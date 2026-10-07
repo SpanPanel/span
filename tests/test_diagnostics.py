@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +12,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import SpanPVSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -29,6 +31,7 @@ from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
+from .adapter_fixtures import schema_one_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
@@ -330,3 +333,72 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
         set(record) <= {"state_class", "device_class", "entity_category"}
         for record in result["adopted_curation"].values()
     )
+
+
+async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: HomeAssistant) -> None:
+    """The first facts a span#269-style report needs, with device-id keys digested."""
+    snapshot = schema_one_snapshot()
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="pv-diag-entry", title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    identity = pv_binding_for(snapshot)
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=identity,
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    (key,) = snapshot.pv_inverters
+    inverter = snapshot.pv_inverters[key]
+    assert result["pv"] == {
+        "mode": "inverter",
+        "bound_circuit_id": key,
+        "solar_card_reads": key,
+        "withheld": [],
+        "inverters": {
+            key: {
+                "feed_circuit_id": inverter.feed_circuit_id,
+                "relative_position": inverter.relative_position,
+                "connected": inverter.connected,
+                "own_card": False,
+            }
+        },
+    }
+
+
+async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together(hass: HomeAssistant) -> None:
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(serial_number="sp3-diag-pv2"),
+        pv_inverters={
+            "c-1": SpanPVSnapshot(device_id="pv-1", node_id="c-1", feed_circuit_id="c-1"),
+            "c-2": SpanPVSnapshot(device_id="pv-2", node_id="c-2", feed_circuit_id="c-2"),
+        },
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="pv-diag-two", title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["pv"]["mode"] == "unbound"
+    assert result["pv"]["solar_card_reads"] == "together"
+    assert {row["own_card"] for row in result["pv"]["inverters"].values()} == {True}

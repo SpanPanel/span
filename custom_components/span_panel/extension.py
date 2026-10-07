@@ -149,6 +149,22 @@ def extension_scope(subject: ExtensionSubject) -> str | None:
     return None
 
 
+def solar_subject(subject: ExtensionSubject, solar_key: str | None) -> ExtensionSubject:
+    """Return the subject a row's id, curation key and card are built from.
+
+    The bound inverter's PV entities are the Solar card's and never move (see
+    `pv_binding`). A lone inverter's subject is keyless and lands there already;
+    once a sibling appears the library keys every inverter's subject, so the
+    bound one is mapped back to the keyless subject here. Its readings keep
+    scope `pv`, their unique ids and the Solar card, and no
+    `{serial}_pv_{key}` device is ever created for it. The row itself keeps the
+    wire subject, which is what `ExtensionEntity._row` matches each cycle.
+    """
+    if subject.kind == "pv" and solar_key is not None and subject.instance_key == solar_key:
+        return ExtensionSubject(kind="pv")
+    return subject
+
+
 def extension_unique_id(
     serial: str, subject: ExtensionSubject, node_id: str, property_id: str
 ) -> str | None:
@@ -533,6 +549,7 @@ def create_extension_sensors(
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
+    solar_key: str | None,
 ) -> list[ExtensionSensor]:
     """Every extension property that is not a declared boolean."""
     return _create(
@@ -544,6 +561,7 @@ def create_extension_sensors(
         Platform.SENSOR,
         config_entry_id=config_entry_id,
         overlay=overlay,
+        solar_key=solar_key,
     )
 
 
@@ -555,6 +573,7 @@ def create_extension_binary_sensors(
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
+    solar_key: str | None,
 ) -> list[ExtensionBinarySensor]:
     """Every extension property declared `boolean`."""
     return _create(
@@ -566,6 +585,7 @@ def create_extension_binary_sensors(
         Platform.BINARY_SENSOR,
         config_entry_id=config_entry_id,
         overlay=overlay,
+        solar_key=solar_key,
     )
 
 
@@ -579,6 +599,7 @@ def _create[ExtensionT: ExtensionEntity](
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
+    solar_key: str | None,
 ) -> list[ExtensionT]:
     """Build one platform's share of the extension properties.
 
@@ -603,11 +624,15 @@ def _create[ExtensionT: ExtensionEntity](
     """
     built: list[ExtensionT] = []
     for row, unique_id, device_identifier in adoptable(
-        snapshot, device_registry, entity_registry, config_entry_id=config_entry_id
+        snapshot,
+        device_registry,
+        entity_registry,
+        config_entry_id=config_entry_id,
+        solar_key=solar_key,
     ):
         if resolve_platform(entity_registry, unique_id, row.datatype) is not platform:
             continue
-        key = extension_curation_key(row.subject, row.path)
+        key = extension_curation_key(solar_subject(row.subject, solar_key), row.path)
         context = RowContext(platform=platform, datatype=row.datatype, unit=row.unit)
         record = None if key is None else overlay.for_row(key, context)
         built.append(
@@ -637,6 +662,7 @@ def adoptable(
     entity_registry: EntityRegistry,
     *,
     config_entry_id: str,
+    solar_key: str | None,
 ) -> list[tuple[ExtensionProperty, str, str]]:
     """Every extension property that can become an entity, with its id and card.
 
@@ -657,7 +683,9 @@ def adoptable(
     everything already registered is admitted first, and the cap applies only to
     what is new.
     """
-    return _partition(snapshot, device_registry, entity_registry, config_entry_id)[0]
+    return _partition(
+        snapshot, device_registry, entity_registry, config_entry_id, solar_key=solar_key
+    )[0]
 
 
 def declined_extensions(
@@ -666,6 +694,7 @@ def declined_extensions(
     entity_registry: EntityRegistry,
     *,
     config_entry_id: str,
+    solar_key: str | None,
 ) -> dict[str, int]:
     """How many properties each wire device declared beyond the cap.
 
@@ -674,7 +703,9 @@ def declined_extensions(
     partition, and a warning per platform would double-count in the log while
     saying nothing new.
     """
-    return _partition(snapshot, device_registry, entity_registry, config_entry_id)[1]
+    return _partition(
+        snapshot, device_registry, entity_registry, config_entry_id, solar_key=solar_key
+    )[1]
 
 
 def _partition(
@@ -682,6 +713,8 @@ def _partition(
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
     config_entry_id: str,
+    *,
+    solar_key: str | None,
 ) -> tuple[list[tuple[ExtensionProperty, str, str]], dict[str, int]]:
     """Split the declared properties into what is adopted and what the cap declined.
 
@@ -703,7 +736,8 @@ def _partition(
     known: list[tuple[ExtensionProperty, str, str]] = []
     fresh: list[tuple[ExtensionProperty, str, str]] = []
     for row in snapshot.extension_properties:
-        identifier = extension_device_identifier(snapshot.serial_number, row.subject)
+        subject = solar_subject(row.subject, solar_key)
+        identifier = extension_device_identifier(snapshot.serial_number, subject)
         if identifier is None:
             continue
         if (
@@ -717,7 +751,7 @@ def _partition(
             )
             continue
         unique_id = extension_unique_id(
-            snapshot.serial_number, row.subject, row.node_id, row.property_id
+            snapshot.serial_number, subject, row.node_id, row.property_id
         )
         if unique_id is None:
             continue
@@ -770,6 +804,8 @@ async def async_notice_declined_extensions(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    *,
+    solar_key: str | None,
 ) -> None:
     """Tell the user once when the cap left vendor readings out, or say nothing.
 
@@ -792,7 +828,11 @@ async def async_notice_declined_extensions(
     translation change is not.
     """
     declined = declined_extensions(
-        snapshot, device_registry, entity_registry, config_entry_id=entry.entry_id
+        snapshot,
+        device_registry,
+        entity_registry,
+        config_entry_id=entry.entry_id,
+        solar_key=solar_key,
     )
     if not declined:
         return

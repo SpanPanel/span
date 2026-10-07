@@ -194,14 +194,14 @@ def test_a_row_whose_card_is_not_registered_yet_is_deferred(
 ) -> None:
     """A capability race defers the entity to the next reload rather than minting a card."""
     snapshot = _snapshot(_row(kind="pv"))
-    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0]) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None) == []
 
 
 def test_a_row_on_a_registered_card_is_adoptable(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row())
-    adoptable_rows = adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
+    adoptable_rows = adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None)
     assert len(adoptable_rows) == 1
     row, unique_id, identifier = adoptable_rows[0]
     assert identifier == BESS_IDENTIFIER
@@ -213,7 +213,7 @@ def test_an_off_charset_address_is_declined_rather_than_sanitised(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row(property_id="Cell_Temperature"))
-    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0]) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None) == []
 
 
 # --- the cap ----------------------------------------------------------------
@@ -224,7 +224,7 @@ def test_a_vendor_flooding_one_device_is_capped(
 ) -> None:
     """Registry rows are permanent and nothing removes them, so the flood is bounded."""
     rows = tuple(_row(property_id=f"reading-{index}") for index in range(MAX_PER_DEVICE + 25))
-    adopted = adoptable(_snapshot(*rows), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
+    adopted = adoptable(_snapshot(*rows), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None)
     assert len(adopted) == MAX_PER_DEVICE
 
 
@@ -247,7 +247,7 @@ def test_the_cap_is_per_wire_device_not_per_card(
         _row(kind="panel", node_id="acme", property_id="site-reading"),
         _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance"),
     )
-    adopted = adoptable(_snapshot(*noisy, *quiet), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
+    adopted = adoptable(_snapshot(*noisy, *quiet), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None)
 
     # Every quiet device keeps its readings, though all four share the panel card.
     adopted_keys = [subject_key(row.subject) for row, _uid, _identifier in adopted]
@@ -270,7 +270,7 @@ def test_two_lugs_publishing_the_same_property_get_two_identities(
     """
     upstream = _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance", value="1.5")
     downstream = _row(kind="lugs", instance_key="downstream", node_id="acme", property_id="phase-balance", value="99.9")
-    adopted = adoptable(_snapshot(upstream, downstream), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
+    adopted = adoptable(_snapshot(upstream, downstream), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None)
 
     ids = [unique_id for _row_, unique_id, _identifier in adopted]
     assert len(ids) == len(set(ids)) == 2
@@ -297,7 +297,7 @@ def test_a_registered_entity_is_never_displaced_by_the_cap(
 
     # The standing property now arrives *last*, behind a full cap of new ones.
     newcomers = tuple(_row(property_id=f"new-{index}") for index in range(MAX_PER_DEVICE))
-    adopted = adoptable(_snapshot(*newcomers, standing), dr.async_get(hass), registry, config_entry_id=registered_panel[0])
+    adopted = adoptable(_snapshot(*newcomers, standing), dr.async_get(hass), registry, config_entry_id=registered_panel[0], solar_key=None)
 
     assert standing_id in {unique_id for _row_, unique_id, _identifier in adopted}
     assert len(adopted) == MAX_PER_DEVICE
@@ -322,6 +322,7 @@ def test_a_sensor_arrives_disabled_diagnostic_and_without_statistics(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert len(sensors) == 1
     sensor = sensors[0]
@@ -345,6 +346,7 @@ def test_a_name_carries_the_node_so_it_cannot_collide_with_a_curated_one(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )[0]
     assert sensor._attr_name == "Battery 2 Cell Temperature"
 
@@ -362,6 +364,7 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert len(binary) == 1
     assert isinstance(binary[0], ExtensionBinarySensor)
@@ -375,6 +378,7 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
             er.async_get(hass),
             config_entry_id=registered_panel[0],
             overlay=CurationOverlay.empty(),
+            solar_key=None,
         )
         == []
     )
@@ -392,6 +396,7 @@ def test_a_property_that_stops_being_published_reads_unknown_rather_than_vanishi
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )[0]
 
     sensor.coordinator.data = _snapshot()
@@ -410,6 +415,7 @@ def test_an_unparseable_number_is_reported_as_nothing_rather_than_as_text(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )[0]
     assert sensor.native_value is None
 
@@ -436,6 +442,7 @@ def test_a_unit_less_numeric_row_still_publishes_a_number(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert sensor.native_value == 42.0
 
@@ -454,6 +461,7 @@ def test_a_unit_less_numeric_row_that_publishes_text_reports_nothing(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert sensor.native_value is None
 
@@ -470,6 +478,7 @@ def test_a_unit_less_string_row_is_still_text(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert sensor.native_value == "idle"
 
@@ -530,6 +539,7 @@ def test_a_curated_record_shapes_the_extension_sensor(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
+        solar_key=None,
     )
     assert entity.state_class is SensorStateClass.MEASUREMENT
     assert entity.device_class is SensorDeviceClass.VOLTAGE
@@ -552,6 +562,7 @@ def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
+        solar_key=None,
     )
     assert entity.state_class is SensorStateClass.MEASUREMENT
     assert entity.native_value == 42.0
@@ -570,6 +581,7 @@ def test_an_uncurated_extension_row_is_exactly_todays_entity(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )
     assert entity.state_class is None
     assert entity.entity_category is EntityCategory.DIAGNOSTIC
@@ -597,6 +609,7 @@ def test_a_stale_extension_record_field_is_skipped_and_the_rest_applied(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
+        solar_key=None,
     )
     assert entity.state_class is None
     assert entity.entity_category is None
@@ -619,6 +632,7 @@ def test_a_curated_binary_sensor_gets_the_only_device_class_there_can_be(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, CurationRecord(device_class="problem")),
+        solar_key=None,
     )
     assert entity.device_class == BinarySensorDeviceClass.PROBLEM
     assert entity.entity_category is EntityCategory.DIAGNOSTIC
@@ -659,6 +673,7 @@ def test_the_hint_is_carried_on_the_entity_for_curation_triage(
         er.async_get(hass),
         config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
+        solar_key=None,
     )[0]
     assert sensor._attr_extra_state_attributes["prominence_hint"] == HINT_READING
     assert sensor._attr_extra_state_attributes["wire_path"] == "battery-2/cell-temperature"
@@ -678,7 +693,7 @@ def _notification_id(entry: MockConfigEntry) -> str:
 
 async def _notice(hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot) -> None:
     await async_notice_declined_extensions(
-        hass, entry, snapshot, dr.async_get(hass), er.async_get(hass)
+        hass, entry, snapshot, dr.async_get(hass), er.async_get(hass), solar_key=None
     )
 
 
@@ -815,7 +830,27 @@ def test_a_card_another_entry_owns_does_not_make_a_row_adoptable(
     )
 
     adopted = adoptable(
-        _snapshot(_row()), registry, er.async_get(hass), config_entry_id=mine.entry_id
+        _snapshot(_row()), registry, er.async_get(hass), config_entry_id=mine.entry_id, solar_key=None
     )
 
     assert adopted == []
+
+
+def test_the_bound_inverters_readings_stay_on_the_solar_card(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Once a sibling appears the library keys the bound inverter's subject; its readings must not move."""
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=registered_panel[0], identifiers={(DOMAIN, f"{PANEL_SERIAL}_pv")}
+    )
+    snapshot = _snapshot(_row(kind="pv", instance_key="c-bound"))
+
+    ((row, unique_id, identifier),) = adoptable(
+        snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key="c-bound"
+    )
+
+    assert identifier == f"{PANEL_SERIAL}_pv"
+    assert unique_id == f"span_{PANEL_SERIAL}_adopted_pv/battery-2/cell-temperature"
+    assert row.subject.instance_key == "c-bound"
+    # Without the binding the row would need a `{serial}_pv_c-bound` card, which nothing creates.
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0], solar_key=None) == []

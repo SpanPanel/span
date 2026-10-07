@@ -56,7 +56,7 @@ from .curation import (
     record_as_dict,
     validate_record,
 )
-from .extension import adoptable, extension_curation_key, resolve_platform
+from .extension import adoptable, extension_curation_key, resolve_platform, solar_subject
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .websocket_panel import resolve_panel_device
 
@@ -162,7 +162,7 @@ async def handle_adopted_list(
     # Each device's row list, held here as the same object its group carries, so
     # one pass both opens the group and fills it.
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in _rows(hass, snapshot, entry.entry_id):
+    for row in _rows(hass, snapshot, entry.entry_id, solar_key=runtime_data.pv_binding.bound_key):
         rows = grouped.get(row.device_identifier)
         if rows is None:
             rows = []
@@ -266,7 +266,8 @@ async def handle_adopted_curate(
     entry, runtime_data, snapshot = resolved
 
     key: str = msg["key"]
-    row = {candidate.key: candidate for candidate in _rows(hass, snapshot, entry.entry_id)}.get(key)
+    candidates = _rows(hass, snapshot, entry.entry_id, solar_key=runtime_data.pv_binding.bound_key)
+    row = {candidate.key: candidate for candidate in candidates}.get(key)
     if row is None:
         connection.send_error(msg["id"], "unknown_key", f"No curatable row is keyed {key!r}")
         return
@@ -322,7 +323,11 @@ def _warnings(record: CurationRecord | None, previous: CurationRecord | None) ->
 
 
 def _rows(
-    hass: HomeAssistant, snapshot: SpanPanelSnapshot, config_entry_id: str
+    hass: HomeAssistant,
+    snapshot: SpanPanelSnapshot,
+    config_entry_id: str,
+    *,
+    solar_key: str | None,
 ) -> list[_AdoptableRow]:
     """Every row on this panel a user may curate, in a deterministic order.
 
@@ -397,10 +402,16 @@ def _rows(
             )
 
     for extension, unique_id, identifier in sorted(
-        adoptable(snapshot, device_registry, entity_registry, config_entry_id=config_entry_id),
+        adoptable(
+            snapshot,
+            device_registry,
+            entity_registry,
+            config_entry_id=config_entry_id,
+            solar_key=solar_key,
+        ),
         key=lambda adopted: (adopted[2], adopted[0].path),
     ):
-        key = extension_curation_key(extension.subject, extension.path)
+        key = extension_curation_key(solar_subject(extension.subject, solar_key), extension.path)
         card = device_registry.async_get_device_by_identifier((DOMAIN, identifier), config_entry_id)
         if key is None or card is None:
             # Neither happens: `adoptable` declines a subject with no scope, which

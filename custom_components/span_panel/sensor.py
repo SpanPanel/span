@@ -153,6 +153,7 @@ async def async_setup_entry(
             er.async_get(hass),
             config_entry_id=config_entry.entry_id,
             overlay=config_entry.runtime_data.curation,
+            solar_key=config_entry.runtime_data.pv_binding.bound_key,
         )
 
         # Add all native sensor entities

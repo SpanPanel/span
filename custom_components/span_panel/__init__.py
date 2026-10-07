@@ -716,7 +716,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # After the forward, because it reports on what the platforms just built
         # -- and once, rather than from each platform's own call to `adoptable`.
         await async_notice_declined_extensions(
-            hass, entry, snapshot, dr.async_get(hass), er.async_get(hass)
+            hass,
+            entry,
+            snapshot,
+            dr.async_get(hass),
+            er.async_get(hass),
+            solar_key=pv_binding.bound_key,
         )
 
         # After the platforms, not before: schema validation runs on the first
