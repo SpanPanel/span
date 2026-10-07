@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
@@ -24,7 +25,14 @@ from .factories import SpanPanelSnapshotFactory
 from .helpers import unwrap_websocket_command
 from .test_pv_binding import _gateway_tree, _unfed_tree
 from .test_pv_device import PV_DEVICE, SOLAR_CIRCUIT, _entry
-from .test_pv_inverters import SECOND_SOLAR_CIRCUIT, _setup, _tree, _unload
+from .test_pv_inverters import (
+    FIRST_PV,
+    SECOND_PV,
+    SECOND_SOLAR_CIRCUIT,
+    _setup,
+    _tree,
+    _unload,
+)
 
 _inner = unwrap_websocket_command(handle_panel_topology)
 
@@ -263,3 +271,48 @@ async def test_pv_power_another_entry_registered_is_not_this_panels(hass: HomeAs
     assert isinstance(panel_entities, dict)
     assert "pv_power" not in panel_entities
     assert "current_power" in panel_entities
+
+
+def _entity_state(hass: HomeAssistant, entry: MockConfigEntry, domain: str, unique_id: str) -> str:
+    entity_id = er.async_get(hass).async_get_entity_id(domain, DOMAIN, unique_id)
+    assert entity_id is not None
+    state = hass.states.get(entity_id)
+    assert state is not None
+    return state.state
+
+
+async def test_a_vendor_published_after_setup_reaches_the_tile_as_it_reaches_the_sensor(
+    hass: HomeAssistant,
+) -> None:
+    """Identity is read live, as the PV Vendor and PV Product sensors read it; nothing reloads for it."""
+    one = schema_one_snapshot()
+    entry = _entry(hass, "entry-ws-late-vendor", one.serial_number)
+    await _unload(await _setup(hass, entry, one))
+    late = _tree()
+    for device in (FIRST_PV, SECOND_PV):
+        late[device].pop("info/vendor-name")
+        late[device].pop("info/model")
+    live = schema_one_snapshot(_tree())
+    platforms = await _setup(hass, entry, schema_one_snapshot(late), published=live)
+    # The coordinator's next refresh, which delivers `live` to every entity.
+    for platform in platforms:
+        for entity in platform.entities.values():
+            if isinstance(entity, CoordinatorEntity):
+                entity._handle_coordinator_update()
+
+    solar = _solar_by_identifier(hass, await _topology(hass, entry))
+
+    serial = live.serial_number
+    site = solar[f"{serial}_pv"]
+    second = solar[f"{serial}_pv_{C2}"]
+    assert isinstance(site, dict) and isinstance(second, dict)
+    assert site["vendor"] == live.pv_inverters[C].vendor_name == "Enphase"
+    assert site["model"] == live.pv_inverters[C].model
+    assert second["vendor"] == "Second Vendor"
+    assert second["model"] == live.pv_inverters[C2].model
+    assert site["vendor"] == _entity_state(
+        hass, entry, "sensor", build_panel_unique_id(serial, "pv_vendor")
+    )
+    assert second["vendor"] == _entity_state(
+        hass, entry, "sensor", build_pv_inverter_unique_id(serial, C2, "pv_vendor")
+    )

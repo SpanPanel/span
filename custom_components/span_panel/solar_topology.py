@@ -10,11 +10,16 @@ several panels' topologies: it re-keys and filters their circuits but copies
 their sub-devices verbatim, so an entity id survives the merge and a circuit id
 does not.
 
-Structure comes from the setup snapshot and the binding resolved from it, the
-same inputs the PV devices were built from, so a block always describes the
-registered device graph. The Solar device's block follows `has_pv`, the test
-that creates the device, so it exists whenever the device does. A structural
-change reloads the entry, because every inverter key is a capability token.
+Structure -- which devices carry a block, and each one's feeding circuit --
+comes from the setup snapshot and the binding resolved from it, the same inputs
+the PV devices were built from, so a block always describes the registered
+device graph. A structural change reloads the entry, because every inverter key
+is a capability token. Identity is read from the live snapshot, as the PV Vendor
+and PV Product sensors read it: a vendor or model published after setup changes
+no capability, so nothing reloads for it, and the tile would otherwise lag the
+sensors beside it until something else did. The Solar device's block follows
+`has_pv`, the test that creates the device and PV Power. A Solar device left
+from an earlier setup without PV gets none.
 
 On SPAN a hybrid's PV is an ordinary `pv` child of the panel: circuit-fed when
 in-panel, identity-only when upstream, like span#269's inverters.
@@ -26,6 +31,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 from .helpers import has_pv
+from .util import EMPTY_PV
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -52,25 +58,29 @@ class SolarTopology(TypedDict):
 def solar_topology(
     inverter_key: str | None,
     binding: PvBinding,
-    snapshot: SpanPanelSnapshot,
+    setup: SpanPanelSnapshot,
+    live: SpanPanelSnapshot,
     circuit_power: Mapping[str, str],
     site_power_entity_id: str | None,
 ) -> SolarTopology | None:
     """Return the block for the Solar device (`inverter_key` None) or one inverter's own device, or None.
 
-    None where there is nothing to describe: PV not commissioned, for the Solar
-    device; or an inverter that is not published or has no card of its own.
+    None where there is nothing to describe: PV not commissioned at `setup`, for
+    the Solar device; or an inverter that was not published at `setup` or has no
+    card of its own. Identity is read from `live`, where an inverter that has
+    left reads as `EMPTY_PV`, as its sensors do.
     """
     if inverter_key is None:
-        return _site(binding, snapshot, circuit_power, site_power_entity_id)
-    inverter = snapshot.pv_inverters.get(inverter_key)
+        return _site(binding, setup, live, circuit_power, site_power_entity_id)
+    inverter = setup.pv_inverters.get(inverter_key)
     if inverter is None or not binding.has_own_card(inverter_key):
         return None
+    identity = live.pv_inverters.get(inverter_key, EMPTY_PV)
     feed = inverter.feed_circuit_id
     return SolarTopology(
         role="inverter",
-        vendor=inverter.vendor_name,
-        model=inverter.model,
+        vendor=identity.vendor_name,
+        model=identity.model,
         feed_circuit_id=feed,
         power_entity_id=_power(feed, circuit_power),
         site_power_entity_id=None,
@@ -79,14 +89,15 @@ def solar_topology(
 
 def _site(
     binding: PvBinding,
-    snapshot: SpanPanelSnapshot,
+    setup: SpanPanelSnapshot,
+    live: SpanPanelSnapshot,
     circuit_power: Mapping[str, str],
     site_power_entity_id: str | None,
 ) -> SolarTopology | None:
-    if not has_pv(snapshot):
+    if not has_pv(setup):
         return None
-    source = binding.source(snapshot)
-    feed = _site_feed_circuit(binding, snapshot)
+    source = binding.source(live)
+    feed = _site_feed_circuit(binding, setup)
     return SolarTopology(
         role="site",
         vendor=source.vendor_name,

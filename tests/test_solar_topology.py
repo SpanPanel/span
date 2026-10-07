@@ -15,7 +15,7 @@ from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .test_pv_binding import NEW_CIRCUIT, _gateway_tree, _unfed_tree
 from .test_pv_device import PV_DEVICE, SOLAR_CIRCUIT
-from .test_pv_inverters import SECOND_SOLAR_CIRCUIT, _tree
+from .test_pv_inverters import FIRST_PV, SECOND_PV, SECOND_SOLAR_CIRCUIT, UNFED_PV, _tree
 
 PANEL = "sp3-solar-001"
 
@@ -59,7 +59,7 @@ def _bound(
 
 
 def _site(binding: PvBinding, snapshot: SpanPanelSnapshot) -> SolarTopology | None:
-    return solar_topology(None, binding, snapshot, POWER, SITE)
+    return solar_topology(None, binding, snapshot, snapshot, POWER, SITE)
 
 
 def _no_inverter_published() -> SpanPanelSnapshot:
@@ -90,7 +90,7 @@ def test_each_other_inverter_gets_its_own_circuit() -> None:
     binding = _bound(C, legacy=C)
 
     site = _site(binding, snapshot)
-    second = solar_topology(C2, binding, snapshot, POWER, SITE)
+    second = solar_topology(C2, binding, snapshot, snapshot, POWER, SITE)
 
     assert site is not None and site["power_entity_id"] == POWER[C]
     assert second == SolarTopology(
@@ -101,7 +101,7 @@ def test_each_other_inverter_gets_its_own_circuit() -> None:
         power_entity_id=POWER[C2],
         site_power_entity_id=None,
     )
-    assert solar_topology(C, binding, snapshot, POWER, SITE) is None
+    assert solar_topology(C, binding, snapshot, snapshot, POWER, SITE) is None
 
 
 def test_unbound_over_several_leaves_the_site_tile_on_the_site_total() -> None:
@@ -115,7 +115,7 @@ def test_unbound_over_several_leaves_the_site_tile_on_the_site_total() -> None:
     assert site["feed_circuit_id"] is None
     assert site["power_entity_id"] is None
     assert site["site_power_entity_id"] == SITE
-    first = solar_topology(C, binding, snapshot, POWER, SITE)
+    first = solar_topology(C, binding, snapshot, snapshot, POWER, SITE)
     assert first is not None and first["power_entity_id"] == POWER[C]
 
 
@@ -129,7 +129,7 @@ def test_an_inverter_no_circuit_feeds_has_no_individual_reading() -> None:
     binding = pv_binding_for(snapshot)
 
     site = _site(binding, snapshot)
-    inverter = solar_topology("panel-use7600h-us-2", binding, snapshot, POWER, SITE)
+    inverter = solar_topology("panel-use7600h-us-2", binding, snapshot, snapshot, POWER, SITE)
 
     assert site is not None and site["vendor"] == "SolarEdge" and site["model"] is None
     assert site["power_entity_id"] is None
@@ -147,7 +147,7 @@ def test_a_pending_record_keeps_the_bound_circuit_on_the_site_tile() -> None:
     assert site is not None
     assert site["feed_circuit_id"] == C and site["power_entity_id"] == POWER[C]
     assert site["vendor"] is None
-    assert solar_topology(PV_DEVICE, binding, snapshot, POWER, SITE) is None
+    assert solar_topology(PV_DEVICE, binding, snapshot, snapshot, POWER, SITE) is None
 
 
 def test_a_bound_circuit_that_is_gone_leaves_the_site_total() -> None:
@@ -166,7 +166,7 @@ def test_a_bound_key_holding_a_card_leaves_the_site_tile_on_the_site_total() -> 
     binding = _bound(C, legacy=None)
 
     site = _site(binding, snapshot)
-    own = solar_topology(C, binding, snapshot, POWER, SITE)
+    own = solar_topology(C, binding, snapshot, snapshot, POWER, SITE)
 
     assert site is not None and site["power_entity_id"] is None
     assert own is not None and own["power_entity_id"] == POWER[C]
@@ -199,4 +199,35 @@ def test_without_pv_there_is_no_block() -> None:
     assert not has_pv(snapshot)
 
     assert _site(pv_binding_for(snapshot), snapshot) is None
-    assert solar_topology("anything", pv_binding_for(snapshot), snapshot, POWER, SITE) is None
+    assert (
+        solar_topology("anything", pv_binding_for(snapshot), snapshot, snapshot, POWER, SITE)
+        is None
+    )
+
+
+def _without_identity(tree: dict[str, dict[str, str]], *devices: str) -> dict[str, dict[str, str]]:
+    """The tree with these PV devices' vendor and model not yet published."""
+    for device in devices:
+        tree[device].pop("info/vendor-name")
+        tree[device].pop("info/model")
+    return tree
+
+
+def test_identity_is_read_live_and_structure_as_of_setup() -> None:
+    """A vendor or model published after setup is not a capability change, so nothing reloads; the tile reads it as the sensors do."""
+    setup = schema_one_snapshot(_without_identity(_tree(), FIRST_PV, SECOND_PV))
+    live = schema_one_snapshot(_tree(unfed=True))
+    binding = _bound(C, legacy=C)
+
+    site = solar_topology(None, binding, setup, live, POWER, SITE)
+    second = solar_topology(C2, binding, setup, live, POWER, SITE)
+
+    assert setup.pv_inverters[C].vendor_name is None
+    assert site is not None and second is not None
+    assert (site["vendor"], site["model"]) == (
+        live.pv_inverters[C].vendor_name,
+        live.pv_inverters[C].model,
+    )
+    assert (second["vendor"], second["model"]) == ("Second Vendor", live.pv_inverters[C2].model)
+    assert site["vendor"] is not None and second["model"] is not None
+    assert solar_topology(UNFED_PV, binding, setup, live, POWER, SITE) is None
