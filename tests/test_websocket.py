@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,16 +27,12 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import unwrap_websocket_command
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-# The command stack includes wrappers such as @async_response and
-# @require_admin. Unwrap until we reach the original async handler so the
-# direct-call tests can await it.
-_handle_panel_topology_inner = handle_panel_topology
-while not inspect.iscoroutinefunction(_handle_panel_topology_inner):
-    _handle_panel_topology_inner = _handle_panel_topology_inner.__wrapped__
+_handle_panel_topology_inner = unwrap_websocket_command(handle_panel_topology)
 
 # ---------------------------------------------------------------------------
 # Helpers

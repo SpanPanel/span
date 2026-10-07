@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import Final
 from unittest.mock import MagicMock
 
@@ -21,38 +20,29 @@ from custom_components.span_panel.sensor_definitions import PV_POWER_SENSOR
 from custom_components.span_panel.websocket import handle_panel_topology
 
 from .adapter_fixtures import schema_one_snapshot
+from .helpers import unwrap_websocket_command
 from .test_pv_binding import _gateway_tree, _unfed_tree
 from .test_pv_device import PV_DEVICE, SOLAR_CIRCUIT, _entry
 from .test_pv_inverters import SECOND_SOLAR_CIRCUIT, _setup, _tree, _unload
 
-_inner = handle_panel_topology
-while not inspect.iscoroutinefunction(_inner):
-    _inner = _inner.__wrapped__
+_inner = unwrap_websocket_command(handle_panel_topology)
 
 C: Final = SOLAR_CIRCUIT
 C2: Final = SECOND_SOLAR_CIRCUIT
 
 
 async def _topology(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, object]:
-    """Answer the command for an entry marked loaded only while it runs.
-
-    Left loaded, the entry would be unloaded at teardown, which awaits a
-    shutdown the test coordinator does not have.
-    """
     entry.mock_state(hass, ConfigEntryState.LOADED)
     connection = MagicMock()
-    try:
-        await _inner(
-            hass,
-            connection,
-            {
-                "id": 1,
-                "type": "span_panel/panel_topology",
-                "device_id": entry.runtime_data.panel_device_id,
-            },
-        )
-    finally:
-        entry.mock_state(hass, ConfigEntryState.NOT_LOADED)
+    await _inner(
+        hass,
+        connection,
+        {
+            "id": 1,
+            "type": "span_panel/panel_topology",
+            "device_id": entry.runtime_data.panel_device_id,
+        },
+    )
     connection.send_error.assert_not_called()
     result: object = connection.send_result.call_args.args[1]
     assert isinstance(result, dict)
@@ -85,10 +75,25 @@ def _circuit_power(hass: HomeAssistant, entry: MockConfigEntry, circuit_id: str)
     return matches[0]
 
 
-def _site_power(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> str | None:
-    return er.async_get(hass).async_get_entity_id(
-        "sensor", DOMAIN, build_panel_unique_id(snapshot.serial_number, PV_POWER_SENSOR.key)
+def _site_power(hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot) -> str:
+    """PV Power, found on the Solar device itself rather than by the handler's own lookup.
+
+    Required to exist, so that a lookup that found nothing cannot pass by
+    matching a handler that also found nothing.
+    """
+    serial = snapshot.serial_number
+    solar = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, f"{serial}_pv"), entry.entry_id
     )
+    assert solar is not None
+    unique_id = build_panel_unique_id(serial, PV_POWER_SENSOR.key)
+    matches = [
+        row.entity_id
+        for row in er.async_entries_for_device(er.async_get(hass), solar.id)
+        if row.domain == "sensor" and row.unique_id == unique_id
+    ]
+    assert len(matches) == 1, matches
+    return matches[0]
 
 
 def _no_inverter_published() -> SpanPanelSnapshot:
@@ -116,7 +121,7 @@ async def test_the_bound_inverter_is_the_site_tile_and_the_other_has_its_own(
             "model": two.pv_inverters[C].model,
             "feed_circuit_id": C,
             "power_entity_id": _circuit_power(hass, entry, C),
-            "site_power_entity_id": _site_power(hass, two),
+            "site_power_entity_id": _site_power(hass, entry, two),
         },
         f"{serial}_pv_{C2}": {
             "role": "inverter",
@@ -147,7 +152,7 @@ async def test_inverters_behind_a_gateway_have_identity_and_no_individual_readin
     site = solar[f"{serial}_pv"]
     assert isinstance(site, dict)
     assert site["power_entity_id"] is None and site["site_power_entity_id"] == _site_power(
-        hass, snapshot
+        hass, entry, snapshot
     )
     for key in ("panel-se7600h-us-1", "panel-use7600h-us-2"):
         block = solar[f"{serial}_pv_{key}"]
@@ -214,7 +219,7 @@ async def test_pv_with_no_inverter_published_still_gets_a_site_block(hass: HomeA
             "model": None,
             "feed_circuit_id": None,
             "power_entity_id": None,
-            "site_power_entity_id": _site_power(hass, snapshot),
+            "site_power_entity_id": _site_power(hass, entry, snapshot),
         }
     }
 

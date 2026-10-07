@@ -16,8 +16,7 @@ the old device's primary.
 
 from __future__ import annotations
 
-import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.config_entries import ConfigEntryState
@@ -34,11 +33,7 @@ from custom_components.span_panel.websocket import handle_panel_topology
 from custom_components.span_panel.websocket_adopted import handle_adopted_list
 
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
-
-if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
-
-    Handler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
+from .helpers import unwrap_websocket_command
 
 # The registry is loaded from the store below rather than started empty.
 pytestmark = pytest.mark.parametrize("load_registries", [False])
@@ -48,12 +43,6 @@ SPAN_ENTRY_ID = "span_entry"
 HELPER_ENTRY_ID = "helper_entry"
 OLD_PANEL_ID = "0ld0pane1000000000000000000000ab"
 BATTERY_ID = "batt000000000000000000000000000c"
-
-
-def _inner(handler: Callable[..., object]) -> Handler:
-    """Unwrap a websocket command to the coroutine it decorates."""
-    inner: Handler = inspect.unwrap(handler, stop=inspect.iscoroutinefunction)
-    return inner
 
 
 def _device(**fields: Any) -> dict[str, Any]:
@@ -165,7 +154,7 @@ async def test_topology_answers_an_old_panel_id_with_the_panel_it_became(
     panel = await _split_panel(hass, hass_storage, primary=primary)
     connection = MagicMock()
 
-    await _inner(handle_panel_topology)(
+    await unwrap_websocket_command(handle_panel_topology)(
         hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": OLD_PANEL_ID}
     )
 
@@ -191,7 +180,7 @@ async def test_the_adopted_list_answers_an_old_panel_id(
     await _split_panel(hass, hass_storage, primary=primary)
     connection = MagicMock()
 
-    await _inner(handle_adopted_list)(
+    await unwrap_websocket_command(handle_adopted_list)(
         hass, connection, {"id": 1, "type": "span_panel/adopted/list", "device_id": OLD_PANEL_ID}
     )
 
@@ -232,7 +221,7 @@ async def test_an_old_id_split_into_devices_span_owns_none_of_is_not_a_panel(
     await er.async_load(hass)
     connection = MagicMock()
 
-    await _inner(handle_panel_topology)(
+    await unwrap_websocket_command(handle_panel_topology)(
         hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": OLD_PANEL_ID}
     )
 

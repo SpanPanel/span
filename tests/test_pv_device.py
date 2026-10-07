@@ -212,6 +212,8 @@ def _coordinator(
     coordinator.unresolved_paths = frozenset()
     coordinator.config_entry = entry
     coordinator.async_request_refresh = AsyncMock()
+    # Awaited when a test that marks the entry loaded is unloaded at teardown.
+    coordinator.async_shutdown = AsyncMock()
     return coordinator
 
 
