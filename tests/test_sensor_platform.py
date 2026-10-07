@@ -229,6 +229,12 @@ def test_create_panel_sensors_filters_net_energy_and_adds_diagnostics() -> None:
     assert "downstream_l1_current" in keys
     assert "downstream_l2_current" in keys
     assert "main_breaker_rating" in keys
+    assert {
+        "mainMeterEnergyProducedWh",
+        "mainMeterEnergyConsumedWh",
+        "feedthroughEnergyProducedWh",
+        "feedthroughEnergyConsumedWh",
+    } <= set(keys)
 
 
 def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> None:
@@ -314,6 +320,7 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
     assert "circuit_energy_net" not in keys
     assert "circuit_current" in keys
     assert "circuit_breaker_rating" in keys
+    assert {"circuit_power", "circuit_energy_produced", "circuit_energy_consumed"} <= set(keys)
     assert any(
         entity.device_info["name"] == "Main House SPAN Drive (Kitchen)"
         for entity in entities

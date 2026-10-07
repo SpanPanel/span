@@ -44,6 +44,13 @@ from span_panel_api import (
     SpanPVSnapshot,
 )
 
+from .energy_orientation import (
+    LOAD,
+    EnergyRole,
+    PanelMeter,
+    circuit_is_generation,
+    circuit_net_orientation,
+)
 from .field_paths import (
     DerivedReason,
     FieldPathDeclarationMixin,
@@ -69,6 +76,12 @@ class SpanPanelCircuitsSensorEntityDescription(
     written into the registry's `name`. Consulted only to hand that field back --
     never to name anything, so a label can be reworded without a migration."""
 
+    energy_role: EnergyRole | None = None
+    """The part this sensor plays in its circuit's energy: a counter, or the Net of
+    the two. Declared rather than matched on `key`, for the reason the shed-forecast
+    mixin gives: a pairing is data, and a substring match is how a rename silently
+    unpairs it. Its meter is the instance's circuit."""
+
 
 @dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin(FieldPathDeclarationMixin):
@@ -80,6 +93,13 @@ class SpanPanelDataRequiredKeysMixin(FieldPathDeclarationMixin):
 @dataclass(frozen=True, kw_only=True)
 class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDataRequiredKeysMixin):
     """Describes a Span Panel data sensor entity."""
+
+    energy_role: EnergyRole | None = None
+    """The part this sensor plays on `panel_meter`. Set on the six
+    `PANEL_ENERGY_SENSORS` and nothing else, always together with `panel_meter`."""
+
+    panel_meter: PanelMeter | None = None
+    """The panel meter whose counters this sensor reads; set with `energy_role`."""
 
 
 @dataclass(frozen=True)
@@ -1104,6 +1124,12 @@ SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
 )
 
 # Panel energy sensor definitions
+# Net is listed after its Produced and Consumed siblings, and the order is
+# load-bearing. Net reads their dip offsets during the same coordinator
+# fan-out; listeners run in the order the entities were added, and the
+# platform adds them in this order. Listed earlier, Net would add the previous
+# update's offsets and show a one-update spike whenever a dip is booked.
+# `tests/test_net_energy_fanout.py` pins it.
 PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
@@ -1114,6 +1140,8 @@ PANEL_ENERGY_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyProducedWh",
+        energy_role=EnergyRole.PRODUCED,
+        panel_meter=PanelMeter.MAIN_METER,
         field_path="panel.main_meter_energy_produced_wh",
         translation_key="main_meter_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1124,6 +1152,8 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyConsumedWh",
+        energy_role=EnergyRole.CONSUMED,
+        panel_meter=PanelMeter.MAIN_METER,
         field_path="panel.main_meter_energy_consumed_wh",
         translation_key="main_meter_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1134,6 +1164,8 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
+        energy_role=EnergyRole.PRODUCED,
+        panel_meter=PanelMeter.FEEDTHROUGH,
         field_path="panel.feedthrough_energy_produced_wh",
         # Unreliable in the SPAN API; see the module docstring (#234).
         entity_registry_enabled_default=False,
@@ -1146,6 +1178,8 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
+        energy_role=EnergyRole.CONSUMED,
+        panel_meter=PanelMeter.FEEDTHROUGH,
         field_path="panel.feedthrough_energy_consumed_wh",
         # Unreliable in the SPAN API; see the module docstring (#234).
         entity_registry_enabled_default=False,
@@ -1158,6 +1192,8 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterNetEnergyWh",
+        energy_role=EnergyRole.NET,
+        panel_meter=PanelMeter.MAIN_METER,
         derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="main_meter_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1166,11 +1202,16 @@ PANEL_ENERGY_SENSORS: tuple[
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
         value_fn=lambda s: _difference(
-            s.main_meter_energy_consumed_wh, s.main_meter_energy_produced_wh
+            *LOAD.ordered(
+                consumed=s.main_meter_energy_consumed_wh,
+                produced=s.main_meter_energy_produced_wh,
+            )
         ),
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
+        energy_role=EnergyRole.NET,
+        panel_meter=PanelMeter.FEEDTHROUGH,
         derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="feedthrough_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1179,12 +1220,21 @@ PANEL_ENERGY_SENSORS: tuple[
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
         value_fn=lambda s: _difference(
-            s.feedthrough_energy_consumed_wh, s.feedthrough_energy_produced_wh
+            *LOAD.ordered(
+                consumed=s.feedthrough_energy_consumed_wh,
+                produced=s.feedthrough_energy_produced_wh,
+            )
         ),
     ),
 )
 
 # Circuit sensor definitions
+# Net is listed after its Produced and Consumed siblings, and the order is
+# load-bearing. Net reads their dip offsets during the same coordinator
+# fan-out; listeners run in the order the entities were added, and the
+# platform adds them in this order. Listed earlier, Net would add the previous
+# update's offsets and show a one-update spike whenever a dip is booked.
+# `tests/test_net_energy_fanout.py` pins it.
 CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
@@ -1200,13 +1250,14 @@ CIRCUIT_SENSORS: tuple[
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
         value_fn=lambda c: (
-            _negated(c.instant_power_w) if c.device_type == "pv" else c.instant_power_w
+            _negated(c.instant_power_w) if circuit_is_generation(c) else c.instant_power_w
         ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_produced",
+        energy_role=EnergyRole.PRODUCED,
         field_path="circuit.produced_energy_wh",
         name="Produced Energy",
         legacy_names=("Energy Produced",),
@@ -1220,6 +1271,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_consumed",
+        energy_role=EnergyRole.CONSUMED,
         field_path="circuit.consumed_energy_wh",
         name="Consumed Energy",
         legacy_names=("Energy Consumed",),
@@ -1233,6 +1285,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
+        energy_role=EnergyRole.NET,
         derived=DerivedReason.MULTIPLE_FIELDS,
         name="Net Energy",
         legacy_names=("Energy Net",),
@@ -1240,10 +1293,10 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda c: (
-            _difference(c.produced_energy_wh, c.consumed_energy_wh)
-            if c.device_type == "pv"
-            else _difference(c.consumed_energy_wh, c.produced_energy_wh)
+        value_fn=lambda c: _difference(
+            *circuit_net_orientation(c).ordered(
+                consumed=c.consumed_energy_wh, produced=c.produced_energy_wh
+            )
         ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
