@@ -24,6 +24,7 @@ from custom_components.span_panel.const import (
     CircuitPriority,
     CircuitRelayState,
 )
+from custom_components.span_panel.pv_binding import PvBinding, resolve
 
 
 class SpanCircuitSnapshotFactory:
@@ -359,3 +360,8 @@ class SpanPanelSnapshotFactory:
             serial_number=serial_number,
             circuits=[SpanCircuitSnapshotFactory.create_kitchen_outlet()],
         )
+
+
+def pv_binding_for(snapshot: SpanPanelSnapshot) -> PvBinding:
+    """The identity a first setup over `snapshot` resolves, for harnesses that build runtime data by hand."""
+    return resolve(snapshot, None, frozenset())[0]

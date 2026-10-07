@@ -58,6 +58,7 @@ from .adapter_fixtures import (
     schema_one_snapshot,
     schema_one_tree,
 )
+from .factories import pv_binding_for
 
 EVSE = "evse"
 EVSE_2 = "evse-2"
@@ -206,6 +207,7 @@ def _coordinator(snapshot: SpanPanelSnapshot, client: object | None = None) -> M
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator

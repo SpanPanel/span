@@ -48,6 +48,8 @@ from custom_components.span_panel.services import (
     rotation_in_progress,
 )
 
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
+
 OLD_BROKER_PASSWORD = "old-broker-password"
 NEW_BROKER_PASSWORD = "new-broker-password"
 # The panel reports the same value in both fields; distinct here so a test can
@@ -91,6 +93,7 @@ def _add_v2_entry(hass: HomeAssistant) -> MockConfigEntry:
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
     return entry
 
@@ -268,6 +271,7 @@ async def test_no_v2_entry_is_reported(hass: HomeAssistant) -> None:
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
     _async_register_credential_services(hass)
 
@@ -294,6 +298,7 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
         coordinator=MagicMock(),
         panel_device_id="panel-device-id-two",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
     _async_register_credential_services(hass)
 
@@ -398,6 +403,7 @@ async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id-two",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
     _async_register_credential_services(hass)
 

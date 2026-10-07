@@ -14,6 +14,8 @@ from custom_components.span_panel.schema_repairs import (
 )
 from custom_components.span_panel.schema_validation import SchemaFindings, UnitMismatch
 
+from .factories import pv_binding_for
+
 _PATH = "circuit.instant_power_w"
 _UNIT_PATH = "panel.l1_voltage"
 
@@ -542,6 +544,7 @@ async def _entities_by_declared_path(hass):
         coordinator=coordinator,
         panel_device_id=await ensure_device_registered(hass, config_entry, snapshot, "SPAN Panel"),
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     grouped: dict[str, dict[str, list[object]]] = {}

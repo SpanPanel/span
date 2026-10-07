@@ -35,8 +35,9 @@ from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
-    SpanPanelSnapshotFactory,
     SpanPVSnapshot,
+    SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -244,6 +245,7 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     mapping = _build_evse_device_info_map(coordinator, snapshot)
@@ -287,6 +289,7 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     entities = create_circuit_sensors(coordinator, snapshot, entry)
@@ -324,6 +327,7 @@ def test_create_unmapped_circuit_sensors_only_creates_unmapped_entities() -> Non
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     entities = create_unmapped_circuit_sensors(coordinator, snapshot)
@@ -351,6 +355,7 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     entities = create_battery_sensors(coordinator, snapshot)
@@ -381,6 +386,7 @@ def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     entities = create_power_flow_sensors(coordinator, snapshot)
@@ -410,6 +416,7 @@ def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     entities = create_evse_sensors(coordinator, snapshot)

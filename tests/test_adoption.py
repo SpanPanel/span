@@ -58,7 +58,7 @@ from custom_components.span_panel.util import (
     classify_sub_device_identifier,
 )
 
-from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory
+from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -1153,6 +1153,7 @@ async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_stand
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     coordinator.config_entry = entry
     added: list[object] = []

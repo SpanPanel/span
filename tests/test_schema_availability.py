@@ -52,6 +52,7 @@ from .factories import (
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 _CIRCUIT_POWER_PATH = "circuit.instant_power_w"
@@ -82,6 +83,7 @@ def _make_coordinator(hass: HomeAssistant) -> SpanPanelCoordinator:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     return coordinator
 

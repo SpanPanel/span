@@ -83,6 +83,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
+from .factories import pv_binding_for
 
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -256,6 +257,7 @@ async def _install(
         coordinator=coordinator,
         panel_device_id=panel_device_id,
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     await _register(hass, entry, "sensor", sensor_setup_entry)
     await _register(hass, entry, "binary_sensor", binary_sensor_setup_entry)

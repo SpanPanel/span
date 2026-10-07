@@ -97,6 +97,7 @@ from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
+from .pv_binding import async_forget_pv_binding, async_resolve_pv_binding
 from .pv_inverter_layout import async_reconcile_pv_inverter_layout
 
 # Re-exported: the types themselves live in a leaf module (see `runtime.py`), but
@@ -686,6 +687,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # record follows the re-keyed ids, or they would be announced as new.
         pv_moves = await async_reconcile_pv_inverter_layout(hass, entry, coordinator, snapshot)
         await async_rekey_announced(hass, entry, pv_moves)
+        pv_binding = await async_resolve_pv_binding(hass, entry, snapshot)
 
         # Populated here rather than earlier because the panel's registry id is
         # part of it, and that only exists once the device is registered. Nothing
@@ -699,6 +701,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 hass, entry, snapshot, smart_device_name
             ),
             curation=await async_load_curation(hass, entry),
+            pv_binding=pv_binding,
         )
 
         # Before the forward, because a sub-device's `via_device_id` has to name a
@@ -788,6 +791,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_leaf_name_mismatch(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
+    await async_forget_pv_binding(hass, entry)
     await async_forget(hass, entry)
 
 

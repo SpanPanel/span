@@ -46,7 +46,7 @@ from custom_components.span_panel.runtime import loaded_runtime_data
 from custom_components.span_panel.util import SUB_DEVICE_BESS
 from custom_components.span_panel.websocket import async_register_commands
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -170,12 +170,14 @@ def _setup(
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
     panel = _register_cards(hass)
+    published = snapshot if snapshot is not None else _snapshot()
     coordinator = MagicMock()
-    coordinator.data = snapshot if snapshot is not None else _snapshot()
+    coordinator.data = published
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=panel.id,
         curation=overlay if overlay is not None else CurationOverlay.empty(),
+        pv_binding=pv_binding_for(published),
     )
     if register_adopted:
         async_register_adopted_devices(
@@ -758,6 +760,7 @@ async def test_no_data(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
         coordinator=coordinator,
         panel_device_id=panel.id,
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
 
     reply = await _list(hass, hass_ws_client, panel.id)

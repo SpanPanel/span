@@ -28,6 +28,7 @@ from .curation import CurationOverlay
 
 if TYPE_CHECKING:
     from .coordinator import SpanPanelCoordinator
+    from .pv_binding import PvBinding
 
 
 def _default_control_lock() -> ControlLock:
@@ -61,6 +62,11 @@ class SpanPanelRuntimeData:
     # because an empty overlay is indistinguishable from a user who has curated
     # nothing, and the user's records would still be sitting on disk.
     curation: CurationOverlay
+    # Which inverter the Solar card's PV entities read, and which inverters get
+    # a card of their own; see `pv_binding`. Required for the reason
+    # `curation` is: a setup path that forgets to resolve it would silently
+    # give the bound inverter a duplicate card and the Solar card the wrong one.
+    pv_binding: PvBinding
     # Resolved once at setup and read by every control platform, so a single
     # answer decides which entities exist and which callers may operate them.
     # Defaulted rather than required because the default *is* the policy an entry

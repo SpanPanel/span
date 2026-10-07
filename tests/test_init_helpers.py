@@ -20,7 +20,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -47,6 +47,7 @@ async def test_async_remove_config_entry_device_rejects_main_panel_device(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001")}
@@ -66,6 +67,7 @@ async def test_async_remove_config_entry_device_allows_subdevice_removal(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001_evse")}
@@ -191,6 +193,7 @@ async def test_async_unload_entry_shuts_down_runtime_data(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
 
     with patch.object(

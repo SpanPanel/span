@@ -33,7 +33,7 @@ from custom_components.span_panel.util import SUB_DEVICE_BESS
 from custom_components.span_panel.websocket import handle_panel_topology
 from custom_components.span_panel.websocket_adopted import handle_adopted_list
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -137,14 +137,16 @@ async def _split_panel(
     assert panel.id in {split.id for split in splits}
 
     span.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number=SERIAL)
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number=SERIAL)
+    coordinator.data = snapshot
     # Unloaded at teardown, which awaits the coordinator's shutdown.
     coordinator.async_shutdown = AsyncMock()
     span.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=panel.id,
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     return panel
 

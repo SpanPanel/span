@@ -34,6 +34,7 @@ from .factories import (
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 
@@ -96,6 +97,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -176,6 +178,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
             )
         },
         evse={},
+        pv_inverters={},
         battery=None,
         adopted_devices=(),
         lugs_at_service_entrance=True,
@@ -193,6 +196,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -250,8 +254,9 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
         disabled_by=er.RegistryEntryDisabler.INTEGRATION,
     )
 
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
+    coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
@@ -264,6 +269,7 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -296,8 +302,9 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     )
     await async_save_record(hass, entry, "bess/battery-2/enabled", CurationRecord(promote=True))
 
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-004")
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-004")
+    coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
@@ -306,6 +313,7 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=await async_load_curation(hass, entry),
+        pv_binding=pv_binding_for(snapshot),
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)

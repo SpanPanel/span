@@ -27,6 +27,7 @@ from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -50,6 +51,7 @@ def _make_coordinator(snapshot) -> MagicMock:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator

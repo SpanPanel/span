@@ -30,9 +30,10 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
+from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 
 def _create_v2_entry(**data_overrides) -> MockConfigEntry:
@@ -571,6 +572,7 @@ def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
     )
 
     assert runtime_data.control_lock.armed == ControlPolicy.default().lock_enabled
@@ -632,3 +634,46 @@ async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
     assert forwarded_overlay[0].record_for("bess/battery-2/cell-voltage") == CurationRecord(
         device_class="voltage"
     )
+
+
+async def test_setup_resolves_the_pv_binding_before_the_platforms(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """The platforms are handed the identity the record on disk decides, not one derived after them."""
+    hass_storage["span_panel.pv_binding.entry-setup"] = {"version": 1, "data": {"circuit_id": "c-bound"}}
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    forwarded: list[PvBinding] = []
+
+    async def _capture(*args: object, **kwargs: object) -> None:
+        forwarded.append(entry.runtime_data.pv_binding)
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch("custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert forwarded[0].bound_key == "c-bound"
+    assert forwarded[0].mode == "inverter"
+
+
+def test_runtime_data_refuses_to_be_built_without_a_pv_binding() -> None:
+    """Required like `curation`: a setup path that forgets to resolve it must fail here."""
+    with pytest.raises(TypeError, match="pv_binding"):
+        SpanPanelRuntimeData(
+            coordinator=MagicMock(), panel_device_id="panel-device-id", curation=CurationOverlay.empty()
+        )

@@ -64,6 +64,7 @@ from custom_components.span_panel.util import (
 from custom_components.span_panel.websocket import _classify_sub_device
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
+from .factories import pv_binding_for
 from .test_pv_device import PANEL_NAME, _coordinator, _entry
 
 SOLAR_CIRCUIT: Final = "573066aaddd7b75114c4563ce3af18c4"
@@ -137,6 +138,7 @@ async def _setup(
         coordinator=coordinator,
         panel_device_id=panel_device_id,
         curation=await async_load_curation(hass, entry),
+        pv_binding=pv_binding_for(snapshot),
     )
     platforms: list[MockEntityPlatform] = []
     for domain, setup in (

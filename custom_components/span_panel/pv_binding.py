@@ -30,6 +30,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Final, Literal, TypedDict
 
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPVSnapshot
 
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers import entity_registry as er
     from span_panel_api import SpanPanelSnapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -179,3 +179,24 @@ def keys_holding_cards(
         return False
 
     return frozenset(key for key in keys if holds(key))
+
+
+async def async_resolve_pv_binding(
+    hass: HomeAssistant, entry: ConfigEntry, snapshot: SpanPanelSnapshot
+) -> PvBinding:
+    """Resolve this setup's identity, writing the record at first sight or at its one refinement."""
+    store = store_for(hass, entry)
+    record = read_record(await store.async_load())
+    held = keys_holding_cards(
+        er.async_get(hass), entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
+    )
+    identity, kept = resolve(snapshot, record, held)
+    if kept is not None and kept != record:
+        await store.async_save(kept)
+        _LOGGER.info("Solar card's PV entities: %s", identity.mode)
+    return identity
+
+
+async def async_forget_pv_binding(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the record with the entry, as `curation.async_forget_curation` drops its own."""
+    await store_for(hass, entry).async_remove()

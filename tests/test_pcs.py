@@ -62,7 +62,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -166,6 +166,7 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     return coordinator
 

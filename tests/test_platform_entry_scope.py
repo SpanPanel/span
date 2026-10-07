@@ -37,7 +37,7 @@ from custom_components.span_panel.select import async_setup_entry as select_asyn
 from custom_components.span_panel.sensor import async_setup_entry as sensor_async_setup_entry
 from custom_components.span_panel.switch import async_setup_entry as switch_async_setup_entry
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -106,6 +106,7 @@ async def _set_up(
         coordinator=coordinator,
         panel_device_id=panel_device_id,
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
     )
     added: list[Entity] = []
     await setup(hass, entry, lambda entities, *_args, **_kwargs: added.extend(entities))
