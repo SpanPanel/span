@@ -13,7 +13,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel.const import DOMAIN, PV_PANEL_LINK_KEY
+from custom_components.span_panel.entity_resolver import entity_id_in_entry
 from custom_components.span_panel.id_builder import (
+    build_binary_sensor_unique_id,
     build_panel_unique_id,
     build_pv_inverter_unique_id,
 )
@@ -274,7 +276,7 @@ async def test_pv_power_another_entry_registered_is_not_this_panels(hass: HomeAs
 
 
 def _entity_state(hass: HomeAssistant, entry: MockConfigEntry, domain: str, unique_id: str) -> str:
-    entity_id = er.async_get(hass).async_get_entity_id(domain, DOMAIN, unique_id)
+    entity_id = entity_id_in_entry(er.async_get(hass), entry.entry_id, domain, unique_id)
     assert entity_id is not None
     state = hass.states.get(entity_id)
     assert state is not None
@@ -340,3 +342,27 @@ async def test_a_restored_store_draws_the_bound_circuit_once_on_its_own_tile(
     assert site["feed_circuit_id"] is None and site["power_entity_id"] is None
     assert own["feed_circuit_id"] == C
     assert own["power_entity_id"] == _circuit_power(hass, entry, C)
+
+
+async def test_a_panel_status_another_entry_holds_is_not_this_panels(hass: HomeAssistant) -> None:
+    """The panel status the card watches is looked up in this entry too."""
+    snapshot = SpanPanelSnapshotFactory.create()
+    entry = _entry(hass, "entry-ws-scoped-status", snapshot.serial_number)
+    await _setup(hass, entry, snapshot)
+    other = MockConfigEntry(
+        domain=DOMAIN, entry_id="entry-ws-other-status", unique_id="another-panel"
+    )
+    other.add_to_hass(hass)
+    registry = er.async_get(hass)
+    unique_id = build_binary_sensor_unique_id(snapshot.serial_number, "panel_status")
+    own = registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
+    assert own is not None
+    registry.async_remove(own)
+    registry.async_get_or_create("binary_sensor", DOMAIN, unique_id, config_entry=other)
+
+    result = await _topology(hass, entry)
+
+    panel_entities = result["panel_entities"]
+    assert isinstance(panel_entities, dict)
+    assert "panel_status" not in panel_entities
+    assert "current_power" in panel_entities

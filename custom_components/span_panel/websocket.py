@@ -127,7 +127,9 @@ async def handle_panel_topology(
         snapshot.serial_number, entity_registry, config_entry_id
     )
 
-    panel_status_entity = _resolve_panel_status_entity(snapshot.serial_number, entity_registry)
+    panel_status_entity = _resolve_panel_status_entity(
+        snapshot.serial_number, entity_registry, config_entry_id
+    )
     if panel_status_entity is not None:
         panel_entities["panel_status"] = panel_status_entity
 
@@ -357,15 +359,17 @@ def _build_panel_entity_map(
 def _resolve_panel_status_entity(
     serial: str,
     entity_registry: er.EntityRegistry,
+    config_entry_id: str,
 ) -> str | None:
     """Resolve the panel_status binary sensor entity_id for the frontend.
 
     The frontend watches this entity to detect panel online/offline state.
     The binary sensor is always available (see binary_sensor.py) so the
     frontend can rely on its state regardless of coordinator offline status.
+    Looked up in this config entry only, as `_build_panel_entity_map` is.
     """
     unique_id = build_binary_sensor_unique_id(serial, "panel_status")
-    return entity_registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
+    return entity_id_in_entry(entity_registry, config_entry_id, "binary_sensor", unique_id)
 
 
 def _classify_sensor_role(unique_id: str) -> str | None:
