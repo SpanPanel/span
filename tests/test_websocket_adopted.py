@@ -1299,7 +1299,7 @@ async def test_the_bound_inverters_keyed_reading_is_listed_on_the_solar_card(
             for key in (bound, other)
         },
     )
-    binding = resolve(snapshot, StoredPvBinding(circuit_id=bound), frozenset())[0]
+    binding = resolve(snapshot, StoredPvBinding(circuit_id=bound), frozenset(), link_held=False)[0]
     panel = _setup(hass, snapshot, pv_binding=binding)
     solar = dr.async_get(hass).async_get_or_create(
         config_entry_id=ENTRY_ID,

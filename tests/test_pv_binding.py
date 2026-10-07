@@ -7,10 +7,12 @@ from typing import Final
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry
+from custom_components.span_panel.binary_sensor import SpanPVSolarLinkBinarySensor
 from custom_components.span_panel.const import DOMAIN, PV_PANEL_LINK_KEY
 from custom_components.span_panel.id_builder import (
     build_panel_unique_id,
@@ -414,3 +416,112 @@ async def test_the_platforms_decide_from_the_snapshot_the_binding_was_resolved_f
     await _setup(hass, entry, after)
     assert entry.runtime_data.pv_binding.bound_key == SOLAR_CIRCUIT
     assert inverter_cards(hass, entry) == set()
+
+
+# --- the Solar card's link entity -----------------------------------------------------
+#
+# Created where it is already registered, or where every inverter the card reads
+# publishes a link record -- never by what a link reads at setup.
+
+STATUS_TOPIC: Final = "connection/feeds-device-status"
+
+
+def _solar_link(platforms: list[MockEntityPlatform], serial: str) -> SpanPVSolarLinkBinarySensor | None:
+    """The Solar card's link entity these platforms built, read once from the coordinator."""
+    link_id = solar_unique_ids(serial)[PV_PANEL_LINK_KEY]
+    for platform in platforms:
+        for entity in platform.entities.values():
+            if isinstance(entity, SpanPVSolarLinkBinarySensor) and entity.unique_id == link_id:
+                entity._handle_coordinator_update()
+                return entity
+    return None
+
+
+def _one_record_less(status: str) -> dict[str, dict[str, str]]:
+    """Two inverters at first sight; the first circuit reports `status`, the second publishes no record."""
+    tree = _tree()
+    tree[SOLAR_CIRCUIT][STATUS_TOPIC] = status
+    tree[SECOND_SOLAR_CIRCUIT].pop(STATUS_TOPIC)
+    return tree
+
+
+@pytest.mark.parametrize(("recorded", "expected"), [(True, True), (False, None)], ids=["record", "no-record"])
+async def test_a_lone_inverter_has_the_link_exactly_as_2_1_1_did(
+    hass: HomeAssistant, recorded: bool, expected: bool | None
+) -> None:
+    """With a record the link is created, reading it; without one it is not, as 2.1.1 decided it."""
+    tree = schema_one_tree()
+    if not recorded:
+        tree[SOLAR_CIRCUIT].pop(STATUS_TOPIC)
+    snapshot = schema_one_snapshot(tree)
+    entry = _entry(hass, "entry-link-lone", snapshot.serial_number)
+
+    link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
+
+    assert (link is not None) is recorded
+    assert link is None or link.is_on is expected
+
+
+async def test_a_bound_link_is_kept_and_reads_unknown_while_its_inverter_is_not_published(
+    hass: HomeAssistant,
+) -> None:
+    fed = schema_one_snapshot()
+    entry = _entry(hass, "entry-link-bound", fed.serial_number)
+    await _unload(await _setup(hass, entry, fed))
+
+    pending = schema_one_snapshot(_unfed_tree())
+    platforms = await _setup(hass, entry, pending)
+    link = _solar_link(platforms, pending.serial_number)
+    assert link is not None
+    assert link.is_on is None and link.available
+    await _unload(platforms)
+
+    tree = schema_one_tree()
+    tree[NEW_CIRCUIT] = tree.pop(SOLAR_CIRCUIT)
+    departed = schema_one_snapshot(tree)
+    link = _solar_link(await _setup(hass, entry, departed), departed.serial_number)
+    assert link is not None
+    assert link.is_on is None and link.available
+
+
+async def test_an_unbound_link_over_several_does_not_come_and_go_with_a_reading(hass: HomeAssistant) -> None:
+    """One inverter publishes no record: the link's existence is the same whether the other is OK or LOST."""
+    entry = _entry(hass, "entry-link-unbound", schema_one_snapshot().serial_number)
+    existence = []
+    for status in ("OK", "LOST", "OK"):
+        snapshot = schema_one_snapshot(_one_record_less(status))
+        platforms = await _setup(hass, entry, snapshot)
+        assert entry.runtime_data.pv_binding.mode == "unbound"
+        existence.append(_solar_link(platforms, snapshot.serial_number) is not None)
+        await _unload(platforms)
+    assert existence == [False, False, False]
+
+
+async def test_an_unbound_link_over_several_all_recorded_is_created(hass: HomeAssistant) -> None:
+    snapshot = schema_one_snapshot(_tree())
+    entry = _entry(hass, "entry-link-all", snapshot.serial_number)
+
+    link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
+
+    assert entry.runtime_data.pv_binding.mode == "unbound"
+    assert link is not None and link.is_on is True
+
+
+@pytest.mark.parametrize(("status", "reading"), [("OK", None), ("LOST", False)])
+async def test_an_install_that_had_the_link_keeps_it_when_the_record_rule_fails(
+    hass: HomeAssistant, status: str, reading: bool | None
+) -> None:
+    """A 2.1.1 registry holding the link, upgraded straight to two inverters one of which publishes no record.
+
+    Kept whatever the recorded link reads; it reads the inverters together --
+    unknown with one unreported and the other up, down once the other is down.
+    """
+    snapshot = schema_one_snapshot(_one_record_less(status))
+    entry = _entry(hass, "entry-link-held", snapshot.serial_number)
+    held = _seed_2_1_1(hass, entry)
+
+    link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
+
+    assert link is not None
+    assert held[solar_unique_ids(snapshot.serial_number)[PV_PANEL_LINK_KEY]][0] == link.entity_id
+    assert link.is_on is reading

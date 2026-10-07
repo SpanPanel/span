@@ -486,10 +486,11 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     version, so a panel that starts publishing the record reaches
     `detect_capabilities`, the coordinator reloads, and the sensors appear.
     """
-    return (
-        snapshot.pv.connected is not None
-        or any(pv.connected is not None for pv in snapshot.pv_inverters.values())
-        or any(evse.connected is not None for evse in snapshot.evse.values())
+    # `snapshot.pv` is the lone inverter or the inverters together, so a record
+    # on it is a record on some inverter here; reading the aggregate as well would
+    # only add a value that comes and goes with what the links read.
+    return any(pv.connected is not None for pv in snapshot.pv_inverters.values()) or any(
+        evse.connected is not None for evse in snapshot.evse.values()
     )
 
 

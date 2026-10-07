@@ -690,11 +690,14 @@ def _create_pv_link_sensors(
     config_entry: SpanPanelConfigEntry,
     snapshot: SpanPanelSnapshot,
 ) -> list[SpanPVSolarLinkBinarySensor | SpanPVInverterBinarySensor]:
-    """Create the enclosure's view of the link to each solar inverter, where a circuit reports one.
+    """Create the enclosure's view of the link to each solar inverter.
 
     The Solar card's link reads through `pv_binding`, like its other PV
-    entities; every other inverter has its own on its own card. Gated on the
-    record existing: absence is the panel saying it does not know.
+    entities, and exists where the binding's `solar_link` says: already
+    registered, or every inverter the card reads publishes a link record -- never
+    by what a link reads at setup. Every other inverter has its own on its own
+    card, gated on its circuit publishing the record: absence is the panel saying
+    it does not know.
     """
     coordinator = config_entry.runtime_data.coordinator
     identity = config_entry.runtime_data.pv_binding
@@ -703,8 +706,8 @@ def _create_pv_link_sensors(
         for key, inverter in snapshot.pv_inverters.items()
         if identity.has_own_card(key) and inverter.connected is not None
     ]
-    source = identity.source(snapshot)
-    if source.connected is not None:
+    if identity.solar_link:
+        source = identity.source(snapshot)
         configured_name = coordinator.config_entry.data.get(
             CONF_DEVICE_NAME, coordinator.config_entry.title
         )

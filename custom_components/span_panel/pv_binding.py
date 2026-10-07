@@ -35,7 +35,7 @@ from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPVSnapshot
 
 from .const import DOMAIN, PV_PANEL_LINK_KEY
-from .id_builder import build_pv_inverter_unique_id
+from .id_builder import build_binary_sensor_unique_id, build_pv_inverter_unique_id
 from .sensor_definitions import PV_METADATA_SENSORS
 
 if TYPE_CHECKING:
@@ -80,6 +80,16 @@ class PvBinding:
     withheld: frozenset[str]
     """Device-id keys given no card while the bound circuit's record is pending."""
 
+    solar_link: bool
+    """Whether the Solar card has its link entity at this setup.
+
+    Decided by what does not change with a reading: the entity is already
+    registered, so it never vanishes, or every inverter the card reads publishes
+    a link record. The second is what 2.1.1 asked of its one inverter. A link a
+    circuit publishes reads OK, LOST or DEGRADED, so it is the record, never
+    its reading, that decides; the reading is what the entity shows.
+    """
+
     def has_own_card(self, key: str) -> bool:
         """Whether inverter `key` gets a card and entities of its own at this setup."""
         return key != self.legacy_key and key not in self.withheld
@@ -95,8 +105,11 @@ class PvBinding:
         return snapshot.pv_inverters.get(self.bound_key, SpanPVSnapshot())
 
 
-UNDECIDED_PV_BINDING: Final = PvBinding("undecided", None, None, frozenset())
-"""What setup resolves while no inverter has been seen: nothing bound, nothing withheld, nothing written."""
+UNDECIDED_PV_BINDING: Final = PvBinding("undecided", None, None, frozenset(), solar_link=False)
+"""What setup resolves while no inverter has been seen: nothing bound, nothing withheld, nothing written.
+
+Its link is kept only where the entity is already registered; see `resolve`.
+"""
 
 
 def read_record(stored: object) -> StoredPvBinding | None:
@@ -122,22 +135,44 @@ def _lone_fed_circuit(snapshot: SpanPanelSnapshot) -> str | None:
     return key if pv.feed_circuit_id is not None else None
 
 
+def _reads_link_records(snapshot: SpanPanelSnapshot, bound: str | None) -> bool:
+    """Whether every inverter the Solar card reads publishes a link record.
+
+    Bound, that is the bound inverter, which must be published to have one.
+    Unbound, the card reads the lone inverter or the inverters together, so
+    every inverter must have one: with any left unreported the aggregate is
+    known only while another link is down, and the entity would come and go
+    with a reading.
+    """
+    if bound is not None:
+        pv = snapshot.pv_inverters.get(bound)
+        return pv is not None and pv.connected is not None
+    inverters = snapshot.pv_inverters.values()
+    return bool(inverters) and all(pv.connected is not None for pv in inverters)
+
+
 def resolve(
-    snapshot: SpanPanelSnapshot, record: StoredPvBinding | None, held: frozenset[str]
+    snapshot: SpanPanelSnapshot,
+    record: StoredPvBinding | None,
+    held: frozenset[str],
+    *,
+    link_held: bool,
 ) -> tuple[PvBinding, StoredPvBinding | None]:
     """Decide this setup's identity, and the record to keep.
 
-    `held` is the inverter keys that already have a card of their own. The
+    `held` is the inverter keys that already have a card of their own, and
+    `link_held` whether the Solar card's link entity is already registered. The
     record is written at first sight, binding only a lone circuit-fed inverter
     that holds no card; its only rewrite is refining an unbound record the same
-    way. A key in `held` always keeps its card: nothing here withdraws one.
+    way. A key in `held` always keeps its card, and a held link is always kept:
+    nothing here withdraws either.
     """
     inverters = snapshot.pv_inverters
     lone_fed = _lone_fed_circuit(snapshot)
     bindable = lone_fed if lone_fed is not None and lone_fed not in held else None
     if record is None:
         if not inverters:
-            return UNDECIDED_PV_BINDING, None
+            return PvBinding("undecided", None, None, frozenset(), solar_link=link_held), None
         record = StoredPvBinding(circuit_id=bindable)
     elif record["circuit_id"] is None and bindable is not None:
         record = StoredPvBinding(circuit_id=bindable)
@@ -151,15 +186,24 @@ def resolve(
         )
         # A bound key that somehow holds a card (a store restored from an older backup) keeps it.
         legacy = None if bound in held else bound
-        return PvBinding("inverter", bound, legacy, withheld), record
+        solar_link = link_held or _reads_link_records(snapshot, bound)
+        return PvBinding("inverter", bound, legacy, withheld, solar_link), record
     lone = next(iter(inverters)) if len(inverters) == 1 else None
     legacy = lone if lone is not None and lone not in held else None
-    return PvBinding("unbound", None, legacy, frozenset()), record
+    solar_link = link_held or _reads_link_records(snapshot, None)
+    return PvBinding("unbound", None, legacy, frozenset(), solar_link), record
 
 
 def store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredPvBinding]:
     """Per entry. A `Store`, not config entry data: writing entry data during setup fires the update listener."""
     return Store(hass, _STORE_VERSION, f"{DOMAIN}.pv_binding.{entry.entry_id}")
+
+
+def _registered_in(registry: er.EntityRegistry, entry_id: str, domain: str, unique_id: str) -> bool:
+    """Whether `unique_id` is registered under `domain` in this entry; another entry's says nothing."""
+    entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+    entry = registry.async_get(entity_id) if entity_id is not None else None
+    return entry is not None and entry.config_entry_id == entry_id
 
 
 def keys_holding_cards(
@@ -173,16 +217,31 @@ def keys_holding_cards(
     """
 
     def holds(key: str) -> bool:
-        for domain, description_key in _CARD_ENTITIES:
-            entity_id = registry.async_get_entity_id(
-                domain, DOMAIN, build_pv_inverter_unique_id(serial, key, description_key)
+        return any(
+            _registered_in(
+                registry,
+                entry_id,
+                domain,
+                build_pv_inverter_unique_id(serial, key, description_key),
             )
-            entry = registry.async_get(entity_id) if entity_id is not None else None
-            if entry is not None and entry.config_entry_id == entry_id:
-                return True
-        return False
+            for domain, description_key in _CARD_ENTITIES
+        )
 
     return frozenset(key for key in keys if holds(key))
+
+
+def solar_link_held(registry: er.EntityRegistry, entry_id: str, serial: str) -> bool:
+    """Return whether the Solar card's link entity is already registered in this entry.
+
+    Built with `build_binary_sensor_unique_id`, as `SpanPVSolarLinkBinarySensor`
+    builds its id through the panel binary sensor it extends.
+    """
+    return _registered_in(
+        registry,
+        entry_id,
+        "binary_sensor",
+        build_binary_sensor_unique_id(serial, PV_PANEL_LINK_KEY),
+    )
 
 
 async def async_resolve_pv_binding(
@@ -191,10 +250,12 @@ async def async_resolve_pv_binding(
     """Resolve this setup's identity, writing the record at first sight or at its one refinement."""
     store = store_for(hass, entry)
     record = read_record(await store.async_load())
+    registry = er.async_get(hass)
     held = keys_holding_cards(
-        er.async_get(hass), entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
+        registry, entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
     )
-    identity, kept = resolve(snapshot, record, held)
+    link_held = solar_link_held(registry, entry.entry_id, snapshot.serial_number)
+    identity, kept = resolve(snapshot, record, held, link_held=link_held)
     if kept is not None and kept != record:
         await store.async_save(kept)
         _LOGGER.info("Solar card's PV entities: %s", identity.mode)

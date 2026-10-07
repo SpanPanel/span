@@ -876,7 +876,7 @@ def _panel_with(
 def _binding(
     snapshot: SpanPanelSnapshot, record: StoredPvBinding | None, held: frozenset[str] = frozenset()
 ) -> PvBinding:
-    return resolve(snapshot, record, held)[0]
+    return resolve(snapshot, record, held, link_held=False)[0]
 
 
 def _cards(hass: HomeAssistant, entry_id: str, *suffixes: str) -> None:
