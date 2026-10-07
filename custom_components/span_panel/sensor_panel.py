@@ -14,7 +14,7 @@ from span_panel_api import (
 )
 
 from .coordinator import SpanPanelCoordinator
-from .energy_orientation import LOAD, EnergyRole, NetEnergyOrientation, PanelMeter
+from .energy_orientation import EnergyBinding
 from .helpers import (
     build_bess_unique_id_for_entry,
     build_mid_unique_id_for_entry,
@@ -569,22 +569,15 @@ class SpanPanelEnergySensor(
         description: SpanPanelDataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
     ) -> None:
-        """Initialize the panel energy sensor, keeping its declared role and meter."""
-        self._declared_role: EnergyRole | None = description.energy_role
-        self._declared_meter: PanelMeter | None = description.panel_meter
+        """Initialize the panel energy sensor, bound to the meter its description declares."""
+        self._bind_energy(
+            EnergyBinding(
+                meter=description.panel_meter,
+                role=description.energy_role,
+                net=description.net_energy,
+            )
+        )
         super().__init__(data_coordinator, description, snapshot)
-
-    def _energy_meter(self) -> PanelMeter | None:
-        """Return the main meter or the feed-through lugs."""
-        return self._declared_meter
-
-    def _energy_role(self) -> EnergyRole | None:
-        """Return Produced, Consumed or Net, as the catalog declares."""
-        return self._declared_role
-
-    def _net_orientation(self, data_source: SpanPanelSnapshot) -> NetEnergyOrientation:
-        """Return load: the panel's meters always count consumed minus produced."""
-        return LOAD
 
     def _generate_unique_id(
         self,

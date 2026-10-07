@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Final
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.sensor import SensorDeviceClass
@@ -13,7 +14,7 @@ from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import SpanPVSnapshot
+from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -23,13 +24,16 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.energy_orientation import (
     CircuitMeter,
+    EnergyBinding,
     EnergyCounter,
     EnergyMeter,
+    EnergyRole,
     PanelMeter,
 )
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
+    SpanEnergySensorBase,
     _parse_numeric_state,
 )
 from custom_components.span_panel.sensor_circuit import (
@@ -692,6 +696,117 @@ def test_main_meter_net_is_compensated_consumed_minus_compensated_produced() -> 
     sensor._handle_online_state()
 
     assert sensor.native_value == pytest.approx((100.0 + 2400.0) - (10.0 + 290.0))
+
+
+# ---------------------------------------------------------------------------
+# Every Net's adjustment is oriented as its value is
+# ---------------------------------------------------------------------------
+
+# Asymmetric on purpose: an adjustment oriented against its value lands on a
+# different number from the value of the compensated counters.
+RAW: Final = {EnergyCounter.CONSUMED: 30.0, EnergyCounter.PRODUCED: 1000.0}
+OFFSET: Final = {EnergyCounter.CONSUMED: 7.0, EnergyCounter.PRODUCED: 50.0}
+COMPENSATED: Final = {counter: RAW[counter] + OFFSET[counter] for counter in EnergyCounter}
+
+PANEL_COUNTER_FIELDS: Final = {
+    PanelMeter.MAIN_METER: {
+        EnergyCounter.CONSUMED: "main_meter_energy_consumed_wh",
+        EnergyCounter.PRODUCED: "main_meter_energy_produced_wh",
+    },
+    PanelMeter.FEEDTHROUGH: {
+        EnergyCounter.CONSUMED: "feedthrough_energy_consumed_wh",
+        EnergyCounter.PRODUCED: "feedthrough_energy_produced_wh",
+    },
+}
+
+
+def _offset_of(meter: EnergyMeter) -> Callable[[EnergyMeter, EnergyCounter], float]:
+    return _offsets(
+        meter,
+        produced=OFFSET[EnergyCounter.PRODUCED],
+        consumed=OFFSET[EnergyCounter.CONSUMED],
+    )
+
+
+@pytest.mark.parametrize("device_type", ["pv", "circuit", "evse"])
+def test_a_circuit_nets_adjustment_is_oriented_as_its_value(device_type: str) -> None:
+    """Net under offsets is the value function of the compensated counters, never the other sign."""
+    description = _circuit_description("circuit_energy_net")
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1",
+        device_type=device_type,
+        consumed_energy_wh=RAW[EnergyCounter.CONSUMED],
+        produced_energy_wh=RAW[EnergyCounter.PRODUCED],
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offset_of(CircuitMeter("c1"))
+    sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
+
+    sensor._handle_online_state()
+
+    compensated = replace(
+        circuit,
+        consumed_energy_wh=COMPENSATED[EnergyCounter.CONSUMED],
+        produced_energy_wh=COMPENSATED[EnergyCounter.PRODUCED],
+    )
+    assert sensor.native_value == pytest.approx(description.value_fn(compensated))
+
+
+@pytest.mark.parametrize(
+    "description",
+    [d for d in PANEL_ENERGY_SENSORS if d.energy_role is EnergyRole.NET],
+    ids=lambda d: d.key,
+)
+def test_a_panel_nets_adjustment_is_oriented_as_its_value(
+    description: SpanPanelDataSensorEntityDescription,
+) -> None:
+    """Main Meter Net and Feed Through Net, through the same path a circuit's Net takes."""
+    assert description.panel_meter is not None
+    fields = PANEL_COUNTER_FIELDS[description.panel_meter]
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(),
+        **{fields[counter]: RAW[counter] for counter in EnergyCounter},
+    )
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offset_of(description.panel_meter)
+    sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
+
+    sensor._handle_online_state()
+
+    compensated = replace(snapshot, **{fields[counter]: COMPENSATED[counter] for counter in EnergyCounter})
+    assert sensor.native_value == pytest.approx(description.value_fn(compensated))
+
+
+# ---------------------------------------------------------------------------
+# The binding is made exactly once
+# ---------------------------------------------------------------------------
+
+
+def test_an_energy_sensor_that_never_binds_its_energy_fails_at_construction() -> None:
+    class _Forgetful(SpanPanelEnergySensor):
+        def __init__(
+            self,
+            data_coordinator: MagicMock,
+            description: SpanPanelDataSensorEntityDescription,
+            snapshot: SpanPanelSnapshot,
+        ) -> None:
+            SpanEnergySensorBase.__init__(self, data_coordinator, description, snapshot)
+
+    snapshot = SpanPanelSnapshotFactory.create()
+
+    with pytest.raises(TypeError, match="_bind_energy"):
+        _Forgetful(_make_coordinator(snapshot), _panel_description("mainMeterNetEnergyWh"), snapshot)
+
+
+def test_an_energy_sensor_cannot_be_bound_twice() -> None:
+    snapshot = SpanPanelSnapshotFactory.create()
+    sensor = SpanPanelEnergySensor(
+        _make_coordinator(snapshot), _panel_description("mainMeterEnergyConsumedWh"), snapshot
+    )
+
+    with pytest.raises(RuntimeError, match="twice"):
+        sensor._bind_energy(EnergyBinding(meter=None, role=None, net=None))
 
 
 def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference() -> None:

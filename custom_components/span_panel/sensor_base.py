@@ -32,7 +32,7 @@ from .energy_dip import (
     build_dip_attributes,
     process_energy_dip,
 )
-from .energy_orientation import EnergyMeter, EnergyRole, NetEnergyOrientation
+from .energy_orientation import EnergyBinding
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -531,13 +531,25 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
     _unrecorded_attributes = _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES
 
+    _energy_binding: EnergyBinding[D] | None = None
+    """Set once, by `_bind_energy`, before `__init__` runs; read through `_energy`."""
+
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
         snapshot: SpanPanelSnapshot,
     ) -> None:
-        """Initialize the energy sensor with grace period tracking."""
+        """Initialize the energy sensor with grace period tracking.
+
+        Refuses a subclass that has not bound its energy: a sensor that forgot
+        would otherwise register as no meter's counter and give its Net no
+        adjustment, silently.
+        """
+        if self._energy_binding is None:
+            raise TypeError(
+                f"{type(self).__name__} must call _bind_energy before SpanEnergySensorBase.__init__"
+            )
         super().__init__(data_coordinator, description, snapshot)
         self._last_valid_state: float | None = None
         self._last_valid_changed: datetime | None = None
@@ -570,17 +582,26 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         """Return the cumulative dip compensation offset."""
         return self._energy_offset
 
-    @abstractmethod
-    def _energy_meter(self) -> EnergyMeter | None:
-        """Return the meter this sensor reads, or None for a sensor on no meter."""
+    def _bind_energy(self, binding: EnergyBinding[D]) -> None:
+        """Record this sensor's meter, role and Net definition, once.
 
-    @abstractmethod
-    def _energy_role(self) -> EnergyRole | None:
-        """Return the part this sensor plays on its meter, as its description declares."""
+        Called by each subclass's `__init__` before it reaches this class's, from
+        its description: a subclass binds rather than passing these to `__init__`
+        because the circuit classes share a cooperative `__init__` with the power
+        sensor, which takes no such arguments. Binding twice is a programming
+        error, because the coordinator may already hold the first binding's key.
+        """
+        if self._energy_binding is not None:
+            raise RuntimeError(f"{type(self).__name__} bound its energy twice")
+        self._energy_binding = binding
 
-    @abstractmethod
-    def _net_orientation(self, data_source: D) -> NetEnergyOrientation:
-        """Return which counter this meter's Net credits, read from the data its value is."""
+    @property
+    def _energy(self) -> EnergyBinding[D]:
+        """Return the sensor's binding, raising if `_bind_energy` was never called."""
+        binding = self._energy_binding
+        if binding is None:
+            raise TypeError(f"{type(self).__name__} never called _bind_energy")
+        return binding
 
     def _read_raw_value(
         self,
@@ -592,22 +613,24 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         Produced and Consumed compensate their own dips. Net is a `TOTAL` sensor
         and compensates nothing itself, so it reads their offsets through the
         coordinator and stays equal to compensated credit minus compensated debit.
-        The orientation is the one its value function used, so the value and the
-        adjustment cannot disagree.
+        The orientation is its `NetEnergy`'s, whose `value` is also its value
+        function, so the value and the adjustment cannot disagree.
         """
         raw_value = super()._read_raw_value(value_function, data_source)
         # Narrowed before the partial is built: a sensor on no meter has no
         # siblings to read, so it gets no adjustment rather than a None meter.
-        meter = self._energy_meter()
+        binding = self._energy
+        net = binding.net
+        meter = binding.meter
         if (
-            self._energy_role() is not EnergyRole.NET
+            net is None
             or meter is None
             or isinstance(raw_value, bool)
             or not isinstance(raw_value, int | float)
         ):
             return raw_value
         offset_of = partial(self.coordinator.dip_offset, meter)
-        return raw_value + self._net_orientation(data_source).adjustment(offset_of)
+        return raw_value + net.orientation_of(data_source).adjustment(offset_of)
 
     def _process_raw_value(self, raw_value: float | str | None) -> None:
         """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
@@ -734,11 +757,9 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
         # Offer this counter's offset to its meter's Net before the coordinator
         # listener exists, so a Net added after it reads it from the first update.
-        role = self._energy_role()
-        meter = self._energy_meter()
-        counter = role.counter if role is not None else None
-        if meter is not None and counter is not None:
-            self.coordinator.register_energy_sensor(meter, counter, self)
+        binding = self._energy
+        if binding.meter is not None and binding.counter is not None:
+            self.coordinator.register_energy_sensor(binding.meter, binding.counter, self)
 
         # Register the coordinator listener (and base RestoreSensor setup).
         await super().async_added_to_hass()

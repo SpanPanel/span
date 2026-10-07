@@ -12,12 +12,7 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
-from .energy_orientation import (
-    CircuitMeter,
-    EnergyRole,
-    NetEnergyOrientation,
-    circuit_net_orientation,
-)
+from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
@@ -298,12 +293,19 @@ class SpanCircuitEnergySensor(
         circuit_id: str,
         device_info_override: DeviceInfo | None = None,
     ) -> None:
-        """Initialize a circuit energy sensor, keeping the role its description declares.
+        """Initialize a circuit energy sensor, bound to its circuit's meter.
 
-        Kept under a name of our own because `SensorEntity.entity_description` is
-        annotated as the base description, as `SpanShedForecastSensor` explains.
+        Bound from the catalog description here rather than read off
+        `entity_description` later, which `SensorEntity` annotates as the base
+        description, as `SpanShedForecastSensor` explains.
         """
-        self._declared_role: EnergyRole | None = description.energy_role
+        self._bind_energy(
+            EnergyBinding(
+                meter=CircuitMeter(circuit_id),
+                role=description.energy_role,
+                net=description.net_energy,
+            )
+        )
         super().__init__(
             data_coordinator,
             description,
@@ -327,18 +329,6 @@ class SpanCircuitEnergySensor(
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
-
-    def _energy_meter(self) -> CircuitMeter:
-        """Return this circuit's meter."""
-        return CircuitMeter(self.circuit_id)
-
-    def _energy_role(self) -> EnergyRole | None:
-        """Return Produced, Consumed or Net, as the catalog declares."""
-        return self._declared_role
-
-    def _net_orientation(self, data_source: SpanCircuitSnapshot) -> NetEnergyOrientation:
-        """Return generation for a solar circuit and load for any other, from the reading being processed."""
-        return circuit_net_orientation(data_source)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

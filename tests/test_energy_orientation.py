@@ -19,12 +19,15 @@ from custom_components.span_panel.energy_orientation import (
     GENERATION,
     LOAD,
     CircuitMeter,
+    EnergyBinding,
     EnergyCounter,
     EnergyRole,
+    NetEnergy,
     NetEnergyOrientation,
     PanelMeter,
     circuit_is_generation,
     circuit_net_orientation,
+    panel_meter_net_orientation,
 )
 from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_BREAKER_RATING_SENSOR,
@@ -32,6 +35,7 @@ from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_SENSORS,
     PANEL_ENERGY_SENSORS,
     UNMAPPED_SENSORS,
+    SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
 )
 
@@ -104,6 +108,56 @@ def test_a_counter_key_answers_neither_a_role_nor_a_string() -> None:
     assert (PanelMeter.MAIN_METER, "produced") not in offsets
 
 
+def test_the_panel_meters_are_load_oriented() -> None:
+    assert panel_meter_net_orientation(SpanPanelSnapshotFactory.create()) is LOAD
+
+
+# ---------------------------------------------------------------------------
+# A Net is one orientation, read by both its value and its adjustment
+# ---------------------------------------------------------------------------
+
+CIRCUIT_NET: Final = NetEnergy(
+    orientation_of=circuit_net_orientation,
+    consumed=lambda c: c.consumed_energy_wh,
+    produced=lambda c: c.produced_energy_wh,
+)
+
+
+@pytest.mark.parametrize(("device_type", "expected"), [("pv", 970.0), ("circuit", -970.0)])
+def test_a_net_value_is_the_credited_reading_minus_the_debited_one(device_type: str, expected: float) -> None:
+    circuit = SpanCircuitSnapshotFactory.create(
+        device_type=device_type, consumed_energy_wh=30.0, produced_energy_wh=1000.0
+    )
+
+    assert CIRCUIT_NET.value(circuit) == pytest.approx(expected)
+
+
+def test_a_net_value_is_unknown_while_a_counter_is_unreported() -> None:
+    circuit = SpanCircuitSnapshotFactory.create(consumed_energy_wh=None, produced_energy_wh=4.0)
+
+    assert CIRCUIT_NET.value(circuit) is None
+
+
+def test_a_binding_declares_a_net_exactly_when_its_role_is_net() -> None:
+    with pytest.raises(ValueError, match="Net"):
+        EnergyBinding(meter=CircuitMeter("c1"), role=EnergyRole.NET, net=None)
+    with pytest.raises(ValueError, match="Net"):
+        EnergyBinding(meter=CircuitMeter("c1"), role=EnergyRole.PRODUCED, net=CIRCUIT_NET)
+
+
+def test_a_binding_plays_its_role_on_a_meter() -> None:
+    with pytest.raises(ValueError, match="meter"):
+        EnergyBinding(meter=None, role=EnergyRole.CONSUMED, net=None)
+
+
+def test_a_binding_names_the_counter_it_offers() -> None:
+    meter = CircuitMeter("c1")
+    assert EnergyBinding(meter=meter, role=EnergyRole.PRODUCED, net=None).counter is EnergyCounter.PRODUCED
+    assert EnergyBinding(meter=meter, role=EnergyRole.CONSUMED, net=None).counter is EnergyCounter.CONSUMED
+    assert EnergyBinding(meter=meter, role=EnergyRole.NET, net=CIRCUIT_NET).counter is None
+    assert EnergyBinding(meter=None, role=None, net=None).counter is None
+
+
 def test_meters_are_hashable_keys() -> None:
     keys = {
         (CircuitMeter("c1"), EnergyCounter.PRODUCED),
@@ -161,6 +215,16 @@ def test_each_panel_meter_has_one_produced_one_consumed_and_one_net() -> None:
     for meter in PanelMeter:
         roles = [d.energy_role for d in PANEL_ENERGY_SENSORS if d.panel_meter is meter]
         assert Counter(roles) == Counter(EnergyRole), meter
+
+
+def test_a_description_carries_a_net_exactly_when_its_role_is_net() -> None:
+    energy_descriptions = [
+        d
+        for d in _every_description()
+        if isinstance(d, SpanPanelCircuitsSensorEntityDescription | SpanPanelDataSensorEntityDescription)
+    ]
+    for description in energy_descriptions:
+        assert (description.net_energy is not None) is (description.energy_role is EnergyRole.NET), description.key
 
 
 def test_exactly_three_descriptions_are_net_sensors() -> None:

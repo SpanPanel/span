@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -45,11 +45,12 @@ from span_panel_api import (
 )
 
 from .energy_orientation import (
-    LOAD,
     EnergyRole,
+    NetEnergy,
     PanelMeter,
     circuit_is_generation,
     circuit_net_orientation,
+    panel_meter_net_orientation,
 )
 from .field_paths import (
     DerivedReason,
@@ -82,6 +83,10 @@ class SpanPanelCircuitsSensorEntityDescription(
     mixin gives: a pairing is data, and a substring match is how a rename silently
     unpairs it. Its meter is the instance's circuit."""
 
+    net_energy: NetEnergy[SpanCircuitSnapshot] | None = None
+    """The Net's definition, set exactly when `energy_role` is Net. `value_fn` is
+    its `value`, and the sensor's dip adjustment reads its orientation."""
+
 
 @dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin(FieldPathDeclarationMixin):
@@ -100,6 +105,10 @@ class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDat
 
     panel_meter: PanelMeter | None = None
     """The panel meter whose counters this sensor reads; set with `energy_role`."""
+
+    net_energy: NetEnergy[SpanPanelSnapshot] | None = None
+    """The Net's definition, set exactly when `energy_role` is Net. `value_fn` is
+    its `value`, and the sensor's dip adjustment reads its orientation."""
 
 
 @dataclass(frozen=True)
@@ -286,18 +295,6 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
 # tell. Returning `None` instead reaches `_process_raw_value`, which renders the
 # sensor unknown and, on a `TOTAL_INCREASING` sensor, skips dip compensation so
 # the absent reading never becomes a baseline.
-
-
-def _difference(minuend: float | None, subtrahend: float | None) -> float | None:
-    """`minuend - subtrahend`, or `None` while either side is unreported.
-
-    Half a difference is not a smaller difference, it is no answer: a circuit
-    that has published its consumed counter and not its produced one knows
-    nothing yet about the net of the two.
-    """
-    if minuend is None or subtrahend is None:
-        return None
-    return minuend - subtrahend
 
 
 def _negated(value: float | None) -> float | None:
@@ -1123,6 +1120,28 @@ SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
     value_fn=lambda s: s.power_flow_site if s.power_flow_site is not None else 0.0,
 )
 
+# Each meter's Net, declared once: the description's value function and the
+# sensor's dip adjustment both read the orientation here.
+_MAIN_METER_NET_ENERGY: Final = NetEnergy[SpanPanelSnapshot](
+    orientation_of=panel_meter_net_orientation,
+    consumed=lambda s: s.main_meter_energy_consumed_wh,
+    produced=lambda s: s.main_meter_energy_produced_wh,
+)
+
+# Through the same path as the others. Its counters are `TOTAL` and never
+# compensated, so their offsets, and with them its adjustment, are zero.
+_FEEDTHROUGH_NET_ENERGY: Final = NetEnergy[SpanPanelSnapshot](
+    orientation_of=panel_meter_net_orientation,
+    consumed=lambda s: s.feedthrough_energy_consumed_wh,
+    produced=lambda s: s.feedthrough_energy_produced_wh,
+)
+
+_CIRCUIT_NET_ENERGY: Final = NetEnergy[SpanCircuitSnapshot](
+    orientation_of=circuit_net_orientation,
+    consumed=lambda c: c.consumed_energy_wh,
+    produced=lambda c: c.produced_energy_wh,
+)
+
 # Panel energy sensor definitions
 # Net is listed after its Produced and Consumed siblings, and the order is
 # load-bearing. Net reads their dip offsets during the same coordinator
@@ -1194,6 +1213,7 @@ PANEL_ENERGY_SENSORS: tuple[
         key="mainMeterNetEnergyWh",
         energy_role=EnergyRole.NET,
         panel_meter=PanelMeter.MAIN_METER,
+        net_energy=_MAIN_METER_NET_ENERGY,
         derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="main_meter_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1201,17 +1221,13 @@ PANEL_ENERGY_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
-        value_fn=lambda s: _difference(
-            *LOAD.ordered(
-                consumed=s.main_meter_energy_consumed_wh,
-                produced=s.main_meter_energy_produced_wh,
-            )
-        ),
+        value_fn=_MAIN_METER_NET_ENERGY.value,
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
         energy_role=EnergyRole.NET,
         panel_meter=PanelMeter.FEEDTHROUGH,
+        net_energy=_FEEDTHROUGH_NET_ENERGY,
         derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="feedthrough_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1219,12 +1235,7 @@ PANEL_ENERGY_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
-        value_fn=lambda s: _difference(
-            *LOAD.ordered(
-                consumed=s.feedthrough_energy_consumed_wh,
-                produced=s.feedthrough_energy_produced_wh,
-            )
-        ),
+        value_fn=_FEEDTHROUGH_NET_ENERGY.value,
     ),
 )
 
@@ -1286,6 +1297,7 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
         energy_role=EnergyRole.NET,
+        net_energy=_CIRCUIT_NET_ENERGY,
         derived=DerivedReason.MULTIPLE_FIELDS,
         name="Net Energy",
         legacy_names=("Energy Net",),
@@ -1293,11 +1305,7 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda c: _difference(
-            *circuit_net_orientation(c).ordered(
-                consumed=c.consumed_energy_wh, produced=c.produced_energy_wh
-            )
-        ),
+        value_fn=_CIRCUIT_NET_ENERGY.value,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
