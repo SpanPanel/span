@@ -341,11 +341,12 @@ async def test_a_restored_control_returns_with_its_identity_and_customisations(h
     select_after = registry.async_get(select_id)
     assert select_after is not None and select_after.id == select_before.id
     # A named control asks for no reload; an unnamed one asks once, to sync its name.
-    switch = controls.entity(switch_id)
-    select = controls.entity(select_id)
-    switch._handle_coordinator_update()
-    select._handle_coordinator_update()
-    assert controls.coordinator.request_reload.call_count == 1
+    request_reload = controls.coordinator.request_reload
+    request_reload.reset_mock()
+    controls.entity(switch_id)._handle_coordinator_update()
+    assert request_reload.call_count == 0
+    controls.entity(select_id)._handle_coordinator_update()
+    assert request_reload.call_count == 1
 
 
 async def test_a_user_disabled_control_comes_back_disabled(hass: HomeAssistant) -> None:
