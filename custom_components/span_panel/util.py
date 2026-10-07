@@ -1,5 +1,6 @@
 """Utility functions for the Span integration."""
 
+from dataclasses import dataclass
 import logging
 from typing import Final
 
@@ -121,6 +122,31 @@ def classify_sub_device_identifier(identifier: str) -> str | None:
         return SUB_DEVICE_MID
     if identifier.endswith(f"_{SUB_DEVICE_PV}"):
         return SUB_DEVICE_PV
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class PvDeviceRef:
+    """Which PV card an identifier names: the Solar card, or one inverter's. There is no third kind."""
+
+    inverter_key: str | None
+    """The `pv_inverters` key of an inverter's own card; `None` for the Solar card."""
+
+
+def pv_device_ref(identifier: str, panel_identifier: str) -> PvDeviceRef | None:
+    """Read a PV identifier back, the reading end of `pv_device_info` and `pv_inverter_device_info`.
+
+    Anchored on this panel's own prefix rather than tested as an infix, as
+    `classify_sub_device_identifier` must be for kinds it cannot anchor: here
+    the panel is known, so a charger whose node id contains `_pv_`, an adopted
+    device, or another panel's card cannot be mistaken for one of these.
+    """
+    solar = f"{panel_identifier}_{SUB_DEVICE_PV}"
+    if identifier == solar:
+        return PvDeviceRef(None)
+    key = identifier.removeprefix(f"{solar}_")
+    if key and key != identifier:
+        return PvDeviceRef(key)
     return None
 
 
