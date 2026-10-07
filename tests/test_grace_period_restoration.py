@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
+from custom_components.span_panel.energy_orientation import EnergyBinding
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -380,6 +381,7 @@ class DummyEnergySensor(SpanEnergySensorBase):
         self, grace_minutes: int | str = 15
     ) -> None:
         # Bypass parent __init__ to avoid full HA dependencies for unit testing
+        self._bind_energy(EnergyBinding(meter=None, role=None, net=None))
         self.coordinator = SimpleNamespace(
             panel_offline=True,
             config_entry=SimpleNamespace(

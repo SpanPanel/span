@@ -214,6 +214,9 @@ def _coordinator(
     coordinator.async_request_refresh = AsyncMock()
     # Awaited when a test that marks the entry loaded is unloaded at teardown.
     coordinator.async_shutdown = AsyncMock()
+    # Every Net Energy adds its siblings' dip offsets to its reading, so the
+    # offset has to be a number: a bare `MagicMock` would become the state.
+    coordinator.dip_offset = MagicMock(return_value=0.0)
     return coordinator
 
 

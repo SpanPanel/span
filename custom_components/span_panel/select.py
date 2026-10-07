@@ -23,6 +23,7 @@ from .helpers import (
     construct_circuit_label,
     construct_tabs_attribute,
     construct_voltage_attribute,
+    remove_withdrawn_controls,
 )
 from .naming import (
     circuit_object_id_base,
@@ -351,8 +352,9 @@ async def async_setup_entry(
 
     _LOGGER.debug("ASYNC SETUP ENTRY SELECT")
 
-    # Under `disabled` no control entity is created and no registry entry is
-    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    # Under `disabled` no control entity is created and none is removed; see
+    # `switch.async_setup_entry` for why the entries stay, and for the removal
+    # of a control the panel withdraws.
     if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
         return
 
@@ -361,6 +363,17 @@ async def async_setup_entry(
 
     # Get device name from config entry data
     device_name = config_entry.data.get("device_name", config_entry.title)
+
+    remove_withdrawn_controls(
+        er.async_get(hass),
+        config_entry.entry_id,
+        "select",
+        snapshot.circuits,
+        circuit_has_a_priority_select,
+        lambda circuit_id: build_select_unique_id_for_entry(
+            coordinator, snapshot, circuit_id, device_name
+        ),
+    )
 
     entities: list[SpanPanelCircuitsSelect | AdoptedSelect] = []
 

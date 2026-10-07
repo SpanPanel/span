@@ -97,8 +97,8 @@ def _coordinator(
     coordinator.transport_dead = False
     coordinator.config_entry = entry
     coordinator.request_reload = MagicMock()
-    coordinator.register_circuit_energy_sensor = MagicMock()
-    coordinator.get_circuit_dip_offset = MagicMock(return_value=0.0)
+    coordinator.register_energy_sensor = MagicMock()
+    coordinator.dip_offset = MagicMock(return_value=0.0)
     return coordinator
 
 

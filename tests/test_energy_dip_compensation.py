@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.energy_dip import CONFIRMED_RETRACTION_WINDOW, PendingDip
+from custom_components.span_panel.energy_orientation import EnergyBinding
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -25,6 +26,7 @@ class DummyDipSensor(SpanEnergySensorBase):
         state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING,
     ) -> None:
         """Bypass parent __init__ to avoid full HA dependencies."""
+        self._bind_energy(EnergyBinding(meter=None, role=None, net=None))
         self.coordinator = SimpleNamespace(
             panel_offline=False,
             transport_dead=False,

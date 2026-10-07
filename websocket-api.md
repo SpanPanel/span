@@ -50,8 +50,13 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "voltage": 240,
       "device_type": "circuit",
       "relay_state": "CLOSED",
+      "relay_state_target": null,
       "is_user_controllable": true,
       "breaker_rating_a": 30,
+      "always_on": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "is_never_backup": false,
       "entities": {
         "power": "sensor.span_panel_kitchen_power",
         "produced_energy": "sensor.span_panel_kitchen_produced_energy",
@@ -69,8 +74,13 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "voltage": 120,
       "device_type": "circuit",
       "relay_state": "CLOSED",
+      "relay_state_target": null,
       "is_user_controllable": true,
       "breaker_rating_a": 15,
+      "always_on": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "is_never_backup": true,
       "entities": {
         "power": "sensor.span_panel_master_bedroom_power",
         "switch": "switch.span_panel_master_bedroom_breaker"
@@ -176,16 +186,21 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Circuit Object
 
-| Field                  | Type        | Description                                    |
-| ---------------------- | ----------- | ---------------------------------------------- |
-| `tabs`                 | int[]       | Sorted breaker slot positions (1-indexed)      |
-| `name`                 | string/null | Circuit name from the panel (null if unnamed)  |
-| `voltage`              | int         | 120 (single tab) or 240 (double tab)           |
-| `device_type`          | string      | `circuit`, `pv`, or `evse`                     |
-| `relay_state`          | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                 |
-| `is_user_controllable` | bool        | Whether the circuit relay can be toggled       |
-| `breaker_rating_a`     | float/null  | Breaker amperage rating (null if not reported) |
-| `entities`             | object      | Role-keyed map of entity IDs (see below)       |
+| Field                  | Type        | Description                                                                                |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `tabs`                 | int[]       | Sorted breaker slot positions (1-indexed)                                                  |
+| `name`                 | string/null | Circuit name from the panel (null if unnamed)                                              |
+| `voltage`              | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say              |
+| `device_type`          | string      | `circuit`, `pv`, or `evse`                                                                 |
+| `relay_state`          | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                             |
+| `relay_state_target`   | string/null | The relay state last commanded and not yet reached, or null                                |
+| `always_on`            | bool        | Whether the panel keeps this circuit on and offers no relay control                        |
+| `priority`             | string      | Shed priority as the panel publishes it: `NEVER`, `SOC_THRESHOLD`, `OFF_GRID` or `UNKNOWN` |
+| `priority_target`      | string/null | The priority last commanded and not yet reached, or null                                   |
+| `is_never_backup`      | bool        | Whether the panel pins the priority, so it cannot be set                                   |
+| `is_user_controllable` | bool        | Whether the circuit relay can be toggled                                                   |
+| `breaker_rating_a`     | float/null  | Breaker amperage rating (null if not reported)                                             |
+| `entities`             | object      | Role-keyed map of entity IDs (see below)                                                   |
 
 #### Circuit Entity Roles
 
@@ -200,8 +215,9 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `switch`          | switch | Relay on/off control   |
 | `select`          | select | Shed priority control  |
 
-Not all roles are present on every circuit. Roles are omitted when the entity does not exist (e.g., `current` is absent if the panel does not report per-circuit
-current, `switch` is absent for always-on circuits).
+Not all roles are present on every circuit. A role is omitted when its entity does not exist: `current` is absent if the panel does not report per-circuit
+current. `switch` and `select` are present only while the integration provides that control, meaning the live circuit qualifies for it and **Who may operate the
+panel** is not **Nobody**. An unavailable state on a present `switch` or `select` is transient.
 
 #### Sub-Device Object
 

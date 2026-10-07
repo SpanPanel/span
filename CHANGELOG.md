@@ -60,6 +60,12 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 - **The card editor lists the entities of every EV charger**, not only the last one.
 - **The card's breaker chart of a circuit that feeds an EV charger keeps its history**, where it opened empty or stayed blank because the charger's tile charts
   the same circuit.
+- **Net Energy stays consistent with Produced and Consumed Energy when energy dip compensation is on**, where a solar circuit's moved the wrong way at each
+  compensated dip and Main Meter Net Energy ignored compensation.
+- **Switches and priority selects for circuits the panel no longer lets you control are removed instead of staying unavailable**, and return with their entity
+  IDs, names and areas if the circuit becomes controllable again.
+- **The SPAN Panel card and dashboard never offer a breaker switch or priority the integration does not provide**, and show a breaker's relay state rather than
+  Off while its switch is unavailable.
 
 ## [2.1.1] - 8/2026
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable, Mapping
 from hashlib import sha256
+import logging
 
-from homeassistant.helpers import (
-    entity_registry as er,  # noqa: F401 — re-exported for patch compatibility
-)
+from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot, SpanPVSnapshot
 
 from .entity_resolver import (  # noqa: F401
@@ -22,6 +22,7 @@ from .entity_resolver import (  # noqa: F401
     construct_panel_unique_id_for_entry,
     construct_synthetic_unique_id_for_entry,
     construct_unmapped_friendly_name,
+    entity_id_in_entry,
     get_device_identifier_for_entry,
     resolve_evse_display_suffix,
 )
@@ -104,10 +105,13 @@ __all__ = [
     "identity_digest",
     "pv_inverter_capability_tokens",
     "is_panel_level_sensor_key",
+    "remove_withdrawn_controls",
     "resolve_evse_display_suffix",
     "resolve_pv_display_suffix",
     "resolve_pv_display_suffixes",
 ]
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def circuit_has_a_breaker_switch(circuit: SpanCircuitSnapshot) -> bool:
@@ -148,6 +152,55 @@ def circuit_has_a_priority_select(circuit: SpanCircuitSnapshot) -> bool:
     # PV/EVSE circuits only get selects if they have a physical breaker
     # (relative_position == "DOWNSTREAM" means connected at a breaker slot).
     return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
+
+
+def remove_withdrawn_controls(
+    registry: er.EntityRegistry,
+    entry_id: str,
+    domain: str,
+    circuits: Mapping[str, SpanCircuitSnapshot],
+    qualifies: Callable[[SpanCircuitSnapshot], bool],
+    unique_id_for: Callable[[str], str],
+) -> list[str]:
+    """Remove this entry's control for every circuit that no longer qualifies for one.
+
+    Called by each control platform's `async_setup_entry` with the predicate and
+    unique-id builder it creates with, so creation and removal cannot disagree.
+    Setup sees every path a withdrawal takes: a change while running, which
+    reloads; a change across a restart; and an upgrade from a release that left
+    the control orphaned.
+
+    Removed rather than disabled. A disabled control could be enabled again by a
+    user while the panel refuses it, and would stay listed for a control that does
+    not exist. Core keeps the removed entry's tombstone while the config entry
+    exists, so a control the panel offers again returns with its entity id, name,
+    area and the rest of the user's customisations.
+
+    Only circuits in `circuits` -- the setup snapshot -- are judged. A circuit
+    absent from it is never a withdrawal (see the coordinator's
+    `_check_settability_change`). An `unmapped_tab_*` pseudo-circuit is judged
+    like any other, but no release ever registered a switch or select for one,
+    so its lookup finds nothing and nothing is removed. Only this entry's
+    registration is removed: `entity_id_in_entry` ignores another entry holding
+    the same unique id.
+
+    Returns the entity ids removed.
+    """
+    removed: list[str] = []
+    for circuit_id, circuit in circuits.items():
+        if qualifies(circuit):
+            continue
+        entity_id = entity_id_in_entry(registry, entry_id, domain, unique_id_for(circuit_id))
+        if entity_id is None:
+            continue
+        registry.async_remove(entity_id)
+        _LOGGER.info(
+            "Removed %s: the panel no longer offers this control on circuit %s",
+            entity_id,
+            circuit_id,
+        )
+        removed.append(entity_id)
+    return removed
 
 
 def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = "") -> str:

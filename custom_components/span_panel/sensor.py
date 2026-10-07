@@ -20,6 +20,7 @@ from .const import (
     USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
+from .energy_orientation import EnergyRole
 from .extension import create_extension_sensors
 from .helpers import (
     has_bess,
@@ -191,7 +192,7 @@ def create_panel_sensors(
 
     for description in PANEL_ENERGY_SENSORS:
         # Skip net energy sensors if disabled
-        is_net_energy_sensor = "net_energy" in description.key or "NetEnergy" in description.key
+        is_net_energy_sensor = description.energy_role is EnergyRole.NET
 
         if not panel_net_energy_enabled and is_net_energy_sensor:
             continue
@@ -276,9 +277,7 @@ def create_circuit_sensors(
 
         for circuit_description in CIRCUIT_SENSORS:
             # Skip net energy sensors if disabled
-            is_net_energy_sensor = (
-                "net_energy" in circuit_description.key or "energy_net" in circuit_description.key
-            )
+            is_net_energy_sensor = circuit_description.energy_role is EnergyRole.NET
 
             if not circuit_net_energy_enabled and is_net_energy_sensor:
                 continue

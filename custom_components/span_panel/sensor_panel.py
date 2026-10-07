@@ -14,6 +14,7 @@ from span_panel_api import (
 )
 
 from .coordinator import SpanPanelCoordinator
+from .energy_orientation import EnergyBinding
 from .helpers import (
     build_bess_unique_id_for_entry,
     build_mid_unique_id_for_entry,
@@ -568,7 +569,14 @@ class SpanPanelEnergySensor(
         description: SpanPanelDataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
     ) -> None:
-        """Initialize the panel energy sensor."""
+        """Initialize the panel energy sensor, bound to the meter its description declares."""
+        self._bind_energy(
+            EnergyBinding(
+                meter=description.panel_meter,
+                role=description.energy_role,
+                net=description.net_energy,
+            )
+        )
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(

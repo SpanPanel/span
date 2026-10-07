@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 import logging
 from typing import Any
 
@@ -31,6 +32,7 @@ from .energy_dip import (
     build_dip_attributes,
     process_energy_dip,
 )
+from .energy_orientation import EnergyBinding
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -415,7 +417,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
             self._log_debug_info(data_source)
-            raw_value: float | int | str | None = value_function(data_source)
+            raw_value = self._read_raw_value(value_function, data_source)
             self._process_raw_value(raw_value)
         except (AttributeError, KeyError, IndexError) as err:
             _LOGGER.debug(
@@ -433,6 +435,19 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                 err,
             )
             self._attr_native_value = self._unknown_value()
+
+    def _read_raw_value(
+        self,
+        value_function: Callable[[D], float | int | str | None],
+        data_source: D,
+    ) -> float | int | str | None:
+        """Read this sensor's raw value from the data source its update fetched.
+
+        A hook, so a sensor whose reading also depends on its siblings can add to it
+        before it is processed; see `SpanEnergySensorBase._read_raw_value`. The
+        data source is passed in rather than fetched again.
+        """
+        return value_function(data_source)
 
     def _log_debug_info(self, data_source: D) -> None:
         """Log debug information for circuit sensors."""
@@ -516,13 +531,25 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
     _unrecorded_attributes = _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES
 
+    _energy_binding: EnergyBinding[D] | None = None
+    """Set once, by `_bind_energy`, before `__init__` runs; read through `_energy`."""
+
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
         snapshot: SpanPanelSnapshot,
     ) -> None:
-        """Initialize the energy sensor with grace period tracking."""
+        """Initialize the energy sensor with grace period tracking.
+
+        Refuses a subclass that has not bound its energy: a sensor that forgot
+        would otherwise register as no meter's counter and give its Net no
+        adjustment, silently.
+        """
+        if self._energy_binding is None:
+            raise TypeError(
+                f"{type(self).__name__} must call _bind_energy before SpanEnergySensorBase.__init__"
+            )
         super().__init__(data_coordinator, description, snapshot)
         self._last_valid_state: float | None = None
         self._last_valid_changed: datetime | None = None
@@ -554,6 +581,56 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
     def energy_offset(self) -> float:
         """Return the cumulative dip compensation offset."""
         return self._energy_offset
+
+    def _bind_energy(self, binding: EnergyBinding[D]) -> None:
+        """Record this sensor's meter, role and Net definition, once.
+
+        Called by each subclass's `__init__` before it reaches this class's, from
+        its description: a subclass binds rather than passing these to `__init__`
+        because the circuit classes share a cooperative `__init__` with the power
+        sensor, which takes no such arguments. Binding twice is a programming
+        error, because the coordinator may already hold the first binding's key.
+        """
+        if self._energy_binding is not None:
+            raise RuntimeError(f"{type(self).__name__} bound its energy twice")
+        self._energy_binding = binding
+
+    @property
+    def _energy(self) -> EnergyBinding[D]:
+        """Return the sensor's binding, raising if `_bind_energy` was never called."""
+        binding = self._energy_binding
+        if binding is None:
+            raise TypeError(f"{type(self).__name__} never called _bind_energy")
+        return binding
+
+    def _read_raw_value(
+        self,
+        value_function: Callable[[D], float | int | str | None],
+        data_source: D,
+    ) -> float | int | str | None:
+        """Read the raw value; a Net also adds its siblings' dip offsets, oriented as its value is.
+
+        Produced and Consumed compensate their own dips. Net is a `TOTAL` sensor
+        and compensates nothing itself, so it reads their offsets through the
+        coordinator and stays equal to compensated credit minus compensated debit.
+        The orientation is its `NetEnergy`'s, whose `value` is also its value
+        function, so the value and the adjustment cannot disagree.
+        """
+        raw_value = super()._read_raw_value(value_function, data_source)
+        # Narrowed before the partial is built: a sensor on no meter has no
+        # siblings to read, so it gets no adjustment rather than a None meter.
+        binding = self._energy
+        net = binding.net
+        meter = binding.meter
+        if (
+            net is None
+            or meter is None
+            or isinstance(raw_value, bool)
+            or not isinstance(raw_value, int | float)
+        ):
+            return raw_value
+        offset_of = partial(self.coordinator.dip_offset, meter)
+        return raw_value + net.orientation_of(data_source).adjustment(offset_of)
 
     def _process_raw_value(self, raw_value: float | str | None) -> None:
         """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
@@ -677,6 +754,12 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._last_panel_reading,
                 self._last_dip_delta,
             )
+
+        # Offer this counter's offset to its meter's Net before the coordinator
+        # listener exists, so a Net added after it reads it from the first update.
+        binding = self._energy
+        if binding.meter is not None and binding.counter is not None:
+            self.coordinator.register_energy_sensor(binding.meter, binding.counter, self)
 
         # Register the coordinator listener (and base RestoreSensor setup).
         await super().async_added_to_hass()
