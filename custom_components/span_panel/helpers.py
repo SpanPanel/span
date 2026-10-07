@@ -98,7 +98,6 @@ __all__ = [
     "has_bess",
     "has_evse",
     "has_mid",
-    "has_multiple_pv_inverters",
     "has_power_flows",
     "has_pv",
     "has_shed_forecast",
@@ -284,23 +283,6 @@ def has_pv(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.power_flow_pv is not None or any(
         c.device_type == "pv" for c in snapshot.circuits.values()
     )
-
-
-def has_multiple_pv_inverters(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether the panel publishes more than one PV inverter.
-
-    Decides which of two layouts the PV entities take. With one inverter, the
-    `{serial}_pv` card carries that inverter's vendor, model, nameplate and link
-    under the panel-scoped unique ids they have always had, so nothing about an
-    existing installation moves. With more than one, each inverter gets a card
-    and entities of its own keyed by its `pv_inverters` key, and `{serial}_pv`
-    keeps only the panel's aggregate PV power.
-
-    Crossing between the two re-keys the primary inverter's entities in place,
-    so a user's entity_ids survive it in either direction; nothing is deleted.
-    See `pv_inverter_layout`.
-    """
-    return len(snapshot.pv_inverters) > 1
 
 
 def resolve_pv_display_suffix(
@@ -569,16 +551,10 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
 
 
 def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-    """One token per inverter, once the panel publishes more than one.
+    """One token per inverter key, one inverter or several, so a key the panel starts publishing reloads.
 
-    So a panel whose upgrade publishes its other inverters reloads into the
-    per-inverter layout (see `has_multiple_pv_inverters`), and a later inverter
-    arriving reloads again. Empty with one inverter, so a single-inverter panel
-    reads exactly as it did. Digested because the key can be a device id, which
-    can carry a serial; see `identity_digest`.
+    Digested because a key can be a device id, which carries the panel serial; see `identity_digest`.
     """
-    if not has_multiple_pv_inverters(snapshot):
-        return frozenset()
     return frozenset(f"pv_inverter:{identity_digest(key)}" for key in snapshot.pv_inverters)
 
 

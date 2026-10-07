@@ -237,7 +237,11 @@ async def test_binary_sensor_async_setup_entry_adds_panel_bess_and_evse_entities
     )
     coordinator = _make_coordinator(snapshot)
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(),
+        coordinator=coordinator,
+        pv_binding=pv_binding_for(snapshot),
+    )
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, config_entry, async_add_entities)

@@ -94,6 +94,9 @@ from pytest_homeassistant_custom_component.common import (
 PV_DEVICE: Final = "pv"
 """The inverter's Homie device id in the capture."""
 
+SOLAR_CIRCUIT: Final = "573066aaddd7b75114c4563ce3af18c4"
+"""The capture's solar circuit, which feeds its one inverter."""
+
 VENDOR_TOPIC: Final = "info/vendor-name"
 MODEL_TOPIC: Final = "info/model"
 FIRMWARE_TOPIC: Final = "info/firmware-version"

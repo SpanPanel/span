@@ -332,6 +332,7 @@ def test_panel_metadata_sensors_return_expected_data_sources() -> None:
         PV_METADATA_SENSORS[0],
         snapshot,
         {"identifiers": {("span_panel", "pv")}},
+        pv_binding_for(snapshot),
     )
 
     assert bess_sensor.get_data_source(snapshot) is battery

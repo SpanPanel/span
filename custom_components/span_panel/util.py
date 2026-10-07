@@ -1,6 +1,5 @@
 """Utility functions for the Span integration."""
 
-from collections.abc import Iterable
 import logging
 from typing import Final
 
@@ -111,7 +110,7 @@ def classify_sub_device_identifier(identifier: str) -> str | None:
     # charger from another on the same panel.
     if f"_{SUB_DEVICE_EVSE}_" in identifier:
         return SUB_DEVICE_EVSE
-    # One inverter of several, whose key follows the kind as a charger's does.
+    # An inverter's own card, whose key follows the kind as a charger's does.
     # After the EVSE test for the same reason the suffix rules are: a charger's
     # node id is opaque, whatever it contains.
     if f"_{SUB_DEVICE_PV}_" in identifier:
@@ -304,8 +303,8 @@ def pv_device_info(
     registry on, so that day would read as the inverter being replaced rather
     than as a value arriving. `{panel serial}_pv` answers the only question an
     identifier has to answer, "which panel's inverter", on a panel with one.
-    A panel with more than one keeps this card for its aggregate PV power and
-    gives each inverter a card of its own; see `pv_inverter_device_info`. The
+    The card describes what its PV entities read: the inverter they are bound
+    to, or the inverters together; see `pv_binding`. The
     serial is not on the card either, for the same reason it is not in the
     identifier: nothing in this integration should start depending on it before
     a producer publishes one.
@@ -339,35 +338,6 @@ EMPTY_PV: Final = SpanPVSnapshot()
 """Stand-in for an inverter that has left the snapshot, as `EMPTY_EVSE` is for a charger."""
 
 
-def pv_array_device_info(
-    panel_identifier: str,
-    inverters: Iterable[SpanPVSnapshot],
-    panel_name: str,
-    *,
-    panel_device_id: str,
-) -> DeviceInfo:
-    """Create DeviceInfo for the solar card on a panel with more than one inverter.
-
-    The same `{panel serial}_pv` identifier `pv_device_info` builds, so the
-    card a panel already has stays where it is and keeps the aggregate PV power
-    sensor. What it stops doing is describe one inverter: the vendor shown is
-    the one every inverter shares, or the fallback when they differ, and the
-    firmware version is cleared because no single inverter's version is the
-    card's. Each inverter's own identity is on its `pv_inverter_device_info`
-    card.
-    """
-    vendors = {pv.vendor_name for pv in inverters}
-    vendor = vendors.pop() if len(vendors) == 1 else None
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_PV}")},
-        name=f"{panel_name} Solar",
-        manufacturer=vendor or "Unknown",
-        model="Solar Inverters",
-        sw_version=None,
-        via_device_id=panel_device_id,
-    )
-
-
 def pv_inverter_device_info(
     panel_identifier: str,
     inverter_key: str,
@@ -377,7 +347,7 @@ def pv_inverter_device_info(
     *,
     panel_device_id: str,
 ) -> DeviceInfo:
-    """Create DeviceInfo for one inverter on a panel with more than one.
+    """Create DeviceInfo for an inverter the Solar card does not read.
 
     Keyed by `inverter_key`, the library's `pv_inverters` key, for the reason
     `pv_device_info` gives for leaving the serial out of its own identifier:

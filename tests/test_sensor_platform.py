@@ -52,7 +52,11 @@ async def test_sensor_async_setup_entry_adds_entities_and_refreshes(
     coordinator.data = snapshot
     coordinator.async_request_refresh = AsyncMock()
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
+    entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(),
+        coordinator=coordinator,
+        pv_binding=pv_binding_for(snapshot),
+    )
     entities = [MagicMock(), MagicMock()]
     async_add_entities = MagicMock()
 
@@ -71,10 +75,15 @@ async def test_sensor_async_setup_entry_logs_and_reraises_errors(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Setup errors should be logged and re-raised."""
+    snapshot = SpanPanelSnapshotFactory.create()
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create()
+    coordinator.data = snapshot
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
+    entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(),
+        coordinator=coordinator,
+        pv_binding=pv_binding_for(snapshot),
+    )
 
     caplog.set_level(logging.ERROR)
 
