@@ -50,8 +50,13 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "voltage": 240,
       "device_type": "circuit",
       "relay_state": "CLOSED",
+      "relay_state_target": null,
       "is_user_controllable": true,
       "breaker_rating_a": 30,
+      "always_on": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "is_never_backup": false,
       "entities": {
         "power": "sensor.span_panel_kitchen_power",
         "produced_energy": "sensor.span_panel_kitchen_produced_energy",
@@ -69,8 +74,13 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "voltage": 120,
       "device_type": "circuit",
       "relay_state": "CLOSED",
+      "relay_state_target": null,
       "is_user_controllable": true,
       "breaker_rating_a": 15,
+      "always_on": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "is_never_backup": true,
       "entities": {
         "power": "sensor.span_panel_master_bedroom_power",
         "switch": "switch.span_panel_master_bedroom_breaker"
