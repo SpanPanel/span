@@ -1,13 +1,29 @@
 """Helper functions for testing the Span Panel integration."""
 
+from collections.abc import Awaitable, Callable
 import datetime
+import inspect
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+type WebSocketHandler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
+"""A websocket command's own coroutine, as a test awaits it with a mock connection."""
+
+
+def unwrap_websocket_command(command: Callable[..., object]) -> WebSocketHandler:
+    """Unwrap a websocket command to the coroutine its decorators wrap.
+
+    `@websocket_command`, `@require_admin` and `@async_response` each wrap the
+    handler, so a test that calls it directly with a mock connection has to get
+    beneath them.
+    """
+    handler: WebSocketHandler = inspect.unwrap(command, stop=inspect.iscoroutinefunction)
+    return handler
 
 
 def make_span_panel_entry(

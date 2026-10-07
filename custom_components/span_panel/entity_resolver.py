@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
+from .const import DOMAIN
 from .id_builder import (
     build_bess_unique_id,
     build_binary_sensor_unique_id,
@@ -26,7 +27,23 @@ from .id_builder import (
 )
 
 if TYPE_CHECKING:
+    from homeassistant.helpers import entity_registry as er
+
     from .coordinator import SpanPanelCoordinator
+
+
+def entity_id_in_entry(
+    registry: er.EntityRegistry, entry_id: str, domain: str, unique_id: str
+) -> str | None:
+    """Return the entity id `unique_id` is registered under in this entry, or None.
+
+    The registry keys an entity on its platform and unique id, not on its entry,
+    so another config entry of this integration can hold the same unique id. What
+    that entry holds says nothing about this one.
+    """
+    entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+    entry = registry.async_get(entity_id) if entity_id is not None else None
+    return entity_id if entry is not None and entry.config_entry_id == entry_id else None
 
 
 def resolve_evse_display_suffix(

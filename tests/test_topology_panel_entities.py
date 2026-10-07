@@ -25,8 +25,9 @@ class TestBuildPanelEntityMap:
             return mapping.get(unique_id)
 
         mock_registry.async_get_entity_id = mock_get_entity_id
+        mock_registry.async_get = MagicMock(return_value=MagicMock(config_entry_id="entry"))
 
-        result = _build_panel_entity_map(serial, mock_registry)
+        result = _build_panel_entity_map(serial, mock_registry, "entry")
 
         assert result["current_power"] == "sensor.my_current_power"
         assert result["site_power"] == "sensor.custom_site"
@@ -40,7 +41,7 @@ class TestBuildPanelEntityMap:
         mock_registry = MagicMock()
         mock_registry.async_get_entity_id = MagicMock(return_value=None)
 
-        result = _build_panel_entity_map("unknown-serial", mock_registry)
+        result = _build_panel_entity_map("unknown-serial", mock_registry, "entry")
         assert result == {}
 
     def test_all_panel_sensor_keys_attempted(self):
@@ -54,7 +55,7 @@ class TestBuildPanelEntityMap:
         mock_registry = MagicMock()
         mock_registry.async_get_entity_id = MagicMock(return_value=None)
 
-        _build_panel_entity_map(serial, mock_registry)
+        _build_panel_entity_map(serial, mock_registry, "entry")
 
         # Should have been called once per key
         assert mock_registry.async_get_entity_id.call_count == len(_PANEL_SENSOR_KEYS)
