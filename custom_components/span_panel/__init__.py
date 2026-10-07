@@ -714,7 +714,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             snapshot,
             dr.async_get(hass),
             er.async_get(hass),
-            solar_key=pv_binding.bound_key,
+            pv_binding=pv_binding,
         )
 
         # After the platforms, not before: schema validation runs on the first

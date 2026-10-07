@@ -33,9 +33,10 @@ wire rather than by a feature.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import re
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.sensor import SensorEntity
@@ -73,6 +74,9 @@ from .util import (
     SUB_DEVICE_PV,
     declares_a_number,
 )
+
+if TYPE_CHECKING:
+    from .pv_binding import PvBinding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,20 +153,54 @@ def extension_scope(subject: ExtensionSubject) -> str | None:
     return None
 
 
-def solar_subject(subject: ExtensionSubject, solar_key: str | None) -> ExtensionSubject:
-    """Return the subject a row's id, curation key and card are built from.
+def solar_subject(
+    subject: ExtensionSubject, binding: PvBinding, snapshot: SpanPanelSnapshot
+) -> ExtensionSubject | None:
+    """Return the subject a row's id, curation key and card are built from, or `None` to defer it.
 
-    The bound inverter's PV entities are the Solar card's and never move (see
-    `pv_binding`). A lone inverter's subject is keyless and lands there already;
-    once a sibling appears the library keys every inverter's subject, so the
-    bound one is mapped back to the keyless subject here. Its readings keep
-    scope `pv`, their unique ids and the Solar card, and no
-    `{serial}_pv_{key}` device is ever created for it. The row itself keeps the
-    wire subject, which is what `ExtensionEntity._row` matches each cycle.
+    A PV row is placed by the rule that places the PV metadata (see
+    `pv_binding`), so an inverter's vendor readings sit wherever its metadata
+    does. The inverter the Solar card reads -- the bound one, or the one it
+    describes at this setup -- keeps the keyless subject, scope `pv`, the Solar
+    card's unique ids and its curation keys, and no `{serial}_pv_{key}` device
+    is ever created for it. An inverter with a card of its own takes the keyed
+    subject. One with neither is withheld while the bound circuit's record is
+    pending, and its rows wait for a later setup rather than borrow a card.
+
+    The library leaves a lone inverter's subject keyless and keys every
+    inverter's once there are several, so a keyless row is resolved to the lone
+    `pv_inverters` key first. Without that, a lone inverter the Solar card does
+    not read -- one beside a departed bound inverter, or one holding a card of
+    its own -- would take the Solar card's ids. The row itself keeps the wire
+    subject, which is what `ExtensionEntity._row` matches each cycle.
     """
-    if subject.kind == "pv" and solar_key is not None and subject.instance_key == solar_key:
+    if subject.kind != "pv":
+        return subject
+    key = subject.instance_key
+    if key is None:
+        if len(snapshot.pv_inverters) != 1:
+            return subject
+        key = next(iter(snapshot.pv_inverters))
+    if key in (binding.bound_key, binding.legacy_key):
         return ExtensionSubject(kind="pv")
-    return subject
+    if binding.has_own_card(key):
+        return ExtensionSubject(kind="pv", instance_key=key)
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class AdoptableExtension:
+    """One extension property that can become an entity, placed once.
+
+    `subject` is the placed subject `solar_subject` decided -- the one the id,
+    the card and the curation key are built from -- so no consumer derives the
+    placement a second time. `row` keeps the wire subject.
+    """
+
+    row: ExtensionProperty
+    unique_id: str
+    device_identifier: str
+    subject: ExtensionSubject
 
 
 def extension_unique_id(
@@ -549,7 +587,7 @@ def create_extension_sensors(
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
-    solar_key: str | None,
+    pv_binding: PvBinding,
 ) -> list[ExtensionSensor]:
     """Every extension property that is not a declared boolean."""
     return _create(
@@ -561,7 +599,7 @@ def create_extension_sensors(
         Platform.SENSOR,
         config_entry_id=config_entry_id,
         overlay=overlay,
-        solar_key=solar_key,
+        pv_binding=pv_binding,
     )
 
 
@@ -573,7 +611,7 @@ def create_extension_binary_sensors(
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
-    solar_key: str | None,
+    pv_binding: PvBinding,
 ) -> list[ExtensionBinarySensor]:
     """Every extension property declared `boolean`."""
     return _create(
@@ -585,7 +623,7 @@ def create_extension_binary_sensors(
         Platform.BINARY_SENSOR,
         config_entry_id=config_entry_id,
         overlay=overlay,
-        solar_key=solar_key,
+        pv_binding=pv_binding,
     )
 
 
@@ -599,7 +637,7 @@ def _create[ExtensionT: ExtensionEntity](
     *,
     config_entry_id: str,
     overlay: CurationOverlay,
-    solar_key: str | None,
+    pv_binding: PvBinding,
 ) -> list[ExtensionT]:
     """Build one platform's share of the extension properties.
 
@@ -623,21 +661,26 @@ def _create[ExtensionT: ExtensionEntity](
     type system holding the two to one contract, not a case that occurs.
     """
     built: list[ExtensionT] = []
-    for row, unique_id, device_identifier in adoptable(
+    for adopted in adoptable(
         snapshot,
         device_registry,
         entity_registry,
         config_entry_id=config_entry_id,
-        solar_key=solar_key,
+        pv_binding=pv_binding,
     ):
-        if resolve_platform(entity_registry, unique_id, row.datatype) is not platform:
+        row = adopted.row
+        if resolve_platform(entity_registry, adopted.unique_id, row.datatype) is not platform:
             continue
-        key = extension_curation_key(solar_subject(row.subject, solar_key), row.path)
+        key = extension_curation_key(adopted.subject, row.path)
         context = RowContext(platform=platform, datatype=row.datatype, unit=row.unit)
         record = None if key is None else overlay.for_row(key, context)
         built.append(
             entity_class(
-                coordinator, unique_id, row, device_identifier=device_identifier, record=record
+                coordinator,
+                adopted.unique_id,
+                row,
+                device_identifier=adopted.device_identifier,
+                record=record,
             )
         )
     return built
@@ -662,9 +705,9 @@ def adoptable(
     entity_registry: EntityRegistry,
     *,
     config_entry_id: str,
-    solar_key: str | None,
-) -> list[tuple[ExtensionProperty, str, str]]:
-    """Every extension property that can become an entity, with its id and card.
+    pv_binding: PvBinding,
+) -> list[AdoptableExtension]:
+    """Every extension property that can become an entity, with its id, card and placed subject.
 
     Three reasons a declared property is declined here, all of them stated rather
     than silent: its subject resolves to no device card, its card is not in this
@@ -684,7 +727,7 @@ def adoptable(
     what is new.
     """
     return _partition(
-        snapshot, device_registry, entity_registry, config_entry_id, solar_key=solar_key
+        snapshot, device_registry, entity_registry, config_entry_id, pv_binding=pv_binding
     )[0]
 
 
@@ -694,7 +737,7 @@ def declined_extensions(
     entity_registry: EntityRegistry,
     *,
     config_entry_id: str,
-    solar_key: str | None,
+    pv_binding: PvBinding,
 ) -> dict[str, int]:
     """How many properties each wire device declared beyond the cap.
 
@@ -704,7 +747,7 @@ def declined_extensions(
     saying nothing new.
     """
     return _partition(
-        snapshot, device_registry, entity_registry, config_entry_id, solar_key=solar_key
+        snapshot, device_registry, entity_registry, config_entry_id, pv_binding=pv_binding
     )[1]
 
 
@@ -714,8 +757,8 @@ def _partition(
     entity_registry: EntityRegistry,
     config_entry_id: str,
     *,
-    solar_key: str | None,
-) -> tuple[list[tuple[ExtensionProperty, str, str]], dict[str, int]]:
+    pv_binding: PvBinding,
+) -> tuple[list[AdoptableExtension], dict[str, int]]:
     """Split the declared properties into what is adopted and what the cap declined.
 
     The card is looked up within `config_entry_id` rather than across every entry,
@@ -733,10 +776,16 @@ def _partition(
     rest on it. Home Assistant reports the unscoped lookup as deprecated for this
     ambiguity and says it stops working in 2027.8.
     """
-    known: list[tuple[ExtensionProperty, str, str]] = []
-    fresh: list[tuple[ExtensionProperty, str, str]] = []
+    known: list[AdoptableExtension] = []
+    fresh: list[AdoptableExtension] = []
     for row in snapshot.extension_properties:
-        subject = solar_subject(row.subject, solar_key)
+        subject = solar_subject(row.subject, pv_binding, snapshot)
+        if subject is None:
+            _LOGGER.debug(
+                "Extension property %s belongs to an inverter with no card at this setup; deferred",
+                row.path,
+            )
+            continue
         identifier = extension_device_identifier(snapshot.serial_number, subject)
         if identifier is None:
             continue
@@ -759,22 +808,24 @@ def _partition(
             entity_registry.async_get_entity_id(platform.value, DOMAIN, unique_id) is not None
             for platform in (Platform.SENSOR, Platform.BINARY_SENSOR)
         )
-        (known if registered else fresh).append((row, unique_id, identifier))
+        (known if registered else fresh).append(
+            AdoptableExtension(row, unique_id, identifier, subject)
+        )
 
     per_subject: dict[str, int] = {}
-    for row, _unique_id, _identifier in known:
-        key = subject_key(row.subject)
+    for adopted in known:
+        key = subject_key(adopted.row.subject)
         per_subject[key] = per_subject.get(key, 0) + 1
 
     adoptable_rows = list(known)
     declined: dict[str, int] = {}
-    for row, unique_id, identifier in fresh:
-        key = subject_key(row.subject)
+    for adopted in fresh:
+        key = subject_key(adopted.row.subject)
         if per_subject.get(key, 0) >= MAX_PER_DEVICE:
             declined[key] = declined.get(key, 0) + 1
             continue
         per_subject[key] = per_subject.get(key, 0) + 1
-        adoptable_rows.append((row, unique_id, identifier))
+        adoptable_rows.append(adopted)
     return adoptable_rows, declined
 
 
@@ -805,7 +856,7 @@ async def async_notice_declined_extensions(
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
     *,
-    solar_key: str | None,
+    pv_binding: PvBinding,
 ) -> None:
     """Tell the user once when the cap left vendor readings out, or say nothing.
 
@@ -832,7 +883,7 @@ async def async_notice_declined_extensions(
         device_registry,
         entity_registry,
         config_entry_id=entry.entry_id,
-        solar_key=solar_key,
+        pv_binding=pv_binding,
     )
     if not declined:
         return

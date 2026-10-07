@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Final
 
 from homeassistant.core import HomeAssistant
@@ -17,6 +18,8 @@ from custom_components.span_panel.util import SUB_DEVICE_PV
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .test_pv_device import PANEL_NAME, PV_DEVICE, SOLAR_CIRCUIT, _entry
 from .test_pv_inverters import (
+    FIRST_PV,
+    SECOND_PV,
     SECOND_SOLAR_CIRCUIT,
     _setup,
     _tree,
@@ -280,3 +283,50 @@ async def test_a_second_setup_writes_nothing(hass: HomeAssistant, hass_storage: 
     await _unload(await _setup(hass, entry, schema_one_snapshot(_tree())))
 
     assert _record(hass_storage, entry) == written
+
+
+def _with_vendor_readings(tree: dict[str, dict[str, str]], *device_ids: str) -> dict[str, dict[str, str]]:
+    """Declare a vendor node on each inverter: one reading and one boolean no schema field addresses."""
+    for device_id in device_ids:
+        description = json.loads(tree[device_id]["$description"])
+        description["nodes"]["acme"] = {
+            "name": "acme",
+            "type": "acme.inverter",
+            "properties": {
+                "string-voltage": {"name": "String voltage", "datatype": "float", "unit": "V"},
+                "arc-fault": {"name": "Arc fault", "datatype": "boolean"},
+            },
+        }
+        tree[device_id]["$description"] = json.dumps(description)
+        tree[device_id]["acme/string-voltage"] = "412.0"
+        tree[device_id]["acme/arc-fault"] = "false"
+    return tree
+
+
+async def test_vendor_readings_follow_the_binding_through_setup(hass: HomeAssistant) -> None:
+    """The bound inverter's readings register on the Solar card under the keyless ids; the newcomer's on its own card."""
+    one = schema_one_snapshot()
+    serial = one.serial_number
+    entry = _entry(hass, "entry-vendor", serial)
+    await _unload(await _setup(hass, entry, one))
+    two = schema_one_snapshot(_with_vendor_readings(_tree(), FIRST_PV, SECOND_PV))
+
+    await _unload(await _setup(hass, entry, two))
+    # The newcomer's card is minted by that setup, so its readings follow on the next.
+    await _unload(await _setup(hass, entry, two))
+
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    solar = devices.async_get_device_by_identifier((DOMAIN, f"{serial}_{SUB_DEVICE_PV}"), entry.entry_id)
+    newcomer = devices.async_get_device_by_identifier(
+        (DOMAIN, f"{serial}_{SUB_DEVICE_PV}_{SECOND_SOLAR_CIRCUIT}"), entry.entry_id
+    )
+    assert solar is not None and newcomer is not None
+    for domain, path in (("sensor", "acme/string-voltage"), ("binary_sensor", "acme/arc-fault")):
+        on_solar = entities.async_get_entity_id(domain, DOMAIN, f"span_{serial}_adopted_pv/{path}")
+        assert on_solar is not None, f"{domain} {path} is not on the Solar card"
+        assert entities.async_get(on_solar).device_id == solar.id
+        assert entities.async_get_entity_id(domain, DOMAIN, f"span_{serial}_adopted_pv_{SOLAR_CIRCUIT}/{path}") is None
+        own = entities.async_get_entity_id(domain, DOMAIN, f"span_{serial}_adopted_pv_{SECOND_SOLAR_CIRCUIT}/{path}")
+        assert own is not None, f"{domain} {path} is not on the newcomer's card"
+        assert entities.async_get(own).device_id == newcomer.id

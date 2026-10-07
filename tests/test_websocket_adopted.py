@@ -26,7 +26,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
-from span_panel_api import AdoptedDevice, AdoptedProperty, ExtensionProperty, ExtensionSubject
+from span_panel_api import (
+    AdoptedDevice,
+    AdoptedProperty,
+    ExtensionProperty,
+    ExtensionSubject,
+    SpanPVSnapshot,
+)
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.adoption import (
@@ -42,8 +48,9 @@ from custom_components.span_panel.curation import (
     async_load_curation,
 )
 from custom_components.span_panel.extension import extension_curation_key, extension_unique_id
+from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 from custom_components.span_panel.runtime import loaded_runtime_data
-from custom_components.span_panel.util import SUB_DEVICE_BESS
+from custom_components.span_panel.util import SUB_DEVICE_BESS, SUB_DEVICE_PV
 from custom_components.span_panel.websocket import async_register_commands
 
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
@@ -159,6 +166,7 @@ def _setup(
     *,
     overlay: CurationOverlay | None = None,
     register_adopted: bool = True,
+    pv_binding: PvBinding | None = None,
 ) -> dr.DeviceEntry:
     """Bring an entry up the way setup does, and return the panel's device entry.
 
@@ -177,7 +185,7 @@ def _setup(
         coordinator=coordinator,
         panel_device_id=panel.id,
         curation=overlay if overlay is not None else CurationOverlay.empty(),
-        pv_binding=pv_binding_for(published),
+        pv_binding=pv_binding if pv_binding is not None else pv_binding_for(published),
     )
     if register_adopted:
         async_register_adopted_devices(
@@ -1267,3 +1275,40 @@ async def test_a_card_another_entry_owns_is_not_reported_as_this_panels(
     names = [group["name"] for group in reply["result"]["devices"]]
     assert "Somebody else's generator" not in names
     assert _group(reply, "Backup Generator")["device_id"] is None
+
+
+async def test_the_bound_inverters_keyed_reading_is_listed_on_the_solar_card(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The editor files the bound inverter's reading where its entity is: the Solar card, keyed `pv/...`."""
+    bound, other = "c-bound", "c-other"
+    row = ExtensionProperty(
+        subject=ExtensionSubject(kind="pv", instance_key=bound),
+        node_id="acme",
+        property_id="string-voltage",
+        datatype="float",
+        unit="V",
+        value="412.0",
+    )
+    snapshot = replace(
+        _snapshot(devices=(), rows=(row,)),
+        pv_inverters={
+            key: SpanPVSnapshot(device_id=f"device-{key}", node_id=key, feed_circuit_id=key)
+            for key in (bound, other)
+        },
+    )
+    binding = resolve(snapshot, StoredPvBinding(circuit_id=bound), frozenset())[0]
+    panel = _setup(hass, snapshot, pv_binding=binding)
+    solar = dr.async_get(hass).async_get_or_create(
+        config_entry_id=ENTRY_ID,
+        identifiers={(DOMAIN, f"{PANEL_SERIAL}_{SUB_DEVICE_PV}")},
+        name="Span Panel Solar",
+        via_device_id=panel.id,
+    )
+
+    reply = await _list(hass, hass_ws_client, panel.id)
+
+    assert reply["success"] is True
+    group = _group(reply, "Span Panel Solar")
+    assert group["device_id"] == solar.id
+    assert _row(group, "pv/acme/string-voltage")["path"] == "acme/string-voltage"
