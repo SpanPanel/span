@@ -977,9 +977,8 @@ class SpanPVMetadataRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for PV metadata sensors.
 
     The value_fn takes one inverter's snapshot, as the BESS metadata ones take
-    the battery's, so the same three descriptions serve `snapshot.pv` on a
-    panel with one inverter and each `snapshot.pv_inverters` entry on a panel
-    with more.
+    the battery's, so the same three descriptions serve the Solar card, through
+    `pv_binding`, and each inverter's own card.
     """
 
     value_fn: Callable[[SpanPVSnapshot], float | str | None]

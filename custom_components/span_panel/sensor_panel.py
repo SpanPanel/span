@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import (
@@ -34,6 +34,9 @@ from .sensor_definitions import (
     SpanShedForecastSensorEntityDescription,
 )
 from .util import EMPTY_PV
+
+if TYPE_CHECKING:
+    from .pv_binding import PvBinding
 
 
 def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
@@ -682,9 +685,8 @@ class SpanPVMetadataSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription,
     derives from the inverter's device name. That asymmetry is intended -- see
     `test_pv_device.py`.
 
-    A panel with more than one inverter gets `SpanPVInverterSensor` instead,
-    one set per inverter, and these three are re-keyed in place onto the
-    primary inverter's; see `pv_inverter_layout`.
+    It reads the inverter `pv_binding` binds the Solar card to, or the
+    inverters together. Every other inverter gets `SpanPVInverterSensor`.
     """
 
     def __init__(
@@ -693,8 +695,11 @@ class SpanPVMetadataSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription,
         description: SpanPVMetadataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
         device_info_override: DeviceInfo,
+        identity: PvBinding,
     ) -> None:
         """Initialize the PV metadata sensor."""
+        # Set before the base initializer, so nothing it runs finds the entity without its source.
+        self._identity = identity
         super().__init__(data_coordinator, description, snapshot)
         self._attr_device_info = device_info_override
 
@@ -710,11 +715,11 @@ class SpanPVMetadataSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription,
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPVSnapshot:
         """Get the data source for the PV metadata sensor."""
-        return snapshot.pv
+        return self._identity.source(snapshot)
 
 
 class SpanPVInverterSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPVSnapshot]):
-    """One inverter's metadata sensor, on a panel with more than one inverter.
+    """One inverter's metadata sensor, for an inverter the Solar card does not read.
 
     The per-inverter counterpart of `SpanPVMetadataSensor`, built from the same
     descriptions and shaped like `SpanEvseSensor`: the unique id carries the

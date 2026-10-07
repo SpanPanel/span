@@ -33,7 +33,7 @@ from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 OTHER_PEM = "-----BEGIN CERTIFICATE-----\nb3RoZXI=\n-----END CERTIFICATE-----\n"
@@ -560,6 +560,8 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
+        setup_snapshot=SpanPanelSnapshotFactory.create(),
     )
     _async_register_credential_services(hass)
 

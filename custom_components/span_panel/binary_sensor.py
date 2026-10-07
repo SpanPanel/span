@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import logging
 from types import MappingProxyType
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -42,7 +42,6 @@ from .helpers import (
     build_pv_inverter_unique_id_for_entry,
     has_bess,
     has_mid,
-    has_multiple_pv_inverters,
     has_pcs,
     resolve_evse_display_suffix,
     resolve_pv_display_suffixes,
@@ -56,6 +55,9 @@ from .util import (
     pv_device_info,
     pv_inverter_device_info,
 )
+
+if TYPE_CHECKING:
+    from .pv_binding import PvBinding
 
 # pylint: disable=invalid-overridden-method
 
@@ -586,7 +588,7 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
 
 
 # ---------------------------------------------------------------------------
-# PV inverter binary sensors, on a panel with more than one inverter
+# PV inverter binary sensors, for each inverter the Solar card does not read
 # ---------------------------------------------------------------------------
 
 
@@ -613,7 +615,7 @@ PV_INVERTER_LINK_SENSOR = SpanPVBinarySensorEntityDescription(
     entity_category=EntityCategory.DIAGNOSTIC,
     value_fn=lambda pv: pv.connected,
 )
-"""`PV_PANEL_LINK_SENSOR` for one inverter of several.
+"""`PV_PANEL_LINK_SENSOR` for an inverter the Solar card does not read.
 
 The same key, translation and source field, read from that inverter's own
 snapshot rather than from `snapshot.pv`. Created per inverter and only where
@@ -668,49 +670,61 @@ class SpanPVInverterBinarySensor(SpanPanelEntity, BinarySensorEntity):
         super()._handle_coordinator_update()
 
 
+class SpanPVSolarLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]):
+    """`PV_PANEL_LINK_SENSOR` on the Solar card, reading what `pv_binding` binds the card to.
+
+    Unique id, device and description are the panel sensor's, unchanged; only
+    the reading follows the identity, so the entity keeps describing the
+    inverter it always did when another is published beside it.
+    """
+
+    def __init__(
+        self, coordinator: SpanPanelCoordinator, identity: PvBinding, device_info: DeviceInfo
+    ) -> None:
+        """Initialize the Solar card's link sensor."""
+        super().__init__(coordinator, PV_PANEL_LINK_SENSOR, device_info_override=device_info)
+        self._value_fn = lambda snapshot: identity.source(snapshot).connected
+
+
 def _create_pv_link_sensors(
     config_entry: SpanPanelConfigEntry,
     snapshot: SpanPanelSnapshot,
-) -> list[
-    SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanPVInverterBinarySensor
-]:
+) -> list[SpanPVSolarLinkBinarySensor | SpanPVInverterBinarySensor]:
     """Create the enclosure's view of the link to each solar inverter.
 
-    Created where a circuit publishes one. Gated on the record existing and
-    never on what kind of circuit publishes it: `distribution-enclosure.md`
-    makes a mixed-load circuit publishing no `feeds-*` the normal case, so
-    absence is the panel saying it does not know rather than a fault, and the
-    enum it does publish has no UNKNOWN member for it to say that with. See
-    `PV_PANEL_LINK_SENSOR`.
-
-    Per inverter on a panel with more than one, in place of the single sensor,
-    whose registry entry `async_reconcile_pv_inverter_layout` has already
-    re-keyed onto the primary inverter's.
+    The Solar card's link reads through `pv_binding`, like its other PV
+    entities, and exists where the binding's `solar_link` says: already
+    registered, or every inverter the card reads publishes a link record -- never
+    by what a link reads at setup. Every other inverter has its own on its own
+    card by the same rule, per key (`inverter_links`): already registered, or its
+    circuit publishes the record, whose absence is the panel saying it does not
+    know.
     """
     coordinator = config_entry.runtime_data.coordinator
-    if has_multiple_pv_inverters(snapshot):
-        return [
-            SpanPVInverterBinarySensor(coordinator, PV_INVERTER_LINK_SENSOR, key)
-            for key, inverter in snapshot.pv_inverters.items()
-            if inverter.connected is not None
-        ]
-    if snapshot.pv.connected is None:
-        return []
-    configured_name = coordinator.config_entry.data.get(
-        CONF_DEVICE_NAME, coordinator.config_entry.title
-    )
-    return [
-        SpanPanelBinarySensor(
-            coordinator,
-            PV_PANEL_LINK_SENSOR,
-            device_info_override=pv_device_info(
-                snapshot.serial_number,
-                snapshot.pv,
-                configured_name or "Span Panel",
-                panel_device_id=config_entry.runtime_data.panel_device_id,
-            ),
-        )
+    identity = config_entry.runtime_data.pv_binding
+    entities: list[SpanPVSolarLinkBinarySensor | SpanPVInverterBinarySensor] = [
+        SpanPVInverterBinarySensor(coordinator, PV_INVERTER_LINK_SENSOR, key)
+        for key in snapshot.pv_inverters
+        if key in identity.inverter_links
     ]
+    if identity.solar_link:
+        source = identity.source(snapshot)
+        configured_name = coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, coordinator.config_entry.title
+        )
+        entities.append(
+            SpanPVSolarLinkBinarySensor(
+                coordinator,
+                identity,
+                pv_device_info(
+                    snapshot.serial_number,
+                    source,
+                    configured_name or "Span Panel",
+                    panel_device_id=config_entry.runtime_data.panel_device_id,
+                ),
+            )
+        )
+    return entities
 
 
 async def async_setup_entry(
@@ -733,7 +747,7 @@ async def async_setup_entry(
         for description in BINARY_SENSORS
     ]
 
-    snapshot: SpanPanelSnapshot = coordinator.data
+    snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
     # Created unconditionally, because on both generations the answer is knowable.
     #
@@ -825,6 +839,7 @@ async def async_setup_entry(
                 er.async_get(hass),
                 config_entry_id=config_entry.entry_id,
                 overlay=config_entry.runtime_data.curation,
+                pv_binding=config_entry.runtime_data.pv_binding,
             ),
         ]
     )

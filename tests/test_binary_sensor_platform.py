@@ -27,6 +27,7 @@ from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -50,6 +51,8 @@ def _make_coordinator(snapshot) -> MagicMock:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator
@@ -235,7 +238,12 @@ async def test_binary_sensor_async_setup_entry_adds_panel_bess_and_evse_entities
     )
     coordinator = _make_coordinator(snapshot)
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(),
+        coordinator=coordinator,
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, config_entry, async_add_entities)

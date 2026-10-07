@@ -536,7 +536,7 @@ async def async_setup_entry(
 
     coordinator = config_entry.runtime_data.coordinator
     policy = config_entry.runtime_data.control_policy
-    snapshot: SpanPanelSnapshot = coordinator.data
+    snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)

@@ -64,6 +64,7 @@ from .factories import (
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 
@@ -107,6 +108,8 @@ def _make_coordinator(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     coordinator.request_reload = MagicMock()
     coordinator.register_circuit_energy_sensor = MagicMock()
@@ -330,6 +333,7 @@ def test_panel_metadata_sensors_return_expected_data_sources() -> None:
         PV_METADATA_SENSORS[0],
         snapshot,
         {"identifiers": {("span_panel", "pv")}},
+        pv_binding_for(snapshot),
     )
 
     assert bess_sensor.get_data_source(snapshot) is battery
@@ -744,6 +748,8 @@ def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -818,6 +824,8 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     description = next(desc for desc in EVSE_SENSORS if desc.key == "evse_status")
 

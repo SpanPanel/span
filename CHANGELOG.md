@@ -11,9 +11,8 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 
 - **Support for SPAN panel firmware r202639**, whose changes are listed in SPAN's
   [API changelog](https://github.com/spanio/SPAN-API-Client-Docs/blob/main/CHANGELOG.md) and handled by the entries below.
-- **Each solar inverter gets its own device** on a panel that reports more than one, while PV Power stays the panel's total and your existing PV entities keep
-  their entity_ids, moving to the inverter on the lowest breaker space and back if the panel returns to one inverter.
-- **Vendor readings a solar inverter publishes** appear on that inverter's own device.
+- **Each additional solar inverter gets its own device**, with its own vendor, product and nameplate capacity, and its panel link where the panel reports one.
+- **Vendor readings an additional solar inverter publishes** appear on that inverter's own device.
 - **A solar inverter the panel stops reporting keeps its device and entities** until you delete the device.
 
 ### Changed
@@ -30,8 +29,8 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
   devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
 - **The card no longer shows an empty tile for the Microgrid Interconnect** — a device with nothing to display is now left off the card rather than drawn as a
   bare header and settings icon.
-- **No deprecation warning on Home Assistant 2026.9 from the favorites service or new-entity announcements** — Home Assistant 2026.9 can answer a
-  device lookup with a child device, and the integration no longer reads a field such a device does not have.
+- **No deprecation warning on Home Assistant 2026.9 from the favorites service or new-entity announcements** — Home Assistant 2026.9 can answer a device lookup
+  with a child device, and the integration no longer reads a field such a device does not have.
 - **Rotate panel credentials now returns the new panel passphrase**: the panel replaces its passphrase along with the broker password, so the action's response
   carries the new passphrase for you to save. The integration still does not store it, and the action can only be run with its response.
 - **The integration reconnects after a rotation instead of asking to reauthenticate**: the broker may not accept the new password as soon as the panel returns
@@ -39,8 +38,8 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
   a last resort restart the panel. Access tokens already issued, including the integration's, are not revoked.
 - **Rotation errors say what happened**: a reduced-privilege access token and a panel that did not report the outcome each get their own message, and the latter
   no longer claims that nothing changed. A request that timed out or lost its connection after it was sent is reported as an unknown outcome, and a panel whose
-  passphrase service is not running is reported as unchanged. When the outcome is unknown, the message says to run the rotation again, and to reauthenticate only
-  if the panel refuses it.
+  passphrase service is not running is reported as unchanged. When the outcome is unknown, the message says to run the rotation again, and to reauthenticate
+  only if the panel refuses it.
 - **Rotate panel credentials works on a panel that is not loaded**: a panel that did not reconnect after a rotation, or that restarted with a broker password
   the panel no longer accepts, can be rotated again, since the rotation needs only the stored access token, which the panel does not revoke.
 - **Overlapping rotations of one panel run one after the other**: a second call, such as a double submit, waits until the first has reconnected, so the stored

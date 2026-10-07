@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -94,6 +94,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -172,11 +174,15 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot_a),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot_a),
+            setup_snapshot=snapshot_a,
         )
         entry_b.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_b),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot_b),
+            setup_snapshot=snapshot_b,
         )
 
         _register_power_entity(
@@ -221,6 +227,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -266,6 +274,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         # Only register entity for one circuit
@@ -329,6 +339,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -377,6 +389,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -413,6 +427,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
         # No entities registered
 
@@ -446,6 +462,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -480,6 +498,8 @@ class TestExportCircuitManifest:
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(

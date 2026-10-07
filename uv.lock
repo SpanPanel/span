@@ -2547,7 +2547,7 @@ wheels = [
 
 [[package]]
 name = "span"
-version = "2.1.2b3"
+version = "2.1.2b4"
 source = { virtual = "." }
 dependencies = [
     { name = "homeassistant" },
@@ -2599,12 +2599,12 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "voluptuous-stubs" },
-    { name = "vulture", specifier = ">=2.14" },
+    { name = "vulture", specifier = ">=2.16" },
 ]
 
 [[package]]
 name = "span-panel-api"
-version = "3.6.0"
+version = "3.6.1b1"
 source = { editable = "../../span/span-panel-api" }
 dependencies = [
     { name = "httpx" },
@@ -2657,7 +2657,7 @@ requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-ap
 
 [[package]]
 name = "span-panel-api-schema-1"
-version = "1.2.0"
+version = "1.2.1b1"
 source = { editable = "../../span/span-panel-api/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },

@@ -192,13 +192,11 @@ If you upgraded, these keep their entity ids, unique ids and history — but not
 device starts without one. Assign it an area, or anything area-scoped (dashboards, automations, voice targeting a room) stops matching them. New installations
 get ids from the new device name — `sensor.span_panel_solar_pv_vendor` rather than `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
 
-On a panel with more than one inverter (published from firmware r202639), each inverter gets a **Solar Inverter** device of its own, named after the circuit
-that feeds it, carrying its own PV Vendor, PV Product, Nameplate Capacity and PV Panel Link. The **Solar** device keeps PV Power, which stays the panel's total
-for all inverters. When the panel first reports a second inverter, the metadata sensors the Solar device carried move to the device of the inverter on the
-lowest breaker space, with their entity IDs, history and automations intact; vendor readings on the Solar device move with them and keep their customizations.
-If the panel returns to a single inverter, the same sensors move back to the Solar device, keeping their entity IDs, and describe the remaining inverter. An
-inverter device the panel no longer reports stays, unavailable, until you delete it. A panel with one inverter keeps exactly the entities and ids described
-above.
+Each additional solar inverter (published from firmware r202639) gets a **Solar Inverter** device of its own, named after the circuit that feeds it where one
+does, with its own PV Vendor, PV Product and Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
+never move: they keep describing the inverter they always did, beside PV Power, the panel's total. Where the panel cannot say which inverter they described — an
+inverter no circuit feeds, for example behind a Tesla Gateway, or several already reported when you upgraded — they describe all of your inverters together. An
+inverter device the panel no longer reports stays, unavailable, until you delete it.
 
 **Deprecated:**
 

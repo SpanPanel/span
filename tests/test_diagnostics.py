@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +13,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -28,12 +31,16 @@ from custom_components.span_panel.curation import (
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.span_panel.helpers import identity_digest
+from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
+from .adapter_fixtures import schema_one_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
+    pv_binding_for,
 )
 
 
@@ -96,6 +103,8 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -176,6 +185,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
             )
         },
         evse={},
+        pv_inverters={},
         battery=None,
         adopted_devices=(),
         lugs_at_service_entrance=True,
@@ -193,6 +203,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -250,8 +262,9 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
         disabled_by=er.RegistryEntryDisabler.INTEGRATION,
     )
 
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
+    coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
@@ -264,6 +277,8 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -296,8 +311,9 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     )
     await async_save_record(hass, entry, "bess/battery-2/enabled", CurationRecord(promote=True))
 
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-004")
     coordinator = MagicMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-004")
+    coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
@@ -306,6 +322,8 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=await async_load_curation(hass, entry),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -322,3 +340,163 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
         set(record) <= {"state_class", "device_class", "entity_category"}
         for record in result["adopted_curation"].values()
     )
+
+
+async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: HomeAssistant) -> None:
+    """The first facts a span#269-style report needs: a circuit-fed inverter, shown by its circuit."""
+    snapshot = schema_one_snapshot()
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="pv-diag-entry", title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    identity = pv_binding_for(snapshot)
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=identity,
+        setup_snapshot=snapshot,
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    (key,) = snapshot.pv_inverters
+    inverter = snapshot.pv_inverters[key]
+    assert result["pv"] == {
+        "mode": "inverter",
+        "bound_circuit_id": key,
+        "legacy_key": key,
+        "solar_card_reads": key,
+        "solar_link": True,
+        "withheld": [],
+        "inverters": {
+            key: {
+                "feed_circuit_id": inverter.feed_circuit_id,
+                "relative_position": inverter.relative_position,
+                "connected": inverter.connected,
+                "own_card": False,
+                "own_link": False,
+            }
+        },
+    }
+
+
+async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together(hass: HomeAssistant) -> None:
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(serial_number="sp3-diag-pv2"),
+        pv_inverters={
+            "c-1": SpanPVSnapshot(device_id="pv-1", node_id="c-1", feed_circuit_id="c-1"),
+            "c-2": SpanPVSnapshot(device_id="pv-2", node_id="c-2", feed_circuit_id="c-2"),
+        },
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="pv-diag-two", title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["pv"]["mode"] == "unbound"
+    assert result["pv"]["solar_card_reads"] == "together"
+    assert {row["own_card"] for row in result["pv"]["inverters"].values()} == {True}
+    # Neither inverter's circuit publishes a link record, so neither card, nor the Solar card, has a link.
+    assert {row["own_link"] for row in result["pv"]["inverters"].values()} == {False}
+    assert result["pv"]["solar_link"] is False
+
+
+async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnapshot, binding: PvBinding) -> dict[str, object]:
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id=entry_id, title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=binding,
+        setup_snapshot=snapshot,
+    )
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    block: dict[str, object] = result["pv"]
+    return block
+
+
+SERIAL_PV = "sp3-diag-serial-001"
+DEVICE_ID_KEY = f"{SERIAL_PV}-pv"
+"""An inverter no circuit feeds is keyed by its device id, which embeds the panel serial."""
+
+
+async def test_an_unfed_inverters_device_id_key_is_digested_where_the_card_reads_it(hass: HomeAssistant) -> None:
+    """Unbound, one inverter no circuit feeds: its key is shown digested, as the Solar card's legacy key too."""
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(serial_number=SERIAL_PV),
+        pv_inverters={DEVICE_ID_KEY: SpanPVSnapshot(device_id=DEVICE_ID_KEY, node_id=DEVICE_ID_KEY)},
+    )
+    binding = resolve(snapshot, None, frozenset(), link_held=False, inverter_links_held=frozenset())[0]
+    assert binding.legacy_key == DEVICE_ID_KEY
+
+    block = await _pv_block(hass, "pv-diag-unfed", snapshot, binding)
+
+    digest = identity_digest(DEVICE_ID_KEY)
+    assert block["mode"] == "unbound"
+    assert block["legacy_key"] == digest
+    assert block["solar_card_reads"] == digest
+    assert block["inverters"] == {
+        digest: {
+            "feed_circuit_id": None,
+            "relative_position": None,
+            "connected": None,
+            "own_card": False,
+            "own_link": False,
+        }
+    }
+    assert SERIAL_PV not in json.dumps(block)
+
+
+async def test_a_withheld_inverters_device_id_key_is_digested(hass: HomeAssistant) -> None:
+    """Pending: the bound circuit is published, its inverter is not, and a device-id inverter is withheld."""
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(
+            serial_number=SERIAL_PV, circuits={"c-bound": SpanCircuitSnapshotFactory.create(circuit_id="c-bound")}
+        ),
+        pv_inverters={DEVICE_ID_KEY: SpanPVSnapshot(device_id=DEVICE_ID_KEY, node_id=DEVICE_ID_KEY)},
+    )
+    binding = resolve(snapshot, StoredPvBinding(circuit_id="c-bound"), frozenset(), link_held=False, inverter_links_held=frozenset())[0]
+    assert binding.withheld == frozenset({DEVICE_ID_KEY})
+
+    block = await _pv_block(hass, "pv-diag-withheld", snapshot, binding)
+
+    digest = identity_digest(DEVICE_ID_KEY)
+    assert block["mode"] == "inverter"
+    assert block["bound_circuit_id"] == "c-bound"
+    assert block["legacy_key"] == "c-bound"
+    assert block["withheld"] == [digest]
+    assert block["inverters"] == {
+        digest: {
+            "feed_circuit_id": None,
+            "relative_position": None,
+            "connected": None,
+            "own_card": False,
+            "own_link": False,
+        }
+    }
+    assert SERIAL_PV not in json.dumps(block)

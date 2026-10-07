@@ -98,10 +98,10 @@ __all__ = [
     "has_bess",
     "has_evse",
     "has_mid",
-    "has_multiple_pv_inverters",
     "has_power_flows",
     "has_pv",
     "has_shed_forecast",
+    "identity_digest",
     "pv_inverter_capability_tokens",
     "is_panel_level_sensor_key",
     "resolve_evse_display_suffix",
@@ -283,23 +283,6 @@ def has_pv(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.power_flow_pv is not None or any(
         c.device_type == "pv" for c in snapshot.circuits.values()
     )
-
-
-def has_multiple_pv_inverters(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether the panel publishes more than one PV inverter.
-
-    Decides which of two layouts the PV entities take. With one inverter, the
-    `{serial}_pv` card carries that inverter's vendor, model, nameplate and link
-    under the panel-scoped unique ids they have always had, so nothing about an
-    existing installation moves. With more than one, each inverter gets a card
-    and entities of its own keyed by its `pv_inverters` key, and `{serial}_pv`
-    keeps only the panel's aggregate PV power.
-
-    Crossing between the two re-keys the primary inverter's entities in place,
-    so a user's entity_ids survive it in either direction; nothing is deleted.
-    See `pv_inverter_layout`.
-    """
-    return len(snapshot.pv_inverters) > 1
 
 
 def resolve_pv_display_suffix(
@@ -503,14 +486,15 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     version, so a panel that starts publishing the record reaches
     `detect_capabilities`, the coordinator reloads, and the sensors appear.
     """
-    return (
-        snapshot.pv.connected is not None
-        or any(pv.connected is not None for pv in snapshot.pv_inverters.values())
-        or any(evse.connected is not None for evse in snapshot.evse.values())
+    # `snapshot.pv` is the lone inverter or the inverters together, so a record
+    # on it is a record on some inverter here; reading the aggregate as well would
+    # only add a value that comes and goes with what the links read.
+    return any(pv.connected is not None for pv in snapshot.pv_inverters.values()) or any(
+        evse.connected is not None for evse in snapshot.evse.values()
     )
 
 
-def _digest(identity: str) -> str:
+def identity_digest(identity: str) -> str:
     """Return a short, stable digest of one wire identity.
 
     Not a security boundary and not trying to be one — this is the same rule
@@ -537,7 +521,7 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     Vendor extensibility is the one part of the snapshot whose vocabulary this
     integration cannot enumerate in advance, so it cannot be reduced to a named
     flag the way `bess` or `pcs` are. It reaches the reload trigger as its
-    identities, digested — see `_digest` for why the raw ids must not appear here.
+    identities, digested — see `identity_digest` for why the raw ids must not appear here.
 
     **One token each rather than one hash of the set.** The trigger fires on set
     *expansion* (`current - known`), and a hash of a shrinking set is as "new" as
@@ -557,10 +541,10 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     be created at setup now can.
     """
     return frozenset(
-        [f"adopted:{_digest(device.device_id)}" for device in snapshot.adopted_devices]
+        [f"adopted:{identity_digest(device.device_id)}" for device in snapshot.adopted_devices]
         + [
             f"extension:{row.subject.kind}:"
-            f"{'' if row.subject.instance_key is None else _digest(row.subject.instance_key)}:"
+            f"{'' if row.subject.instance_key is None else identity_digest(row.subject.instance_key)}:"
             f"{row.path}"
             for row in snapshot.extension_properties
         ]
@@ -568,17 +552,11 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
 
 
 def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-    """One token per inverter, once the panel publishes more than one.
+    """One token per inverter key, one inverter or several, so a key the panel starts publishing reloads.
 
-    So a panel whose upgrade publishes its other inverters reloads into the
-    per-inverter layout (see `has_multiple_pv_inverters`), and a later inverter
-    arriving reloads again. Empty with one inverter, so a single-inverter panel
-    reads exactly as it did. Digested because the key can be a device id, which
-    can carry a serial; see `_digest`.
+    Digested because a key can be a device id, which carries the panel serial; see `identity_digest`.
     """
-    if not has_multiple_pv_inverters(snapshot):
-        return frozenset()
-    return frozenset(f"pv_inverter:{_digest(key)}" for key in snapshot.pv_inverters)
+    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in snapshot.pv_inverters)
 
 
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:

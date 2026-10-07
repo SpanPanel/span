@@ -60,6 +60,7 @@ from .adapter_fixtures import (
     schema_one_metadata_raw,
     schema_one_tree,
 )
+from .factories import pv_binding_for
 
 BASELINE = pathlib.Path(__file__).parent / "fixtures" / "unread_declarations_baseline.json"
 
@@ -180,8 +181,9 @@ def test_a_discovered_row_raises_no_unit_mismatch() -> None:
 
 
 def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
+    snapshot = _snapshot()
     coordinator = MagicMock()
-    coordinator.data = _snapshot()
+    coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
@@ -191,6 +193,8 @@ def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     return entry
 

@@ -60,7 +60,7 @@ from custom_components.span_panel.sensor_circuit import (
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS, UNMAPPED_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 CIRCUIT_ID = "15"
 SERIAL = "sp3-recreate-001"
@@ -169,6 +169,8 @@ class _Install[E: SpanPanelEntity]:
             coordinator=coordinator,
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         self._platform = MockEntityPlatform(
@@ -937,6 +939,8 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)

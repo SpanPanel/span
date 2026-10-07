@@ -1,6 +1,6 @@
 [project]
 name = "span"
-version = "2.1.2b3"
+version = "2.1.2b4"
 description = "Span Panel Custom Integration for Home Assistant"
 authors = [{name = "SpanPanel"}]
 license = {text = "MIT"}
@@ -8,13 +8,13 @@ readme = "README.md"
 requires-python = ">=3.14.3,<3.15"
 dependencies = [
     "homeassistant==2026.9.4",
-    "span-panel-api==3.6.0",
+    "span-panel-api==3.6.1b1",
     # Separate distributions, not dependencies of the bootstrap: adapters are found
     # through the `span_panel_api.schema_adapters` entry-point group, so each one has
     # to be installed for discovery to see it. manifest.json carries the same three,
     # and that is the list Home Assistant actually reads.
     "span-panel-api-schema-0==1.2.0",
-    "span-panel-api-schema-1==1.2.0",
+    "span-panel-api-schema-1==1.2.1b1",
 ]
 
 [dependency-groups]

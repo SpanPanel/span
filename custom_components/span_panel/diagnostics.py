@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
@@ -19,8 +19,12 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
+from .helpers import identity_digest
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
+
+if TYPE_CHECKING:
+    from .pv_binding import PvBinding, PvBindingMode
 
 TO_REDACT = {
     CONF_ACCESS_TOKEN,
@@ -241,6 +245,81 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
     }
 
 
+class PvInverterRow(TypedDict):
+    """One inverter in the `pv` section: where it is fed from, and whether it has a card and a link of its own."""
+
+    feed_circuit_id: str | None
+    relative_position: str | None
+    connected: bool | None
+    own_card: bool
+    own_link: bool
+
+
+class PvBlock(TypedDict):
+    """The `pv` section. Typed so the shape is checked, not described.
+
+    Every key that names an inverter goes through `_pv`'s `shown`, so a device-id
+    key cannot reach the payload undigested by a field added beside the others.
+    """
+
+    mode: PvBindingMode
+    bound_circuit_id: str | None
+    legacy_key: str | None
+    solar_card_reads: str | None
+    solar_link: bool
+    withheld: list[str]
+    inverters: dict[str, PvInverterRow]
+
+
+def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
+    """Which inverter the Solar card reads, and each inverter's place.
+
+    A device-id key can embed the panel serial (`<panel-serial>-<pv-identifier>`),
+    so it is digested as the capability tokens are; a circuit id is shown as
+    the `circuits` block already shows it. `legacy_key` is the inverter the Solar
+    card's PV entities describe at this setup, and `solar_card_reads` adds what
+    they read when no one inverter is it: the inverters together, or nothing yet.
+    """
+
+    def shown(key: str) -> str:
+        pv = snapshot.pv_inverters.get(key)
+        if key == identity.bound_key or (pv is not None and pv.feed_circuit_id is not None):
+            return key
+        return identity_digest(key)
+
+    legacy = None if identity.legacy_key is None else shown(identity.legacy_key)
+    # What the Solar card's PV entities read: one inverter, the inverters
+    # together (unbound with several), or nothing yet.
+    reads: str | None
+    if legacy is not None:
+        reads = legacy
+    elif identity.bound_key is not None:
+        reads = identity.bound_key
+    elif identity.mode == "unbound" and len(snapshot.pv_inverters) > 1:
+        reads = "together"
+    else:
+        reads = None
+
+    return {
+        "mode": identity.mode,
+        "bound_circuit_id": identity.bound_key,
+        "legacy_key": legacy,
+        "solar_card_reads": reads,
+        "solar_link": identity.solar_link,
+        "withheld": sorted(shown(key) for key in identity.withheld),
+        "inverters": {
+            shown(key): {
+                "feed_circuit_id": pv.feed_circuit_id,
+                "relative_position": pv.relative_position,
+                "connected": pv.connected,
+                "own_card": identity.has_own_card(key),
+                "own_link": key in identity.inverter_links,
+            }
+            for key, pv in snapshot.pv_inverters.items()
+        },
+    }
+
+
 def _panel_ca(entry: SpanPanelConfigEntry) -> dict[str, Any]:
     """How this entry's broker connection is anchored, without the PEM itself.
 
@@ -329,6 +408,7 @@ async def async_get_config_entry_diagnostics(
         "circuits": circuit_data,
         "evse": evse_data,
         "battery": battery_data,
+        "pv": _pv(snapshot, entry.runtime_data.pv_binding),
         "coordinator": {
             "panel_offline": coordinator.panel_offline,
             "last_update_success": coordinator.last_update_success,

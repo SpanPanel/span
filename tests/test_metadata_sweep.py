@@ -58,6 +58,8 @@ from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from .factories import pv_binding_for
+
 EVSE_PART_NUMBER_KEY = "evse_part_number"
 DSM_STATE_KEY = "dsm_state"
 SOFTWARE_VERSION_KEY = "software_version"
@@ -147,6 +149,8 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
         coordinator=coordinator,
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     return coordinator
 

@@ -297,7 +297,7 @@ async def async_setup_entry(
         return
 
     coordinator = config_entry.runtime_data.coordinator
-    snapshot: SpanPanelSnapshot = coordinator.data
+    snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
     curated: list[SpanEvseNumber] = [
         SpanEvseNumber(coordinator, description, evse_id)

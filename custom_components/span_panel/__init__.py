@@ -45,7 +45,6 @@ from . import config_flow  # noqa: F401
 from .additions import (
     async_announce_new_entities,
     async_forget_announcements,
-    async_rekey_announced,
 )
 from .adoption import async_register_adopted_devices
 from .ca_repairs import (
@@ -97,7 +96,7 @@ from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
-from .pv_inverter_layout import async_reconcile_pv_inverter_layout
+from .pv_binding import async_forget_pv_binding, async_resolve_pv_binding
 
 # Re-exported: the types themselves live in a leaf module (see `runtime.py`), but
 # `custom_components.span_panel.SpanPanelRuntimeData` is the name the tests and
@@ -679,13 +678,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         if entry.title == serial_number:
             hass.config_entries.async_update_entry(entry, title=smart_device_name)
 
-        # Before the curation overlay is loaded below, because re-keying a solar
-        # extension entity moves its curation record too, and before the
-        # forward, so the platforms find the PV entities already re-keyed to the
-        # current inverter layout and keep their entity_ids. The announcement
-        # record follows the re-keyed ids, or they would be announced as new.
-        pv_moves = await async_reconcile_pv_inverter_layout(hass, entry, coordinator, snapshot)
-        await async_rekey_announced(hass, entry, pv_moves)
+        # Before the platforms: which inverter the Solar card's PV entities read,
+        # recorded once. Nothing is re-keyed. See `pv_binding`.
+        pv_binding = await async_resolve_pv_binding(hass, entry, snapshot)
 
         # Populated here rather than earlier because the panel's registry id is
         # part of it, and that only exists once the device is registered. Nothing
@@ -699,6 +694,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 hass, entry, snapshot, smart_device_name
             ),
             curation=await async_load_curation(hass, entry),
+            pv_binding=pv_binding,
+            setup_snapshot=snapshot,
         )
 
         # Before the forward, because a sub-device's `via_device_id` has to name a
@@ -713,7 +710,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # After the forward, because it reports on what the platforms just built
         # -- and once, rather than from each platform's own call to `adoptable`.
         await async_notice_declined_extensions(
-            hass, entry, snapshot, dr.async_get(hass), er.async_get(hass)
+            hass,
+            entry,
+            snapshot,
+            dr.async_get(hass),
+            er.async_get(hass),
+            pv_binding=pv_binding,
         )
 
         # After the platforms, not before: schema validation runs on the first
@@ -788,6 +790,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_leaf_name_mismatch(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
+    await async_forget_pv_binding(hass, entry)
     await async_forget(hass, entry)
 
 
