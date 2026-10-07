@@ -206,7 +206,7 @@ def test_without_pv_there_is_no_block() -> None:
 
 
 def _without_identity(tree: dict[str, dict[str, str]], *devices: str) -> dict[str, dict[str, str]]:
-    """The tree with these PV devices' vendor and model not yet published."""
+    """Return the tree with these PV devices' vendor and model not yet published."""
     for device in devices:
         tree[device].pop("info/vendor-name")
         tree[device].pop("info/model")
@@ -231,3 +231,21 @@ def test_identity_is_read_live_and_structure_as_of_setup() -> None:
     assert (second["vendor"], second["model"]) == ("Second Vendor", live.pv_inverters[C2].model)
     assert site["vendor"] is not None and second["model"] is not None
     assert solar_topology(UNFED_PV, binding, setup, live, POWER, SITE) is None
+
+
+def test_an_inverter_gone_from_the_live_snapshot_keeps_its_block_with_no_identity() -> None:
+    """Structure is as of setup, so the block stays until the reload the departure causes; identity reads empty, as its sensors do."""
+    setup = schema_one_snapshot(_tree())
+    live = schema_one_snapshot(_tree(second=False))
+    assert C2 in setup.pv_inverters and C2 not in live.pv_inverters
+
+    second = solar_topology(C2, _bound(C, legacy=C), setup, live, POWER, SITE)
+
+    assert second == SolarTopology(
+        role="inverter",
+        vendor=None,
+        model=None,
+        feed_circuit_id=C2,
+        power_entity_id=POWER[C2],
+        site_power_entity_id=None,
+    )
