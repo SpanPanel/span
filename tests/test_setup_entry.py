@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import (
@@ -15,6 +16,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelServerError
 
 from custom_components.span_panel import SpanPanelRuntimeData, async_setup_entry
@@ -29,6 +31,7 @@ from custom_components.span_panel.const import (
 )
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
+from custom_components.span_panel.id_builder import build_pv_inverter_unique_id
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
@@ -636,19 +639,14 @@ async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
     )
 
 
-async def test_setup_resolves_the_pv_binding_before_the_platforms(
-    hass: HomeAssistant, hass_storage: dict[str, object]
-) -> None:
-    """The platforms are handed the identity the record on disk decides, not one derived after them."""
-    hass_storage["span_panel.pv_binding.entry-setup"] = {"version": 1, "data": {"circuit_id": "c-bound"}}
-    entry = _create_v2_entry()
-    entry.add_to_hass(hass)
+async def _forwarded_pv_binding(hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot) -> PvBinding:
+    """Run `async_setup_entry` over a coordinator publishing `snapshot`; return the binding the platforms were handed."""
     client = MagicMock()
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
-    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    coordinator.data = snapshot
     forwarded: list[PvBinding] = []
 
     async def _capture(*args: object, **kwargs: object) -> None:
@@ -666,9 +664,72 @@ async def test_setup_resolves_the_pv_binding_before_the_platforms(
         patch.object(hass.config_entries, "async_update_entry"),
     ):
         assert await async_setup_entry(hass, entry) is True
+    (binding,) = forwarded
+    return binding
 
-    assert forwarded[0].bound_key == "c-bound"
-    assert forwarded[0].mode == "inverter"
+
+SETUP_CIRCUIT = "c-setup"
+
+
+def _one_fed_inverter() -> SpanPanelSnapshot:
+    return replace(
+        SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001"),
+        pv_inverters={
+            SETUP_CIRCUIT: SpanPVSnapshot(device_id="pv", node_id=SETUP_CIRCUIT, feed_circuit_id=SETUP_CIRCUIT)
+        },
+    )
+
+
+async def test_setup_resolves_the_pv_binding_before_the_platforms(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """The platforms are handed the identity the record on disk decides, not one derived after them."""
+    hass_storage["span_panel.pv_binding.entry-setup"] = {"version": 1, "data": {"circuit_id": "c-bound"}}
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+
+    binding = await _forwarded_pv_binding(hass, entry, SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001"))
+
+    assert binding.bound_key == "c-bound"
+    assert binding.mode == "inverter"
+
+
+async def test_setup_decides_the_pv_binding_from_the_coordinators_snapshot(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """No record: the one inverter `coordinator.data` publishes is bound, and the record is written through setup."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+
+    binding = await _forwarded_pv_binding(hass, entry, _one_fed_inverter())
+
+    assert binding.mode == "inverter"
+    assert binding.bound_key == SETUP_CIRCUIT
+    stored = hass_storage["span_panel.pv_binding.entry-setup"]
+    assert isinstance(stored, dict)
+    assert stored["data"] == {"circuit_id": SETUP_CIRCUIT}
+
+
+async def test_setup_reads_the_registry_for_cards_the_inverter_already_holds(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """No record, but the inverter already has a card in this entry: it keeps it, and the record is unbound."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_pv_inverter_unique_id("sp3-setup-001", SETUP_CIRCUIT, "pv_vendor"),
+        config_entry=entry,
+    )
+
+    binding = await _forwarded_pv_binding(hass, entry, _one_fed_inverter())
+
+    assert binding.mode == "unbound"
+    assert binding.has_own_card(SETUP_CIRCUIT)
+    stored = hass_storage["span_panel.pv_binding.entry-setup"]
+    assert isinstance(stored, dict)
+    assert stored["data"] == {"circuit_id": None}
 
 
 def test_runtime_data_refuses_to_be_built_without_a_pv_binding() -> None:

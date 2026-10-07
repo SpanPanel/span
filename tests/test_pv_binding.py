@@ -12,6 +12,11 @@ from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry
 from custom_components.span_panel.const import DOMAIN, PV_PANEL_LINK_KEY
+from custom_components.span_panel.id_builder import (
+    build_panel_unique_id,
+    build_pv_inverter_unique_id,
+)
+from custom_components.span_panel.pv_binding import async_resolve_pv_binding, keys_holding_cards
 from custom_components.span_panel.sensor_panel import SpanPVMetadataSensor
 from custom_components.span_panel.util import SUB_DEVICE_PV
 
@@ -330,3 +335,63 @@ async def test_vendor_readings_follow_the_binding_through_setup(hass: HomeAssist
         own = entities.async_get_entity_id(domain, DOMAIN, f"span_{serial}_adopted_pv_{SECOND_SOLAR_CIRCUIT}/{path}")
         assert own is not None, f"{domain} {path} is not on the newcomer's card"
         assert entities.async_get(own).device_id == newcomer.id
+
+
+# --- which inverters already hold a card -------------------------------------------
+
+
+def test_a_card_is_counted_only_in_its_own_entry(hass: HomeAssistant) -> None:
+    """An inverter id another entry owns says nothing about this entry's cards."""
+    mine = _entry(hass, "entry-cards-mine", "sp3-cards-001")
+    theirs = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-cards-theirs", unique_id="sp3-cards-002")
+    theirs.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor", DOMAIN, build_pv_inverter_unique_id("sp3-cards-001", "c-1", "pv_vendor"), config_entry=theirs
+    )
+
+    assert keys_holding_cards(registry, mine.entry_id, "sp3-cards-001", ["c-1"]) == frozenset()
+    assert keys_holding_cards(registry, theirs.entry_id, "sp3-cards-001", ["c-1"]) == frozenset({"c-1"})
+
+
+def test_an_inverter_holding_only_its_link_sensor_holds_a_card(hass: HomeAssistant) -> None:
+    """The link binary sensor alone is a card of its own; the Solar card's panel-scoped ids are not."""
+    entry = _entry(hass, "entry-cards-link", "sp3-cards-003")
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "binary_sensor",
+        DOMAIN,
+        build_pv_inverter_unique_id("sp3-cards-003", "c-link", PV_PANEL_LINK_KEY),
+        config_entry=entry,
+    )
+    registry.async_get_or_create(
+        "sensor", DOMAIN, build_panel_unique_id("sp3-cards-003", "pv_vendor"), config_entry=entry
+    )
+
+    assert keys_holding_cards(registry, entry.entry_id, "sp3-cards-003", ["c-link", "c-none"]) == frozenset(
+        {"c-link"}
+    )
+
+
+# --- the record on disk -------------------------------------------------------------
+
+
+async def test_first_sight_writes_the_record_and_no_inverter_writes_none(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    empty = schema_one_snapshot(schema_one_tree(without=PV_DEVICE))
+    entry = _entry(hass, "entry-record-write", empty.serial_number)
+    key = f"{DOMAIN}.pv_binding.{entry.entry_id}"
+
+    undecided = await async_resolve_pv_binding(hass, entry, empty)
+    await hass.async_block_till_done()
+    assert undecided.mode == "undecided"
+    assert key not in hass_storage
+
+    bound = await async_resolve_pv_binding(hass, entry, schema_one_snapshot())
+    await hass.async_block_till_done()
+    assert bound.bound_key == SOLAR_CIRCUIT
+    stored = hass_storage[key]
+    assert isinstance(stored, dict)
+    assert stored["version"] == 1
+    assert stored["data"] == {"circuit_id": SOLAR_CIRCUIT}
