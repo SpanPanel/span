@@ -316,3 +316,27 @@ async def test_a_vendor_published_after_setup_reaches_the_tile_as_it_reaches_the
     assert second["vendor"] == _entity_state(
         hass, entry, "sensor", build_pv_inverter_unique_id(serial, C2, "pv_vendor")
     )
+
+
+async def test_a_restored_store_draws_the_bound_circuit_once_on_its_own_tile(
+    hass: HomeAssistant,
+) -> None:
+    """A bound inverter that already holds a card keeps it, so its circuit is drawn there and not on the Solar tile too."""
+    one = schema_one_snapshot()
+    entry = _entry(hass, "entry-ws-restored", one.serial_number)
+    await _unload(await _setup(hass, entry, one))
+    assert entry.runtime_data.pv_binding.bound_key == C
+    serial = one.serial_number
+    er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, build_pv_inverter_unique_id(serial, C, "pv_vendor"), config_entry=entry
+    )
+    await _setup(hass, entry, schema_one_snapshot(_tree()))
+
+    solar = _solar_by_identifier(hass, await _topology(hass, entry))
+
+    site = solar[f"{serial}_pv"]
+    own = solar[f"{serial}_pv_{C}"]
+    assert isinstance(site, dict) and isinstance(own, dict)
+    assert site["feed_circuit_id"] is None and site["power_entity_id"] is None
+    assert own["feed_circuit_id"] == C
+    assert own["power_entity_id"] == _circuit_power(hass, entry, C)
