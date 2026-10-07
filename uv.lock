@@ -2599,7 +2599,7 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "voluptuous-stubs" },
-    { name = "vulture", specifier = ">=2.14" },
+    { name = "vulture", specifier = ">=2.16" },
 ]
 
 [[package]]
