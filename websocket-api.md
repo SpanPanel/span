@@ -116,17 +116,17 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Top Level
 
-| Field             | Type        | Description                                         |
-| ----------------- | ----------- | --------------------------------------------------- |
-| `serial`          | string      | Panel serial number                                 |
-| `firmware`        | string      | Panel firmware version                              |
-| `panel_size`      | int or null | Total breaker spaces (e.g., 32, 40)                 |
-| `device_id`       | string      | HA device registry ID (echoed from request)         |
-| `panel_device_id` | string      | The panel's current HA device registry ID           |
-| `config_entry_id` | string      | The config entry that owns the panel                |
-| `device_name`     | string      | HA device display name                              |
-| `circuits`        | object      | Circuit UUID keyed map (see below)                  |
-| `sub_devices`     | object      | HA device ID keyed map of BESS/MID/EVSE (see below) |
+| Field             | Type        | Description                                            |
+| ----------------- | ----------- | ------------------------------------------------------ |
+| `serial`          | string      | Panel serial number                                    |
+| `firmware`        | string      | Panel firmware version                                 |
+| `panel_size`      | int or null | Total breaker spaces (e.g., 32, 40)                    |
+| `device_id`       | string      | HA device registry ID (echoed from request)            |
+| `panel_device_id` | string      | The panel's current HA device registry ID              |
+| `config_entry_id` | string      | The config entry that owns the panel                   |
+| `device_name`     | string      | HA device display name                                 |
+| `circuits`        | object      | Circuit UUID keyed map (see below)                     |
+| `sub_devices`     | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below) |
 
 #### Circuit Object
 
@@ -159,15 +159,31 @@ current, `switch` is absent for always-on circuits).
 
 #### Sub-Device Object
 
-| Field           | Type        | Description                           |
-| --------------- | ----------- | ------------------------------------- |
-| `name`          | string      | HA device display name                |
-| `type`          | string      | `bess`, `mid`, `evse`, or `unknown`   |
-| `manufacturer`  | string/null | Device manufacturer                   |
-| `model`         | string/null | Device model                          |
-| `serial_number` | string/null | Device serial number                  |
-| `sw_version`    | string/null | Device firmware/software version      |
-| `entities`      | object      | Entity ID keyed map with domain, name |
+| Field           | Type        | Description                               |
+| --------------- | ----------- | ----------------------------------------- |
+| `name`          | string      | HA device display name                    |
+| `type`          | string      | `bess`, `mid`, `evse`, `pv`, or `unknown` |
+| `manufacturer`  | string/null | Device manufacturer                       |
+| `model`         | string/null | Device model                              |
+| `serial_number` | string/null | Device serial number                      |
+| `sw_version`    | string/null | Device firmware/software version          |
+| `entities`      | object      | Entity ID keyed map with domain, name     |
+| `solar`         | object      | PV devices only: see Solar Object         |
+
+#### Solar Object
+
+| Field                  | Type        | Description                                                                                            |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `role`                 | string      | `site` for the Solar device, `inverter` for an additional inverter's own device                        |
+| `vendor`               | string/null | Vendor of the inverter this device describes; null when not published or not shared                    |
+| `model`                | string/null | Model of the inverter this device describes; null when not published or not shared                     |
+| `feed_circuit_id`      | string/null | The circuit that feeds the inverter this device describes; null when no circuit feeds it               |
+| `power_entity_id`      | string/null | That inverter's own power reading: its feeding circuit's `power` entity; null when no circuit feeds it |
+| `site_power_entity_id` | string/null | `site` only: PV Power, the site's total; null on `inverter`                                            |
+
+`power_entity_id` is an entity id rather than a circuit id, so a consumer that merges several panels' circuits, as the card's favorites view does, can still
+resolve it. `vendor` and `model` are what the panel publishes, `null` where it publishes nothing, whereas the device's `manufacturer` and `model` carry Home
+Assistant's display placeholders.
 
 ### Errors
 

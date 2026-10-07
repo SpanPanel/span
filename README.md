@@ -196,7 +196,10 @@ Each additional solar inverter (published from firmware r202639) gets a **Solar 
 does, with its own PV Vendor, PV Product and Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
 never move: they keep describing the inverter they always did, beside PV Power, the panel's total. Where the panel cannot say which inverter they described — an
 inverter no circuit feeds, for example behind a Tesla Gateway, or several already reported when you upgraded — they describe all of your inverters together. An
-inverter device the panel no longer reports stays, unavailable, until you delete it.
+inverter device the panel no longer reports stays, unavailable, until you delete it. Each inverter's power is the power of the circuit that feeds it, which the
+SPAN Panel card shows on that inverter's tile. An inverter no circuit feeds, such as one upstream of the panel, has no individual reading; its output is
+included in PV Power, the panel's total. The card's Solar tile shows its inverter's circuit and the site total together; on a single-inverter site the two are
+usually close.
 
 **Deprecated:**
 
