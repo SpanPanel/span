@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import Enum
 from typing import Final
 
 from span_panel_api import SpanCircuitSnapshot
@@ -26,8 +26,13 @@ _GENERATION_DEVICE_TYPE: Final = "pv"
 """The circuit `device_type` whose energy is oriented as generation."""
 
 
-class EnergyCounter(StrEnum):
-    """One of a meter's two cumulative counters."""
+class EnergyCounter(Enum):
+    """One of a meter's two cumulative counters.
+
+    A plain `Enum`, not a `StrEnum`: a member equals only itself, so neither a
+    role nor a string can answer a lookup keyed by counter. Nothing needs these
+    to be strings.
+    """
 
     CONSUMED = "consumed"
     PRODUCED = "produced"
@@ -79,8 +84,11 @@ def circuit_net_orientation(circuit: SpanCircuitSnapshot) -> NetEnergyOrientatio
     return GENERATION if circuit_is_generation(circuit) else LOAD
 
 
-class EnergyRole(StrEnum):
-    """The part an energy sensor plays on its meter, declared on its description."""
+class EnergyRole(Enum):
+    """The part an energy sensor plays on its meter, declared on its description.
+
+    A plain `Enum` for the reason `EnergyCounter` is one.
+    """
 
     PRODUCED = "produced"
     CONSUMED = "consumed"

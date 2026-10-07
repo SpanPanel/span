@@ -8,6 +8,7 @@ made a solar circuit's Net move the wrong way at each compensated dip.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Final
 
 from homeassistant.components.sensor import SensorEntityDescription
@@ -95,6 +96,14 @@ def test_a_counter_role_names_its_counter_and_net_names_none() -> None:
     assert EnergyRole.NET.counter is None
 
 
+def test_a_counter_key_answers_neither_a_role_nor_a_string() -> None:
+    """The offset map is keyed by counter, and that holds at runtime, not only for mypy."""
+    offsets = {(PanelMeter.MAIN_METER, EnergyCounter.PRODUCED): 1.0}
+
+    assert (PanelMeter.MAIN_METER, EnergyRole.PRODUCED) not in offsets
+    assert (PanelMeter.MAIN_METER, "produced") not in offsets
+
+
 def test_meters_are_hashable_keys() -> None:
     keys = {
         (CircuitMeter("c1"), EnergyCounter.PRODUCED),
@@ -151,7 +160,7 @@ def test_panel_energy_descriptions_set_role_and_meter_together_and_nothing_else_
 def test_each_panel_meter_has_one_produced_one_consumed_and_one_net() -> None:
     for meter in PanelMeter:
         roles = [d.energy_role for d in PANEL_ENERGY_SENSORS if d.panel_meter is meter]
-        assert sorted(r for r in roles if r is not None) == sorted(EnergyRole), meter
+        assert Counter(roles) == Counter(EnergyRole), meter
 
 
 def test_exactly_three_descriptions_are_net_sensors() -> None:
