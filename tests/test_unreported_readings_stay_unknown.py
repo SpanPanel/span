@@ -21,8 +21,13 @@ import pytest
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.sensor_definitions import (
+    BATTERY_POWER_SENSOR,
     CIRCUIT_SENSORS,
+    GRID_POWER_FLOW_SENSOR,
     PANEL_ENERGY_SENSORS,
+    PV_POWER_SENSOR,
+    SITE_POWER_SENSOR,
+    SpanPanelDataSensorEntityDescription,
 )
 from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -149,3 +154,57 @@ class TestPanelNetEnergy:
         )
 
         assert _panel_value_fn(key)(snapshot) == pytest.approx(3800.0)
+
+
+_POWER_FLOW_SENSORS = [
+    (BATTERY_POWER_SENSOR, "power_flow_battery", -1.0),
+    (PV_POWER_SENSOR, "power_flow_pv", -1.0),
+    (GRID_POWER_FLOW_SENSOR, "power_flow_grid", -1.0),
+    (SITE_POWER_SENSOR, "power_flow_site", 1.0),
+]
+_POWER_FLOW_IDS = [description.key for description, _, _ in _POWER_FLOW_SENSORS]
+
+
+class TestPanelPowerFlows:
+    """Battery, PV, Grid and Site Power read the panel's `power-flows` node.
+
+    Each answered `0.0` while its flow was unpublished, which on a dashboard is
+    an idle battery, no sun, a balanced grid and an empty house: four confident
+    readings of something nobody measured.
+    """
+
+    @pytest.mark.parametrize(
+        ("description", "field", "sign"), _POWER_FLOW_SENSORS, ids=_POWER_FLOW_IDS
+    )
+    def test_unknown_while_the_flow_has_not_been_published(
+        self, description: SpanPanelDataSensorEntityDescription, field: str, sign: float
+    ) -> None:
+        """An unpublished flow passes straight through as unknown."""
+        snapshot = SpanPanelSnapshotFactory.create(**{field: None})
+
+        assert description.value_fn(snapshot) is None
+
+    @pytest.mark.parametrize(
+        ("description", "field", "sign"), _POWER_FLOW_SENSORS, ids=_POWER_FLOW_IDS
+    )
+    def test_a_published_flow_keeps_its_orientation(
+        self, description: SpanPanelDataSensorEntityDescription, field: str, sign: float
+    ) -> None:
+        """Battery, PV and Grid are negated from the wire, Site is not, exactly as before."""
+        snapshot = SpanPanelSnapshotFactory.create(**{field: 1250.0})
+
+        assert description.value_fn(snapshot) == pytest.approx(sign * 1250.0)
+
+    @pytest.mark.parametrize(
+        ("description", "field", "sign"), _POWER_FLOW_SENSORS, ids=_POWER_FLOW_IDS
+    )
+    def test_a_published_zero_is_zero_and_never_negative_zero(
+        self, description: SpanPanelDataSensorEntityDescription, field: str, sign: float
+    ) -> None:
+        """A measured zero still reads zero, and renders as "0.0" rather than "-0.0"."""
+        snapshot = SpanPanelSnapshotFactory.create(**{field: 0.0})
+
+        result = description.value_fn(snapshot)
+
+        assert result == 0.0
+        assert str(result) == "0.0"

@@ -2,11 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.3] - 10/2026
 
 ### Fixed
 
-- **Power sensors show unknown while the panel is offline**, instead of a false 0 W that history and statistics could not tell from a real reading.
+- **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,
+  instead of a false 0 W that history and statistics could not tell from a real reading.
+- **Get monitoring status reports no current or utilization for a circuit or main breaker that has not been measured yet**, instead of 0 A and 0%.
 
 ## [2.1.2] - 10/2026
 
