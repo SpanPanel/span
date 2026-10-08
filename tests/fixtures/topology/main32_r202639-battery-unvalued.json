@@ -1,0 +1,514 @@
+{
+  "circuits": {
+    "266eb903e50116147fb212879e812cd7": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_attic_back_outlet_breaker_rating",
+        "consumed_energy": "sensor.span_panel_attic_back_outlet_consumed_energy",
+        "current": "sensor.span_panel_attic_back_outlet_current",
+        "net_energy": "sensor.span_panel_attic_back_outlet_net_energy",
+        "power": "sensor.span_panel_attic_back_outlet_power",
+        "produced_energy": "sensor.span_panel_attic_back_outlet_produced_energy",
+        "select": "select.span_panel_attic_back_outlet_circuit_priority",
+        "switch": "switch.span_panel_attic_back_outlet_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Attic-Back-Outlet",
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        5
+      ],
+      "voltage": 120
+    },
+    "31f1d56b0926276e04c84360b1a31a6c": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hvac_air_handler_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hvac_air_handler_consumed_energy",
+        "current": "sensor.span_panel_hvac_air_handler_current",
+        "net_energy": "sensor.span_panel_hvac_air_handler_net_energy",
+        "power": "sensor.span_panel_hvac_air_handler_power",
+        "produced_energy": "sensor.span_panel_hvac_air_handler_produced_energy",
+        "select": "select.span_panel_hvac_air_handler_circuit_priority",
+        "switch": "switch.span_panel_hvac_air_handler_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "HVAC-Air-Handler",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        13,
+        15
+      ],
+      "voltage": 240
+    },
+    "390351d21af25d6409aba2b210928f7f": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_clothes_dryer_breaker_rating",
+        "consumed_energy": "sensor.span_panel_clothes_dryer_consumed_energy",
+        "current": "sensor.span_panel_clothes_dryer_current",
+        "net_energy": "sensor.span_panel_clothes_dryer_net_energy",
+        "power": "sensor.span_panel_clothes_dryer_power",
+        "produced_energy": "sensor.span_panel_clothes_dryer_produced_energy",
+        "select": "select.span_panel_clothes_dryer_circuit_priority",
+        "switch": "switch.span_panel_clothes_dryer_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Clothes-Dryer",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        2,
+        4
+      ],
+      "voltage": 240
+    },
+    "48c572b0051eaddaf85e1c26ef0f52be": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_espresso_machine_breaker_rating",
+        "consumed_energy": "sensor.span_panel_espresso_machine_consumed_energy",
+        "current": "sensor.span_panel_espresso_machine_current",
+        "net_energy": "sensor.span_panel_espresso_machine_net_energy",
+        "power": "sensor.span_panel_espresso_machine_power",
+        "produced_energy": "sensor.span_panel_espresso_machine_produced_energy",
+        "select": "select.span_panel_espresso_machine_circuit_priority",
+        "switch": "switch.span_panel_espresso_machine_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Espresso-Machine",
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        22,
+        24
+      ],
+      "voltage": 240
+    },
+    "56def60d3bbd177fc8856cca8713c05a": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_shed_240vac_outlet_breaker_rating",
+        "consumed_energy": "sensor.span_panel_shed_240vac_outlet_consumed_energy",
+        "current": "sensor.span_panel_shed_240vac_outlet_current",
+        "net_energy": "sensor.span_panel_shed_240vac_outlet_net_energy",
+        "power": "sensor.span_panel_shed_240vac_outlet_power",
+        "produced_energy": "sensor.span_panel_shed_240vac_outlet_produced_energy",
+        "select": "select.span_panel_shed_240vac_outlet_circuit_priority",
+        "switch": "switch.span_panel_shed_240vac_outlet_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Shed-240VAC-Outlet",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        26,
+        28
+      ],
+      "voltage": 240
+    },
+    "704b457f76e9451eb44fbc8287e67f9f": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_future_240vac_1_breaker_rating",
+        "consumed_energy": "sensor.span_panel_future_240vac_1_consumed_energy",
+        "current": "sensor.span_panel_future_240vac_1_current",
+        "net_energy": "sensor.span_panel_future_240vac_1_net_energy",
+        "power": "sensor.span_panel_future_240vac_1_power",
+        "produced_energy": "sensor.span_panel_future_240vac_1_produced_energy",
+        "select": "select.span_panel_future_240vac_1_circuit_priority",
+        "switch": "switch.span_panel_future_240vac_1_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Future-240VAC-1",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        21,
+        23
+      ],
+      "voltage": 240
+    },
+    "8a562bd10fb843842670080af2bbb983": {
+      "always_on": true,
+      "breaker_rating_a": null,
+      "device_type": "pv",
+      "entities": {
+        "consumed_energy": "sensor.span_panel_commissioned_pv_system_consumed_energy",
+        "current": "sensor.span_panel_commissioned_pv_system_current",
+        "net_energy": "sensor.span_panel_commissioned_pv_system_net_energy",
+        "power": "sensor.span_panel_commissioned_pv_system_power",
+        "produced_energy": "sensor.span_panel_commissioned_pv_system_produced_energy"
+      },
+      "is_never_backup": true,
+      "is_user_controllable": false,
+      "name": "Commissioned PV System",
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        29,
+        31
+      ],
+      "voltage": 240
+    },
+    "9498a44c930374d2ea1e9508c3def44e": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_cooktop_stove_breaker_rating",
+        "consumed_energy": "sensor.span_panel_cooktop_stove_consumed_energy",
+        "current": "sensor.span_panel_cooktop_stove_current",
+        "net_energy": "sensor.span_panel_cooktop_stove_net_energy",
+        "power": "sensor.span_panel_cooktop_stove_power",
+        "produced_energy": "sensor.span_panel_cooktop_stove_produced_energy",
+        "select": "select.span_panel_cooktop_stove_circuit_priority",
+        "switch": "switch.span_panel_cooktop_stove_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Cooktop/Stove",
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        18,
+        20
+      ],
+      "voltage": 240
+    },
+    "a6f39ecc6a8bf3453b9487dba9581b2c": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hvac_heat_pump_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hvac_heat_pump_consumed_energy",
+        "current": "sensor.span_panel_hvac_heat_pump_current",
+        "net_energy": "sensor.span_panel_hvac_heat_pump_net_energy",
+        "power": "sensor.span_panel_hvac_heat_pump_power",
+        "produced_energy": "sensor.span_panel_hvac_heat_pump_produced_energy",
+        "select": "select.span_panel_hvac_heat_pump_circuit_priority",
+        "switch": "switch.span_panel_hvac_heat_pump_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "HVAC-Heat-Pump",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        10,
+        12
+      ],
+      "voltage": 240
+    },
+    "aa47c5f799def01ce9ed945a4200b544": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ovens_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ovens_consumed_energy",
+        "current": "sensor.span_panel_ovens_current",
+        "net_energy": "sensor.span_panel_ovens_net_energy",
+        "power": "sensor.span_panel_ovens_power",
+        "produced_energy": "sensor.span_panel_ovens_produced_energy",
+        "select": "select.span_panel_ovens_circuit_priority",
+        "switch": "switch.span_panel_ovens_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Ovens",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        14,
+        16
+      ],
+      "voltage": 240
+    },
+    "c00a7e2e5d468da627d084071177d865": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_studio_hvac_breaker_rating",
+        "consumed_energy": "sensor.span_panel_studio_hvac_consumed_energy",
+        "current": "sensor.span_panel_studio_hvac_current",
+        "net_energy": "sensor.span_panel_studio_hvac_net_energy",
+        "power": "sensor.span_panel_studio_hvac_power",
+        "produced_energy": "sensor.span_panel_studio_hvac_produced_energy",
+        "select": "select.span_panel_studio_hvac_circuit_priority",
+        "switch": "switch.span_panel_studio_hvac_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Studio-HVAC",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        17,
+        19
+      ],
+      "voltage": 240
+    },
+    "c0161381e50e069b9fd063a0ca1df808": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_future_240vac_2_breaker_rating",
+        "consumed_energy": "sensor.span_panel_future_240vac_2_consumed_energy",
+        "current": "sensor.span_panel_future_240vac_2_current",
+        "net_energy": "sensor.span_panel_future_240vac_2_net_energy",
+        "power": "sensor.span_panel_future_240vac_2_power",
+        "produced_energy": "sensor.span_panel_future_240vac_2_produced_energy",
+        "select": "select.span_panel_future_240vac_2_circuit_priority",
+        "switch": "switch.span_panel_future_240vac_2_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Future-240VAC-2",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        25,
+        27
+      ],
+      "voltage": 240
+    },
+    "caff3023f569495b2a36bf9354a8cd38": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_outlets_1_outlets_2_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_outlets_1_outlets_2_consumed_energy",
+        "current": "sensor.span_panel_kitchen_outlets_1_outlets_2_current",
+        "net_energy": "sensor.span_panel_kitchen_outlets_1_outlets_2_net_energy",
+        "power": "sensor.span_panel_kitchen_outlets_1_outlets_2_power",
+        "produced_energy": "sensor.span_panel_kitchen_outlets_1_outlets_2_produced_energy",
+        "select": "select.span_panel_kitchen_outlets_1_outlets_2_circuit_priority",
+        "switch": "switch.span_panel_kitchen_outlets_1_outlets_2_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen-Outlets-1 & Outlets-2",
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        1,
+        3
+      ],
+      "voltage": 240
+    },
+    "cb26f4260adebb7b71de48682618db0a": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_wine_refrigerator_breaker_rating",
+        "consumed_energy": "sensor.span_panel_wine_refrigerator_consumed_energy",
+        "current": "sensor.span_panel_wine_refrigerator_current",
+        "net_energy": "sensor.span_panel_wine_refrigerator_net_energy",
+        "power": "sensor.span_panel_wine_refrigerator_power",
+        "produced_energy": "sensor.span_panel_wine_refrigerator_produced_energy",
+        "select": "select.span_panel_wine_refrigerator_circuit_priority",
+        "switch": "switch.span_panel_wine_refrigerator_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Wine Refrigerator",
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        7
+      ],
+      "voltage": 120
+    },
+    "f66769009923287a83be6740bd0bbfbd": {
+      "always_on": false,
+      "breaker_rating_a": 45.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hvac_heating_coil_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hvac_heating_coil_consumed_energy",
+        "current": "sensor.span_panel_hvac_heating_coil_current",
+        "net_energy": "sensor.span_panel_hvac_heating_coil_net_energy",
+        "power": "sensor.span_panel_hvac_heating_coil_power",
+        "produced_energy": "sensor.span_panel_hvac_heating_coil_produced_energy",
+        "select": "select.span_panel_hvac_heating_coil_circuit_priority",
+        "switch": "switch.span_panel_hvac_heating_coil_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "HVAC-Heating-Coil",
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        6,
+        8
+      ],
+      "voltage": 240
+    },
+    "f84ad966ee15cec0c359d151af8157e2": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_water_heater_breaker_rating",
+        "consumed_energy": "sensor.span_panel_water_heater_consumed_energy",
+        "current": "sensor.span_panel_water_heater_current",
+        "net_energy": "sensor.span_panel_water_heater_net_energy",
+        "power": "sensor.span_panel_water_heater_power",
+        "produced_energy": "sensor.span_panel_water_heater_produced_energy",
+        "select": "select.span_panel_water_heater_circuit_priority",
+        "switch": "switch.span_panel_water_heater_breaker"
+      },
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Water-Heater",
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "tabs": [
+        9,
+        11
+      ],
+      "voltage": 240
+    }
+  },
+  "config_entry_id": "entry-main32_r202639-battery-unvalued",
+  "device_id": "nt-9874-s7rxt",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "panel_device_id": "nt-9874-s7rxt",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 32,
+  "serial": "nt-9874-s7rxt",
+  "sub_devices": {
+    "nt-9874-s7rxt_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_nt-9874-s7rxt_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "tg957432104u3d-djc",
+      "sw_version": null,
+      "type": "mid"
+    },
+    "nt-9874-s7rxt_pv": {
+      "entities": {
+        "binary_sensor.span_panel_solar_pv_panel_link": {
+          "domain": "binary_sensor",
+          "original_name": "PV Panel Link",
+          "unique_id": "span_nt-9874-s7rxt_pv_panel_link"
+        },
+        "sensor.span_panel_solar_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_nt-9874-s7rxt_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_pv_power": {
+          "domain": "sensor",
+          "original_name": "PV Power",
+          "unique_id": "span_nt-9874-s7rxt_pv_power"
+        },
+        "sensor.span_panel_solar_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_nt-9874-s7rxt_pv_product"
+        },
+        "sensor.span_panel_solar_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_nt-9874-s7rxt_pv_vendor"
+        }
+      },
+      "manufacturer": "Enphase Energy",
+      "model": "IQ7PLUS-72-x-US-&",
+      "name": "Span Panel Solar",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": "8a562bd10fb843842670080af2bbb983",
+        "model": "IQ7PLUS-72-x-US-&",
+        "power_entity_id": "sensor.span_panel_commissioned_pv_system_power",
+        "role": "site",
+        "site_power_entity_id": "sensor.span_panel_solar_pv_power",
+        "vendor": "Enphase Energy"
+      },
+      "sw_version": null,
+      "type": "pv"
+    }
+  }
+}

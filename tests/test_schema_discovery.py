@@ -27,7 +27,6 @@ own published values.
 from __future__ import annotations
 
 import json
-import pathlib
 from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
@@ -61,8 +60,7 @@ from .adapter_fixtures import (
     schema_one_tree,
 )
 from .factories import pv_binding_for
-
-BASELINE = pathlib.Path(__file__).parent / "fixtures" / "unread_declarations_baseline.json"
+from .test_declared_but_unread import SOURCES
 
 _SYNTHETIC = DiscoveredMetadata(unit="°C", datatype="float", retained=True)
 """A row for a property no firmware in the fixtures declares.
@@ -135,12 +133,13 @@ def test_no_curated_inventory_names_a_discovered_path() -> None:
         assert not is_discovery_path(path)
     for path in RESIDUAL_EXEMPT_PATHS:
         assert not is_discovery_path(path)
-    for key in json.loads(BASELINE.read_text(encoding="utf-8")):
-        assert not is_discovery_path(key), (
-            f"{key} is a discovered path in the unread baseline. The baseline is the "
-            "consumer's own backlog, decided per line; discovery is a report about "
-            "the panel and nothing may be written into the baseline from it."
-        )
+    for source in SOURCES:
+        for key in json.loads(source.baseline.read_text(encoding="utf-8")):
+            assert not is_discovery_path(key), (
+                f"{key} is a discovered path in {source.baseline.name}. The baseline is the "
+                "consumer's own backlog, decided per line; discovery is a report about "
+                "the panel and nothing may be written into the baseline from it."
+            )
 
 
 def test_the_curated_fixture_hands_out_no_discovered_row() -> None:

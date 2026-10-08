@@ -4,6 +4,9 @@ default_stages = ["pre-commit"]
 # at the commits where the library path override went wrong, held to those commits
 # by tests/test_library_path_hook.py -- they are what proves the library-path gate
 # fires, so they have to stay the real files rather than approximations of them.
+# `tests/fixtures/captures/*-tree-v1.json` are panels' retained trees vendored from the
+# emitter's published fixtures, held to their recorded digests by
+# tests/test_expected_entities.py for the same reason.
 #
 # The three hooks below that *rewrite* files -- trailing-whitespace,
 # end-of-file-fixer and mixed-line-ending -- are excluded from them, because a
@@ -11,13 +14,13 @@ default_stages = ["pre-commit"]
 # formatter that has to yield: the bytes are the artifact.
 #
 # Not hypothetical, merely not yet triggered. Those three cover tests/ today, and
-# they leave the current copies alone only because both happen to be
+# they leave the current copies alone only because every one happens to be
 # newline-terminated with LF endings and no trailing whitespace. The first one
 # taken without a final newline would be rewritten on commit, and the guard would
 # then fail against a commit the copy had genuinely matched when it was made.
 #
-# The read-only hooks keep covering them. check-toml in particular should: a copy
-# that does not parse is worth hearing about wherever it came from.
+# The read-only hooks keep covering them. check-toml and check-json in particular
+# should: a copy that does not parse is worth hearing about wherever it came from.
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v5.0.0"
@@ -28,9 +31,9 @@ hooks = [
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
-  { id = "trailing-whitespace", exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "end-of-file-fixer", exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "trailing-whitespace", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "end-of-file-fixer", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
 ]
 
 # The library path override in pyproject.toml must name the checkout, not a

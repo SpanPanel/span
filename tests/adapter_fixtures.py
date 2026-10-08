@@ -120,14 +120,22 @@ def schema_one_snapshot(tree: dict[str, dict[str, str]] | None = None) -> SpanPa
     the actual adapter over the actual capture makes the published topic the
     source of truth, so republishing one is a mutation the entity has to follow.
     """
+    return tree_snapshot(schema_one_tree() if tree is None else tree, SCHEMA_ONE_PANEL)
+
+
+def tree_snapshot(tree: dict[str, dict[str, str]], panel_id: str) -> SpanPanelSnapshot:
+    """Build a snapshot through the schema_1 mapper from any tree whose enclosure is `panel_id`.
+
+    Every other device in the tree is handed over as a child, which is what a
+    complete capture's declared children are.
+    """
     from span_panel_api_schema_1.snapshot import build_snapshot
 
-    tree = schema_one_tree() if tree is None else tree
-    panel = _device(SCHEMA_ONE_PANEL, tree[SCHEMA_ONE_PANEL])
+    panel = _device(panel_id, tree[panel_id])
     children = [
         _device(device_id, topics)
         for device_id, topics in tree.items()
-        if device_id != SCHEMA_ONE_PANEL
+        if device_id != panel_id
     ]
     return build_snapshot(panel, children)
 
