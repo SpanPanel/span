@@ -7,6 +7,7 @@ only logging, re, and span_panel_api types.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 import logging
 import re
 
@@ -247,24 +248,30 @@ def get_panel_entity_suffix(description_key: str) -> str:
     return get_user_friendly_suffix(description_key)
 
 
-def extract_circuit_uuid_from_unique_id(unique_id: str) -> str | None:
-    """Return the 32-char hex circuit UUID embedded in a SPAN entity unique_id.
+def match_circuit_id(unique_id: str, circuit_ids: Collection[str]) -> str | None:
+    """Return the circuit id `unique_id` names, or None.
 
-    SPAN entity unique_ids follow ``span_{serial}_{circuit_uuid}_{suffix}``.
-    The circuit UUID is a 32-char lowercase hex segment. Skips ``parts[0]``
-    (``span``) and ``parts[1]`` (the serial — never a circuit UUID) so a
-    serial that happens to be 32 hex chars cannot shadow the circuit id.
+    A circuit id is opaque: it is compared only as a whole run of `_`-separated
+    segments, after the `span_{serial}_` prefix, against the ids the live snapshot
+    holds. The longest run that is a known id wins, so an id that is a prefix of
+    another, or one containing `_`, resolves to the one meant. With no ids there is
+    no match, never a guess from the id's shape.
 
-    Returns ``None`` for unique_ids with no circuit UUID segment (e.g.
-    panel-level sensors).
+    Skipping the prefix means a serial can never be read as a circuit id. Ids
+    without the prefix are searched whole.
     """
-    if not unique_id:
+    if not circuit_ids:
         return None
-    parts = unique_id.split("_")
-    for part in parts[2:]:
-        if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
-            return part
-    return None
+    segments = unique_id.split("_")
+    if segments[0] == "span" and len(segments) > 2:
+        segments = segments[2:]
+    best: str | None = None
+    for start in range(len(segments)):
+        for end in range(start + 1, len(segments) + 1):
+            candidate = "_".join(segments[start:end])
+            if candidate in circuit_ids and (best is None or len(candidate) > len(best)):
+                best = candidate
+    return best
 
 
 # ---------------------------------------------------------------------------

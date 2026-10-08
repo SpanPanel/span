@@ -30,7 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import build_circuit_unique_id, build_panel_unique_id
-from .id_builder import extract_circuit_uuid_from_unique_id
+from .id_builder import match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -241,14 +241,17 @@ class CurrentMonitor:
         """Resolve a power sensor entity_id to its internal circuit_id.
 
         Accepts either an entity_id (sensor.span_panel_kitchen_power) or
-        a raw circuit_id (UUID) for backwards compatibility.
+        a raw circuit_id for backwards compatibility. The circuit is the one of
+        the latest snapshot's ids that the entity's unique_id names; an id is
+        opaque, so before the first snapshot nothing is matched.
         """
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
-        if entry is not None and entry.unique_id:
-            uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
-            if uuid is not None:
-                return uuid
+        snapshot = self._last_snapshot
+        if entry is not None and entry.unique_id and snapshot is not None:
+            circuit_id = match_circuit_id(entry.unique_id, snapshot.circuits.keys())
+            if circuit_id is not None:
+                return circuit_id
         # Fall through: assume it's already a circuit_id
         return entity_id
 

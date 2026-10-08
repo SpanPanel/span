@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -36,7 +37,7 @@ from .const import (
 from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
-from .id_builder import build_circuit_unique_id, extract_circuit_uuid_from_unique_id
+from .id_builder import build_circuit_unique_id, match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -569,18 +570,29 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
     The public API takes ``entity_id`` — any sensor on a SPAN circuit or
     sub-device — and resolves it server-side to the internal
     ``(panel_device_id, kind, target_id)`` tuple used in storage. Circuit
-    UUIDs and HA device IDs are not part of the user-visible surface.
+    ids and HA device IDs are not part of the user-visible surface.
     """
+
+    def _live_circuit_ids(config_entry_id: str | None) -> Collection[str]:
+        """Return the circuit ids the entry's live snapshot holds, or none if it is not loaded."""
+        config_entry = (
+            hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
+        )
+        runtime_data = loaded_runtime_data(config_entry) if config_entry is not None else None
+        if runtime_data is None:
+            return ()
+        return runtime_data.coordinator.data.circuits.keys()
 
     def _resolve_entity_to_favorite_target(entity_id: str) -> tuple[str, FavoriteKind, str]:
         """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
-        ``target_id`` is the panel-local circuit uuid (extracted from the
-        entity's unique_id). For sub-devices, ``target_id`` is the HA device id
-        of the sub-device; the panel id walks up via ``via_device_id``. Nothing
-        here enumerates the kinds, so a new one -- the PV inverter most recently
-        -- is favouritable the day its device exists.
+        ``target_id`` is the panel-local circuit id: the one of the live
+        snapshot's ids that the entity's unique_id names. For sub-devices,
+        ``target_id`` is the HA device id of the sub-device; the panel id walks
+        up via ``via_device_id``. Nothing here enumerates the kinds, so a new
+        one -- the PV inverter most recently -- is favouritable the day its
+        device exists.
 
         Failure paths use distinct translation keys so users see the
         actual reason their pick was rejected.
@@ -639,7 +651,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         # Rationale: the device card on the dashboard already represents
         # both the sub-device's status sensors AND its feed-circuit
         # power. Routing a feed-circuit sensor (current/power, whose
-        # unique_id encodes a circuit UUID) to a circuit favorite would
+        # unique_id encodes a circuit id) to a circuit favorite would
         # make a Favorites view show the same physical thing twice — a
         # device card and a circuit row — and prevent the user from
         # ever favoriting "the device" via a click on a feed-circuit
@@ -649,13 +661,16 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             return panel_device_id, "sub_devices", device_entry.id
 
         # Main-panel entity (regular breaker circuit) — favorite the
-        # circuit. Requires a unique_id that embeds the 32-char circuit
-        # UUID (``span_{serial}_{circuit_uuid}_{suffix}``).
-        circuit_uuid = (
-            extract_circuit_uuid_from_unique_id(entry.unique_id) if entry.unique_id else None
+        # circuit. Its unique_id names one of the circuit ids the panel
+        # publishes now (``span_{serial}_{circuit_id}_{suffix}``); an id is
+        # opaque, so it is found among the live ids rather than by its shape.
+        circuit_id = (
+            match_circuit_id(entry.unique_id, _live_circuit_ids(entry.config_entry_id))
+            if entry.unique_id
+            else None
         )
-        if circuit_uuid is not None:
-            return panel_device_id, "circuits", circuit_uuid
+        if circuit_id is not None:
+            return panel_device_id, "circuits", circuit_id
 
         if not entry.unique_id:
             raise ServiceValidationError(

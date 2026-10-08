@@ -299,6 +299,20 @@ class TestBuildCircuitEntityMap:
         result = _build_circuit_entity_map({"c1"}, entities)
         assert len(result["c1"]) == 6
 
+    @pytest.mark.parametrize("ids", [["b-7", "sub-b-7"], ["sub-b-7", "b-7"]])
+    def test_a_hyphen_suffix_id_keeps_its_own_entities(self, ids: list[str]) -> None:
+        """`b-7` is not found inside `sub-b-7`, whichever of the two is tried first."""
+        entities = [
+            self._make_entity("sensor", "span_nt-0000-test1_sub-b-7_power", "sensor.sub_power"),
+            self._make_entity("switch", "span_nt-0000-test1_relay_sub-b-7", "switch.sub"),
+            self._make_entity("sensor", "span_nt-0000-test1_b-7_power", "sensor.b_power"),
+        ]
+        result = _build_circuit_entity_map(ids, entities)
+        assert result == {
+            "sub-b-7": {"power": "sensor.sub_power", "switch": "switch.sub"},
+            "b-7": {"power": "sensor.b_power"},
+        }
+
 
 # ---------------------------------------------------------------------------
 # Integration tests for handle_panel_topology

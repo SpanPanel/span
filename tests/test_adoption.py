@@ -715,8 +715,8 @@ def test_an_adopted_id_follows_the_same_grammar_as_a_curated_one() -> None:
     An earlier version lower-cased and de-hyphenated the whole string, which
     mangled the serial into `span_sp3_242424_001_...` where every other id in the
     integration says `span_sp3-242424-001_...`. A reader that parses an id by
-    position -- `extract_circuit_uuid_from_unique_id` does -- must not meet a
-    second grammar.
+    its `_` segments -- `match_circuit_id` does -- must not meet a second
+    grammar.
     """
     declaration = _property(node_id="meter", property_id="active-power")
     identifier = adopted_identifier(PANEL_SERIAL, "generator-1")

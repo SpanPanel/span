@@ -457,6 +457,67 @@ class TestPerCircuitOverrides:
         assert monitor.get_circuit_state("1").last_spike_alert is None
 
 
+def _registry_holding(unique_id: str) -> Any:
+    """Patch the monitor's entity registry to answer every lookup with this unique id."""
+    registry = MagicMock()
+    registry.async_get.return_value = MagicMock(unique_id=unique_id)
+    return patch(
+        "custom_components.span_panel.current_monitor.er.async_get", return_value=registry
+    )
+
+
+class TestCircuitEntityResolution:
+    """A threshold set through a circuit's entity lands on the circuit the panel names."""
+
+    def test_an_override_for_one_of_two_prefixed_ids_applies_to_that_circuit_only(self):
+        """`c-1` is a prefix of `c-12`, and an override for `c-12` never reaches `c-1`."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(**{SPIKE_THRESHOLD_PCT: 100}))
+        circuits = {
+            cid: SpanCircuitSnapshotFactory.create(
+                circuit_id=cid,
+                name=cid,
+                current_a=18.0,  # 90% of 20A — under the global threshold
+                breaker_rating_a=20.0,
+            )
+            for cid in ("c-1", "c-12")
+        }
+        snapshot = SpanPanelSnapshotFactory.create(circuits=circuits, main_breaker_rating_a=200)
+        monitor.process_snapshot(snapshot)
+
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            circuit_id = monitor.resolve_entity_to_circuit_id("sensor.c_12_current")
+        assert circuit_id == "c-12"
+
+        monitor.set_circuit_override(circuit_id, {SPIKE_THRESHOLD_PCT: 90})
+        monitor.process_snapshot(snapshot)
+
+        assert monitor.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor.get_circuit_state("c-1").last_spike_alert is None
+
+    def test_an_opaque_id_resolves_to_its_circuit(self):
+        """A circuit id is not required to be 32 hex characters."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        circuit = SpanCircuitSnapshotFactory.create(circuit_id="b-7", breaker_rating_a=20.0)
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(circuits={"b-7": circuit}, main_breaker_rating_a=200)
+        )
+
+        with _registry_holding("span_nt-0000-test1_b-7_power"):
+            assert monitor.resolve_entity_to_circuit_id("sensor.b_7_power") == "b-7"
+
+    def test_before_any_snapshot_the_input_is_taken_as_a_circuit_id(self):
+        """With no live ids nothing is guessed from the shape of the unique id."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+
+        with _registry_holding("span_nt-0000-test1_0123456789abcdef0123456789abcdef_power"):
+            assert monitor.resolve_entity_to_circuit_id("sensor.kitchen_power") == (
+                "sensor.kitchen_power"
+            )
+
+
 class TestPerMainsOverrides:
     """Tests for per-mains-leg threshold overrides."""
 

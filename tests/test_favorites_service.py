@@ -10,13 +10,18 @@ import pytest
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.frontend import (
     async_get_favorites,
     async_set_favorite,
 )
+from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import _async_register_favorites_services
+
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 
 class _FakeStore:
@@ -269,6 +274,30 @@ def _make_service_call(data: dict[str, Any]) -> MagicMock:
     return call
 
 
+def _loaded_panel(hass: MagicMock, *circuit_ids: str) -> None:
+    """Give the entity's config entry a live snapshot holding these circuits.
+
+    A circuit favorite is resolved against the ids the panel publishes, never
+    against what an id looks like, so a loaded entry is part of the setup.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        circuits={cid: SpanCircuitSnapshotFactory.create(circuit_id=cid) for cid in circuit_ids}
+    )
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    config_entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="panel_entry")
+    config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="d_main",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    hass.config_entries.async_get_entry = MagicMock(
+        side_effect=lambda entry_id: config_entry if entry_id == "panel_entry" else None
+    )
+
+
 def _make_entity_entry(
     *,
     platform: str = DOMAIN,
@@ -279,6 +308,7 @@ def _make_entity_entry(
     entry.platform = platform
     entry.unique_id = unique_id
     entry.device_id = device_id
+    entry.config_entry_id = "panel_entry"
     return entry
 
 
@@ -418,7 +448,7 @@ class TestFavoritesServiceHandlers:
     ) -> None:
         """EVSE feed-circuit sensors are device-info-attached to the EVSE
         sub-device. Even though their unique_id still encodes the underlying
-        circuit UUID, favoriting one must produce a *sub-device* favorite —
+        circuit id, favoriting one must produce a *sub-device* favorite —
         the device card on the dashboard already represents both the EVSE's
         status sensors and its feed-circuit power, so a circuit favorite would
         duplicate the same physical thing as both a card and a row in the
@@ -451,20 +481,64 @@ class TestFavoritesServiceHandlers:
         assert result == {"favorites": {"d_main": _panel_entry([], ["d_evse"])}}
 
     @pytest.mark.asyncio
-    async def test_add_favorite_rejects_entity_without_uuid_in_unique_id(
+    async def test_add_favorite_rejects_an_entity_that_names_no_circuit(
         self, _patched_store: Any
     ) -> None:
         hass = MagicMock()
+        _loaded_panel(hass, "abcdef0123456789abcdef0123456789")
         registered = _capture_registered_handlers(hass)
         handler = registered["handlers"]["add_favorite"]
 
-        # Panel-level sensor (no circuit uuid segment in unique_id).
+        # Panel-level sensor: no segment of its unique_id is a circuit id.
         entity = _make_entity_entry(unique_id="span_sp3-242424_instantGridPowerW")
         device = _make_device_entry()
 
         with _patch_registries(entity=entity, device=device):
-            with pytest.raises(ServiceValidationError):
+            with pytest.raises(ServiceValidationError) as raised:
                 await handler(_make_service_call({"entity_id": "sensor.panel_power"}))
+        assert raised.value.translation_key == "favorite_no_circuit_uuid"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("circuit_ids", [("b-7", "sub-b-7"), ("sub-b-7", "b-7")])
+    async def test_add_favorite_on_an_opaque_circuit_id(
+        self, _patched_store: Any, circuit_ids: tuple[str, str]
+    ) -> None:
+        """A circuit id that is not 32 hex characters is favorited by the id the panel uses.
+
+        `b-7` sits inside `sub-b-7`, and neither is mistaken for the other.
+        """
+        hass = MagicMock()
+        _loaded_panel(hass, *circuit_ids)
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+        device = _make_device_entry(device_id="d_main")
+
+        for circuit_id in ("sub-b-7", "b-7"):
+            entity = _make_entity_entry(
+                unique_id=f"span_sp3-242424_{circuit_id}_power", device_id="d_main"
+            )
+            with _patch_registries(entity=entity, device=device):
+                result = await handler(_make_service_call({"entity_id": "sensor.any_power"}))
+
+        assert result == {"favorites": {"d_main": _panel_entry(["sub-b-7", "b-7"])}}
+
+    @pytest.mark.asyncio
+    async def test_add_favorite_without_a_loaded_panel_names_no_circuit(
+        self, _patched_store: Any
+    ) -> None:
+        """With no live snapshot there are no circuit ids to match, so nothing is guessed."""
+        hass = MagicMock()
+        hass.config_entries.async_get_entry = MagicMock(return_value=None)
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        entity = _make_entity_entry()
+        device = _make_device_entry()
+
+        with _patch_registries(entity=entity, device=device):
+            with pytest.raises(ServiceValidationError) as raised:
+                await handler(_make_service_call({"entity_id": "sensor.kitchen_power"}))
+        assert raised.value.translation_key == "favorite_no_circuit_uuid"
 
     @pytest.mark.asyncio
     async def test_add_favorite_persists_and_returns_map(
@@ -475,6 +549,7 @@ class TestFavoritesServiceHandlers:
         handler = registered["handlers"]["add_favorite"]
 
         circuit_uuid = "abcdef0123456789abcdef0123456789"
+        _loaded_panel(hass, circuit_uuid)
         entity = _make_entity_entry(
             unique_id=f"span_sp3-242424_{circuit_uuid}_power",
             device_id="d_main",
@@ -501,6 +576,7 @@ class TestFavoritesServiceHandlers:
             {"favorites": {"d_main": _panel_entry([circuit_uuid])}},
         )
         hass = MagicMock()
+        _loaded_panel(hass, circuit_uuid)
         registered = _capture_registered_handlers(hass)
         handler = registered["handlers"]["remove_favorite"]
 
