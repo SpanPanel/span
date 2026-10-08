@@ -8,7 +8,7 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -237,19 +237,23 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, power_uid)
         return entity_id if entity_id is not None else circuit_id
 
-    def resolve_entity_to_circuit_id(self, entity_id: str) -> str:
+    def resolve_entity_to_circuit_id(self, entity_id: str, circuit_ids: Collection[str]) -> str:
         """Resolve a power sensor entity_id to its internal circuit_id.
 
         Accepts either an entity_id (sensor.span_panel_kitchen_power) or
         a raw circuit_id for backwards compatibility. The circuit is the one of
-        the latest snapshot's ids that the entity's unique_id names; an id is
-        opaque, so before the first snapshot nothing is matched.
+        `circuit_ids` that the entity's unique_id names; an id is opaque, so it is
+        found among them rather than by its shape.
+
+        The caller passes the coordinator's live ids rather than this monitor
+        reading its own last snapshot: the monitor sees a snapshot only on the
+        coordinator's next push after setup, and a threshold set before then
+        must still land on its circuit.
         """
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
-        snapshot = self._last_snapshot
-        if entry is not None and entry.unique_id and snapshot is not None:
-            circuit_id = match_circuit_id(entry.unique_id, snapshot.circuits.keys())
+        if entry is not None and entry.unique_id:
+            circuit_id = match_circuit_id(entry.unique_id, circuit_ids)
             if circuit_id is not None:
                 return circuit_id
         # Fall through: assume it's already a circuit_id

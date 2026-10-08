@@ -18,6 +18,7 @@ from custom_components.span_panel.const import (
 from homeassistant.core import CoreState
 
 from custom_components.span_panel.current_monitor import CurrentMonitor
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -25,7 +26,10 @@ from custom_components.span_panel.options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from custom_components.span_panel.runtime import SpanPanelRuntimeData
+from custom_components.span_panel.services import _async_register_monitoring_services
+from span_panel_api import SpanPanelSnapshot
+from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 
 def _make_options(**overrides):
@@ -486,7 +490,9 @@ class TestCircuitEntityResolution:
         monitor.process_snapshot(snapshot)
 
         with _registry_holding("span_nt-0000-test1_c-12_current"):
-            circuit_id = monitor.resolve_entity_to_circuit_id("sensor.c_12_current")
+            circuit_id = monitor.resolve_entity_to_circuit_id(
+                "sensor.c_12_current", snapshot.circuits.keys()
+            )
         assert circuit_id == "c-12"
 
         monitor.set_circuit_override(circuit_id, {SPIKE_THRESHOLD_PCT: 90})
@@ -499,23 +505,102 @@ class TestCircuitEntityResolution:
         """A circuit id is not required to be 32 hex characters."""
         hass = _make_hass()
         monitor = _make_monitor(hass)
-        circuit = SpanCircuitSnapshotFactory.create(circuit_id="b-7", breaker_rating_a=20.0)
-        monitor.process_snapshot(
-            SpanPanelSnapshotFactory.create(circuits={"b-7": circuit}, main_breaker_rating_a=200)
-        )
 
         with _registry_holding("span_nt-0000-test1_b-7_power"):
-            assert monitor.resolve_entity_to_circuit_id("sensor.b_7_power") == "b-7"
+            assert monitor.resolve_entity_to_circuit_id("sensor.b_7_power", {"b-7"}) == "b-7"
 
-    def test_before_any_snapshot_the_input_is_taken_as_a_circuit_id(self):
-        """With no live ids nothing is guessed from the shape of the unique id."""
+    def test_with_no_known_ids_the_input_is_taken_as_a_circuit_id(self):
+        """Nothing is guessed from the shape of the unique id."""
         hass = _make_hass()
         monitor = _make_monitor(hass)
 
         with _registry_holding("span_nt-0000-test1_0123456789abcdef0123456789abcdef_power"):
-            assert monitor.resolve_entity_to_circuit_id("sensor.kitchen_power") == (
+            assert monitor.resolve_entity_to_circuit_id("sensor.kitchen_power", ()) == (
                 "sensor.kitchen_power"
             )
+
+
+def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:
+    """Register the monitoring services on a mock hass and return the handlers by name."""
+    handlers: dict[str, Any] = {}
+
+    def _register(_domain: str, service: str, handler: Any, **_kwargs: Any) -> None:
+        handlers[service] = handler
+
+    hass.services.async_register = MagicMock(side_effect=_register)
+    _async_register_monitoring_services(hass)
+    return handlers
+
+
+def _loaded_panel_with_a_fresh_monitor(
+    hass: MagicMock, *circuit_ids: str
+) -> tuple[CurrentMonitor, SpanPanelSnapshot]:
+    """Return the monitor of a loaded panel as setup leaves it: created, fed nothing yet.
+
+    The coordinator already holds the first refresh's snapshot, which is what a
+    threshold service resolves against; the monitor sees its first snapshot only
+    on the next push.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        circuits={
+            cid: SpanCircuitSnapshotFactory.create(
+                circuit_id=cid,
+                name=cid,
+                current_a=18.0,  # 90% of 20A — under the global threshold
+                breaker_rating_a=20.0,
+            )
+            for cid in circuit_ids
+        },
+        main_breaker_rating_a=200,
+    )
+    entry = MagicMock()
+    entry.entry_id = "test_entry"
+    entry.options = _make_options(**{SPIKE_THRESHOLD_PCT: 100})
+    monitor = CurrentMonitor(hass, entry)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.current_monitor = monitor
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    hass.config_entries.async_loaded_entries = MagicMock(return_value=[entry])
+    return monitor, snapshot
+
+
+class TestThresholdServicesBeforeTheFirstPush:
+    """Right after setup the monitor has seen no snapshot, and a threshold still lands on its circuit."""
+
+    async def test_a_threshold_set_before_the_first_push_applies_to_its_circuit(self):
+        hass = _make_hass()
+        monitor, snapshot = _loaded_panel_with_a_fresh_monitor(hass, "c-1", "c-12")
+        handlers = _monitoring_handlers(hass)
+
+        call = MagicMock()
+        call.data = {"circuit_id": "sensor.c_12_current", SPIKE_THRESHOLD_PCT: 90}
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            await handlers["set_circuit_threshold"](call)
+
+        monitor.process_snapshot(snapshot)
+        assert monitor.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor.get_circuit_state("c-1").last_spike_alert is None
+
+    async def test_a_threshold_cleared_before_the_first_push_is_cleared(self):
+        hass = _make_hass()
+        monitor, snapshot = _loaded_panel_with_a_fresh_monitor(hass, "c-1", "c-12")
+        monitor.set_circuit_override("c-12", {SPIKE_THRESHOLD_PCT: 90})
+        handlers = _monitoring_handlers(hass)
+
+        call = MagicMock()
+        call.data = {"circuit_id": "sensor.c_12_current"}
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            await handlers["clear_circuit_threshold"](call)
+
+        monitor.process_snapshot(snapshot)
+        assert monitor.get_circuit_state("c-12").last_spike_alert is None
 
 
 class TestPerMainsOverrides:

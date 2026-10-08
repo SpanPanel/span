@@ -267,17 +267,18 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
                 return runtime_data, entry
         return None
 
-    def _get_monitor(
-        call: ServiceCall,
-        config_entry_id: str | None = None,
-    ) -> CurrentMonitor:
-        """Find the CurrentMonitor for the given entry."""
-        entry_id = config_entry_id or call.data.get("config_entry_id")
-        result = _get_runtime_data(entry_id)
+    def _get_monitored(call: ServiceCall) -> tuple[CurrentMonitor, SpanPanelRuntimeData]:
+        """Find the CurrentMonitor for the call's entry, with that entry's runtime data.
+
+        The runtime data comes with it because a circuit is resolved against the
+        coordinator's live circuit ids, which the monitor itself does not hold
+        until the coordinator's next push.
+        """
+        result = _get_runtime_data(call.data.get("config_entry_id"))
         if result is not None:
             runtime_data, _entry = result
             if runtime_data.coordinator.current_monitor is not None:
-                return runtime_data.coordinator.current_monitor
+                return runtime_data.coordinator.current_monitor, runtime_data
         raise ServiceValidationError(
             "No SPAN panel with current monitoring enabled.",
             translation_domain=DOMAIN,
@@ -310,21 +311,25 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
+        monitor, runtime_data = _get_monitored(call)
         data = dict(call.data)
         entity_id = data.pop("circuit_id")
         data.pop("config_entry_id", None)
-        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
+        circuit_id = monitor.resolve_entity_to_circuit_id(
+            entity_id, runtime_data.coordinator.data.circuits.keys()
+        )
         monitor.set_circuit_override(circuit_id, data)
 
     async def async_handle_clear_circuit_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
+        monitor, runtime_data = _get_monitored(call)
         entity_id = call.data["circuit_id"]
-        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
+        circuit_id = monitor.resolve_entity_to_circuit_id(
+            entity_id, runtime_data.coordinator.data.circuits.keys()
+        )
         monitor.clear_circuit_override(circuit_id)
 
     async def async_handle_set_mains_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
+        monitor, _runtime_data = _get_monitored(call)
         data = dict(call.data)
         entity_id = data.pop("leg")
         data.pop("config_entry_id", None)
@@ -332,7 +337,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         monitor.set_mains_override(leg, data)
 
     async def async_handle_clear_mains_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
+        monitor, _runtime_data = _get_monitored(call)
         entity_id = call.data["leg"]
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.clear_mains_override(leg)
