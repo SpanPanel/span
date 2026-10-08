@@ -2,14 +2,13 @@
 
 This module contains functions that build unique IDs and map suffixes.
 It has NO dependency on Home Assistant, coordinator, or entity registry --
-only logging, re, and span_panel_api types.
+only logging and span_panel_api types.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection
 import logging
-import re
 
 from span_panel_api import SpanPanelSnapshot
 
@@ -187,42 +186,6 @@ def get_suffix_from_sensor_key(sensor_key: str) -> str:
     # If no established pattern matches, return the last part after the last underscore
     name_parts = sensor_name.split("_")
     return name_parts[-1] if name_parts else sensor_name
-
-
-def is_panel_level_sensor_key(sensor_key: str) -> bool:
-    """Check if a sensor key represents a panel-level sensor.
-
-    Panel-level sensors have the form: span_{device_identifier}_{sensor_type}
-    Circuit sensors have the form: span_{device_identifier}_{circuit_id}_{sensor_type}
-
-    Args:
-        sensor_key: Sensor key to check (e.g., "span_span12345678_current_power" or
-            "span_span12345678_12ce227695cd44338864b0ef2ec4168b_instantPowerW").
-
-    Returns:
-        True if this is a panel-level sensor (no circuit ID)
-
-    Examples:
-        is_panel_level_sensor_key("span_span12345678_current_power") → True
-        is_panel_level_sensor_key(
-            "span_span12345678_12ce227695cd44338864b0ef2ec4168b_instantPowerW"
-        ) → False
-
-    """
-
-    # Must start with "span_"
-    if not sensor_key.startswith("span_"):
-        return False
-
-    # Look for UUID pattern (32 hex characters) anywhere in the string after "span_"
-    # Circuit IDs in SPAN are typically formatted as 32 lowercase hex characters without dashes
-    uuid_pattern = re.compile(r"_[a-f0-9]{32}_")
-
-    # If we find a UUID pattern, this is a circuit sensor
-    if uuid_pattern.search(sensor_key):
-        return False
-    # No UUID pattern found, this is a panel-level sensor
-    return True
 
 
 def get_user_friendly_suffix(description_key: str) -> str:
