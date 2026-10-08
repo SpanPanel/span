@@ -8,7 +8,7 @@ import logging
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
@@ -20,7 +20,9 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util.hass_dict import HassKey
 from span_panel_api import (
     LeafNameMismatch,
     SpanMqttClient,
@@ -145,6 +147,9 @@ PLATFORMS: list[Platform] = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+_DEFERRED_RELOADS: HassKey[dict[str, CALLBACK_TYPE]] = HassKey(f"{DOMAIN}_deferred_reloads")
+"""Per entry, the cancel handle of a reload waiting for Home Assistant to start; see `update_listener`."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -823,13 +828,52 @@ async def async_remove_config_entry_device(
 
 
 async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Handle options updates."""
+    """Reload the entry after an update: now, or once Home Assistant has started.
+
+    While Home Assistant is starting the reload waits for it to finish rather
+    than being dropped. Dropped, it left the entry running on options it was
+    never set up with until the next restart -- a change to energy dip
+    compensation, for one, reached the sensors, which re-read it on every
+    update, but not the offsets only a reload restores or discards.
+    """
     _LOGGER.debug("Configuration options changed for entry: %s", entry.entry_id)
 
-    try:
-        if hass.state is not CoreState.running:
-            return
+    if hass.state is not CoreState.running:
+        _defer_reload_until_started(hass, entry)
+        return
 
+    await _async_reload_after_update(hass, entry)
+
+
+@callback
+def _defer_reload_until_started(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
+    """Reload the entry once Home Assistant has started, once however many updates ask.
+
+    One-shot: the pending reload is forgotten when it runs, and cancelled with
+    the entry if it unloads first.
+    """
+    pending = hass.data.setdefault(_DEFERRED_RELOADS, {})
+    if entry.entry_id in pending:
+        return
+
+    async def _reload_once_started(hass: HomeAssistant) -> None:
+        pending.pop(entry.entry_id, None)
+        await _async_reload_after_update(hass, entry)
+
+    pending[entry.entry_id] = async_at_started(hass, _reload_once_started)
+
+    @callback
+    def _cancel() -> None:
+        cancel = pending.pop(entry.entry_id, None)
+        if cancel is not None:
+            cancel()
+
+    entry.async_on_unload(_cancel)
+
+
+async def _async_reload_after_update(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
+    """Reload the entry to apply an update, unless a credential rotation is applying it."""
+    try:
         # `rotate_credentials` stored the new password and reloads it itself.
         if rotation_in_progress(hass, entry.entry_id):
             return

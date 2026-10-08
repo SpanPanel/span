@@ -579,8 +579,16 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
     @property
     def energy_offset(self) -> float:
-        """Return the cumulative dip compensation offset."""
-        return self._energy_offset
+        """Return the dip offset this sensor is applying to its reading: 0.0 while it compensates nothing.
+
+        What its meter's Net adds for it, so it answers by the same cached flag
+        `_process_raw_value` reads. The option is re-read on every update, while
+        the held offset is discarded only by the reload that follows a change, so
+        between the two this sensor already reports its raw reading and its Net
+        has to stop adding the offset on the same update. The offset itself is
+        kept: turning the option back on before a reload resumes it on both.
+        """
+        return self._energy_offset if self._dip_compensation_enabled else 0.0
 
     def _bind_energy(self, binding: EnergyBinding[D]) -> None:
         """Record this sensor's meter, role and Net definition, once.

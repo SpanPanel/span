@@ -16,7 +16,7 @@ from custom_components.span_panel import (
 )
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
@@ -88,17 +88,75 @@ async def test_update_listener_reloads_running_entry(hass: HomeAssistant) -> Non
     mock_reload.assert_awaited_once_with("entry-123")
 
 
-async def test_update_listener_skips_reload_when_not_running(
+async def test_update_listener_defers_the_reload_until_home_assistant_has_started(
     hass: HomeAssistant,
 ) -> None:
-    """Options updates should be ignored before Home Assistant is running."""
+    """An update while Home Assistant is starting reloads once it has started, not never."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
-    hass.state = CoreState.starting
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.starting)
 
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
         await update_listener(hass, entry)
+        await hass.async_block_till_done()
+        mock_reload.assert_not_awaited()
+
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    mock_reload.assert_awaited_once_with("entry-123")
+
+
+async def test_updates_while_starting_coalesce_into_one_reload(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.starting)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
+        await update_listener(hass, entry)
+        await update_listener(hass, entry)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    mock_reload.assert_awaited_once_with("entry-123")
+
+
+async def test_unloading_before_start_cancels_the_deferred_reload(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.starting)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
+        await update_listener(hass, entry)
+        await entry._async_process_on_unload(hass)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
 
     mock_reload.assert_not_awaited()
+
+
+async def test_an_update_after_the_deferred_reload_ran_defers_again(hass: HomeAssistant) -> None:
+    """The deferral is one-shot: once it has run, a later start-up update gets its own."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.starting)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
+        await update_listener(hass, entry)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+        hass.set_state(CoreState.starting)
+        await update_listener(hass, entry)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    assert mock_reload.await_count == 2
 
 
 async def test_update_listener_propagates_cancelled_error(hass: HomeAssistant) -> None:

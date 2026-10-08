@@ -211,13 +211,16 @@ async def test_net_is_the_raw_difference_with_dip_compensation_off(hass: HomeAss
 
 
 # ---------------------------------------------------------------------------
-# A dip that is taken back, and a restart
+# A dip that is taken back, a restart, and an option changed before a reload
 # ---------------------------------------------------------------------------
 
 # Every counter at zero, as a replay that has not yet delivered the readings.
 ZERO: Final = _snapshot(pv=(0.0, 0.0), load=(0.0, 0.0), main=(0.0, 0.0), feed=(0.0, 0.0))
 # Back above where they were: the drop was an artefact, and every dip retracts.
 BACK: Final = _snapshot(pv=(1001.0, 41.0), load=(31.0, 501.0), main=(301.0, 2501.0), feed=(21.0, 81.0))
+# Counting up from AFTER, and once more from there.
+LATER: Final = _snapshot(pv=(55.0, 5.0), load=(4.0, 22.0), main=(11.0, 110.0), feed=(1.5, 6.0))
+LATER_STILL: Final = _snapshot(pv=(60.0, 6.0), load=(5.0, 24.0), main=(12.0, 120.0), feed=(2.0, 7.0))
 
 
 async def test_net_stays_flat_when_a_booked_dip_is_retracted(hass: HomeAssistant) -> None:
@@ -257,4 +260,50 @@ async def test_restored_offsets_reach_nets_first_update_after_a_restart(hass: Ho
 
     assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
     assert _nets(energy) == pytest.approx(before_restart)
+    _assert_every_net_on_its_siblings(energy)
+
+
+async def test_compensation_turned_off_before_a_reload_leaves_every_net_on_its_siblings(
+    hass: HomeAssistant,
+) -> None:
+    """Audit R2: the counters stop compensating at once, so their Nets must stop too.
+
+    While Home Assistant is starting, an options change waits for the reload
+    that applies it, and the sensors re-read the option on every update.
+    """
+    coordinator, energy = await _built(hass)
+    coordinator.async_set_updated_data(BEFORE)
+    coordinator.async_set_updated_data(AFTER)
+    assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: False}
+    )
+    coordinator.async_set_updated_data(LATER)
+
+    assert _reading(energy, "mainMeterEnergyConsumedWh") == pytest.approx(110.0)
+    assert _reading(energy, "mainMeterNetEnergyWh") == pytest.approx(110.0 - 11.0)
+    assert _reading(energy, f"{PV}:circuit_energy_net") == pytest.approx(55.0 - 5.0)
+    _assert_every_net_on_its_siblings(energy)
+
+
+async def test_compensation_turned_back_on_before_a_reload_returns_to_every_net(
+    hass: HomeAssistant,
+) -> None:
+    """The held offsets come back to the counters and their Nets on the same update."""
+    coordinator, energy = await _built(hass)
+    coordinator.async_set_updated_data(BEFORE)
+    coordinator.async_set_updated_data(AFTER)
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: False}
+    )
+    coordinator.async_set_updated_data(LATER)
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: True}
+    )
+    coordinator.async_set_updated_data(LATER_STILL)
+
+    assert _reading(energy, "mainMeterEnergyConsumedWh") == pytest.approx(120.0 + 2400.0)
+    assert _reading(energy, f"{PV}:circuit_energy_produced") == pytest.approx(60.0 + 950.0)
     _assert_every_net_on_its_siblings(energy)
