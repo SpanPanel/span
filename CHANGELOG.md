@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.2] - 10/2026
 
+### In short
+
+- **Install 2.1.2 before your panel takes firmware r202639**, or the battery's Meter Power reads with its sign flipped, positive while charging.
+
 The credential-rotation, GFE Override and DSM Grid State fixes below were reported and fixed by [@dcj](https://github.com/dcj) in
 [#277](https://github.com/SpanPanel/span/pull/277), from issue [#276](https://github.com/SpanPanel/span/issues/276).
 
