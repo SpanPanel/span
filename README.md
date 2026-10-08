@@ -614,10 +614,11 @@ failing.
 | `energy_offset`  | Cumulative Wh compensation applied (when > 0) |
 | `last_dip_delta` | Size of the most recent dip in Wh             |
 
-**Upgrading to 2.1.2.** A Net Energy sensor whose Produced and Consumed siblings carry offsets booked before 2.1.0 takes a one-time step at its first update
-after the upgrade, because Net now applies those offsets in the direction of its own value. Check them as described under **Energy Dashboard spikes after
-firmware updates** in [Troubleshooting](#troubleshooting): an offset far larger than its sensor's reading was never a real reset, and turning compensation off
-discards it.
+**Before upgrading to 2.1.2,** check the `energy_offset` of your Produced and Consumed Energy sensors as described under **Energy Dashboard spikes after
+firmware updates** in [Troubleshooting](#troubleshooting). At the first update after the upgrade, Main Meter Net Energy steps once by its counters' offsets,
+which it now applies, and a solar circuit's Net Energy steps by twice the difference of its counters' offsets, which it now applies in its own direction. A load
+circuit's Net Energy does not step. An offset far larger than its sensor's reading was never a real reset: turn Energy Dip Compensation off and then back on to
+clear it before you upgrade.
 
 Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
 
