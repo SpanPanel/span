@@ -368,17 +368,28 @@ async def test_the_fatal_channel_takes_the_entities_down_without_waiting_for_a_p
 
 
 @pytest.mark.asyncio
-async def test_an_ordinary_disconnect_still_holds_the_last_reading(
+async def test_an_ordinary_disconnect_keeps_the_sensor_available(
     hass: HomeAssistant,
 ) -> None:
-    """The grace period is for outages, and this fix must not have taken it."""
+    """An outage is a gap that closes, and this fix must not have taken it down.
+
+    Available, but not holding the reading: a power the panel is not
+    publishing reads unknown until it publishes again.
+    """
     coordinator, sensor = _panel_reading_1200_watts(hass)
 
     coordinator._on_connection_change(False)
+    sensor._update_native_value()
 
     assert coordinator.panel_offline is True
     assert coordinator.transport_dead is False
     assert sensor.available is True
+    assert sensor.native_value is None
+
+    coordinator._on_connection_change(True)
+    sensor._update_native_value()
+
+    assert sensor.native_value == 1200.0
 
 
 @pytest.mark.asyncio

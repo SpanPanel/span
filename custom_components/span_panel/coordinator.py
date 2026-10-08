@@ -204,18 +204,18 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """True once the transport has stopped in a way waiting cannot fix.
 
         Deliberately not `panel_offline`. Offline means "no data right now",
-        and every consumer of it is written for a gap that closes: sensors
-        hold their last reading through the grace period, POWER sensors read
-        0.0, the panel-status binary sensor says so, and all of them stay
-        available because that is the right answer for a broker that drops for
-        thirty seconds.
+        and every consumer of it is written for a gap that closes: energy
+        sensors hold their last reading through the grace period, POWER sensors
+        read unknown, the panel-status binary sensor says so, and all of them
+        stay available because that is the right answer for a broker that drops
+        for thirty seconds.
 
         None of it is the right answer for a transport that is not coming
         back. The last snapshot was read before the failure and is indefinitely
-        old; a dashboard cannot tell a held reading from a live one, and 0 W is
-        not a measurement at all. Entities that read this go unavailable, which
-        is the one honest state -- it says the value is not knowable rather
-        than substituting a plausible one.
+        old, and a dashboard cannot tell a held reading from a live one.
+        Entities that read this go unavailable, which is the one honest state
+        -- it says the value is not knowable rather than substituting a
+        plausible one.
 
         Set by the library's fatal-error channel and by the CA branch of the
         update path -- today the same condition reached two ways, since a

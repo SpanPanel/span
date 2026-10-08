@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Power sensors show unknown while the panel is offline**, instead of a false 0 W that history and statistics could not tell from a real reading.
+
 ## [2.1.2] - 10/2026
 
 ### In short
