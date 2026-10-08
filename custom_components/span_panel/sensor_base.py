@@ -23,7 +23,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
+from .const import DEFAULT_ENERGY_DIP_COMPENSATION, DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
     DipEvent,
@@ -574,7 +574,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
         self._dip_compensation_enabled: bool = option_bool(
-            data_coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION), False
+            data_coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION),
+            DEFAULT_ENERGY_DIP_COMPENSATION,
         )
 
     @property
@@ -897,7 +898,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
         # Update dip compensation flag from options in case it changed
         self._dip_compensation_enabled = option_bool(
-            self.coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION), False
+            self.coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION),
+            DEFAULT_ENERGY_DIP_COMPENSATION,
         )
 
         # Use the overridden _update_native_value method which handles grace period

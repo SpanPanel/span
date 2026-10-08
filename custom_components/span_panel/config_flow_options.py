@@ -13,6 +13,7 @@ from homeassistant.helpers.selector import (
 import voluptuous as vol
 
 from .const import (
+    DEFAULT_ENERGY_DIP_COMPENSATION,
     DEFAULT_SNAPSHOT_INTERVAL,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_ENERGY_DIP_COMPENSATION,
@@ -102,7 +103,7 @@ def get_general_options_defaults(
         ),
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, True
+            ENABLE_ENERGY_DIP_COMPENSATION, DEFAULT_ENERGY_DIP_COMPENSATION
         ),
         # Every default below reproduces what an entry already does. A silent
         # tightening on upgrade would break a household's automations with an

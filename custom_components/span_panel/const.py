@@ -105,6 +105,13 @@ ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
+DEFAULT_ENERGY_DIP_COMPENSATION = False
+"""What an entry that never stored `ENABLE_ENERGY_DIP_COMPENSATION` does: compensate
+nothing. Installs from before the option have no value for it; a new install stores
+the config flow's choice, which starts on. Read by the sensors and pre-filled by the
+General Options form, so saving that form never changes what the sensors do."""
+NEW_INSTALL_ENERGY_DIP_COMPENSATION = True
+"""The config flow's starting choice for a new install, which it stores."""
 
 # Unmapped circuit sensor configuration
 ENABLE_UNMAPPED_CIRCUIT_SENSORS = "enable_unmapped_circuit_sensors"
