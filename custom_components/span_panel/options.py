@@ -20,3 +20,8 @@ CONTROL_MODE = "control_mode"
 ALLOW_CONTEXTLESS_CONTROL = "allow_contextless_control"
 CONTROL_LOCK_TIMEOUT = "control_lock_timeout"
 RELAY_DEBOUNCE_SECONDS = "relay_debounce_seconds"
+
+
+def option_bool(value: object, default: bool) -> bool:
+    """Read a bool out of untyped option data: `default` unless the stored value is a bool."""
+    return value if isinstance(value, bool) else default

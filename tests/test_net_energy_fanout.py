@@ -86,9 +86,7 @@ def _key(entity: SpanEnergySensorBase[object, object]) -> str:
     return entity.entity_description.key
 
 
-async def _built(
-    hass: HomeAssistant, *, compensate: bool = True
-) -> tuple[SpanPanelCoordinator, dict[str, SpanEnergySensorBase[object, object]]]:
+def _entry(hass: HomeAssistant, *, compensate: bool = True) -> MockConfigEntry:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={"device_name": "SPAN Panel"},
@@ -97,6 +95,20 @@ async def _built(
         unique_id=SERIAL,
     )
     entry.add_to_hass(hass)
+    return entry
+
+
+async def _built(
+    hass: HomeAssistant, *, compensate: bool = True
+) -> tuple[SpanPanelCoordinator, dict[str, SpanEnergySensorBase[object, object]]]:
+    coordinator, energy, _ = await _set_up(hass, _entry(hass, compensate=compensate))
+    return coordinator, energy
+
+
+async def _set_up(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> tuple[SpanPanelCoordinator, dict[str, SpanEnergySensorBase[object, object]], MockEntityPlatform]:
+    """Build the entry's sensors with the platform's own factories and add them, as a (re)load does."""
     coordinator = SpanPanelCoordinator(hass, MagicMock(), entry)
     coordinator.data = BEFORE
     entry.runtime_data = SpanPanelRuntimeData(
@@ -125,13 +137,40 @@ async def _built(
     await platform.async_add_entities(entities)
 
     energy = {_key(e): e for e in entities if isinstance(e, SpanEnergySensorBase)}
-    return coordinator, energy
+    return coordinator, energy, platform
 
 
 def _reading(energy: dict[str, SpanEnergySensorBase[object, object]], key: str) -> float:
     value = energy[key].native_value
     assert isinstance(value, float), (key, value)
     return value
+
+
+# Each compensated Net with the sibling it credits and the one it debits.
+NETS: Final = (
+    (f"{PV}:circuit_energy_net", f"{PV}:circuit_energy_produced", f"{PV}:circuit_energy_consumed"),
+    (f"{LOAD}:circuit_energy_net", f"{LOAD}:circuit_energy_consumed", f"{LOAD}:circuit_energy_produced"),
+    ("mainMeterNetEnergyWh", "mainMeterEnergyConsumedWh", "mainMeterEnergyProducedWh"),
+)
+
+
+def _entity_ids(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, str]:
+    """Every registered entity of the entry, unique id to entity id."""
+    return {
+        row.unique_id: row.entity_id
+        for row in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    }
+
+
+def _nets(energy: dict[str, SpanEnergySensorBase[object, object]]) -> dict[str, float]:
+    return {net: _reading(energy, net) for net, _, _ in NETS}
+
+
+def _assert_every_net_on_its_siblings(energy: dict[str, SpanEnergySensorBase[object, object]]) -> None:
+    for net, credit, debit in NETS:
+        assert _reading(energy, net) == pytest.approx(
+            _reading(energy, credit) - _reading(energy, debit)
+        ), net
 
 
 async def test_net_reads_this_updates_offsets_on_the_update_that_books_them(hass: HomeAssistant) -> None:
@@ -177,3 +216,105 @@ async def test_net_is_the_raw_difference_with_dip_compensation_off(hass: HomeAss
     assert _reading(energy, f"{PV}:circuit_energy_net") == pytest.approx(50.0 - 4.0)
     assert _reading(energy, f"{LOAD}:circuit_energy_net") == pytest.approx(20.0 - 3.0)
     assert _reading(energy, "mainMeterNetEnergyWh") == pytest.approx(100.0 - 10.0)
+
+
+# ---------------------------------------------------------------------------
+# A dip that is taken back, a restart, and an option changed before a reload
+# ---------------------------------------------------------------------------
+
+# Every counter at zero, as a replay that has not yet delivered the readings.
+ZERO: Final = _snapshot(pv=(0.0, 0.0), load=(0.0, 0.0), main=(0.0, 0.0), feed=(0.0, 0.0))
+# Back above where they were: the drop was an artefact, and every dip retracts.
+BACK: Final = _snapshot(pv=(1001.0, 41.0), load=(31.0, 501.0), main=(301.0, 2501.0), feed=(21.0, 81.0))
+# Counting up from AFTER, and once more from there.
+LATER: Final = _snapshot(pv=(55.0, 5.0), load=(4.0, 22.0), main=(11.0, 110.0), feed=(1.5, 6.0))
+LATER_STILL: Final = _snapshot(pv=(60.0, 6.0), load=(5.0, 24.0), main=(12.0, 120.0), feed=(2.0, 7.0))
+
+
+async def test_net_stays_flat_when_a_booked_dip_is_retracted(hass: HomeAssistant) -> None:
+    """Audit P1: the offset goes on and comes off on the updates the siblings book and retract it."""
+    coordinator, energy = await _built(hass)
+    coordinator.async_set_updated_data(BEFORE)
+    before = _nets(energy)
+
+    coordinator.async_set_updated_data(ZERO)
+
+    assert energy[f"{PV}:circuit_energy_produced"].energy_offset == pytest.approx(1000.0)
+    assert _nets(energy) == pytest.approx(before)
+    _assert_every_net_on_its_siblings(energy)
+
+    coordinator.async_set_updated_data(BACK)
+
+    assert energy[f"{PV}:circuit_energy_produced"].energy_offset == 0.0
+    assert energy["mainMeterEnergyConsumedWh"].energy_offset == 0.0
+    assert _nets(energy) == pytest.approx(before)
+    _assert_every_net_on_its_siblings(energy)
+
+
+async def test_restored_offsets_reach_nets_first_update_after_a_restart(hass: HomeAssistant) -> None:
+    """Audit P2: through the real platform add order, a restart moves no Net."""
+    entry = _entry(hass)
+    coordinator, energy, platform = await _set_up(hass, entry)
+    coordinator.async_set_updated_data(BEFORE)
+    coordinator.async_set_updated_data(AFTER)
+    before_restart = _nets(energy)
+    assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
+    entity_ids = _entity_ids(hass, entry)
+    assert len(entity_ids) >= len(energy)
+
+    # Removing the entities hands their state and dip records to the restore
+    # cache, which the next set of entities reads as they are added.
+    await platform.async_reset()
+    coordinator, energy, _ = await _set_up(hass, entry)
+    coordinator.async_set_updated_data(AFTER)
+
+    assert _entity_ids(hass, entry) == entity_ids
+    assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
+    assert _nets(energy) == pytest.approx(before_restart)
+    _assert_every_net_on_its_siblings(energy)
+
+
+async def test_compensation_turned_off_before_a_reload_leaves_every_net_on_its_siblings(
+    hass: HomeAssistant,
+) -> None:
+    """Audit R2: the counters stop compensating at once, so their Nets must stop too.
+
+    While Home Assistant is starting, an options change waits for the reload
+    that applies it, and the sensors re-read the option on every update.
+    """
+    coordinator, energy = await _built(hass)
+    coordinator.async_set_updated_data(BEFORE)
+    coordinator.async_set_updated_data(AFTER)
+    assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: False}
+    )
+    coordinator.async_set_updated_data(LATER)
+
+    assert _reading(energy, "mainMeterEnergyConsumedWh") == pytest.approx(110.0)
+    assert _reading(energy, "mainMeterNetEnergyWh") == pytest.approx(110.0 - 11.0)
+    assert _reading(energy, f"{PV}:circuit_energy_net") == pytest.approx(55.0 - 5.0)
+    _assert_every_net_on_its_siblings(energy)
+
+
+async def test_compensation_turned_back_on_before_a_reload_returns_to_every_net(
+    hass: HomeAssistant,
+) -> None:
+    """The held offsets come back to the counters and their Nets on the same update."""
+    coordinator, energy = await _built(hass)
+    coordinator.async_set_updated_data(BEFORE)
+    coordinator.async_set_updated_data(AFTER)
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: False}
+    )
+    coordinator.async_set_updated_data(LATER)
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={ENABLE_ENERGY_DIP_COMPENSATION: True}
+    )
+    coordinator.async_set_updated_data(LATER_STILL)
+
+    assert _reading(energy, "mainMeterEnergyConsumedWh") == pytest.approx(120.0 + 2400.0)
+    assert _reading(energy, f"{PV}:circuit_energy_produced") == pytest.approx(60.0 + 950.0)
+    _assert_every_net_on_its_siblings(energy)

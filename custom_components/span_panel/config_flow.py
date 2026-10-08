@@ -81,6 +81,7 @@ from .const import (
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
+    NEW_INSTALL_ENERGY_DIP_COMPENSATION,
     PANEL_CA_PENDING,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
@@ -111,7 +112,9 @@ def get_user_data_schema(default_host: str = "") -> vol.Schema:
             vol.Optional(CONF_HTTP_PORT, default=80): int,
             vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
             vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
-            vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION, default=True): bool,
+            vol.Optional(
+                ENABLE_ENERGY_DIP_COMPENSATION, default=NEW_INSTALL_ENERGY_DIP_COMPENSATION
+            ): bool,
         }
     )
 
@@ -612,7 +615,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Store precision settings from user input for later flow steps.
         self.power_display_precision = user_input.get(POWER_DISPLAY_PRECISION, 0)
         self.energy_display_precision = user_input.get(ENERGY_DISPLAY_PRECISION, 2)
-        self._enable_dip_compensation = user_input.get(ENABLE_ENERGY_DIP_COMPENSATION, True)
+        self._enable_dip_compensation = user_input.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, NEW_INSTALL_ENERGY_DIP_COMPENSATION
+        )
 
         _LOGGER.debug(
             "CONFIG_INPUT_DEBUG: User input precision - power: %s, energy: %s, full input: %s",

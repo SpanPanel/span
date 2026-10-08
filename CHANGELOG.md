@@ -66,6 +66,9 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
   IDs, names and areas if the circuit becomes controllable again.
 - **The SPAN Panel card and dashboard never offer a breaker switch or priority the integration does not provide**, and show a breaker's relay state rather than
   Off while its switch is unavailable.
+- **Turning energy dip compensation off or on while Home Assistant is starting now takes effect without another restart**, once Home Assistant has finished
+  starting.
+- **Saving General Options no longer turns on energy dip compensation** for an install that never enabled it.
 
 ## [2.1.1] - 8/2026
 

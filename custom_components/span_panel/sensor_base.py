@@ -23,7 +23,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
+from .const import DEFAULT_ENERGY_DIP_COMPENSATION, DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
     DipEvent,
@@ -45,7 +45,7 @@ from .naming import (
     circuit_object_id_base,
     release_registry_name_written_by_older_release,
 )
-from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -573,14 +573,23 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
-        self._dip_compensation_enabled: bool = data_coordinator.config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, False
+        self._dip_compensation_enabled: bool = option_bool(
+            data_coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION),
+            DEFAULT_ENERGY_DIP_COMPENSATION,
         )
 
     @property
     def energy_offset(self) -> float:
-        """Return the cumulative dip compensation offset."""
-        return self._energy_offset
+        """Return the dip offset this sensor is applying to its reading: 0.0 while it compensates nothing.
+
+        What its meter's Net adds for it, so it answers by the same cached flag
+        `_process_raw_value` reads. The option is re-read on every update, while
+        the held offset is discarded only by the reload that follows a change, so
+        between the two this sensor already reports its raw reading and its Net
+        has to stop adding the offset on the same update. The offset itself is
+        kept: turning the option back on before a reload resumes it on both.
+        """
+        return self._energy_offset if self._dip_compensation_enabled else 0.0
 
     def _bind_energy(self, binding: EnergyBinding[D]) -> None:
         """Record this sensor's meter, role and Net definition, once.
@@ -888,8 +897,9 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         )
 
         # Update dip compensation flag from options in case it changed
-        self._dip_compensation_enabled = self.coordinator.config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, False
+        self._dip_compensation_enabled = option_bool(
+            self.coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION),
+            DEFAULT_ENERGY_DIP_COMPENSATION,
         )
 
         # Use the overridden _update_native_value method which handles grace period

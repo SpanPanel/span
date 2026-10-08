@@ -46,6 +46,7 @@ from .options import (
     CONTROL_LOCK_TIMEOUT,
     CONTROL_MODE,
     RELAY_DEBOUNCE_SECONDS,
+    option_bool,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,11 +127,6 @@ The entity's `finally` runs after the task exists, so the copy keeps the value.
 """
 
 
-def _as_bool(value: object, default: bool) -> bool:
-    """Read a bool out of untyped option data."""
-    return value if isinstance(value, bool) else default
-
-
 def _as_float(value: object, default: float) -> float:
     """Read a non-negative float out of untyped option data."""
     if isinstance(value, bool):
@@ -198,7 +194,7 @@ class ControlPolicy:
 
         return cls(
             mode=mode,
-            allow_contextless=_as_bool(
+            allow_contextless=option_bool(
                 options.get(ALLOW_CONTEXTLESS_CONTROL), DEFAULT_ALLOW_CONTEXTLESS_CONTROL
             ),
             lock_timeout_minutes=timeout,
