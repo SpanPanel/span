@@ -174,6 +174,5 @@ def test_the_legacy_ids_the_shim_exists_to_preserve() -> None:
     """
     assert build_circuit_unique_id(SERIAL, CIRCUIT, "instantPowerW") == f"span_{SERIAL}_{CIRCUIT}_power"
     assert build_circuit_unique_id(SERIAL, CIRCUIT, "producedEnergyWh") == f"span_{SERIAL}_{CIRCUIT}_energy_produced"
-    assert build_circuit_unique_id(SERIAL, "unmapped_tab_32", "instantPowerW") == f"span_{SERIAL}_unmapped_tab_32_power"
     assert build_panel_unique_id(SERIAL, "instantGridPowerW") == f"span_{SERIAL}_current_power"
     assert build_panel_unique_id(SERIAL, "doorState") == f"span_{SERIAL}_doorstate"

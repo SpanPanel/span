@@ -18,7 +18,6 @@ from .const import (
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
-    ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     PANEL_ADMIN_ONLY,
     PANEL_SHOW_SIDEBAR,
     USE_CIRCUIT_NUMBERS,
@@ -48,7 +47,6 @@ GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
         ),
         vol.Optional(ENABLE_PANEL_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENABLE_CIRCUIT_NET_ENERGY_SENSORS): bool,
-        vol.Optional(ENABLE_UNMAPPED_CIRCUIT_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
         # A SelectSelector rather than `vol.In`, so the three choices are
@@ -97,9 +95,6 @@ def get_general_options_defaults(
         ),
         ENABLE_CIRCUIT_NET_ENERGY_SENSORS: config_entry.options.get(
             ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True
-        ),
-        ENABLE_UNMAPPED_CIRCUIT_SENSORS: config_entry.options.get(
-            ENABLE_UNMAPPED_CIRCUIT_SENSORS, False
         ),
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(

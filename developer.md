@@ -340,8 +340,8 @@ assembles it. This integration no longer presets `entity_id` for circuit entitie
 non-circuit entity here has always worked.
 
 `naming.py` is the only place the wording of a circuit id is written down. `circuit_object_id_base(identifier, suffix, existing_entity_id)` joins the
-naming-flag half — `Circuit 15`, `Kitchen Outlets`, `Unmapped Tab 32` — to the suffix wording, and it is the base, not the display name: the two are decoupled
-on purpose so a label can be reworded without a migration. The suffix wording is read back from the id an entity already has, because two spellings have shipped
+naming-flag half — `Circuit 15`, `Kitchen Outlets` — to the suffix wording, and it is the base, not the display name: the two are decoupled on purpose so a
+label can be reworded without a migration. The suffix wording is read back from the id an entity already has, because two spellings have shipped
 (`consumed_energy` before ids were preset, `energy_consumed` after); a new entity gets the noun-last form, matching the panel-level ids.
 `ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another is _discovered_, never to introduce one.
 

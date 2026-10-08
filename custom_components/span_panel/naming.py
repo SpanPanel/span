@@ -95,12 +95,11 @@ def _form_after_the_identifier(object_id: str, identifier_slug: str, suffix: str
 def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str | None) -> str:
     """Return the base for one circuit entity.
 
-    `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`,
-    `Unmapped Tab 32`); `suffix` is this entity's canonical suffix, which the
-    sensors derive from their description key via
-    `id_builder.get_user_friendly_suffix` while the switch and the select --
-    which have no such key -- name theirs outright ("breaker",
-    "circuit_priority").
+    `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`);
+    `suffix` is this entity's canonical suffix, which the sensors derive from
+    their description key via `id_builder.get_user_friendly_suffix` while the
+    switch and the select -- which have no such key -- name theirs outright
+    ("breaker", "circuit_priority").
 
     Where the existing id still names this circuit, what follows the name
     settles both halves at once -- which form the id carries, and whether the

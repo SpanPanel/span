@@ -55,9 +55,8 @@ from custom_components.span_panel.select import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
-    SpanUnmappedCircuitSensor,
 )
-from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS, UNMAPPED_SENSORS
+from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
@@ -907,53 +906,6 @@ async def test_a_new_sensor_on_a_no_prefix_install_composes_like_every_other_ent
     sensor = await _SensorInstall(hass, entry).load(ORIGINAL_NAME)
 
     assert sensor.entity_id == ORIGINAL_ENTITY_ID
-
-
-async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    """The hidden unmapped-tab sensors were always composed, and are unaffected.
-
-    Home Assistant has always built their ids from the display name, so they
-    carry a device prefix that the naming flag never reached. Turning the flag
-    off does not take it away.
-    """
-    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
-
-    registry = er.async_get(hass)
-    seeded = registry.async_get_or_create(
-        "sensor",
-        DOMAIN,
-        build_circuit_unique_id(SERIAL, "unmapped_tab_32", "instantPowerW"),
-        suggested_object_id="span_panel_unmapped_tab_32_power",
-        config_entry=entry,
-    )
-    assert seeded.entity_id == "sensor.span_panel_unmapped_tab_32_power"
-
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="unmapped_tab_32", name="", tabs=[32])
-    snapshot = SpanPanelSnapshotFactory.create(
-        serial_number=SERIAL, circuits={"unmapped_tab_32": circuit}
-    )
-    coordinator = _coordinator(hass, snapshot, entry)
-    entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator,
-        panel_device_id="panel-device-id",
-        curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(snapshot),
-        setup_snapshot=snapshot,
-    )
-
-    platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
-    platform.config_entry = entry
-    sensor = SpanUnmappedCircuitSensor(coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_32")
-    await platform.async_add_entities([sensor])
-    await hass.async_block_till_done()
-
-    assert sensor.entity_id == seeded.entity_id
-
-    registry_entry = registry.async_get(seeded.entity_id)
-    assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
 
 
 # --- A panel device name this integration generated ---------------------------
