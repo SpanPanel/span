@@ -154,6 +154,14 @@ NETS: Final = (
 )
 
 
+def _entity_ids(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, str]:
+    """Every registered entity of the entry, unique id to entity id."""
+    return {
+        row.unique_id: row.entity_id
+        for row in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    }
+
+
 def _nets(energy: dict[str, SpanEnergySensorBase[object, object]]) -> dict[str, float]:
     return {net: _reading(energy, net) for net, _, _ in NETS}
 
@@ -251,6 +259,8 @@ async def test_restored_offsets_reach_nets_first_update_after_a_restart(hass: Ho
     coordinator.async_set_updated_data(AFTER)
     before_restart = _nets(energy)
     assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
+    entity_ids = _entity_ids(hass, entry)
+    assert len(entity_ids) >= len(energy)
 
     # Removing the entities hands their state and dip records to the restore
     # cache, which the next set of entities reads as they are added.
@@ -258,6 +268,7 @@ async def test_restored_offsets_reach_nets_first_update_after_a_restart(hass: Ho
     coordinator, energy, _ = await _set_up(hass, entry)
     coordinator.async_set_updated_data(AFTER)
 
+    assert _entity_ids(hass, entry) == entity_ids
     assert energy["mainMeterEnergyConsumedWh"].energy_offset == pytest.approx(2400.0)
     assert _nets(energy) == pytest.approx(before_restart)
     _assert_every_net_on_its_siblings(energy)
