@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
+    _defer_reload_until_started,
     async_remove_config_entry_device,
     async_unload_entry,
     ensure_device_registered,
@@ -139,6 +140,32 @@ async def test_each_entry_updated_while_starting_reloads_once_started(hass: Home
         await hass.async_block_till_done()
 
     assert sorted(call.args for call in mock_reload.await_args_list) == [("entry-first",), ("entry-second",)]
+
+
+async def test_a_deferral_made_while_running_reloads_now_and_leaves_nothing_pending(
+    hass: HomeAssistant,
+) -> None:
+    """`async_at_started` runs the job at once when started, before the helper has stored anything.
+
+    Unreachable through `update_listener`, whose guard is the same predicate; pinned so
+    the bookkeeping cannot leave a stale handle that blocks every later deferral.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.running)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
+        _defer_reload_until_started(hass, entry)
+        await hass.async_block_till_done()
+        assert mock_reload.await_count == 1
+
+        hass.set_state(CoreState.starting)
+        await update_listener(hass, entry)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    assert mock_reload.await_count == 2
 
 
 async def test_unloading_before_start_cancels_the_deferred_reload(hass: HomeAssistant) -> None:

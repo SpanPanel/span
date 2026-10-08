@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -148,8 +149,17 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 
-_DEFERRED_RELOADS: HassKey[dict[str, CALLBACK_TYPE]] = HassKey(f"{DOMAIN}_deferred_reloads")
-"""Per entry, the cancel handle of a reload waiting for Home Assistant to start; see `update_listener`."""
+
+@dataclass(slots=True)
+class _DeferredReload:
+    """A reload waiting for Home Assistant to start; see `_defer_reload_until_started`."""
+
+    cancel: CALLBACK_TYPE | None = None
+    """Unsubscribes the wait; None until `async_at_started` has answered."""
+
+
+_DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_deferred_reloads")
+"""Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -850,23 +860,35 @@ def _defer_reload_until_started(hass: HomeAssistant, entry: SpanPanelConfigEntry
     """Reload the entry once Home Assistant has started, once however many updates ask.
 
     One-shot: the pending reload is forgotten when it runs, and cancelled with
-    the entry if it unloads first.
+    the entry if it unloads first. The record is stored before `async_at_started`
+    is asked, and only its own job or canceller removes it, because that helper
+    runs the job at once when Home Assistant has already started: a record
+    stored afterwards would outlive its job and block every later deferral.
     """
     pending = hass.data.setdefault(_DEFERRED_RELOADS, {})
     if entry.entry_id in pending:
         return
+    deferred = _DeferredReload()
+    pending[entry.entry_id] = deferred
+
+    @callback
+    def _forget() -> bool:
+        """Remove this deferral's record if it is still the pending one."""
+        if pending.get(entry.entry_id) is not deferred:
+            return False
+        del pending[entry.entry_id]
+        return True
 
     async def _reload_once_started(hass: HomeAssistant) -> None:
-        pending.pop(entry.entry_id, None)
-        await _async_reload_after_update(hass, entry)
+        if _forget():
+            await _async_reload_after_update(hass, entry)
 
-    pending[entry.entry_id] = async_at_started(hass, _reload_once_started)
+    deferred.cancel = async_at_started(hass, _reload_once_started)
 
     @callback
     def _cancel() -> None:
-        cancel = pending.pop(entry.entry_id, None)
-        if cancel is not None:
-            cancel()
+        if _forget() and deferred.cancel is not None:
+            deferred.cancel()
 
     entry.async_on_unload(_cancel)
 
