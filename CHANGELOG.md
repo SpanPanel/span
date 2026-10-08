@@ -36,6 +36,7 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
   entity IDs if that changes, and the card shows its relay state rather than a dead toggle.
 - **The card no longer draws an empty Microgrid Interconnect tile**, its editor lists every EV charger's entities, and a circuit feeding an EV charger keeps its
   chart history.
+- **A broker reconnect no longer makes a solar circuit read as a load for a moment or reloads the integration.**
 
 ## [2.1.1] - 8/2026
 
