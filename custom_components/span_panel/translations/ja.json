@@ -500,6 +500,9 @@
     "graph_horizon_not_available": {
       "message": "選択されたSPANパネルではグラフホライズンマネージャーが利用できません。"
     },
+    "monitoring_entity_on_another_panel": {
+      "message": "エンティティ {entity_id} は、設定エントリ {config_entry_id} とは別の SPAN Panel に属しています。config_entry_id を省略するか、エンティティ自身のパネルを指定してください。"
+    },
     "monitoring_not_enabled": {
       "message": "電流監視が有効なSPANパネルがありません。"
     },

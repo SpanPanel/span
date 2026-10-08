@@ -500,6 +500,9 @@
     "graph_horizon_not_available": {
       "message": "Graph horizon manager is not available for the selected SPAN panel."
     },
+    "monitoring_entity_on_another_panel": {
+      "message": "Entity {entity_id} belongs to a different SPAN Panel than config entry {config_entry_id}. Leave config_entry_id out, or name the entity's own panel."
+    },
     "monitoring_not_enabled": {
       "message": "No SPAN panel with current monitoring enabled."
     },

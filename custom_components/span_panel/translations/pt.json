@@ -500,6 +500,9 @@
     "graph_horizon_not_available": {
       "message": "O gerenciador de horizonte do gráfico não está disponível para o painel SPAN selecionado."
     },
+    "monitoring_entity_on_another_panel": {
+      "message": "A entidade {entity_id} pertence a um SPAN Panel diferente da entrada de configuração {config_entry_id}. Omita config_entry_id ou indique o painel da própria entidade."
+    },
     "monitoring_not_enabled": {
       "message": "Nenhum painel SPAN com monitoramento de corrente ativado."
     },

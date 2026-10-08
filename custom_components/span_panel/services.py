@@ -248,6 +248,34 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
     )
 
 
+def _threshold_panel_entry_id(
+    hass: HomeAssistant, target: str, requested: str | None
+) -> str | None:
+    """Return the config entry whose panel a threshold call acts on, or None for the first loaded.
+
+    `target` is what the call names: one of this integration's entities, or a
+    raw circuit id or leg name. An entity belongs to one panel, its own config
+    entry, and that entry decides, so an automation that names only the entity
+    reaches the right panel among several. A `requested` entry naming another
+    panel is refused rather than obeyed: acting on the other panel would put a
+    mains override on that panel's leg of the same name, or store a circuit
+    override under an id that panel does not publish. A raw id belongs to no
+    entity, so `requested`, or else the first loaded panel, decides as before.
+    """
+    entity_entry = er.async_get(hass).async_get(target)
+    if entity_entry is None or entity_entry.platform != DOMAIN:
+        return requested
+    owner = entity_entry.config_entry_id
+    if owner is not None and requested is not None and requested != owner:
+        raise ServiceValidationError(
+            f"Entity {target} belongs to a different SPAN Panel than config entry {requested}.",
+            translation_domain=DOMAIN,
+            translation_key="monitoring_entity_on_another_panel",
+            translation_placeholders={"entity_id": target, "config_entry_id": requested},
+        )
+    return owner or requested
+
+
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services."""
 
@@ -267,14 +295,19 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
                 return runtime_data, entry
         return None
 
-    def _get_monitored(call: ServiceCall) -> tuple[CurrentMonitor, SpanPanelRuntimeData]:
-        """Find the CurrentMonitor for the call's entry, with that entry's runtime data.
+    def _get_monitored(
+        call: ServiceCall, target: str
+    ) -> tuple[CurrentMonitor, SpanPanelRuntimeData]:
+        """Find the CurrentMonitor for the panel `target` belongs to, with its runtime data.
 
-        The runtime data comes with it because a circuit is resolved against the
-        coordinator's live circuit ids, which the monitor itself does not hold
-        until the coordinator's next push.
+        The panel is `_threshold_panel_entry_id`'s choice. The runtime data comes
+        with the monitor because a circuit is resolved against the coordinator's
+        live circuit ids, which the monitor itself does not hold until the
+        coordinator's next push.
         """
-        result = _get_runtime_data(call.data.get("config_entry_id"))
+        result = _get_runtime_data(
+            _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
+        )
         if result is not None:
             runtime_data, _entry = result
             if runtime_data.coordinator.current_monitor is not None:
@@ -311,34 +344,34 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
-        monitor, runtime_data = _get_monitored(call)
         data = dict(call.data)
         entity_id = data.pop("circuit_id")
         data.pop("config_entry_id", None)
+        monitor, runtime_data = _get_monitored(call, entity_id)
         circuit_id = monitor.resolve_entity_to_circuit_id(
             entity_id, runtime_data.coordinator.data.circuits.keys()
         )
         monitor.set_circuit_override(circuit_id, data)
 
     async def async_handle_clear_circuit_threshold(call: ServiceCall) -> None:
-        monitor, runtime_data = _get_monitored(call)
         entity_id = call.data["circuit_id"]
+        monitor, runtime_data = _get_monitored(call, entity_id)
         circuit_id = monitor.resolve_entity_to_circuit_id(
             entity_id, runtime_data.coordinator.data.circuits.keys()
         )
         monitor.clear_circuit_override(circuit_id)
 
     async def async_handle_set_mains_threshold(call: ServiceCall) -> None:
-        monitor, _runtime_data = _get_monitored(call)
         data = dict(call.data)
         entity_id = data.pop("leg")
         data.pop("config_entry_id", None)
+        monitor, _runtime_data = _get_monitored(call, entity_id)
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.set_mains_override(leg, data)
 
     async def async_handle_clear_mains_threshold(call: ServiceCall) -> None:
-        monitor, _runtime_data = _get_monitored(call)
         entity_id = call.data["leg"]
+        monitor, _runtime_data = _get_monitored(call, entity_id)
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.clear_mains_override(leg)
 
