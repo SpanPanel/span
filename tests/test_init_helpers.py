@@ -123,6 +123,24 @@ async def test_updates_while_starting_coalesce_into_one_reload(hass: HomeAssista
     mock_reload.assert_awaited_once_with("entry-123")
 
 
+async def test_each_entry_updated_while_starting_reloads_once_started(hass: HomeAssistant) -> None:
+    """Two panels changed during start-up each get their own reload; neither absorbs the other's."""
+    first = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-first")
+    second = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-second")
+    first.add_to_hass(hass)
+    second.add_to_hass(hass)
+    hass.set_state(CoreState.starting)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
+        await update_listener(hass, first)
+        await update_listener(hass, second)
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await hass.async_block_till_done()
+
+    assert sorted(call.args for call in mock_reload.await_args_list) == [("entry-first",), ("entry-second",)]
+
+
 async def test_unloading_before_start_cancels_the_deferred_reload(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
     entry.add_to_hass(hass)
