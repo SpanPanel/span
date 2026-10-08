@@ -523,10 +523,10 @@ class TestFavoritesServiceHandlers:
         assert result == {"favorites": {"d_main": _panel_entry(["sub-b-7", "b-7"])}}
 
     @pytest.mark.asyncio
-    async def test_add_favorite_without_a_loaded_panel_names_no_circuit(
+    async def test_add_favorite_on_an_unloaded_panel_says_the_panel_is_not_loaded(
         self, _patched_store: Any
     ) -> None:
-        """With no live snapshot there are no circuit ids to match, so nothing is guessed."""
+        """With no live snapshot there are no circuit ids to match, and the error says why."""
         hass = MagicMock()
         hass.config_entries.async_get_entry = MagicMock(return_value=None)
         registered = _capture_registered_handlers(hass)
@@ -538,7 +538,87 @@ class TestFavoritesServiceHandlers:
         with _patch_registries(entity=entity, device=device):
             with pytest.raises(ServiceValidationError) as raised:
                 await handler(_make_service_call({"entity_id": "sensor.kitchen_power"}))
+        assert raised.value.translation_key == "favorite_panel_not_loaded"
+
+    @pytest.mark.asyncio
+    async def test_add_favorite_of_a_circuit_the_panel_no_longer_publishes_is_refused(
+        self, _patched_store: Any
+    ) -> None:
+        """Adding matches only the live ids, even when the circuit is already a favorite."""
+        _FakeStore.preload(
+            "span_panel_settings", {"favorites": {"d_main": _panel_entry(["b-7"])}}
+        )
+        hass = MagicMock()
+        _loaded_panel(hass, "c-1")
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        entity = _make_entity_entry(unique_id="span_sp3-242424_b-7_power")
+        device = _make_device_entry(device_id="d_main")
+
+        with _patch_registries(entity=entity, device=device):
+            with pytest.raises(ServiceValidationError) as raised:
+                await handler(_make_service_call({"entity_id": "sensor.gone_power"}))
         assert raised.value.translation_key == "favorite_no_circuit_uuid"
+
+    @pytest.mark.asyncio
+    async def test_remove_favorite_of_a_circuit_that_has_left_the_panel(
+        self, _patched_store: Any
+    ) -> None:
+        """A stored favorite is an id the panel once published, so it still resolves for removal."""
+        _FakeStore.preload(
+            "span_panel_settings", {"favorites": {"d_main": _panel_entry(["b-7"])}}
+        )
+        hass = MagicMock()
+        _loaded_panel(hass, "c-1")
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["remove_favorite"]
+
+        entity = _make_entity_entry(unique_id="span_sp3-242424_b-7_power")
+        device = _make_device_entry(device_id="d_main")
+
+        with _patch_registries(entity=entity, device=device):
+            result = await handler(_make_service_call({"entity_id": "sensor.gone_power"}))
+
+        assert result == {"favorites": {}}
+
+    @pytest.mark.asyncio
+    async def test_remove_favorite_on_an_unloaded_panel_matches_its_stored_favorites(
+        self, _patched_store: Any
+    ) -> None:
+        """Removing needs no live snapshot when the circuit is among the panel's favorites."""
+        _FakeStore.preload(
+            "span_panel_settings", {"favorites": {"d_main": _panel_entry(["b-7", "c-1"])}}
+        )
+        hass = MagicMock()
+        hass.config_entries.async_get_entry = MagicMock(return_value=None)
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["remove_favorite"]
+
+        entity = _make_entity_entry(unique_id="span_sp3-242424_b-7_power")
+        device = _make_device_entry(device_id="d_main")
+
+        with _patch_registries(entity=entity, device=device):
+            result = await handler(_make_service_call({"entity_id": "sensor.b_7_power"}))
+
+        assert result == {"favorites": {"d_main": _panel_entry(["c-1"])}}
+
+    @pytest.mark.asyncio
+    async def test_remove_favorite_on_an_unloaded_panel_of_no_stored_circuit_says_so(
+        self, _patched_store: Any
+    ) -> None:
+        hass = MagicMock()
+        hass.config_entries.async_get_entry = MagicMock(return_value=None)
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["remove_favorite"]
+
+        entity = _make_entity_entry(unique_id="span_sp3-242424_b-7_power")
+        device = _make_device_entry(device_id="d_main")
+
+        with _patch_registries(entity=entity, device=device):
+            with pytest.raises(ServiceValidationError) as raised:
+                await handler(_make_service_call({"entity_id": "sensor.b_7_power"}))
+        assert raised.value.translation_key == "favorite_panel_not_loaded"
 
     @pytest.mark.asyncio
     async def test_add_favorite_persists_and_returns_map(

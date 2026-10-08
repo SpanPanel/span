@@ -485,6 +485,9 @@
     "favorite_not_span_entity": {
       "message": "エンティティ {entity_id} はSPAN Panelのエンティティではありません。回路、バッテリー (BESS)、またはEV充電器 (EVSE) のセンサーを選択してください。"
     },
+    "favorite_panel_not_loaded": {
+      "message": "エンティティ {entity_id} が属する SPAN Panel が読み込まれていないため、回路を特定できません。パネルのセットアップが完了してから再試行してください。"
+    },
     "favorite_subdevice_no_span_parent": {
       "message": "サブデバイス {entity_id} に親のSPAN Panelデバイスがありません。via_device_id がSPANパネルを指していません。"
     },

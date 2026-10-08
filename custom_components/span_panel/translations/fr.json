@@ -485,6 +485,9 @@
     "favorite_not_span_entity": {
       "message": "L'entité {entity_id} n'est pas une entité SPAN Panel. Sélectionnez un capteur de circuit, de batterie (BESS) ou de chargeur EV (EVSE)."
     },
+    "favorite_panel_not_loaded": {
+      "message": "Le SPAN Panel auquel appartient l'entité {entity_id} n'est pas chargé, ses circuits ne peuvent donc pas être résolus. Réessayez une fois la configuration du panneau terminée."
+    },
     "favorite_subdevice_no_span_parent": {
       "message": "Le sous-appareil {entity_id} n'a pas de panneau SPAN parent — son via_device_id ne pointe pas vers un panneau SPAN."
     },
