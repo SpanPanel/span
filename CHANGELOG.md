@@ -10,65 +10,32 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 ### Added
 
 - **Support for SPAN panel firmware r202639**, whose changes are listed in SPAN's
-  [API changelog](https://github.com/spanio/SPAN-API-Client-Docs/blob/main/CHANGELOG.md) and handled by the entries below.
-- **Each additional solar inverter gets its own device**, with its own vendor, product and nameplate capacity, and its panel link where the panel reports one.
-- **Vendor readings an additional solar inverter publishes** appear on that inverter's own device.
-- **A solar inverter the panel stops reporting keeps its device and entities** until you delete the device.
-- **The SPAN Panel card and dashboard give each additional solar inverter its own tile**, with its vendor, model, and the power and chart of the circuit that
-  feeds it.
-- **The card editor has a Solar section** for choosing which entities of the Solar device and of each inverter appear on their tiles.
+  [API changelog](https://github.com/spanio/SPAN-API-Client-Docs/blob/main/CHANGELOG.md), including its reversed battery meter sign, a circuit for every
+  inverter, SPAN Drive charge-current limits and a panel that asks setup to wait and try again.
+- **Each additional solar inverter gets its own device and card tile**, with its vendor, product, nameplate capacity, readings and panel link, and the power and
+  chart of the circuit that feeds it.
+- **The card editor has a Solar section**, and its Battery section offers Meter Power and Nameplate Capacity.
 
 ### Changed
 
 - **New installs no longer allow control without a logged-in user by default**, so automations cannot operate circuits until you turn on **Allow control without
-  a logged-in user** in the integration's options; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
-- **The Solar tile's headline and chart now show the power of the circuit that feeds its inverter**, with your site's total PV power in a row beneath it.
-- **The card editor's Battery section offers Meter Power and Nameplate Capacity**, which the battery tile does not otherwise show.
+  a logged-in user**; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
+- **The Solar tile's headline and chart show the power of the circuit that feeds its inverter**, with your site's total PV power beneath it.
 
 ### Fixed
 
-- **Home Assistant's warning about a deprecated device lookup is resolved** — the integration, its card and its dashboard now find devices the way Home
-  Assistant 2026.8 asks, before the old ways stop working in 2027.8.
-- **A SPAN Panel card set up before Home Assistant 2026.8 works again, with nothing to change** — Home Assistant gave the panel a new device ID during that
-  upgrade if a helper, such as a utility meter, was attached to it. A card still holding the old ID now finds the panel again: its battery, charger and other
-  devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
-- **The card no longer shows an empty tile for the Microgrid Interconnect** — a device with nothing to display is now left off the card rather than drawn as a
-  bare header and settings icon.
-- **No deprecation warning on Home Assistant 2026.9 from the favorites service or new-entity announcements** — Home Assistant 2026.9 can answer a device lookup
-  with a child device, and the integration no longer reads a field such a device does not have.
-- **Rotate panel credentials now returns the new panel passphrase**: the panel replaces its passphrase along with the broker password, so the action's response
-  carries the new passphrase for you to save. The integration still does not store it, and the action can only be run with its response.
-- **The integration reconnects after a rotation instead of asking to reauthenticate**: the broker may not accept the new password as soon as the panel returns
-  it, so the integration retries with the new password for about a minute. If it still has not reconnected, the response says so; run the rotation again, or as
-  a last resort restart the panel. Access tokens already issued, including the integration's, are not revoked.
-- **Rotation errors say what happened**: a reduced-privilege access token and a panel that did not report the outcome each get their own message, and the latter
-  no longer claims that nothing changed. A request that timed out or lost its connection after it was sent is reported as an unknown outcome, and a panel whose
-  passphrase service is not running is reported as unchanged. When the outcome is unknown, the message says to run the rotation again, and to reauthenticate
-  only if the panel refuses it.
-- **Rotate panel credentials works on a panel that is not loaded**: a panel that did not reconnect after a rotation, or that restarted with a broker password
-  the panel no longer accepts, can be rotated again, since the rotation needs only the stored access token, which the panel does not revoke.
-- **Overlapping rotations of one panel run one after the other**: a second call, such as a double submit, waits until the first has reconnected, so the stored
-  broker password is the one from the later rotation.
-- **GFE Override button follows the battery's own link health**: on firmware that publishes the battery's Communication State, the button is available only
-  while that state is anything other than OK, which is when the panel accepts the override. Elsewhere it is available unless BESS Connected is on.
-- **DSM Grid State shows a GFE override while the panel is acting on it**, instead of the islanding state the MID senses.
-- **Every inverter's circuit now reads as solar** on a panel with more than one inverter, where the others reported power and Net Energy with the opposite sign.
-- **SPAN Drive's EVSE Charge Current Limit shows the charger's commissioned maximum when nobody has set a limit**, where it showed unknown.
-- **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
-  reporting a correct passphrase as invalid or saving an entry without its broker password.
-- **The battery's Meter Power keeps its sign on firmware r202639**, which reverses the sign the panel publishes for it, so it still agrees with Battery Power.
-- **The card editor lists the entities of every EV charger**, not only the last one.
-- **The card's breaker chart of a circuit that feeds an EV charger keeps its history**, where it opened empty or stayed blank because the charger's tile charts
-  the same circuit.
-- **Net Energy stays consistent with Produced and Consumed Energy when energy dip compensation is on**, where a solar circuit's moved the wrong way at each
-  compensated dip and Main Meter Net Energy ignored compensation.
-- **Switches and priority selects for circuits the panel no longer lets you control are removed instead of staying unavailable**, and return with their entity
-  IDs, names and areas if the circuit becomes controllable again.
-- **The SPAN Panel card and dashboard never offer a breaker switch or priority the integration does not provide**, and show a breaker's relay state rather than
-  Off while its switch is unavailable.
-- **Turning energy dip compensation off or on while Home Assistant is starting now takes effect without another restart**, once Home Assistant has finished
-  starting.
-- **Saving General Options no longer turns on energy dip compensation** for an install that never enabled it.
+- **Home Assistant 2026.8 and 2026.9 device-lookup deprecation warnings are resolved**, and a card set up before 2026.8 finds its panel again with nothing to
+  change.
+- **Rotate panel credentials returns the new panel passphrase**, reconnects instead of asking to reauthenticate, says what happened when it fails, works on a
+  panel that is not loaded, and runs overlapping requests one after the other.
+- **GFE Override and DSM Grid State follow what the panel is acting on**: the button is available only while the battery's link is not OK, and DSM Grid State
+  shows an active GFE override.
+- **Energy dip compensation keeps Net Energy consistent with Produced and Consumed Energy** for solar circuits and the main meter, applies a change made while
+  Home Assistant is starting, and is no longer turned on by saving General Options on an install that never enabled it.
+- **A circuit the panel no longer lets you control loses its switch and priority select** instead of leaving them unavailable, gets them back with the same
+  entity IDs if that changes, and the card shows its relay state rather than a dead toggle.
+- **The card no longer draws an empty Microgrid Interconnect tile**, its editor lists every EV charger's entities, and a circuit feeding an EV charger keeps its
+  chart history.
 
 ## [2.1.1] - 8/2026
 
