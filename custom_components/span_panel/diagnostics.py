@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -358,8 +358,11 @@ async def async_get_config_entry_diagnostics(
         "power_flow_grid": snapshot.power_flow_grid,
     }
 
+    # Whether the panel reports a Wi-Fi network is kept: it says how the panel
+    # is connected. Its name is not, because it says where the panel is, and
+    # `TO_REDACT` covers only the config entry.
     if snapshot.wifi_ssid is not None:
-        panel_data["wifi_ssid"] = snapshot.wifi_ssid
+        panel_data["wifi_ssid"] = REDACTED
     if snapshot.eth0_link is not None:
         panel_data["eth0_link"] = snapshot.eth0_link
     if snapshot.wlan_link is not None:
