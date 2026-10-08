@@ -30,7 +30,7 @@ from custom_components.span_panel.energy_orientation import (
     EnergyRole,
     PanelMeter,
 )
-from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
+from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
     SpanEnergySensorBase,
@@ -1632,3 +1632,38 @@ def test_circuit_sensor_name_change_requests_reload_in_circuit_numbers_mode() ->
     coordinator.request_reload.assert_called_once()
     runtime_registry.async_update_entity.assert_not_called()
     assert sensor._previous_circuit_name == "Renamed Kitchen"
+
+
+# ---------------------------------------------------------------------------
+# The compensation option is read as a bool, never as whatever was stored
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("stored", "expected"), [(True, True), (False, False), (None, False), ("false", False), (1, False)])
+def test_option_bool_reads_only_a_bool(stored: object, expected: bool) -> None:
+    assert option_bool(stored, False) is expected
+
+
+def test_a_non_bool_compensation_option_compensates_nothing() -> None:
+    """A truthy string is not "on": the sensor and its Net would otherwise disagree with the option."""
+    snapshot = SpanPanelSnapshotFactory.create()
+    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: "false"})
+
+    sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterEnergyConsumedWh"), snapshot)
+
+    assert sensor._dip_compensation_enabled is False
+
+
+def test_the_compensation_option_is_reread_as_a_bool_on_each_update() -> None:
+    snapshot = SpanPanelSnapshotFactory.create()
+    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
+    sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterEnergyConsumedWh"), snapshot)
+    assert sensor._dip_compensation_enabled is True
+
+    coordinator.config_entry = MockConfigEntry(
+        domain="span_panel", options={ENABLE_ENERGY_DIP_COMPENSATION: "false"}
+    )
+    with patch.object(sensor, "async_write_ha_state"):
+        sensor._handle_coordinator_update()
+
+    assert sensor._dip_compensation_enabled is False

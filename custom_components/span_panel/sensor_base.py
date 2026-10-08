@@ -45,7 +45,7 @@ from .naming import (
     circuit_object_id_base,
     release_registry_name_written_by_older_release,
 )
-from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -573,8 +573,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
-        self._dip_compensation_enabled: bool = data_coordinator.config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, False
+        self._dip_compensation_enabled: bool = option_bool(
+            data_coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION), False
         )
 
     @property
@@ -896,8 +896,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         )
 
         # Update dip compensation flag from options in case it changed
-        self._dip_compensation_enabled = self.coordinator.config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, False
+        self._dip_compensation_enabled = option_bool(
+            self.coordinator.config_entry.options.get(ENABLE_ENERGY_DIP_COMPENSATION), False
         )
 
         # Use the overridden _update_native_value method which handles grace period
