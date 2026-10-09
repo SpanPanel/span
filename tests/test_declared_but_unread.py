@@ -38,8 +38,8 @@ that arrives untriaged. A new property can only ever land in either by somebody
 writing the line.
 
 **Every tree, each with its own baseline.** The experiment runs over the
-adapter's reference payload and over every captured panel in
-`tests/fixtures/captures/`, and each keeps its baseline in
+adapter's reference payload and over every captured panel
+`captures_replay.CAPTURES` names, and each keeps its baseline in
 `tests/fixtures/unread_declarations/<stem>.json`. One file per tree rather than
 a union, because a property can be read on one panel's shape and not on
 another's, and a union would let either hide the other.
@@ -93,7 +93,7 @@ REFERENCE = Source("parent_child_tree", schema_one_tree, schema_one_snapshot)
 SOURCES = (
     REFERENCE,
     *(
-        Source(captured.stem, captured.tree, captures_replay.mapped_snapshot)
+        Source(captured.name, captured.tree, captures_replay.mapped_snapshot)
         for captured in captures_replay.CAPTURES
     ),
 )
@@ -421,7 +421,7 @@ def test_every_internal_route_is_still_declared(source: Source) -> None:
 
 
 @pytest.mark.parametrize(
-    "captured", captures_replay.CAPTURES, ids=[c.stem for c in captures_replay.CAPTURES]
+    "captured", captures_replay.CAPTURES, ids=[c.name for c in captures_replay.CAPTURES]
 )
 def test_the_mapper_builds_what_the_transport_delivers(captured: captures_replay.Capture) -> None:
     """The experiment rebuilds through the mapper alone; the integration gets the same snapshot.
