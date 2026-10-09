@@ -39,7 +39,6 @@ from custom_components.span_panel.sensor_base import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
-    SpanUnmappedCircuitSensor,
     _resolve_circuit_identifier_for_sync,
     _unnamed_circuit_fallback,
 )
@@ -59,7 +58,6 @@ from custom_components.span_panel.sensor_definitions import (
     PV_POWER_SENSOR,
     SITE_POWER_SENSOR,
     STATUS_SENSORS,
-    UNMAPPED_SENSORS,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
 )
@@ -494,8 +492,8 @@ def test_circuit_power_sensor_subdevice_uses_short_name() -> None:
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Current"
 
 
-def test_circuit_power_sensor_missing_circuit_uses_unmapped_fallback_name() -> None:
-    """Missing circuits should use the unmapped friendly name fallback."""
+def test_circuit_power_sensor_missing_circuit_uses_fallback_name() -> None:
+    """A missing circuit is named by its id, as the energy sensor names it."""
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
     coordinator = _make_coordinator(snapshot)
 
@@ -505,7 +503,7 @@ def test_circuit_power_sensor_missing_circuit_uses_unmapped_fallback_name() -> N
 
     assert (
         sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Unmapped Tab missing_circuit Current"
+        == "Circuit missing_circuit Current"
     )
 
 
@@ -874,21 +872,6 @@ def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_m
     assert attrs["last_valid_state"] == "12.0"
     assert "tabs" not in attrs
     assert "voltage" not in attrs
-
-
-def test_unmapped_circuit_sensor_generates_unmapped_friendly_name() -> None:
-    """Unmapped circuit sensors should use tab-based fallback names."""
-    snapshot = SpanPanelSnapshotFactory.create(
-        circuits={"unmapped_tab_7": SpanCircuitSnapshotFactory.create(circuit_id="unmapped_tab_7")}
-    )
-    coordinator = _make_coordinator(snapshot)
-
-    sensor = SpanUnmappedCircuitSensor(coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_7")
-
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Unmapped Tab 7 Power"
-    )
 
 
 def test_parse_numeric_state_ignores_unknown_state() -> None:

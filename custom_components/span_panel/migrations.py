@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant
@@ -18,14 +19,17 @@ _LOGGER = logging.getLogger(__name__)
 
 # Must match the storage version produced by the latest supported entry format.
 CURRENT_CONFIG_VERSION = 7
-CURRENT_CONFIG_MINOR_VERSION = 2
+CURRENT_CONFIG_MINOR_VERSION = 3
+
+_UNMAPPED_TAB_SENSORS_OPTION = "enable_unmapped_circuit_sensors"
+"""The retired option's key, spelled out because nothing else reads it any more."""
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> bool:
     """Migrate config entry through successive versions.
 
     Supports upgrades from v1.3.1+ (config version 2) through to the
-    current version 7.2. Each step mutates only the fields relevant to
+    current version 7.3. Each step mutates only the fields relevant to
     that version boundary.
 
     Core also calls this for an entry a newer release has already moved past
@@ -182,4 +186,49 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         )
         _LOGGER.debug("Migrated config entry %s to version 7.2", config_entry.entry_id)
 
+    # --- v7.2 → v7.3: retire the Unmapped Tab sensors option ---
+    if config_entry.version == 7 and config_entry.minor_version < 3:
+        # The panel publishes nothing for an empty breaker position, so these
+        # sensors could only ever report the library's filler. Removed rather
+        # than left unavailable, and the option with them, so no stored value
+        # outlives the form that set it.
+        _remove_unmapped_tab_sensors(hass, config_entry)
+        updated_options = dict(config_entry.options)
+        updated_options.pop(_UNMAPPED_TAB_SENSORS_OPTION, None)
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=updated_options,
+            minor_version=3,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 7.3", config_entry.entry_id)
+
     return True
+
+
+def _remove_unmapped_tab_sensors(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> None:
+    """Remove the sensors the Unmapped Tab option created for this entry.
+
+    Each had the unique id `span_{serial}_unmapped_tab_{n}_{suffix}`, built by
+    `build_circuit_unique_id` from the library's `unmapped_tab_{n}` circuit id
+    and one of three description keys: `instantPowerW`, `producedEnergyWh` and
+    `consumedEnergyWh`, whose suffixes are `power`, `energy_produced` and
+    `energy_consumed`. The match is exact on every segment, so it takes nothing
+    else: no other id this integration builds has `unmapped_tab_` after the
+    serial, because every other circuit id is the panel's own. Only this
+    entry's sensors are considered.
+
+    An entry with no unique id has no serial to match on, and is left alone.
+    """
+    serial = config_entry.unique_id
+    if not serial:
+        return
+    pattern = re.compile(
+        rf"span_{re.escape(serial.lower())}_unmapped_tab_\d+_"
+        r"(?:power|energy_produced|energy_consumed)"
+    )
+    entity_registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(entity_registry, config_entry.entry_id):
+        if entity.domain == "sensor" and pattern.fullmatch(entity.unique_id):
+            entity_registry.async_remove(entity.entity_id)
+            _LOGGER.info("Removed Unmapped Tab sensor %s: the option is retired", entity.entity_id)

@@ -197,11 +197,3 @@ def get_device_identifier_for_entry(
 ) -> str:
     """Public helper to get the per-entry device identifier used in unique_ids and storage."""
     return _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
-
-
-def construct_unmapped_friendly_name(
-    circuit_number: int | str, sensor_description_name: str
-) -> str:
-    """Construct friendly name for unmapped circuit sensors."""
-    # Format: "Unmapped Tab 32 Consumed Energy"
-    return f"Unmapped Tab {circuit_number} {sensor_description_name}"

@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntriesFlowManager, ConfigFlowRes
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
@@ -52,6 +53,11 @@ from custom_components.span_panel.const import (
     PANEL_CA_PENDING,
 )
 from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.id_builder import (
+    build_circuit_unique_id,
+    build_panel_unique_id,
+    build_switch_unique_id,
+)
 from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
 from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL
 
@@ -864,6 +870,113 @@ async def test_home_assistant_actually_runs_the_v7_2_migration(hass: HomeAssista
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+
+
+_UNMAPPED_TAB_OPTION = "enable_unmapped_circuit_sensors"
+_UNMAPPED_TAB_KEYS = ("instantPowerW", "producedEnergyWh", "consumedEnergyWh")
+
+
+@pytest.mark.asyncio
+async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
+    hass: HomeAssistant,
+) -> None:
+    """The retired option's sensors and its stored value go; every other entity stays.
+
+    Run through `async_setup`, so core decides to migrate exactly as it does on
+    upgrade. The survivors are the near misses: the same entry's circuit and
+    panel sensors, an `unmapped_tab_` id the option never built (a net-energy
+    suffix, and a switch), and another panel's Unmapped Tab sensor.
+    """
+    serial = "SPAN-V2-001"
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=2,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={CONF_HOST: MOCK_HOST, CONF_ACCESS_TOKEN: "v2-token-abc", CONF_API_VERSION: "v2"},
+        source=config_entries.SOURCE_USER,
+        options={_UNMAPPED_TAB_OPTION: True, ALLOW_CONTEXTLESS_CONTROL: False},
+        unique_id=serial,
+    )
+    entry.add_to_hass(hass)
+    other_entry = MockConfigEntry(
+        version=7,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+        domain=DOMAIN,
+        title="Span Panel 2",
+        data={CONF_HOST: "192.168.1.51", CONF_API_VERSION: "v2"},
+        source=config_entries.SOURCE_USER,
+        unique_id="SPAN-V2-002",
+    )
+    other_entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    retired = [
+        registry.async_get_or_create(
+            "sensor", DOMAIN, build_circuit_unique_id(serial, circuit_id, key), config_entry=entry
+        ).entity_id
+        for circuit_id in ("unmapped_tab_5", "unmapped_tab_32")
+        for key in _UNMAPPED_TAB_KEYS
+    ]
+    circuit = "0dad2f16cd514812ae1807b0457d473e"
+    kept = {
+        registry.async_get_or_create(
+            "sensor", DOMAIN, unique_id, config_entry=owner
+        ).entity_id: unique_id
+        for unique_id, owner in (
+            (build_circuit_unique_id(serial, circuit, "instantPowerW"), entry),
+            (build_circuit_unique_id(serial, circuit, "consumedEnergyWh"), entry),
+            (build_panel_unique_id(serial, "instantGridPowerW"), entry),
+            (build_circuit_unique_id(serial, "unmapped_tab_32", "netEnergyWh"), entry),
+            (
+                build_circuit_unique_id("SPAN-V2-002", "unmapped_tab_32", "instantPowerW"),
+                other_entry,
+            ),
+        )
+    }
+    switch = registry.async_get_or_create(
+        "switch", DOMAIN, build_switch_unique_id(serial, "unmapped_tab_32"), config_entry=entry
+    )
+    kept[switch.entity_id] = switch.unique_id
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert (entry.version, entry.minor_version) == (7, 3)
+    assert _UNMAPPED_TAB_OPTION not in entry.options
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
+
+    assert [entity_id for entity_id in retired if registry.async_get(entity_id)] == []
+    for entity_id, unique_id in kept.items():
+        registry_entry = registry.async_get(entity_id)
+        assert registry_entry is not None, entity_id
+        assert registry_entry.unique_id == unique_id
+
+
+@pytest.mark.asyncio
+async def test_v7_3_migration_on_an_entry_that_never_set_the_option(
+    hass: HomeAssistant,
+) -> None:
+    """Off by default, so most entries reach the step with nothing to remove."""
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=2,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={CONF_HOST: MOCK_HOST, CONF_API_VERSION: "v2"},
+        source=config_entries.SOURCE_USER,
+        options={ALLOW_CONTEXTLESS_CONTROL: True},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == 3
+    assert dict(entry.options) == {ALLOW_CONTEXTLESS_CONTROL: True}
 
 
 # ---------- zeroconf v2 discovery ----------

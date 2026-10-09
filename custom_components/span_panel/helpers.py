@@ -21,7 +21,6 @@ from .entity_resolver import (  # noqa: F401
     construct_circuit_unique_id_for_entry,
     construct_panel_unique_id_for_entry,
     construct_synthetic_unique_id_for_entry,
-    construct_unmapped_friendly_name,
     entity_id_in_entry,
     get_device_identifier_for_entry,
     resolve_evse_display_suffix,
@@ -88,7 +87,6 @@ __all__ = [
     "construct_synthetic_unique_id",
     "construct_synthetic_unique_id_for_entry",
     "construct_tabs_attribute",
-    "construct_unmapped_friendly_name",
     "construct_voltage_attribute",
     "detect_capabilities",
     "er",
@@ -104,6 +102,7 @@ __all__ = [
     "has_shed_forecast",
     "identity_digest",
     "pv_inverter_capability_tokens",
+    "is_unmapped_tab",
     "match_circuit_id",
     "remove_withdrawn_controls",
     "resolve_evse_display_suffix",
@@ -154,6 +153,21 @@ def circuit_has_a_priority_select(circuit: SpanCircuitSnapshot) -> bool:
     return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
 
 
+def is_unmapped_tab(circuit_id: str) -> bool:
+    """Whether a snapshot circuit is an empty breaker position rather than a circuit.
+
+    The pinned library adds an `unmapped_tab_<n>` entry to `snapshot.circuits`
+    for every position no breaker occupies. The panel publishes nothing for an
+    empty position, so the entry's 0 W, 0 Wh and closed relay are the library's
+    filler, not readings, and nothing here builds on it: no sensor, no topology
+    record, no current monitoring and no manifest row.
+
+    One predicate for every reader, so that when the library stops synthesising
+    these entries this function and the guards that call it go together.
+    """
+    return circuit_id.startswith("unmapped_tab_")
+
+
 def remove_withdrawn_controls(
     registry: er.EntityRegistry,
     entry_id: str,
@@ -178,7 +192,7 @@ def remove_withdrawn_controls(
 
     Only circuits in `circuits` -- the setup snapshot -- are judged. A circuit
     absent from it is never a withdrawal (see the coordinator's
-    `_check_settability_change`). An `unmapped_tab_*` pseudo-circuit is judged
+    `_check_settability_change`). An empty position (`is_unmapped_tab`) is judged
     like any other, but no release ever registered a switch or select for one,
     so its lookup finds nothing and nothing is removed. Only this entry's
     registration is removed: `entity_id_in_entry` ignores another entry holding

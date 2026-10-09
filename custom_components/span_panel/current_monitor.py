@@ -29,7 +29,7 @@ from .const import (
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
 )
-from .helpers import build_circuit_unique_id, build_panel_unique_id
+from .helpers import build_circuit_unique_id, build_panel_unique_id, is_unmapped_tab
 from .id_builder import match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
@@ -304,9 +304,7 @@ class CurrentMonitor:
         # Circuits with relays off may have no state yet but should still appear.
         all_circuit_ids = set(self._circuit_states.keys())
         if snapshot:
-            all_circuit_ids |= {
-                cid for cid in snapshot.circuits if not cid.startswith("unmapped_tab_")
-            }
+            all_circuit_ids |= {cid for cid in snapshot.circuits if not is_unmapped_tab(cid)}
 
         for cid in all_circuit_ids:
             state = self._circuit_states.get(cid)

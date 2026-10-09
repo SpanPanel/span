@@ -19,6 +19,7 @@ from .helpers import (
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
     construct_voltage_attribute,
+    is_unmapped_tab,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -142,7 +143,7 @@ async def handle_panel_topology(
     # Single pass over all entities to build circuit_id to role to entity_id
     # map. EVSE feed circuit sensors live on the EVSE sub-device, so we
     # search all entities for the config entry, not just panel-device ones.
-    circuit_ids = {cid for cid in snapshot.circuits if not cid.startswith("unmapped_tab_")}
+    circuit_ids = {cid for cid in snapshot.circuits if not is_unmapped_tab(cid)}
     entity_map = _build_circuit_entity_map(circuit_ids, all_entities)
     # The `power` role of every circuit, for the `solar` blocks below.
     circuit_power = {cid: roles["power"] for cid, roles in entity_map.items() if "power" in roles}
