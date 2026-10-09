@@ -124,7 +124,8 @@ def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircui
         )
         points.update(dict.fromkeys(members, point))
     for circuit_id, circuit in snapshot.circuits.items():
-        if circuit_id not in points:
+        # A meter outside the panel has no breaker to judge it against.
+        if circuit_id not in points and not circuit.measures_outside_panel:
             points[circuit_id] = MonitoredCircuit(
                 point_id=circuit_id,
                 members=(circuit_id,),
@@ -395,6 +396,10 @@ class CurrentMonitor:
         all_circuit_ids = set(self._circuit_states.keys())
         if snapshot:
             all_circuit_ids |= set(snapshot.circuits)
+            # A meter outside the panel has no breaker to monitor against.
+            all_circuit_ids -= {
+                cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
+            }
         points = monitored_circuits(snapshot) if snapshot else {}
 
         for cid in all_circuit_ids:
