@@ -280,6 +280,11 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if circuit.pcs_priority is not None:
             attributes["pcs_priority"] = circuit.pcs_priority
 
+        # The protections the breaker provides, where it says: a breaker that
+        # does not list them has not said it provides none.
+        if circuit.protection_functions is not None:
+            attributes["protection_functions"] = list(circuit.protection_functions)
+
         attributes.update(construct_shared_with_attributes(self.coordinator.data, circuit))
         return attributes
 

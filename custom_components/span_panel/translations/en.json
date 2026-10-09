@@ -342,6 +342,15 @@
       "main_breaker_rating": {
         "name": "Main Breaker Rating"
       },
+      "upstream_protection_rating": {
+        "name": "Upstream Protection Rating"
+      },
+      "busbar_current": {
+        "name": "Busbar Current"
+      },
+      "frequency": {
+        "name": "Frequency"
+      },
       "main_meter_consumed_energy": {
         "name": "Main Meter Consumed Energy"
       },

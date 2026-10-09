@@ -342,6 +342,15 @@
       "main_breaker_rating": {
         "name": "主幹ブレーカー定格"
       },
+      "upstream_protection_rating": {
+        "name": "上流保護定格"
+      },
+      "busbar_current": {
+        "name": "母線電流"
+      },
+      "frequency": {
+        "name": "周波数"
+      },
       "main_meter_consumed_energy": {
         "name": "主幹メーター消費エネルギー"
       },

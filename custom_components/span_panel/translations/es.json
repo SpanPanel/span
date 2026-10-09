@@ -342,6 +342,15 @@
       "main_breaker_rating": {
         "name": "Capacidad del Interruptor Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Capacidad de la Protección Aguas Arriba"
+      },
+      "busbar_current": {
+        "name": "Corriente de la Barra"
+      },
+      "frequency": {
+        "name": "Frecuencia"
+      },
       "main_meter_consumed_energy": {
         "name": "Energía Consumida del Medidor Principal"
       },

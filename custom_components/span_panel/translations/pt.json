@@ -342,6 +342,15 @@
       "main_breaker_rating": {
         "name": "Classificação do Disjuntor Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Classificação da Proteção a Montante"
+      },
+      "busbar_current": {
+        "name": "Corrente do Barramento"
+      },
+      "frequency": {
+        "name": "Frequência"
+      },
       "main_meter_consumed_energy": {
         "name": "Energia Consumida pelo Medidor Principal"
       },

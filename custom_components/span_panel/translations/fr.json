@@ -342,6 +342,15 @@
       "main_breaker_rating": {
         "name": "Calibre du Disjoncteur Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Calibre de la Protection Amont"
+      },
+      "busbar_current": {
+        "name": "Courant du Jeu de Barres"
+      },
+      "frequency": {
+        "name": "Fréquence"
+      },
       "main_meter_consumed_energy": {
         "name": "Énergie Consommée du Compteur Principal"
       },
