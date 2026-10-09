@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 import enum
 import logging
+import math
 import ssl
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,7 @@ from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelConnectionError,
     SpanPanelPassphraseUnavailableError,
+    SpanPanelRateLimitError,
     SpanPanelServerError,
     SpanPanelTimeoutError,
     SpanPanelValidationError,
@@ -88,6 +90,7 @@ from .const import (
     EntityNamingPattern,
 )
 from .control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL
+from .hardware_guard import registers_by_passphrase_only
 from .options import (
     ALLOW_CONTEXTLESS_CONTROL,
     ENERGY_DISPLAY_PRECISION,
@@ -98,6 +101,18 @@ if TYPE_CHECKING:
     from .runtime import SpanPanelConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _rate_limited(err: SpanPanelRateLimitError) -> tuple[str, dict[str, str]]:
+    """Return the error key and placeholders for a registration the panel rate-limited.
+
+    The wait the panel asked for, rounded up to whole seconds, where it named
+    one; a second key where it did not, so no message ever shows an empty
+    placeholder.
+    """
+    if err.retry_after_s is None or err.retry_after_s <= 0:
+        return "rate_limited_no_retry_after", {}
+    return "rate_limited", {"retry_after": str(math.ceil(err.retry_after_s))}
 
 
 class ConfigFlowError(Exception):
@@ -190,6 +205,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_broker_username: str | None = None
         self._v2_broker_password: str | None = None
         self._v2_panel_serial: str | None = None
+        # The REST `hardwareVersion` the panel reported to detection, which
+        # decides whether proximity is offered. None until detection answers,
+        # and on firmware that does not publish it.
+        self._hardware_version: str | None = None
         self._http_port: int = 80
         self._https_port: int = DEFAULT_HTTPS_PORT
         # Reconfigure's own copy, kept apart from `_https_port` because that one
@@ -510,6 +529,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             self.api_version = "v2"
             self.host = discovery_info.host
             self.serial_number = detection.status_info.serial_number
+            self._hardware_version = detection.status_info.hardware_version
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
             self.context = {
                 **self.context,
@@ -578,6 +598,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Use the serial from the panel (prefer detected over discovery hint)
         panel_serial = detection.status_info.serial_number or serial
+        self._hardware_version = detection.status_info.hardware_version
         if not panel_serial:
             return self.async_abort(reason="no_serial")
 
@@ -667,6 +688,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # Serial comes from detection
             self.host = host
             self.serial_number = detection.status_info.serial_number
+            self._hardware_version = detection.status_info.hardware_version
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
             self.context = {
                 **self.context,
@@ -717,6 +739,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # v2 reauth: set up flow state manually and show confirmation
             self.host = host
             self.serial_number = detection.status_info.serial_number
+            self._hardware_version = detection.status_info.hardware_version
             self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
             self._is_flow_setup = True
             self.context["title_placeholders"] = {"host": host}
@@ -740,9 +763,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Show reauth context and let user choose authentication method."""
         return self.async_show_menu(
             step_id="reauth_confirm",
-            menu_options=["auth_passphrase", "auth_proximity"],
+            menu_options=self._auth_methods(),
             description_placeholders={"host": self.host or ""},
         )
+
+    def _auth_methods(self) -> list[str]:
+        """Return the authentication steps this panel accepts: proximity only where it is supported."""
+        if registers_by_passphrase_only(self._hardware_version):
+            return ["auth_passphrase"]
+        return ["auth_passphrase", "auth_proximity"]
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
@@ -766,11 +795,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_choose_v2_auth(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose v2 authentication method: passphrase or proximity."""
-        return self.async_show_menu(
-            step_id="choose_v2_auth",
-            menu_options=["auth_passphrase", "auth_proximity"],
-        )
+        """Choose v2 authentication method: passphrase or proximity.
+
+        A panel that registers by passphrase only goes straight to the
+        passphrase: a menu with one choice is a question with one answer.
+        """
+        methods = self._auth_methods()
+        if methods == ["auth_passphrase"]:
+            return await self.async_step_auth_passphrase()
+        return self.async_show_menu(step_id="choose_v2_auth", menu_options=methods)
 
     async def async_step_auth_proximity(
         self,
@@ -817,6 +850,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             result = await validate_v2_proximity(self._rest_host, transport)
         except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
+        except SpanPanelRateLimitError as err:
+            return self._async_show_proximity_error(*_rate_limited(err))
         except SpanPanelPassphraseUnavailableError:
             return self._async_show_proximity_error("passphrase_unavailable")
         except (SpanPanelServerError, SpanPanelTimeoutError):
@@ -825,7 +860,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._store_v2_auth_result(result)
         return await self._async_finalize_v2_auth()
 
-    def _async_show_proximity_error(self, reason: str) -> ConfigFlowResult:
+    def _async_show_proximity_error(
+        self, reason: str, placeholders: Mapping[str, str] | None = None
+    ) -> ConfigFlowResult:
         """Show why a proven proximity still did not register, with a retry.
 
         A form rather than the instruction menu, because a menu cannot carry an
@@ -838,6 +875,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             step_id="auth_proximity_confirm",
             data_schema=vol.Schema({}),
             errors={"base": reason},
+            description_placeholders=placeholders,
         )
 
     async def async_step_auth_passphrase(
@@ -871,6 +909,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 step_id="auth_passphrase",
                 data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
                 errors={"base": "invalid_auth"},
+            )
+        except SpanPanelRateLimitError as err:
+            # Not `invalid_auth`: the panel refused to judge the passphrase at
+            # all, so the one the user typed may be right.
+            reason, placeholders = _rate_limited(err)
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": reason},
+                description_placeholders=placeholders,
             )
         except SpanPanelPassphraseUnavailableError:
             # Not `invalid_auth`: the panel could not read its own passphrase,

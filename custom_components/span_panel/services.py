@@ -37,6 +37,7 @@ from .const import (
 from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
+from .hardware_guard import async_read_hardware_version, registers_by_passphrase_only
 from .id_builder import build_circuit_unique_id, match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
@@ -75,8 +76,23 @@ def rotation_in_progress(hass: HomeAssistant, entry_id: str) -> bool:
     return entry_id in hass.data.get(_ROTATIONS_IN_PROGRESS, set())
 
 
-def _rotation_outcome_unknown(host: str) -> HomeAssistantError:
-    """Return the error for a rotation whose outcome the panel did not report."""
+def _rotation_outcome_unknown(host: str, passphrase_only: bool = False) -> HomeAssistantError:
+    """Return the error for a rotation whose outcome the panel did not report.
+
+    A panel that registers by passphrase only offers no proof of proximity, so
+    its message sends the user to the passphrase the SPAN app shows instead.
+    """
+    if passphrase_only:
+        return HomeAssistantError(
+            f"The SPAN Panel at {host} did not report the outcome of the credential "
+            "rotation. The panel passphrase and broker password may have changed. "
+            "Run the rotation again to get a passphrase you know. If the panel "
+            "refuses that rotation, reauthenticate the integration with the "
+            "passphrase shown in the SPAN app.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_outcome_unknown_passphrase_only",
+            translation_placeholders={"host": host},
+        )
     return HomeAssistantError(
         f"The SPAN Panel at {host} did not report the outcome of the credential "
         "rotation. The panel passphrase and broker password may have changed. "
@@ -895,6 +911,13 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
                 translation_key="rotate_credentials_ca_unusable",
             ) from err
 
+        # Read first, while the panel is known to be answering: it only chooses
+        # which recovery an unknown outcome describes, and fails open to the
+        # message every panel had before.
+        passphrase_only = registers_by_passphrase_only(
+            await async_read_hardware_version(hass, host, transport)
+        )
+
         try:
             rotation = await rotate_passphrase(
                 host,
@@ -924,7 +947,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             if (
                 isinstance(err, SpanPanelServerError) and err.status_code != 503
             ) or err.status_code == 200:
-                raise _rotation_outcome_unknown(host) from err
+                raise _rotation_outcome_unknown(host, passphrase_only) from err
             raise ServiceValidationError(
                 f"The SPAN panel at {host} did not complete the rotation.",
                 translation_domain=DOMAIN,
@@ -933,7 +956,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             ) from err
         except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
             if _rotation_may_have_reached_panel(err):
-                raise _rotation_outcome_unknown(host) from err
+                raise _rotation_outcome_unknown(host, passphrase_only) from err
             # The request never left, so the entry still holds the credential
             # the panel still accepts.
             raise ServiceValidationError(

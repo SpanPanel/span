@@ -24,6 +24,8 @@
       "invalid_auth": "Authentification invalide",
       "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
       "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
+      "rate_limited": "Le panneau limite les tentatives d'enregistrement. Réessayez dans {retry_after} secondes.",
+      "rate_limited_no_retry_after": "Le panneau limite les tentatives d'enregistrement. Patientez une minute, puis réessayez.",
       "proximity_failed": "Proximité non prouvée. Veuillez ouvrir et fermer la porte du panneau 3 fois et réessayer.",
       "unknown": "Erreur inattendue"
     },
@@ -187,6 +189,11 @@
         "name": "Forçage GFE : Connecté au Réseau"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "Verrou EVSE"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "Limite de Courant de Charge EVSE"
@@ -337,6 +344,15 @@
       "main_breaker_rating": {
         "name": "Calibre du Disjoncteur Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Calibre de la Protection Amont"
+      },
+      "busbar_current": {
+        "name": "Courant du Jeu de Barres"
+      },
+      "frequency": {
+        "name": "Fréquence"
+      },
       "main_meter_consumed_energy": {
         "name": "Énergie Consommée du Compteur Principal"
       },
@@ -470,6 +486,12 @@
     "evse_charge_limit_not_delivered": {
       "message": "La limite de courant de charge du chargeur {charger} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la limite est donc inchangée."
     },
+    "evse_lock_failed": {
+      "message": "Échec du réglage du verrou du chargeur {charger} : {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "La commande de verrouillage du chargeur {charger} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, le verrou est donc inchangé."
+    },
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."
     },
@@ -541,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Relancez le renouvellement pour obtenir une phrase secrète connue. Si le panneau refuse ce renouvellement, réauthentifiez l'intégration ; si l'ancienne phrase secrète n'est plus acceptée, utilisez la preuve de proximité."
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Relancez le renouvellement pour obtenir une phrase secrète connue. Si le panneau refuse ce renouvellement, réauthentifiez l'intégration avec la phrase secrète affichée dans l'application SPAN."
     },
     "rotate_credentials_requires_admin": {
       "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."

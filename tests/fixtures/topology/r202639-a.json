@@ -1,0 +1,114 @@
+{
+  "circuits": {
+    "circuit-3": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_7_bathroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_7_bathroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_7_bathroom_outlets_current",
+        "net_energy": "sensor.span_panel_7_bathroom_outlets_net_energy",
+        "power": "sensor.span_panel_7_bathroom_outlets_power",
+        "produced_energy": "sensor.span_panel_7_bathroom_outlets_produced_energy",
+        "select": "select.span_panel_7_bathroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_7_bathroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "7 Bathroom / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14
+      ],
+      "voltage": 120.0
+    },
+    "circuit-4": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_6_kitchen_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_6_kitchen_outlets_consumed_energy",
+        "current": "sensor.span_panel_6_kitchen_outlets_current",
+        "net_energy": "sensor.span_panel_6_kitchen_outlets_net_energy",
+        "power": "sensor.span_panel_6_kitchen_outlets_power",
+        "produced_energy": "sensor.span_panel_6_kitchen_outlets_produced_energy",
+        "select": "select.span_panel_6_kitchen_outlets_circuit_priority",
+        "switch": "switch.span_panel_6_kitchen_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "6 Kitchen / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        16
+      ],
+      "voltage": 120.0
+    },
+    "remote-ct-3": {
+      "always_on": null,
+      "breaker_rating_a": null,
+      "device_type": "circuit",
+      "entities": {
+        "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",
+        "current": "sensor.span_panel_remote_ct_3_current",
+        "net_energy": "sensor.span_panel_remote_ct_3_net_energy",
+        "power": "sensor.span_panel_remote_ct_3_power",
+        "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": null,
+      "is_user_controllable": false,
+      "name": "Remote CT 3",
+      "outside_panel": true,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "UNKNOWN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [],
+      "voltage": null
+    }
+  },
+  "config_entry_id": "entry-r202639-a",
+  "device_id": "xg-3940-9ooto",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 14,
+  "last_position": 16,
+  "panel_device_id": "xg-3940-9ooto",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 0,
+  "serial": "xg-3940-9ooto",
+  "sub_devices": {}
+}

@@ -1,0 +1,534 @@
+{
+  "circuits": {
+    "circuit-17": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_1_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_1_consumed_energy",
+        "current": "sensor.span_panel_breaker_1_current",
+        "net_energy": "sensor.span_panel_breaker_1_net_energy",
+        "power": "sensor.span_panel_breaker_1_power",
+        "produced_energy": "sensor.span_panel_breaker_1_produced_energy",
+        "select": "select.span_panel_breaker_1_circuit_priority",
+        "switch": "switch.span_panel_breaker_1_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-1",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9
+      ],
+      "voltage": 120.0
+    },
+    "circuit-18": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_2_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_2_consumed_energy",
+        "current": "sensor.span_panel_breaker_2_current",
+        "net_energy": "sensor.span_panel_breaker_2_net_energy",
+        "power": "sensor.span_panel_breaker_2_power",
+        "produced_energy": "sensor.span_panel_breaker_2_produced_energy",
+        "select": "select.span_panel_breaker_2_circuit_priority",
+        "switch": "switch.span_panel_breaker_2_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-2",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10
+      ],
+      "voltage": 120.0
+    },
+    "circuit-19": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_3_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_3_consumed_energy",
+        "current": "sensor.span_panel_breaker_3_current",
+        "net_energy": "sensor.span_panel_breaker_3_net_energy",
+        "power": "sensor.span_panel_breaker_3_power",
+        "produced_energy": "sensor.span_panel_breaker_3_produced_energy",
+        "select": "select.span_panel_breaker_3_circuit_priority",
+        "switch": "switch.span_panel_breaker_3_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-3",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        11
+      ],
+      "voltage": 120.0
+    },
+    "circuit-20": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_4_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_4_consumed_energy",
+        "current": "sensor.span_panel_breaker_4_current",
+        "net_energy": "sensor.span_panel_breaker_4_net_energy",
+        "power": "sensor.span_panel_breaker_4_power",
+        "produced_energy": "sensor.span_panel_breaker_4_produced_energy",
+        "select": "select.span_panel_breaker_4_circuit_priority",
+        "switch": "switch.span_panel_breaker_4_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-4",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        12
+      ],
+      "voltage": 120.0
+    },
+    "circuit-21": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_5_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_5_consumed_energy",
+        "current": "sensor.span_panel_breaker_5_current",
+        "net_energy": "sensor.span_panel_breaker_5_net_energy",
+        "power": "sensor.span_panel_breaker_5_power",
+        "produced_energy": "sensor.span_panel_breaker_5_produced_energy",
+        "select": "select.span_panel_breaker_5_circuit_priority",
+        "switch": "switch.span_panel_breaker_5_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-5",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13
+      ],
+      "voltage": 120.0
+    },
+    "circuit-22": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_6_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_6_consumed_energy",
+        "current": "sensor.span_panel_breaker_6_current",
+        "net_energy": "sensor.span_panel_breaker_6_net_energy",
+        "power": "sensor.span_panel_breaker_6_power",
+        "produced_energy": "sensor.span_panel_breaker_6_produced_energy",
+        "select": "select.span_panel_breaker_6_circuit_priority",
+        "switch": "switch.span_panel_breaker_6_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-6",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14
+      ],
+      "voltage": 120.0
+    },
+    "circuit-23": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_7_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_7_consumed_energy",
+        "current": "sensor.span_panel_breaker_7_current",
+        "net_energy": "sensor.span_panel_breaker_7_net_energy",
+        "power": "sensor.span_panel_breaker_7_power",
+        "produced_energy": "sensor.span_panel_breaker_7_produced_energy",
+        "select": "select.span_panel_breaker_7_circuit_priority",
+        "switch": "switch.span_panel_breaker_7_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-7",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        15
+      ],
+      "voltage": 120.0
+    },
+    "circuit-24": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_8_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_8_consumed_energy",
+        "current": "sensor.span_panel_breaker_8_current",
+        "net_energy": "sensor.span_panel_breaker_8_net_energy",
+        "power": "sensor.span_panel_breaker_8_power",
+        "produced_energy": "sensor.span_panel_breaker_8_produced_energy",
+        "select": "select.span_panel_breaker_8_circuit_priority",
+        "switch": "switch.span_panel_breaker_8_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-8",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        16
+      ],
+      "voltage": 120.0
+    },
+    "circuit-25": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_9_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_9_consumed_energy",
+        "current": "sensor.span_panel_breaker_9_current",
+        "net_energy": "sensor.span_panel_breaker_9_net_energy",
+        "power": "sensor.span_panel_breaker_9_power",
+        "produced_energy": "sensor.span_panel_breaker_9_produced_energy",
+        "select": "select.span_panel_breaker_9_circuit_priority",
+        "switch": "switch.span_panel_breaker_9_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-9",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17
+      ],
+      "voltage": 120.0
+    },
+    "circuit-26": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_10_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_10_consumed_energy",
+        "current": "sensor.span_panel_breaker_10_current",
+        "net_energy": "sensor.span_panel_breaker_10_net_energy",
+        "power": "sensor.span_panel_breaker_10_power",
+        "produced_energy": "sensor.span_panel_breaker_10_produced_energy",
+        "select": "select.span_panel_breaker_10_circuit_priority",
+        "switch": "switch.span_panel_breaker_10_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-10",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        18
+      ],
+      "voltage": 120.0
+    },
+    "circuit-27": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_11_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_11_consumed_energy",
+        "current": "sensor.span_panel_breaker_11_current",
+        "net_energy": "sensor.span_panel_breaker_11_net_energy",
+        "power": "sensor.span_panel_breaker_11_power",
+        "produced_energy": "sensor.span_panel_breaker_11_produced_energy",
+        "select": "select.span_panel_breaker_11_circuit_priority",
+        "switch": "switch.span_panel_breaker_11_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-11",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        19
+      ],
+      "voltage": 120.0
+    },
+    "circuit-28": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_12_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_12_consumed_energy",
+        "current": "sensor.span_panel_breaker_12_current",
+        "net_energy": "sensor.span_panel_breaker_12_net_energy",
+        "power": "sensor.span_panel_breaker_12_power",
+        "produced_energy": "sensor.span_panel_breaker_12_produced_energy",
+        "select": "select.span_panel_breaker_12_circuit_priority",
+        "switch": "switch.span_panel_breaker_12_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-12",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        20
+      ],
+      "voltage": 120.0
+    },
+    "circuit-29": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_13_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_13_consumed_energy",
+        "current": "sensor.span_panel_breaker_13_current",
+        "net_energy": "sensor.span_panel_breaker_13_net_energy",
+        "power": "sensor.span_panel_breaker_13_power",
+        "produced_energy": "sensor.span_panel_breaker_13_produced_energy",
+        "select": "select.span_panel_breaker_13_circuit_priority",
+        "switch": "switch.span_panel_breaker_13_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-13",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        21
+      ],
+      "voltage": 120.0
+    },
+    "circuit-30": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_14_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_14_consumed_energy",
+        "current": "sensor.span_panel_breaker_14_current",
+        "net_energy": "sensor.span_panel_breaker_14_net_energy",
+        "power": "sensor.span_panel_breaker_14_power",
+        "produced_energy": "sensor.span_panel_breaker_14_produced_energy",
+        "select": "select.span_panel_breaker_14_circuit_priority",
+        "switch": "switch.span_panel_breaker_14_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-14",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22
+      ],
+      "voltage": 120.0
+    },
+    "circuit-31": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_15_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_15_consumed_energy",
+        "current": "sensor.span_panel_breaker_15_current",
+        "net_energy": "sensor.span_panel_breaker_15_net_energy",
+        "power": "sensor.span_panel_breaker_15_power",
+        "produced_energy": "sensor.span_panel_breaker_15_produced_energy",
+        "select": "select.span_panel_breaker_15_circuit_priority",
+        "switch": "switch.span_panel_breaker_15_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-15",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        23
+      ],
+      "voltage": 120.0
+    },
+    "circuit-32": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_breaker_16_breaker_rating",
+        "consumed_energy": "sensor.span_panel_breaker_16_consumed_energy",
+        "current": "sensor.span_panel_breaker_16_current",
+        "net_energy": "sensor.span_panel_breaker_16_net_energy",
+        "power": "sensor.span_panel_breaker_16_power",
+        "produced_energy": "sensor.span_panel_breaker_16_produced_energy",
+        "select": "select.span_panel_breaker_16_circuit_priority",
+        "switch": "switch.span_panel_breaker_16_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "breaker-16",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        24
+      ],
+      "voltage": 120.0
+    },
+    "remote-ct-3": {
+      "always_on": null,
+      "breaker_rating_a": null,
+      "device_type": "circuit",
+      "entities": {
+        "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",
+        "current": "sensor.span_panel_remote_ct_3_current",
+        "net_energy": "sensor.span_panel_remote_ct_3_net_energy",
+        "power": "sensor.span_panel_remote_ct_3_power",
+        "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": null,
+      "is_user_controllable": false,
+      "name": "Remote CT 3",
+      "outside_panel": true,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "UNKNOWN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [],
+      "voltage": null
+    }
+  },
+  "config_entry_id": "entry-r202639-b",
+  "device_id": "xg-1155-18fkf",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 9,
+  "last_position": 24,
+  "panel_device_id": "xg-1155-18fkf",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 16,
+  "serial": "xg-1155-18fkf",
+  "sub_devices": {}
+}

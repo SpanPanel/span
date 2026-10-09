@@ -870,15 +870,28 @@ wheels = [
 ]
 
 [[package]]
+name = "ebus-panel-sim"
+version = "0.10.0b2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ebus-sdk" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/95/a547725c86f7bbf86aaf69e25eaacbb79c95a4de8f6ae9d579b0bc266b51/ebus_panel_sim-0.10.0b2.tar.gz", hash = "sha256:8de940613c6de17f0db896e8721bbb7e1acaa300a9db8672068198cdbcce428a", size = 332231, upload-time = "2026-10-09T18:25:11.778Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/1b/5ca36546226d8d3ab4cff29a6eca6eb6adad38b2f06562992a5919a63391/ebus_panel_sim-0.10.0b2-py3-none-any.whl", hash = "sha256:fde9462a548dba0f95b5eccc10786ed5d48990c470a3a3ec90fe7a7bf58b1b68", size = 206814, upload-time = "2026-10-09T18:25:10.351Z" },
+]
+
+[[package]]
 name = "ebus-sdk"
-version = "0.19.0"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ebus-mqtt-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/45/044c4cd557850d7dc76e7ce664fedb5ce3ee4dbc2a58e97fb17e24991993/ebus_sdk-0.19.0.tar.gz", hash = "sha256:7987d3cae7c86e31656df9cd6e31e5a2ef950c757ba24f433adf019ca9aaa51c", size = 151155, upload-time = "2026-08-07T14:42:08.602Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/a5/2789cbd4d7a84cabaa6d8cf82cb04c66b35abcb1dfee22b1e9c744dd24e7/ebus_sdk-0.22.0.tar.gz", hash = "sha256:cf31a671cec3737ee17a60e36f444b86ed619382f288a52e8f3727472335386c", size = 200217, upload-time = "2026-08-21T01:17:54.237Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/86/aad23b5bd10abb72c3d6bc659ffd67f6b19384aa9b5507050df707ee6cbb/ebus_sdk-0.19.0-py3-none-any.whl", hash = "sha256:33aeec8d61b88373b8d1902bb8338449644d0d5aa4d75835567ad76ffebefd10", size = 95231, upload-time = "2026-08-07T14:42:07.211Z" },
+    { url = "https://files.pythonhosted.org/packages/32/12/d74a67cd9fe615eca54be0266fcf63321cca3997209f0da4aa72d7215d3e/ebus_sdk-0.22.0-py3-none-any.whl", hash = "sha256:8097663199856c0b5f09c5838a1817dda14725f30c45b2bae9f628bb5cac1647", size = 114664, upload-time = "2026-08-21T01:17:52.671Z" },
 ]
 
 [[package]]
@@ -2559,6 +2572,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
+    { name = "ebus-panel-sim" },
     { name = "isort" },
     { name = "mypy" },
     { name = "prek" },
@@ -2586,6 +2600,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", extras = ["toml"], specifier = "==1.9.4" },
+    { name = "ebus-panel-sim", specifier = "==0.10.0b2" },
     { name = "isort" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "prek", specifier = ">=0.5.4" },
@@ -2604,7 +2619,7 @@ dev = [
 
 [[package]]
 name = "span-panel-api"
-version = "3.7.0b1"
+version = "3.8.0b1"
 source = { editable = "../../span/span-panel-api" }
 dependencies = [
     { name = "httpx" },
@@ -2657,7 +2672,7 @@ requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-ap
 
 [[package]]
 name = "span-panel-api-schema-1"
-version = "1.3.0b1"
+version = "1.4.0b1"
 source = { editable = "../../span/span-panel-api/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },

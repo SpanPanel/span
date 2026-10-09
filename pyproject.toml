@@ -8,13 +8,13 @@ readme = "README.md"
 requires-python = ">=3.14.3,<3.15"
 dependencies = [
     "homeassistant==2026.9.4",
-    "span-panel-api==3.7.0b1",
+    "span-panel-api==3.8.0b1",
     # Separate distributions, not dependencies of the bootstrap: adapters are found
     # through the `span_panel_api.schema_adapters` entry-point group, so each one has
     # to be installed for discovery to see it. manifest.json carries the same three,
     # and that is the list Home Assistant actually reads.
     "span-panel-api-schema-0==1.3.0b1",
-    "span-panel-api-schema-1==1.3.0b1",
+    "span-panel-api-schema-1==1.4.0b1",
 ]
 
 [dependency-groups]
@@ -37,6 +37,11 @@ dev = [
     # bump to 0.13.358 pinned 2026.9.0b0 and made the pair unresolvable, which
     # CI's re-lock from PyPI catches and a stale local venv does not.
     "pytest-homeassistant-custom-component==0.13.367",
+    # The reference captures the replay tests read (tests/captures_replay.py) are
+    # this package's data, so the exact pin is the record of which captures they
+    # are. Test-only: never in manifest.json, since Home Assistant must not
+    # install it.
+    "ebus-panel-sim==0.10.0b2",
     "isort",
     "vulture>=2.16",
 ]

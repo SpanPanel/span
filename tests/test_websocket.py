@@ -806,6 +806,10 @@ class TestHandlePanelTopology:
         assert set(result["circuits"]["uuid_kitchen"]) == {
             "tabs",
             "name",
+            "outside_panel",
+            "is_generation",
+            "shared_meter_group",
+            "shared_relay_group",
             "voltage",
             "device_type",
             "relay_state",

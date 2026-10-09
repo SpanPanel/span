@@ -210,7 +210,7 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
 def test_flat_firmware_publishes_no_topology_it_was_never_told() -> None:
     """The flat adapter never writes the field, so its value is a library default.
 
-    `lugs_at_service_entrance` is a plain `bool` defaulting to True and
+    `lugs_at_service_entrance` defaults to True and
     `span_panel_api_schema_0` does not reference it, so a flat panel with a BESS
     ahead of its main lugs -- the very topology the attribute exists to report --
     would publish `at_service_entrance: True`. That is not a wrong reading, which
@@ -258,12 +258,12 @@ def test_the_topology_attribute_reports_what_the_parent_child_panel_published() 
 def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None:
     """Omission must turn on where the value came from, never on what it is.
 
-    Republishing the capture without the upstream lugs' `fed-by-device-id` makes
-    a panel that *is* at the service entrance, and schema_1 reads True off it.
-    Suppressing True as "probably a default" would lose that.
+    Republishing the capture with the upstream lugs' `fed-by-device-id` empty
+    makes a panel that *is* at the service entrance, and schema_1 reads True off
+    it. Suppressing True as "probably a default" would lose that.
     """
     tree = schema_one_tree()
-    del tree["lugs-upstream"]["connection/fed-by-device-id"]
+    tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = schema_one_snapshot(tree)
     coordinator = _make_coordinator(snapshot, schema_major="schema_1")
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
@@ -272,6 +272,25 @@ def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None
     sensor._update_native_value()
 
     assert sensor.extra_state_attributes["at_service_entrance"] is True
+
+
+def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> None:
+    """Declared and not yet published, the feed may still name a device.
+
+    schema_1 reads that as None rather than either answer, and the attribute
+    is omitted, as it is wherever the value is not a reading.
+    """
+    tree = schema_one_tree()
+    del tree["lugs-upstream"]["connection/fed-by-device-id"]
+    snapshot = schema_one_snapshot(tree)
+    assert snapshot.lugs_at_service_entrance is None
+    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
+
+    sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
+    sensor._update_native_value()
+
+    assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
 def test_the_topology_attribute_is_omitted_before_an_adapter_is_known() -> None:

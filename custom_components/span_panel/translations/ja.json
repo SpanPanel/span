@@ -24,6 +24,8 @@
       "invalid_auth": "認証が無効です",
       "panel_not_ready": "パネルはまだ Home Assistant を登録する準備ができていません。通常はまだ起動中であることが原因です。しばらく待ってから、もう一度お試しください。",
       "passphrase_unavailable": "パネルのパスフレーズがまだ利用できないため、パネルは認証情報を発行できません。入力したパスフレーズが間違っているという意味ではありません。数分待ってから、もう一度お試しください。",
+      "rate_limited": "パネルが登録の試行を制限しています。{retry_after} 秒後にもう一度お試しください。",
+      "rate_limited_no_retry_after": "パネルが登録の試行を制限しています。1 分ほど待ってから、もう一度お試しください。",
       "proximity_failed": "近接が証明されませんでした。パネルのドアを3回開閉してから、もう一度お試しください。",
       "unknown": "予期しないエラー"
     },
@@ -187,6 +189,11 @@
         "name": "GFEオーバーライド：系統接続"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "EVSEロック"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "EVSE充電電流上限"
@@ -337,6 +344,15 @@
       "main_breaker_rating": {
         "name": "主幹ブレーカー定格"
       },
+      "upstream_protection_rating": {
+        "name": "上流保護定格"
+      },
+      "busbar_current": {
+        "name": "母線電流"
+      },
+      "frequency": {
+        "name": "周波数"
+      },
       "main_meter_consumed_energy": {
         "name": "主幹メーター消費エネルギー"
       },
@@ -470,6 +486,12 @@
     "evse_charge_limit_not_delivered": {
       "message": "充電器 {charger} の充電電流上限をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、上限は変わっていません。"
     },
+    "evse_lock_failed": {
+      "message": "充電器 {charger} のロックを設定できませんでした: {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "充電器 {charger} のロック操作をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、ロックは変わっていません。"
+    },
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
     },
@@ -541,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "{host} の SPAN Panel は認証情報のローテーション結果を報告しませんでした。パネルのパスフレーズとブローカーのパスワードが変更されている可能性があります。もう一度ローテーションを実行すると、確実に把握できるパスフレーズが得られます。パネルがそのローテーションを拒否した場合は、統合を再認証してください。以前のパスフレーズが受け付けられない場合は、近接証明を使用してください。"
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "{host} の SPAN Panel は認証情報のローテーション結果を報告しませんでした。パネルのパスフレーズとブローカーのパスワードが変更されている可能性があります。もう一度ローテーションを実行すると、確実に把握できるパスフレーズが得られます。パネルがそのローテーションを拒否した場合は、SPAN アプリに表示されるパスフレーズで統合を再認証してください。"
     },
     "rotate_credentials_requires_admin": {
       "message": "SPAN Panel の認証情報をローテーションできるのは Home Assistant の管理者だけです。"
