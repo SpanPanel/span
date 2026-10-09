@@ -547,6 +547,12 @@
     },
     "rotate_credentials_requires_user": {
       "message": "Le renouvellement des identifiants doit être lancé par un administrateur depuis l'interface utilisateur. Les automatisations, les scripts et les autres intégrations ne peuvent pas l'appeler."
+    },
+    "unvalidated_hardware": {
+      "message": "La version matérielle {version} avec le modèle {model} n'a pas été validée avec cette version de l'intégration."
+    },
+    "unvalidated_hardware_no_model": {
+      "message": "La version matérielle {version} avec un modèle inconnu n'a pas été validée avec cette version de l'intégration."
     }
   },
   "options": {
@@ -940,6 +946,14 @@
     "panel_leaf_name_mismatch_no_names": {
       "title": "Le SPAN Panel n'est pas à l'adresse configurée",
       "description": "{panel} est configuré comme **{host}**, mais le certificat qu'il présente ne nomme aucune adresse ; il n'y a donc aucune adresse vers laquelle pointer l'entrée. C'est un défaut du certificat du panneau et non de l'adresse que vous avez configurée, et cela se résout généralement lorsque le panneau le régénère — un redémarrage du panneau est la manière habituelle.\n\nSi cela persiste, utilisez *Reconfigurer* sur l'entrée SPAN Panel pour rétablir la connexion. L'intégration continue de réessayer entre-temps et se rétablira d'elle-même si le panneau nomme à nouveau {host}."
+    },
+    "unvalidated_hardware": {
+      "title": "Matériel du SPAN Panel non validé avec cette version",
+      "description": "La version matérielle {version} avec le modèle {model} n'a pas été validée avec cette version de l'intégration. La configuration est arrêtée et aucune entité n'est créée pour ce panneau."
+    },
+    "unvalidated_hardware_no_model": {
+      "title": "Matériel du SPAN Panel non validé avec cette version",
+      "description": "La version matérielle {version} avec un modèle inconnu n'a pas été validée avec cette version de l'intégration. La configuration est arrêtée et aucune entité n'est créée pour ce panneau."
     }
   }
 }
