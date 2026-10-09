@@ -515,7 +515,7 @@
       "voltage": 120
     }
   },
-  "config_entry_id": "entry-main32",
+  "config_entry_id": "entry-main32_r202633",
   "device_id": "nt-0000-panel",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202633/02",
