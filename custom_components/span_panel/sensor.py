@@ -30,7 +30,6 @@ from .helpers import (
     has_power_flows,
     has_pv,
     has_shed_forecast,
-    is_unmapped_tab,
     resolve_evse_display_suffix,
     resolve_pv_display_suffixes,
 )
@@ -261,11 +260,9 @@ def create_circuit_sensors(
     # Build EVSE device info so feed circuit sensors land on the charger device
     evse_device_map = _build_evse_device_info_map(coordinator, snapshot)
 
-    # Add circuit sensors for every circuit, skipping empty positions
-    named_circuits = [cid for cid in snapshot.circuits if not is_unmapped_tab(cid)]
     circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
 
-    for circuit_id in named_circuits:
+    for circuit_id in snapshot.circuits:
         device_override = evse_device_map.get(circuit_id)
         circuit_data = snapshot.circuits.get(circuit_id)
 

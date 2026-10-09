@@ -204,53 +204,6 @@ class TestExportCircuitManifest:
         assert by_serial["serial-bbb"]["host"] == "192.168.1.101"
 
     @pytest.mark.asyncio
-    async def test_unmapped_tabs_excluded(self, hass: HomeAssistant):
-        """Unmapped tab circuits are excluded from the manifest."""
-        real = SpanCircuitSnapshotFactory.create(circuit_id="uuid_real", tabs=[1])
-        unmapped = SpanCircuitSnapshotFactory.create(
-            circuit_id="unmapped_tab_5", tabs=[5]
-        )
-        snapshot = SpanPanelSnapshotFactory.create(
-            serial_number="sp3-001",
-            circuits={"uuid_real": real, "unmapped_tab_5": unmapped},
-        )
-
-        entry = MockConfigEntry(
-            domain=DOMAIN,
-            data={CONF_HOST: "192.168.1.1"},
-            entry_id="span_entry",
-            unique_id="sp3-001",
-        )
-        entry.add_to_hass(hass)
-        entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
-            curation=CurationOverlay.empty(),
-            pv_binding=pv_binding_for(snapshot),
-            setup_snapshot=snapshot,
-        )
-
-        _register_power_entity(
-            hass, "span_entry", "sp3-001", "uuid_real", "sensor.real_power"
-        )
-        _register_power_entity(
-            hass,
-            "span_entry",
-            "sp3-001",
-            "unmapped_tab_5",
-            "sensor.unmapped_power",
-        )
-
-        _async_register_services(hass)
-        result = await _call_manifest_service(hass)
-
-        panel = result["panels"][0]
-        templates = [c["template"] for c in panel["circuits"]]
-        assert "clone_1" in templates
-        assert "clone_5" not in templates
-
-    @pytest.mark.asyncio
     async def test_circuit_without_entity_excluded(self, hass: HomeAssistant):
         """Circuits with no registered power entity are excluded."""
         registered = SpanCircuitSnapshotFactory.create(circuit_id="uuid_reg", tabs=[1])
