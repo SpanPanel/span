@@ -344,8 +344,13 @@ async def async_resolve_pv_binding(
     held = keys_holding_cards(registry, entry.entry_id, snapshot.serial_number, sources)
     link_held = solar_link_held(registry, entry.entry_id, snapshot.serial_number)
     links_held = inverter_links_held(registry, entry.entry_id, snapshot.serial_number, sources)
-    identity, kept = resolve(
-        snapshot, record, held, link_held=link_held, inverter_links_held=links_held
+    identity, kept = resolve_sources(
+        sources,
+        snapshot.circuits,
+        record,
+        held,
+        link_held=link_held,
+        inverter_links_held=links_held,
     )
     if kept is not None and kept != record:
         await store.async_save(kept)
