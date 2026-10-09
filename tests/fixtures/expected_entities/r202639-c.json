@@ -26,46 +26,9 @@
       "serial_number": "tg607533669hu1-esz",
       "sw_version": null,
       "via_device": "xg-7814-15i6h"
-    },
-    "xg-7814-15i6h_pv": {
-      "hw_version": null,
-      "manufacturer": "Unknown",
-      "model": "Solar Inverter",
-      "name": "Span Panel Solar",
-      "serial_number": null,
-      "sw_version": null,
-      "via_device": "xg-7814-15i6h"
     }
   },
   "entities": {
-    "span_xg-7814-15i6h_adopted_panel/status/postal-code": {
-      "device": "xg-7814-15i6h",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_postal_code",
-      "hidden_by": null,
-      "original_name": "Status Postal Code",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
-    "span_xg-7814-15i6h_adopted_panel/status/time-zone": {
-      "device": "xg-7814-15i6h",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_time_zone",
-      "hidden_by": null,
-      "original_name": "Status Time Zone",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
     "span_xg-7814-15i6h_battery_power": {
       "device": "xg-7814-15i6h_bess",
       "device_class": "power",
@@ -1059,62 +1022,6 @@
       "state_class": "measurement",
       "translation_key": "pcs_import_limit",
       "unit_of_measurement": "A"
-    },
-    "span_xg-7814-15i6h_pv_nameplate_capacity": {
-      "device": "xg-7814-15i6h_pv",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_solar_pv_nameplate_capacity",
-      "hidden_by": null,
-      "original_name": "PV Nameplate Capacity",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": "pv_nameplate_capacity",
-      "unit_of_measurement": "W"
-    },
-    "span_xg-7814-15i6h_pv_power": {
-      "device": "xg-7814-15i6h_pv",
-      "device_class": "power",
-      "disabled_by": null,
-      "entity_category": null,
-      "entity_id": "sensor.span_panel_solar_pv_power",
-      "hidden_by": null,
-      "original_name": "PV Power",
-      "platform": "sensor",
-      "state": "0.0",
-      "state_class": "measurement",
-      "translation_key": "pv_power",
-      "unit_of_measurement": "W"
-    },
-    "span_xg-7814-15i6h_pv_product": {
-      "device": "xg-7814-15i6h_pv",
-      "device_class": null,
-      "disabled_by": null,
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_solar_pv_product",
-      "hidden_by": null,
-      "original_name": "PV Product",
-      "platform": "sensor",
-      "state": "unknown",
-      "state_class": null,
-      "translation_key": "pv_product",
-      "unit_of_measurement": null
-    },
-    "span_xg-7814-15i6h_pv_vendor": {
-      "device": "xg-7814-15i6h_pv",
-      "device_class": null,
-      "disabled_by": null,
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_solar_pv_vendor",
-      "hidden_by": null,
-      "original_name": "PV Vendor",
-      "platform": "sensor",
-      "state": "unknown",
-      "state_class": null,
-      "translation_key": "pv_vendor",
-      "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_relay_circuit-1": {
       "device": "xg-7814-15i6h",

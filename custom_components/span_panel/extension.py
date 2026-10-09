@@ -627,6 +627,16 @@ def create_extension_binary_sensors(
     )
 
 
+SITE_READINGS: Final = frozenset({"status/postal-code", "status/time-zone"})
+"""Properties that say where the panel is installed and that an install may already hold.
+
+The library keeps every other site property from becoming a reading. These two
+were adopted as sensors before that rule existed, so an install whose registry
+holds one keeps it, under its entity id and still updating; a new install, or a
+panel added later, creates neither.
+"""
+
+
 def _create[ExtensionT: ExtensionEntity](
     entity_class: type[ExtensionT],
     coordinator: SpanPanelCoordinator,
@@ -670,6 +680,11 @@ def _create[ExtensionT: ExtensionEntity](
     ):
         row = adopted.row
         if resolve_platform(entity_registry, adopted.unique_id, row.datatype) is not platform:
+            continue
+        if (
+            row.path in SITE_READINGS
+            and entity_registry.async_get_entity_id(platform, DOMAIN, adopted.unique_id) is None
+        ):
             continue
         key = extension_curation_key(adopted.subject, row.path)
         context = RowContext(platform=platform, datatype=row.datatype, unit=row.unit)

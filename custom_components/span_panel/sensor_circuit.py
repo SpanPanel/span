@@ -12,6 +12,7 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
+from .counter_plausibility import exceeds_lifetime_bound
 from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
     construct_circuit_identifier_from_tabs,
@@ -346,6 +347,12 @@ class SpanCircuitEnergySensor(
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
+
+    def _reading_is_implausible(self, reading: float) -> bool:
+        """Whether the reading is beyond anything this circuit's breaker could ever have passed."""
+        snapshot: SpanPanelSnapshot | None = self.coordinator.data
+        circuit = snapshot.circuits.get(self.circuit_id) if snapshot else None
+        return circuit is not None and exceeds_lifetime_bound(circuit, reading)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

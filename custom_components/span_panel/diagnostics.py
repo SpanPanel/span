@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
@@ -19,7 +20,8 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
-from .helpers import identity_digest, outside_meter_label, shared_relay_groups
+from .counter_plausibility import implausible_counters
+from .helpers import has_pv, identity_digest, outside_meter_label, shared_relay_groups
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
@@ -271,6 +273,18 @@ class PvBlock(TypedDict):
     inverters: dict[str, PvInverterRow]
 
 
+def _pv_power_without_source(snapshot: SpanPanelSnapshot) -> float | None:
+    """Return PV power the panel reports while it has no solar source, or None.
+
+    A valued, non-zero figure is the evidence: 0.0 is what a panel with a battery
+    and no solar publishes, and an unpublished figure says nothing.
+    """
+    power = snapshot.power_flow_pv
+    if power is None or power == 0 or has_pv(snapshot):
+        return None
+    return power
+
+
 def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
     """Which inverter the Solar card reads, and each inverter's place.
 
@@ -416,6 +430,12 @@ async def async_get_config_entry_diagnostics(
         # count in the Energy dashboard for what it is.
         "shared_meter_groups": shared_meter_groups(snapshot.circuits),
         "shared_relay_groups": shared_relay_groups(snapshot.circuits),
+        # Counter readings beyond what the circuit's breaker could ever have
+        # passed: shown as published, never used as the dip baseline.
+        "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],
+        # Solar power the panel reports with no solar source to attribute it to:
+        # the earliest sign that where this firmware says its solar is has moved.
+        "pv_power_without_source_w": _pv_power_without_source(snapshot),
         "evse": evse_data,
         "battery": battery_data,
         "pv": _pv(snapshot, entry.runtime_data.pv_binding),

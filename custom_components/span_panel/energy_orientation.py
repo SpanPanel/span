@@ -29,6 +29,10 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 _GENERATION_DEVICE_TYPE: Final = "pv"
 """The circuit `device_type` whose energy is oriented as generation."""
 
+# eBus connection/feeds-role SOLAR
+_GENERATION_FEEDS_ROLE: Final = "SOLAR"
+"""The circuit `feeds_role` whose energy is oriented as generation, whatever its device type."""
+
 
 class EnergyCounter(Enum):
     """One of a meter's two cumulative counters.
@@ -79,12 +83,19 @@ GENERATION: Final = NetEnergyOrientation(
 
 
 def circuit_is_generation(circuit: SpanCircuitSnapshot) -> bool:
-    """Whether a circuit's energy is oriented as generation; its power's sign follows the same answer."""
-    return circuit.device_type == _GENERATION_DEVICE_TYPE
+    """Whether a circuit's energy is oriented as generation; its power's sign follows the same answer.
+
+    A PV circuit, or one whose declared feeds role is solar: a panel may say
+    where its solar is without naming a PV device behind the circuit.
+    """
+    return (
+        circuit.device_type == _GENERATION_DEVICE_TYPE
+        or circuit.feeds_role == _GENERATION_FEEDS_ROLE
+    )
 
 
 def circuit_net_orientation(circuit: SpanCircuitSnapshot) -> NetEnergyOrientation:
-    """Return the orientation of a circuit's Net Energy, by its device type."""
+    """Return the orientation of a circuit's Net Energy, by its device type and feeds role."""
     return GENERATION if circuit_is_generation(circuit) else LOAD
 
 

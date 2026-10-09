@@ -807,6 +807,7 @@ class TestHandlePanelTopology:
             "tabs",
             "name",
             "outside_panel",
+            "is_generation",
             "shared_meter_group",
             "shared_relay_group",
             "voltage",
