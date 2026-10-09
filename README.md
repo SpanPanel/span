@@ -229,10 +229,10 @@ MID actually senses, or your GFE override while the panel is acting on one.
 
 Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Power, and Site Power sensors.
 
-| Attribute  | Type   | Notes                                |
-| ---------- | ------ | ------------------------------------ |
-| `voltage`  | string | Nominal panel voltage ("240")        |
-| `amperage` | string | Calculated current (power / voltage) |
+| Attribute  | Type   | Notes                                                             |
+| ---------- | ------ | ----------------------------------------------------------------- |
+| `voltage`  | string | Nominal panel voltage ("240")                                     |
+| `amperage` | string | Calculated current (power / voltage); null while power is unknown |
 
 **Grid Power** carries one more, because its name is only true in some wiring:
 

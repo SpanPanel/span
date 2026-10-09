@@ -3,7 +3,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -859,3 +859,130 @@ class TestGlobalSettingsStorage:
         })
         await monitor.async_load_overrides()
         assert monitor._global_settings == {}
+
+
+@pytest.fixture
+def _no_registered_entities():
+    """Key monitoring status by circuit id and leg name: no entity is registered."""
+    registry = MagicMock()
+    registry.async_get_entity_id.return_value = None
+    with patch(
+        "custom_components.span_panel.current_monitor.er.async_get", return_value=registry
+    ):
+        yield
+
+
+@pytest.mark.usefixtures("_no_registered_entities")
+class TestMonitoringStatusReportsOnlyMeasuredCurrent:
+    """A point with no sample reports no current and no utilization, not 0 A and 0 %."""
+
+    def test_a_circuit_without_a_current_reading_reports_none(self):
+        """Listed so the tab can show it, but with nothing measured to show."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen", current_a=None, breaker_rating_a=20.0
+        )
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(circuits={"1": circuit}, main_breaker_rating_a=200)
+        )
+
+        status = monitor.get_monitoring_status()["circuits"]["1"]
+
+        assert status["last_current_a"] is None
+        assert status["utilization_pct"] is None
+        assert status["breaker_rating_a"] == 20.0
+
+    def test_a_sampled_circuit_reports_its_current(self):
+        """A measured zero is still a measurement."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        circuits = {
+            "1": SpanCircuitSnapshotFactory.create(
+                circuit_id="1", current_a=10.0, breaker_rating_a=20.0
+            ),
+            "2": SpanCircuitSnapshotFactory.create(
+                circuit_id="2", current_a=0.0, breaker_rating_a=20.0
+            ),
+        }
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(circuits=circuits, main_breaker_rating_a=200)
+        )
+
+        status = monitor.get_monitoring_status()["circuits"]
+
+        assert status["1"]["last_current_a"] == 10.0
+        assert status["1"]["utilization_pct"] == 50.0
+        assert status["2"]["last_current_a"] == 0.0
+        assert status["2"]["utilization_pct"] == 0.0
+
+    def test_mains_without_a_sampled_leg_reports_none(self):
+        """No upstream leg read means no mains current, not an idle main breaker."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(
+                main_breaker_rating_a=200,
+                upstream_l1_current_a=None,
+                upstream_l2_current_a=None,
+            )
+        )
+
+        mains = monitor.get_monitoring_status()["mains"]["upstream_l1"]
+
+        assert mains["last_current_a"] is None
+        assert mains["utilization_pct"] is None
+        assert mains["breaker_rating_a"] == 200.0
+
+    def test_mains_takes_the_peak_of_the_legs_that_were_sampled(self):
+        """One unread leg does not drag the peak down to a fabricated 0 A."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(
+                main_breaker_rating_a=200,
+                upstream_l1_current_a=None,
+                upstream_l2_current_a=-50.0,
+            )
+        )
+
+        mains = monitor.get_monitoring_status()["mains"]["upstream_l1"]
+
+        assert mains["last_current_a"] == 50.0
+        assert mains["utilization_pct"] == 25.0
+
+    def test_mains_takes_the_higher_leg_when_both_were_sampled(self):
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(
+                main_breaker_rating_a=200,
+                upstream_l1_current_a=80.0,
+                upstream_l2_current_a=60.0,
+            )
+        )
+
+        mains = monitor.get_monitoring_status()["mains"]["upstream_l1"]
+
+        assert mains["last_current_a"] == 80.0
+        assert mains["utilization_pct"] == 40.0
+
+    def test_a_missing_sample_raises_no_alert(self):
+        """Threshold checks only ever see a sample; an unread point is skipped."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(**{SPIKE_THRESHOLD_PCT: 100}))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", current_a=None, breaker_rating_a=20.0
+        )
+        monitor.process_snapshot(
+            SpanPanelSnapshotFactory.create(
+                circuits={"1": circuit},
+                main_breaker_rating_a=200,
+                upstream_l1_current_a=None,
+                upstream_l2_current_a=None,
+            )
+        )
+
+        assert monitor.get_circuit_state("1") is None
+        assert monitor.get_mains_state("upstream_l1") is None
+        hass.bus.async_fire.assert_not_called()
