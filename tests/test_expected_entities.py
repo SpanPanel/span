@@ -107,7 +107,10 @@ from custom_components.span_panel.util import SUB_DEVICE_BESS, classify_sub_devi
 
 from .captures_replay import (
     CAPTURES,
+    CAPTURES_DIR,
     DIGESTS,
+    OWN_FILES,
+    UPSTREAM_LICENSE,
     ReplayClient,
     RetainedTree,
     capture,
@@ -424,17 +427,26 @@ def _recorded_digests() -> dict[str, str]:
     return recorded
 
 
-def test_every_capture_is_the_published_copy() -> None:
-    """Byte for byte what the emitter published; the README names the commit.
+def test_every_vendored_file_is_the_published_copy() -> None:
+    """Byte for byte what the emitter published, its license included; the README names the commit.
 
     Exact both ways: a capture without a recorded digest has no provenance, and a
-    digest without its capture describes a file that went away.
+    digest without its file describes one that went away. The license is pinned
+    with the captures because it is what lets them be copied at all.
     """
-    actual = {
-        captured.path.name: hashlib.sha256(captured.path.read_bytes()).hexdigest()
-        for captured in CAPTURES
-    }
+    vendored = (*(captured.path for captured in CAPTURES), UPSTREAM_LICENSE)
+    actual = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in vendored}
     assert actual == _recorded_digests()
+
+
+def test_the_captures_directory_holds_only_vendored_files_and_our_own() -> None:
+    """A file that is neither vendored and pinned nor one of ours has no stated origin."""
+    present = {
+        path.name
+        for path in CAPTURES_DIR.iterdir()
+        if path.is_file() and not path.name.startswith(".")
+    }
+    assert present == set(_recorded_digests()) | OWN_FILES
 
 
 def test_no_fixture_outlives_its_replay() -> None:
