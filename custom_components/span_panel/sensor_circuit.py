@@ -216,7 +216,8 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
 
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
-            return f"Circuit {self.circuit_id} {description.name or 'Sensor'}"
+            circuit_identifier = construct_circuit_identifier_from_tabs([], self.circuit_id)
+            return f"{circuit_identifier} {description.name or 'Sensor'}"
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name or 'Sensor'}"
@@ -322,7 +323,8 @@ class SpanCircuitEnergySensor(
 
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
-            return f"Circuit {self.circuit_id} {description.name}"
+            circuit_identifier = construct_circuit_identifier_from_tabs([], self.circuit_id)
+            return f"{circuit_identifier} {description.name}"
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"

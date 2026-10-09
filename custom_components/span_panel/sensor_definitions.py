@@ -914,11 +914,11 @@ and each is reached by the same single negation of a wire value in the opposite
 frame. The library's helper was renamed `_charge_positive` -> `_discharge_positive`
 for the same reason.
 
-**What is settled is that nothing here regressed.** `BATTERY_POWER_SENSOR` is
-behaviorally identical to the one released in 2.0.8 -- same source, same single
-negation, same device and state class -- and both adapters pass
-`power_flow_battery` through untouched. Whatever a live panel showed then, it
-shows now. `bess_meter_power` was briefly withdrawn on the belief that it would
+**What is settled is that the sign did not regress.** `BATTERY_POWER_SENSOR`
+reads the same source with the same single negation, device and state class
+as the one released in 2.0.8, and both adapters pass `power_flow_battery`
+through untouched. Whatever a live panel showed then, it shows now -- except
+that an unpublished value now reads unknown where 2.0.8 reported 0 W. `bess_meter_power` was briefly withdrawn on the belief that it would
 disagree with its neighbor on real firmware; the capture showed the two wire
 properties aligned on the panel *and* on the emitter, so it cannot, and it is
 restored.

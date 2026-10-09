@@ -25,10 +25,15 @@ class HardwareVerdict(StrEnum):
 
 
 def hardware_verdict(hardware_version: str | None) -> HardwareVerdict:
-    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused."""
-    if not hardware_version or hardware_version in VALIDATED_HARDWARE_VERSIONS:
+    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused.
+
+    Surrounding whitespace and the case of `UNKNOWN` are ignored, so a spelling
+    the changelog did not show cannot alone make the terminal refusal.
+    """
+    version = (hardware_version or "").strip()
+    if not version or version in VALIDATED_HARDWARE_VERSIONS:
         return HardwareVerdict.PROCEED
-    if hardware_version == UNDETERMINED_HARDWARE_VERSION:
+    if version.upper() == UNDETERMINED_HARDWARE_VERSION:
         return HardwareVerdict.CHECK_MODEL
     return HardwareVerdict.REFUSE
 

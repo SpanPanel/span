@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from enum import Enum, auto
 import logging
-from typing import Final
+from typing import Final, Literal
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
@@ -172,6 +173,15 @@ _DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_defe
 """Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
 
 HARDWARE_READ_TIMEOUT_S: Final = 5.0
+
+
+class _HardwareRead(Enum):
+    """The status read failed, so nothing is known about the hardware."""
+
+    UNREAD = auto()
+
+
+HARDWARE_UNREAD: Final = _HardwareRead.UNREAD
 """How long setup waits for the panel's status before going on without it."""
 
 
@@ -307,12 +317,14 @@ async def _async_pinned_ca(
 
 async def _async_read_hardware_version(
     hass: HomeAssistant, host: str, transport: PanelRestTransport
-) -> str | None:
-    """Read the panel's REST `hardwareVersion`, or None when it cannot be had.
+) -> str | None | Literal[_HardwareRead.UNREAD]:
+    """Read the panel's REST `hardwareVersion`, or `HARDWARE_UNREAD` when it cannot be had.
 
     Fail-open by design: a timeout, a refused or reset connection, a certificate
-    the pin rejects and a body that cannot be read all answer None, which the
-    verdict treats exactly as firmware that does not publish the field. This
+    the pin rejects and a body that cannot be read all answer `HARDWARE_UNREAD`,
+    which proceeds like firmware that does not publish the field but, unlike it,
+    leaves a standing refusal's Repair up: an unread status is no evidence the
+    hardware changed. This
     read exists only to refuse unvalidated hardware, so it must never be the
     reason a panel the connect path accepts is locked out; that path still owns
     readiness, and reports every one of these failures in its own terms.
@@ -329,9 +341,9 @@ async def _async_read_hardware_version(
                 httpx_client=get_async_client(hass),
                 ssl_context=transport.ssl_context,
             )
-    except (TimeoutError, SpanPanelError, httpx.HTTPError) as err:
+    except (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL) as err:
         _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %s", host, err)
-        return None
+        return HARDWARE_UNREAD
     return status.hardware_version
 
 
@@ -339,7 +351,7 @@ async def _async_read_hardware_version(
 def _async_enforce_hardware_verdict(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
-    hardware_version: str | None,
+    hardware_version: str | None | Literal[_HardwareRead.UNREAD],
     model: str | None,
 ) -> None:
     """Refuse a panel this release has not been validated with, or clear a standing refusal.
@@ -348,8 +360,11 @@ def _async_enforce_hardware_verdict(
     panel's `info/model` from the first refresh. A refusal raises the Repair and
     a `ConfigEntryError`, which is terminal: the hardware will not change by
     retrying, and a release validated with it is the remedy. A setup that
-    proceeds clears the Repair a previous one raised.
+    proceeds clears the Repair a previous one raised; one whose status could not
+    be read proceeds without judging, and leaves the Repair as it was.
     """
+    if hardware_version is HARDWARE_UNREAD:
+        return
     if not refuses_entities(hardware_verdict(hardware_version), model):
         async_clear_unvalidated_hardware(hass, entry)
         return
