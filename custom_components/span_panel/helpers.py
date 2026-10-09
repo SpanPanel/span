@@ -6,6 +6,8 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from hashlib import sha256
 import logging
+import re
+from typing import Final
 
 from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot, SpanPVSnapshot
@@ -103,6 +105,7 @@ __all__ = [
     "identity_digest",
     "pv_inverter_capability_tokens",
     "match_circuit_id",
+    "outside_meter_label",
     "remove_withdrawn_controls",
     "resolve_evse_display_suffix",
     "resolve_pv_display_suffix",
@@ -215,6 +218,26 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
     if tabs:
         return "Circuit " + " ".join(str(tab) for tab in sorted(tabs))
     return f"Circuit {circuit_id}"
+
+
+OUTSIDE_METER_LABEL_FORMAT: Final = "Remote CT {}"
+"""How a meter without a breaker space is named, filled by `outside_meter_label`."""
+
+_TRAILING_DIGITS: Final = re.compile(r"(\d+)$")
+
+
+def outside_meter_label(circuit_id: str) -> str:
+    """Name a meter that has no breaker space, from its own id alone.
+
+    Such a meter publishes no name and occupies no position, so neither the
+    panel's name nor the breaker-position fallback can name it. The id's
+    trailing number names it where there is one, and the whole id otherwise.
+    Nothing else feeds the label: another meter appearing or leaving never
+    renames this one, and the entity names and the topology rows both call
+    here, so they always agree.
+    """
+    match = _TRAILING_DIGITS.search(circuit_id)
+    return OUTSIDE_METER_LABEL_FORMAT.format(match.group(1) if match else circuit_id)
 
 
 def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str) -> str:

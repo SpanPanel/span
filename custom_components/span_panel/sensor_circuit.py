@@ -19,6 +19,7 @@ from .helpers import (
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_user_friendly_suffix,
+    outside_meter_label,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
@@ -67,7 +68,13 @@ def _resolve_circuit_identifier(
     on the panel the same `sensor.<panel>_power` and leaves the registry to tell
     them apart with `_2`, `_3`, ... in whatever order they were added. The tab
     fallback names them after the breaker position they occupy instead.
+
+    A meter without a breaker space has neither a name nor a position, so it is
+    named by `outside_meter_label` in both modes.
     """
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
+
     use_circuit_numbers = options.get(USE_CIRCUIT_NUMBERS, False)
 
     if use_circuit_numbers:
@@ -82,6 +89,8 @@ def _resolve_circuit_identifier(
 
 def _resolve_circuit_identifier_for_sync(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
     """Resolve the circuit identifier for name-sync (always panel name, with fallback)."""
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
     name: str = circuit.name
     if name:
         return name
