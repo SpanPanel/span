@@ -84,6 +84,7 @@ from homeassistant.util import slugify
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .factories import pv_binding_for
+from .test_declared_but_unread import REFERENCE
 
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -107,7 +108,8 @@ PANEL_NAME: Final = "SPAN Panel"
 FALLBACK_MANUFACTURER: Final = "Unknown"
 FALLBACK_MODEL: Final = "Solar Inverter"
 
-BASELINE: Final = pathlib.Path(__file__).parent / "fixtures" / "unread_declarations_baseline.json"
+BASELINE: Final = REFERENCE.baseline
+"""The reference payload's unread declarations, the tree every expectation here is read from."""
 
 _LEGACY_PV_ENTITIES: Final[tuple[tuple[str, str, str], ...]] = (
     ("sensor", "pv_power", "sensor.span_panel_pv_power"),

@@ -14,6 +14,28 @@ import pytest
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 _CC_DIR = str(Path(_PROJECT_ROOT) / "custom_components")
 
+UPDATE_CAPTURE_FIXTURES = "--update-capture-fixtures"
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the one switch that rewrites fixtures instead of comparing against them."""
+    parser.addoption(
+        UPDATE_CAPTURE_FIXTURES,
+        action="store_true",
+        default=False,
+        help=(
+            "Rewrite tests/fixtures/expected_entities and tests/fixtures/topology from the "
+            "captures' replay rather than comparing against them. Select one stem with "
+            '-k "<stem>]".'
+        ),
+    )
+
+
+@pytest.fixture
+def update_capture_fixtures(request: pytest.FixtureRequest) -> bool:
+    """Whether this run rewrites the capture-derived fixtures it would otherwise compare."""
+    return bool(request.config.getoption(UPDATE_CAPTURE_FIXTURES))
+
 
 def _ensure_span_panel_importable() -> None:
     """Ensure custom_components.span_panel can be imported.

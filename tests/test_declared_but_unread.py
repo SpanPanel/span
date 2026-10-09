@@ -36,16 +36,25 @@ holds what is genuinely unread, one reason per line. Both are compared as exact
 sets, so an entry that stops being true fails just as loudly as a declaration
 that arrives untriaged. A new property can only ever land in either by somebody
 writing the line.
+
+**Every tree, each with its own baseline.** The experiment runs over the
+adapter's reference payload and over every captured panel in
+`tests/fixtures/captures/`, and each keeps its baseline in
+`tests/fixtures/unread_declarations/<stem>.json`. One file per tree rather than
+a union, because a property can be read on one panel's shape and not on
+another's, and a union would let either hide the other.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 import dataclasses
+import functools
 import json
 import pathlib
 from typing import NamedTuple
 
+import pytest
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
@@ -60,13 +69,39 @@ from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     declared_field_paths,
 )
+from tests import captures_replay
 from tests.adapter_fixtures import schema_one_snapshot, schema_one_tree
 
-BASELINE = pathlib.Path(__file__).parent / "fixtures" / "unread_declarations_baseline.json"
+BASELINES = pathlib.Path(__file__).parent / "fixtures" / "unread_declarations"
+
+
+class Source(NamedTuple):
+    """A tree the experiment runs over, and how the pinned library builds its snapshot."""
+
+    stem: str
+    tree: Callable[[], dict[str, dict[str, str]]]
+    build: Callable[[dict[str, dict[str, str]]], SpanPanelSnapshot]
+
+    @property
+    def baseline(self) -> pathlib.Path:
+        return BASELINES / f"{self.stem}.json"
+
+
+REFERENCE = Source("parent_child_tree", schema_one_tree, schema_one_snapshot)
+"""The parent/child payload `span-panel-api-schema-1` ships, named as the wheel names it."""
+
+SOURCES = (
+    REFERENCE,
+    *(
+        Source(captured.stem, captured.tree, captures_replay.mapped_snapshot)
+        for captured in captures_replay.CAPTURES
+    ),
+)
+SOURCE_IDS = [source.stem for source in SOURCES]
 
 
 class Declaration(NamedTuple):
-    """One ``(device type, node, property)`` the fixture's `$description` declares.
+    """One ``(device type, node, property)`` a tree's `$description` declares.
 
     Keyed by device *type* rather than device id, matching the granularity of
     the capability catalogs and of the gap inventory: five circuits declare the
@@ -89,7 +124,7 @@ _INTERNAL_ROUTES: Mapping[Declaration, str] = {
     ),
     Declaration("distribution-enclosure", "shed", "asserted-islanding-state"): (
         "tier 1 of resolve_islanding_state (schema_1 panel.py), whose probe value "
-        "ON_GRID matches this fixture's MID, and the write target of the existing "
+        "ON_GRID matches every tree's MID, and the write target of the existing "
         "dominant-power-source control (schema_1 adapter.py)"
     ),
     Declaration("lugs", "connection", "feeds-device-id"): (
@@ -165,8 +200,8 @@ def _perturbed(declared: _Property, current: str | None) -> str:
     built from the declared `datatype` and `format`, which is the same
     information the adapter parses against.
 
-    `current` is `None` for a property the fixture declares and never publishes
-    — 19 of the 203 instances. Publishing one is the right probe for exactly
+    `current` is `None` for a property a tree declares and never publishes
+    — 19 of the reference payload's 203 instances. Publishing one is the right probe for exactly
     those: it asks whether a value arriving would change anything, which is the
     question `status/wifi-ssid` needed answering.
     """
@@ -239,16 +274,16 @@ def _bare(field_path: str) -> str:
     return field_path.split("@", 1)[0]
 
 
-def _moved_fields() -> dict[Declaration, frozenset[str]]:
+def _moved_fields(source: Source) -> dict[Declaration, frozenset[str]]:
     """Republish each declared property once; return the snapshot fields it moved.
 
-    One rebuild per declaring device, so the two lugs devices and the five
-    circuits are probed separately and their results unioned: only the upstream
-    lugs' `fed-by-*` properties are read, and a single probe against whichever
-    came first would answer for both.
+    One rebuild per declaring device, so the two lugs devices and every circuit
+    are probed separately and their results unioned: only the upstream lugs'
+    `fed-by-*` properties are read, and a single probe against whichever came
+    first would answer for both.
     """
-    tree = schema_one_tree()
-    baseline = _snapshot_fields(schema_one_snapshot(tree))
+    tree = source.tree()
+    baseline = _snapshot_fields(source.build(tree))
     moved: dict[Declaration, frozenset[str]] = {}
 
     for declaration, instances in _declared(tree).items():
@@ -262,7 +297,7 @@ def _moved_fields() -> dict[Declaration, frozenset[str]]:
             )
             mutated = {device_id: dict(topics) for device_id, topics in tree.items()}
             mutated[instance.device_id][instance.topic] = replacement
-            after = _snapshot_fields(schema_one_snapshot(mutated))
+            after = _snapshot_fields(source.build(mutated))
             changed.update(path for path, value in after.items() if baseline.get(path) != value)
         moved[declaration] = frozenset(changed)
     return moved
@@ -281,12 +316,19 @@ def _read_field_paths() -> frozenset[str]:
     return declared_field_paths() | frozenset(RESIDUAL_EXEMPT_PATHS)
 
 
-def _classified() -> tuple[dict[Declaration, frozenset[str]], dict[Declaration, frozenset[str]]]:
-    """Split every declaration into (surfaced, unread)."""
+@functools.cache
+def _classified(
+    source: Source,
+) -> tuple[dict[Declaration, frozenset[str]], dict[Declaration, frozenset[str]]]:
+    """Split every declaration in one tree into (surfaced, unread).
+
+    Cached because each tree's experiment is a few hundred rebuilds and every
+    test below asks the same question of it; the answer is read-only.
+    """
     read = _read_field_paths()
     surfaced: dict[Declaration, frozenset[str]] = {}
     unread: dict[Declaration, frozenset[str]] = {}
-    for declaration, moved in _moved_fields().items():
+    for declaration, moved in _moved_fields(source).items():
         if any(_bare(path) in read for path in moved):
             surfaced[declaration] = moved
         else:
@@ -294,8 +336,8 @@ def _classified() -> tuple[dict[Declaration, frozenset[str]], dict[Declaration, 
     return surfaced, unread
 
 
-def _baseline() -> dict[Declaration, str]:
-    loaded: dict[str, str] = json.loads(BASELINE.read_text(encoding="utf-8"))
+def _baseline(source: Source) -> dict[Declaration, str]:
+    loaded: dict[str, str] = json.loads(source.baseline.read_text(encoding="utf-8"))
     entries: dict[Declaration, str] = {}
     for key, reason in loaded.items():
         device_type, node, property_id = key.split("/", 2)
@@ -307,7 +349,8 @@ def _lines(declarations: Iterable[Declaration]) -> str:
     return "\n".join(f"  {declaration}" for declaration in sorted(declarations)) or "  (none)"
 
 
-def test_the_unread_declarations_match_the_recorded_baseline() -> None:
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_the_unread_declarations_match_the_recorded_baseline(source: Source) -> None:
     """Fails in both directions, so neither a gap nor a fix can land unnoticed.
 
     A declaration nothing reads must be triaged: surfaced by a catch-up task, or
@@ -316,8 +359,8 @@ def test_the_unread_declarations_match_the_recorded_baseline() -> None:
     the file drifts into a description of an older codebase and the count it
     reports stops meaning anything.
     """
-    _, unread = _classified()
-    expected = _baseline()
+    _, unread = _classified(source)
+    expected = _baseline(source)
 
     appeared = sorted(set(unread) - set(expected) - set(_INTERNAL_ROUTES))
     resolved = sorted(set(expected) - set(unread))
@@ -325,32 +368,35 @@ def test_the_unread_declarations_match_the_recorded_baseline() -> None:
     assert set(unread) - set(_INTERNAL_ROUTES) == set(expected), (
         "the set of declarations nothing reads moved.\n"
         f"  newly unread (nothing renders these):\n{_lines(appeared)}\n"
-        f"  now read (delete their lines from {BASELINE.name}):\n{_lines(resolved)}\n\n"
+        f"  now read (delete their lines from {source.baseline.name}):\n{_lines(resolved)}\n\n"
         "A newly unread property is a declaration that reaches no entity, attribute "
         "or device card. Surface it, or record why it stays unread."
     )
 
 
-def test_every_baseline_entry_carries_a_reason() -> None:
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_every_baseline_entry_carries_a_reason(source: Source) -> None:
     """A line with no reason is an allowlist entry wearing a baseline's clothes."""
-    empty = sorted(str(key) for key, reason in _baseline().items() if len(reason.split()) < 4)
+    empty = sorted(str(key) for key, reason in _baseline(source).items() if len(reason.split()) < 4)
     assert not empty, (
         f"baseline entries with no usable reason: {empty}. Each line says why the "
         "property is not surfaced, so a reader can tell a deliberate skip from a backlog item."
     )
 
 
-def test_every_baseline_entry_is_still_declared() -> None:
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_every_baseline_entry_is_still_declared(source: Source) -> None:
     """A baseline outlives its declaration silently; the file only ever grows."""
-    declared = set(_declared(schema_one_tree()))
-    stale = sorted(str(key) for key in _baseline() if key not in declared)
+    declared = set(_declared(source.tree()))
+    stale = sorted(str(key) for key in _baseline(source) if key not in declared)
     assert not stale, (
-        f"baseline entries the fixture no longer declares: {stale}. The property "
+        f"baseline entries {source.stem} no longer declares: {stale}. The property "
         "went away; drop its line with it."
     )
 
 
-def test_no_internal_route_is_observable_after_all() -> None:
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_no_internal_route_is_observable_after_all(source: Source) -> None:
     """An internal-route entry must be the only thing keeping its property out.
 
     This is the entry that could quietly become an allowlist: unlike the
@@ -359,7 +405,7 @@ def test_no_internal_route_is_observable_after_all() -> None:
     field the integration reads, the entry has to go — otherwise the next
     property added beside it inherits an exemption nobody re-examined.
     """
-    surfaced, _ = _classified()
+    surfaced, _ = _classified(source)
     redundant = sorted(str(key) for key in _INTERNAL_ROUTES if key in surfaced)
     assert not redundant, (
         f"internal-route entries whose property now reaches a reader: {redundant}. "
@@ -367,13 +413,31 @@ def test_no_internal_route_is_observable_after_all() -> None:
     )
 
 
-def test_every_internal_route_is_still_declared() -> None:
-    declared = set(_declared(schema_one_tree()))
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_every_internal_route_is_still_declared(source: Source) -> None:
+    declared = set(_declared(source.tree()))
     stale = sorted(str(key) for key in _INTERNAL_ROUTES if key not in declared)
-    assert not stale, f"internal-route entries the fixture no longer declares: {stale}"
+    assert not stale, f"internal-route entries {source.stem} does not declare: {stale}"
 
 
-def test_the_probe_moves_something_for_a_known_reading() -> None:
+@pytest.mark.parametrize(
+    "captured", captures_replay.CAPTURES, ids=[c.stem for c in captures_replay.CAPTURES]
+)
+def test_the_mapper_builds_what_the_transport_delivers(captured: captures_replay.Capture) -> None:
+    """The experiment rebuilds through the mapper alone; the integration gets the same snapshot.
+
+    The transport's path adds adapter dispatch and per-message routing, which
+    is why the experiment skips them, a few hundred rebuilds per tree. Equal
+    snapshots for every capture as published mean the experiment measures what
+    the integration receives. The one property the shortcut cannot see, the
+    data-model version that picks the adapter, is an internal route above.
+    """
+    tree = captured.tree()
+    assert captures_replay.mapped_snapshot(tree) == captures_replay.snapshot(tree)
+
+
+@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
+def test_the_probe_moves_something_for_a_known_reading(source: Source) -> None:
     """The experiment must be able to observe a change at all.
 
     Every assertion above is satisfied by a probe that changes nothing, ever:
@@ -382,7 +446,7 @@ def test_the_probe_moves_something_for_a_known_reading() -> None:
     reading is unarguably rendered has to come back surfaced, and has to name
     the field it moved.
     """
-    surfaced, _ = _classified()
+    surfaced, _ = _classified(source)
     power = Declaration("circuit", "meter", "active-power")
     assert power in surfaced
     assert any(_bare(path) == "circuit.instant_power_w" for path in surfaced[power])
