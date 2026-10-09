@@ -1,10 +1,11 @@
 """Replay a captured panel through the pinned library, as the broker delivers it.
 
-The captures in `tests/fixtures/captures/` are panels' retained MQTT trees,
-recorded in the emitter's `tree-v1` form: per device, its `$description` and
-the value of every property it published. Nothing here interprets them. Each
-capture is turned back into the retained topics the broker would replay, and
-those are handed one message at a time to whichever adapter the library's own
+The captures are panels' retained MQTT trees, the reference captures the pinned
+emitter package ships and `ebus_panel_sim.load_reference_capture` reads, named
+by their handles there: per device, its `$description` and the value of every
+property it published. Nothing here interprets them. Each capture is turned
+back into the retained topics the broker would replay, and those are handed
+one message at a time to whichever adapter the library's own
 dispatch picks for the panel's `info/data-model-version` -- the same parser,
 selected the same way, that `SpanMqttClient` builds on connect. So a snapshot
 taken here is the snapshot the pinned library produces for that panel, and the
@@ -19,10 +20,11 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+import functools
 import json
-from pathlib import Path
 from typing import Final
 
+from ebus_panel_sim import Tree, load_reference_capture
 from span_panel_api import ControlInterceptor, LeafNameMismatch, SpanPanelSnapshot
 from span_panel_api.adapters import resolve_adapter
 from span_panel_api.dispatch import select_adapter_key
@@ -31,17 +33,6 @@ from span_panel_api.models import FieldMetadata, V2HomieSchema
 from span_panel_api.protocol import SchemaAdapter
 
 from .adapter_fixtures import tree_snapshot
-
-CAPTURES_DIR: Final = Path(__file__).parent / "fixtures" / "captures"
-CAPTURE_SUFFIX: Final = "-tree-v1.json"
-DIGESTS: Final = CAPTURES_DIR / "SHA256SUMS"
-"""`sha256sum` lines for every vendored file, held to the upstream copies by a test."""
-
-UPSTREAM_LICENSE: Final = CAPTURES_DIR / "LICENSE"
-"""The emitter's license, which the captures are published under and which travels with them."""
-
-OWN_FILES: Final = frozenset({"README.md", "SHA256SUMS"})
-"""The files in the directory this repository wrote; everything else is vendored."""
 
 PANEL_TYPE: Final = "energy.ebus.device.distribution-enclosure"
 HOMIE_PREFIX: Final = "ebus/5"
@@ -52,33 +43,31 @@ RetainedTree = dict[str, dict[str, str]]
 
 @dataclass(frozen=True, slots=True)
 class Capture:
-    """One vendored capture, named by its file's stem."""
+    """One reference capture, named by its handle in the emitter package."""
 
-    stem: str
-    path: Path
+    name: str
 
     def tree(self) -> RetainedTree:
         """A fresh, mutable copy of the capture's retained topics."""
-        return retained_tree(self.path)
+        return retained_tree(_published_tree(self.name))
 
 
-def _captures() -> tuple[Capture, ...]:
-    return tuple(
-        Capture(path.name.removesuffix(CAPTURE_SUFFIX), path)
-        for path in sorted(CAPTURES_DIR.glob(f"*{CAPTURE_SUFFIX}"))
-    )
+CAPTURES: Final = (Capture("main32_r202633"), Capture("main32_r202639"))
+"""The captures every replay runs over, by handle; each has its expected files on record."""
 
 
-CAPTURES: Final = _captures()
-"""Every capture in the directory: read rather than listed, so every test replays a new one."""
-
-
-def capture(stem: str) -> Capture:
-    """The capture with this stem, or fail naming the ones there are."""
+def capture(name: str) -> Capture:
+    """The capture with this handle, or fail naming the ones there are."""
     for candidate in CAPTURES:
-        if candidate.stem == stem:
+        if candidate.name == name:
             return candidate
-    raise AssertionError(f"no capture {stem!r}; there are {[c.stem for c in CAPTURES]}")
+    raise AssertionError(f"no capture {name!r}; there are {[c.name for c in CAPTURES]}")
+
+
+@functools.cache
+def _published_tree(name: str) -> Tree:
+    """Read the tree from the package once per handle; callers get copies, never this one."""
+    return load_reference_capture(name).tree
 
 
 def _mapping(value: object, where: str) -> Mapping[str, object]:
@@ -87,40 +76,23 @@ def _mapping(value: object, where: str) -> Mapping[str, object]:
     return {str(key): item for key, item in value.items()}
 
 
-def _text_values(value: object, where: str) -> dict[str, str]:
-    """A `{topic: payload}` map; the emitter records every payload as the string it published."""
-    values: dict[str, str] = {}
-    for topic, payload in _mapping(value, where).items():
-        if not isinstance(payload, str):
-            raise TypeError(f"{where}/{topic} is not a string payload")
-        values[topic] = payload
-    return values
+def retained_tree(tree: Tree) -> RetainedTree:
+    """A captured tree back as the retained topics the broker replays.
 
-
-def retained_tree(path: Path) -> RetainedTree:
-    """Read a `tree-v1` capture back into the retained topics the broker replays.
-
-    `$state` is `ready` for every device: the format records what a device
+    `$state` is `ready` for every device: the capture records what a device
     published while it was described and serving, and it carries no state of
     its own. The description is re-serialised rather than kept byte-for-byte,
     which the adapter cannot tell apart -- it parses the JSON, never the text.
+    Every payload is the string the device published, as the emitter reads it.
     """
-    document = _mapping(json.loads(path.read_text(encoding="utf-8")), path.name)
-    schema = _mapping(document.get("metadata"), f"{path.name} metadata").get("schema")
-    if schema != "tree-v1":
-        raise ValueError(f"{path.name} is {schema!r}, not a tree-v1 capture")
-    tree: RetainedTree = {}
-    for device_id, recorded in _mapping(document.get("devices"), f"{path.name} devices").items():
-        device = _mapping(recorded, device_id)
-        tree[device_id] = {
-            "$description": json.dumps(
-                _mapping(device.get("description"), f"{device_id} description")
-            ),
+    return {
+        device_id: {
+            "$description": json.dumps(_mapping(device.description, f"{device_id} description")),
             "$state": "ready",
-            **_text_values(device.get("properties", {}), f"{device_id} properties"),
-            **_text_values(device.get("numeric_properties", {}), f"{device_id} numeric_properties"),
+            **device.properties,
         }
-    return tree
+        for device_id, device in tree.items()
+    }
 
 
 def description(tree: RetainedTree, device_id: str) -> Mapping[str, object]:
