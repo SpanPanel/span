@@ -26,7 +26,7 @@ from custom_components.span_panel.grace_period import SpanEnergyExtraStoredData
 from custom_components.span_panel.sensor_circuit import SpanCircuitEnergySensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 
-from .captures_replay import CAPTURES, Capture, snapshot
+from .captures_replay import MAIN32_CAPTURES, Capture, snapshot
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 from .test_diagnostics import _reference_entry
 from .test_energy_dip_compensation import DummyDipSensor
@@ -163,7 +163,7 @@ async def test_diagnostics_list_each_implausible_counter(hass: HomeAssistant) ->
     ]
 
 
-@pytest.mark.parametrize("captured", CAPTURES, ids=[c.stem for c in CAPTURES])
+@pytest.mark.parametrize("captured", MAIN32_CAPTURES, ids=[c.name for c in MAIN32_CAPTURES])
 def test_no_main32_counter_is_implausible(captured: Capture) -> None:
     assert implausible_counters(snapshot(captured.tree())) == []
 
