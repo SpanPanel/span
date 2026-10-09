@@ -20,7 +20,7 @@ P, C, R = HardwareVerdict.PROCEED, HardwareVerdict.CHECK_MODEL, HardwareVerdict.
 
 @pytest.mark.parametrize(
     ("version", "verdict"),
-    [("1.2", P), ("2.0", P), (None, P), ("", P), ("UNKNOWN", C), ("9.9", R)],
+    [("1.2", P), ("2.0", P), ("3.0", P), (None, P), ("", P), ("UNKNOWN", C), ("9.9", R)],
 )
 def test_the_verdict_from_the_rest_value_alone(version: str | None, verdict: HardwareVerdict) -> None:
     assert hardware_verdict(version) is verdict
