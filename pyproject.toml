@@ -37,6 +37,11 @@ dev = [
     # bump to 0.13.358 pinned 2026.9.0b0 and made the pair unresolvable, which
     # CI's re-lock from PyPI catches and a stale local venv does not.
     "pytest-homeassistant-custom-component==0.13.367",
+    # The reference captures the replay tests read (tests/captures_replay.py) are
+    # this package's data, so the exact pin is the record of which captures they
+    # are. Test-only: never in manifest.json, since Home Assistant must not
+    # install it.
+    "ebus-panel-sim==0.10.0b2",
     "isort",
     "vulture>=2.16",
 ]
