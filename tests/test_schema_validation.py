@@ -312,10 +312,9 @@ def test_unread_excludes_readers_exempt_from_the_producible_gate(
 def test_readers_of_the_same_field_path_agree_on_unit() -> None:
     """`sensor_descriptions_by_field_path` keeps one reader per path.
 
-    Several field paths are read by two descriptions (an unmapped-circuit raw
-    key and its named-circuit twin). Dropping one is only safe while they agree
-    on what the unit check would compare, so pin that here rather than trusting
-    it.
+    Each field path has one reader today. Were a second added, the map would
+    drop it, which is only safe while the two agree on what the unit check would
+    compare, so pin that here rather than trusting it.
     """
     from collections import defaultdict
 
@@ -328,7 +327,6 @@ def test_readers_of_the_same_field_path_agree_on_unit() -> None:
         by_path[description.field_path].append(description)
 
     colliding = {path: ds for path, ds in by_path.items() if len(ds) > 1}
-    assert colliding, "expected at least one field path with two readers"
     for path, descriptions in colliding.items():
         units = {d.native_unit_of_measurement for d in descriptions}
         assert len(units) == 1, f"readers of {path} disagree on unit: {units}"

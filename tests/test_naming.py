@@ -22,7 +22,6 @@ from custom_components.span_panel.naming import (
         ("Kitchen Outlets", "breaker_rating", "Kitchen Outlets breaker rating"),
         ("Kitchen Outlets", "breaker", "Kitchen Outlets breaker"),
         ("Kitchen Outlets", "circuit_priority", "Kitchen Outlets circuit priority"),
-        ("Unmapped Tab 32", "energy_consumed", "Unmapped Tab 32 consumed energy"),
     ],
 )
 def test_a_new_entity_gets_the_noun_last_wording(

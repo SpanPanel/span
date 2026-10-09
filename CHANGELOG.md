@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.3] - 10/2026
 
+### Removed
+
+- **The Unmapped Circuit Sensors option is removed**, because the panel publishes nothing for an empty breaker position, and the hidden Unmapped Tab sensors it
+  created are deleted.
+
 ### Fixed
 
 - **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,

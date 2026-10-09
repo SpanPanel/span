@@ -212,8 +212,8 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         composes the id from the display name exactly as it always has.
 
         A circuit entity answers with the naming-flag half (`Circuit 15`,
-        `Kitchen Outlets`, `Unmapped Tab 32`) and the suffix
-        `naming.circuit_object_id_base` keys on. The two travel together because
+        `Kitchen Outlets`) and the suffix `naming.circuit_object_id_base` keys
+        on. The two travel together because
         neither is any use alone, and because a circuit entity's
         `description.key` has been overwritten with the circuit id by then, so
         there is no suffix a default could compute.

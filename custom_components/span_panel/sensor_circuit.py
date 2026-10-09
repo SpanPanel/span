@@ -17,7 +17,6 @@ from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
     construct_tabs_attribute,
-    construct_unmapped_friendly_name,
     construct_voltage_attribute,
     get_user_friendly_suffix,
 )
@@ -217,9 +216,7 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
 
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
-            return construct_unmapped_friendly_name(
-                self.circuit_id, str(description.name or "Sensor")
-            )
+            return f"Circuit {self.circuit_id} {description.name or 'Sensor'}"
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name or 'Sensor'}"
@@ -351,82 +348,3 @@ class SpanCircuitEnergySensor(
                     attributes["voltage"] = voltage
 
         return attributes or None
-
-
-class SpanUnmappedCircuitSensor(
-    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
-):
-    """Span Panel unmapped circuit sensor entity - native sensors for synthetic calculations."""
-
-    def __init__(
-        self,
-        data_coordinator: SpanPanelCoordinator,
-        description: SpanPanelCircuitsSensorEntityDescription,
-        snapshot: SpanPanelSnapshot,
-        circuit_id: str,
-    ) -> None:
-        """Initialize the Span Panel unmapped circuit sensor."""
-        self.circuit_id = circuit_id
-        # Store the original description key for unique ID and entity ID generation
-        self.original_key = description.key
-
-        # Override the description key to use the circuit_id for data lookup
-        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
-            key=circuit_id,
-            name=description.name,
-            native_unit_of_measurement=description.native_unit_of_measurement,
-            state_class=description.state_class,
-            suggested_display_precision=description.suggested_display_precision,
-            device_class=description.device_class,
-            value_fn=description.value_fn,
-            field_path=description.field_path,
-            derived=description.derived,
-            entity_registry_enabled_default=True,
-            entity_registry_visible_default=False,
-            legacy_names=description.legacy_names,
-        )
-
-        super().__init__(data_coordinator, description_with_circuit, snapshot)
-
-    def _generate_unique_id(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate unique ID for unmapped circuit sensors."""
-        return construct_circuit_unique_id_for_entry(
-            self.coordinator,
-            snapshot,
-            self.circuit_id,
-            self.original_key,
-            self._device_name,
-        )
-
-    def _generate_panel_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Name an unmapped tab, which has no circuit name for a mode to differ over."""
-        return self._unmapped_name(description)
-
-    def _unmapped_name(self, description: SpanPanelCircuitsSensorEntityDescription) -> str:
-        """Return "Unmapped Tab 32 Consumed Energy" and the like."""
-        tab_number = self.circuit_id.replace("unmapped_tab_", "")
-        description_name = str(description.name) if description.name else "Sensor"
-        return construct_unmapped_friendly_name(tab_number, description_name)
-
-    def _object_id_parts(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> tuple[str, str] | None:
-        """Return the tab this sensor backs; unmapped tabs carry no naming flag."""
-        return (
-            f"Unmapped Tab {self.circuit_id.replace('unmapped_tab_', '')}",
-            get_user_friendly_suffix(self.original_key),
-        )
-
-    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
-        """Get the data source for the unmapped circuit sensor."""
-        return _get_circuit_data_source(self.circuit_id, snapshot)

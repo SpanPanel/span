@@ -13,7 +13,6 @@ from custom_components.span_panel.const import (
     DOMAIN,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
-    ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     USE_CIRCUIT_NUMBERS,
 )
 from custom_components.span_panel.curation import CurationOverlay
@@ -26,7 +25,6 @@ from custom_components.span_panel.sensor import (
     create_native_sensors,
     create_panel_sensors,
     create_power_flow_sensors,
-    create_unmapped_circuit_sensors,
 )
 from custom_components.span_panel.sensor_definitions import EVSE_SENSORS
 from homeassistant.core import HomeAssistant
@@ -106,55 +104,6 @@ def test_create_native_sensors_concatenates_sensor_groups() -> None:
     """Native sensor creation should preserve group ordering."""
     coordinator = MagicMock()
     snapshot = SpanPanelSnapshotFactory.create()
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={},
-        title="SPAN Panel",
-        options={ENABLE_UNMAPPED_CIRCUIT_SENSORS: True},
-    )
-
-    panel = [MagicMock(name="panel")]
-    circuit = [MagicMock(name="circuit")]
-    unmapped = [MagicMock(name="unmapped")]
-    battery = [MagicMock(name="battery")]
-    power_flow = [MagicMock(name="power_flow")]
-    evse = [MagicMock(name="evse")]
-
-    with (
-        patch(
-            "custom_components.span_panel.sensor.create_panel_sensors",
-            return_value=panel,
-        ),
-        patch(
-            "custom_components.span_panel.sensor.create_circuit_sensors",
-            return_value=circuit,
-        ),
-        patch(
-            "custom_components.span_panel.sensor.create_unmapped_circuit_sensors",
-            return_value=unmapped,
-        ),
-        patch(
-            "custom_components.span_panel.sensor.create_battery_sensors",
-            return_value=battery,
-        ),
-        patch(
-            "custom_components.span_panel.sensor.create_power_flow_sensors",
-            return_value=power_flow,
-        ),
-        patch(
-            "custom_components.span_panel.sensor.create_evse_sensors",
-            return_value=evse,
-        ),
-    ):
-        result = create_native_sensors(coordinator, snapshot, entry)
-
-    assert result == panel + circuit + unmapped + battery + power_flow + evse
-
-
-def test_create_native_sensors_excludes_unmapped_when_disabled() -> None:
-    """Unmapped sensors should be excluded when the option is disabled."""
-    coordinator = MagicMock()
-    snapshot = SpanPanelSnapshotFactory.create()
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
 
     panel = [MagicMock(name="panel")]
@@ -173,9 +122,6 @@ def test_create_native_sensors_excludes_unmapped_when_disabled() -> None:
             return_value=circuit,
         ),
         patch(
-            "custom_components.span_panel.sensor.create_unmapped_circuit_sensors",
-        ) as mock_unmapped,
-        patch(
             "custom_components.span_panel.sensor.create_battery_sensors",
             return_value=battery,
         ),
@@ -190,7 +136,6 @@ def test_create_native_sensors_excludes_unmapped_when_disabled() -> None:
     ):
         result = create_native_sensors(coordinator, snapshot, entry)
 
-    mock_unmapped.assert_not_called()
     assert result == panel + circuit + battery + power_flow + evse
 
 
@@ -273,7 +218,7 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
 
 
 def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> None:
-    """Circuit sensors should ignore unmapped tabs and honor net-energy options."""
+    """Circuit sensors should skip empty positions and honor net-energy options."""
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={
             "c1": SpanCircuitSnapshotFactory.create(
@@ -325,36 +270,6 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
         entity.device_info["name"] == "Main House SPAN Drive (Kitchen)"
         for entity in entities
     )
-
-
-def test_create_unmapped_circuit_sensors_only_creates_unmapped_entities() -> None:
-    """Unmapped helper sensors should only be created for unmapped circuits."""
-    snapshot = SpanPanelSnapshotFactory.create(
-        circuits={
-            "c1": SpanCircuitSnapshotFactory.create(circuit_id="c1"),
-            "unmapped_tab_7": SpanCircuitSnapshotFactory.create(
-                circuit_id="unmapped_tab_7"
-            ),
-        }
-    )
-    coordinator = MagicMock()
-    coordinator.data = snapshot
-    coordinator.hass = MagicMock()
-    coordinator.config_entry = MockConfigEntry(
-        domain=DOMAIN, data={}, title="SPAN Panel"
-    )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator,
-        panel_device_id="panel-device-id",
-        curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(snapshot),
-        setup_snapshot=snapshot,
-    )
-
-    entities = create_unmapped_circuit_sensors(coordinator, snapshot)
-
-    assert len(entities) == 3
-    assert all(entity.circuit_id == "unmapped_tab_7" for entity in entities)
 
 
 def test_create_battery_sensors_returns_expected_entities_when_bess_present() -> None:

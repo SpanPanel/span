@@ -36,6 +36,7 @@ from .const import (
 from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
+from .helpers import is_unmapped_tab
 from .id_builder import build_circuit_unique_id, extract_circuit_uuid_from_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
@@ -134,7 +135,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             circuits: list[JsonValueType] = []
 
             for circuit_id, circuit in snapshot.circuits.items():
-                if circuit_id.startswith("unmapped_tab_"):
+                if is_unmapped_tab(circuit_id):
                     continue
 
                 tabs = getattr(circuit, "tabs", None)
