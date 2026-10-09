@@ -24,7 +24,7 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
-from custom_components.span_panel.current_monitor import monitored_circuits
+from custom_components.span_panel.current_monitor import CurrentMonitor, monitored_circuits
 from custom_components.span_panel.diagnostics import async_get_config_entry_diagnostics
 from custom_components.span_panel.helpers import (
     construct_shared_with_attribute,
@@ -226,3 +226,83 @@ async def test_diagnostics_list_one_row_per_group(hass: HomeAssistant) -> None:
     }
     assert result["shared_meter_groups"] == groups
     assert result["shared_relay_groups"] == groups
+
+
+def _monitor_over(snapshot: SpanPanelSnapshot) -> CurrentMonitor:
+    monitor = _make_monitor(_make_hass(), _make_options(spike_threshold_pct=100))
+    monitor.process_snapshot(snapshot)
+    return monitor
+
+
+OVERLOADED: Final = _panel(
+    replace(PAIR_A[0], current_a=40.0),
+    replace(PAIR_A[1], current_a=40.0),
+)
+"""The pair at 133 % of its 30 A: a spike at the default threshold."""
+
+
+def test_an_override_on_any_member_applies_to_the_shared_meter() -> None:
+    """Disabling monitoring on the second member stops the group's alerts."""
+    monitor = _monitor_over(SNAPSHOT)
+    monitor.set_circuit_override("circuit-53", {"monitoring_enabled": False})
+
+    monitor.process_snapshot(OVERLOADED)
+
+    state = monitor.get_circuit_state("circuit-52")
+    assert state is None or state.last_spike_alert is None
+    assert monitor._circuit_overrides == {"circuit-52": {"monitoring_enabled": False}}
+
+
+def test_a_member_threshold_reaches_the_group() -> None:
+    monitor = _monitor_over(SNAPSHOT)
+    monitor.set_circuit_override("circuit-53", {"spike_threshold_pct": 150})
+
+    monitor.process_snapshot(OVERLOADED)
+
+    state = monitor.get_circuit_state("circuit-52")
+    assert state is not None and state.last_spike_alert is None, "133 % is under the member's 150 %"
+
+
+def test_clearing_on_any_member_clears_the_shared_meter() -> None:
+    monitor = _monitor_over(SNAPSHOT)
+    monitor.set_circuit_override("circuit-52", {"monitoring_enabled": False})
+
+    monitor.clear_circuit_override("circuit-53")
+
+    assert monitor._circuit_overrides == {}
+
+
+def test_a_stored_member_override_folds_onto_the_group_key() -> None:
+    """Data stored under a member's own id, as loaded from storage, keeps working."""
+    monitor = _make_monitor(_make_hass(), _make_options(spike_threshold_pct=100))
+    monitor._circuit_overrides = {"circuit-53": {"monitoring_enabled": False}}
+
+    monitor.process_snapshot(OVERLOADED)
+
+    assert monitor._circuit_overrides == {"circuit-52": {"monitoring_enabled": False}}
+    state = monitor.get_circuit_state("circuit-52")
+    assert state is None or state.last_spike_alert is None
+
+
+def test_when_both_members_hold_overrides_the_group_key_wins() -> None:
+    monitor = _make_monitor(_make_hass(), _make_options())
+    monitor._circuit_overrides = {
+        "circuit-52": {"spike_threshold_pct": 120},
+        "circuit-53": {"spike_threshold_pct": 150},
+    }
+
+    monitor.process_snapshot(SNAPSHOT)
+
+    assert monitor._circuit_overrides == {"circuit-52": {"spike_threshold_pct": 120}}
+
+
+def test_overrides_on_unshared_circuits_are_untouched() -> None:
+    monitor = _make_monitor(_make_hass(), _make_options())
+    monitor._circuit_overrides = {"circuit-1": {"spike_threshold_pct": 120}}
+
+    monitor.process_snapshot(SNAPSHOT)
+    monitor.set_circuit_override("circuit-1", {"continuous_threshold_pct": 90})
+
+    assert monitor._circuit_overrides == {
+        "circuit-1": {"spike_threshold_pct": 120, "continuous_threshold_pct": 90}
+    }
