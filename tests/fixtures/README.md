@@ -3,7 +3,8 @@
 The files here are committed source this repository owns, with two exceptions, both held byte for byte to where they came from by a guard:
 
 - the **historical `pyproject.toml` copies** (`pyproject_*.toml`) are this repository's own file at the two commits where the library path override went wrong;
-- the **captured panels** (`captures/*-tree-v1.json`) are vendored from the emitter's published fixtures; `captures/README.md` names the tag and the commit.
+- the **captured panels** (`captures/*-tree-v1.json`) are vendored from the emitter's published fixtures, with the emitter's `LICENSE` beside them;
+  `captures/README.md` names the tag and the commit.
 
 The schema-adapter payloads the conformance tests replay are **not** here. They are package data of `span-panel-api-schema-0` and `span-panel-api-schema-1`,
 read out of the installed wheels by `tests/adapter_fixtures.py`; the pin in `custom_components/span_panel/manifest.json` is what says which capture the suite
@@ -38,8 +39,9 @@ Re-vendor either with `git show <commit>:pyproject.toml > tests/fixtures/<name>.
 
 ## The historical copies are exempt from formatting
 
-`tests/fixtures/pyproject_*.toml` and `tests/fixtures/captures/*-tree-v1.json` are excluded from every hook that rewrites files — `trailing-whitespace`, `end-of-file-fixer`
-and `mixed-line-ending` in `prek.toml`. Prettier cannot format TOML; it can format JSON, so `.prettierignore` names the captures.
+`tests/fixtures/pyproject_*.toml`, `tests/fixtures/captures/*-tree-v1.json` and `tests/fixtures/captures/LICENSE` are excluded from every hook that rewrites
+files — `trailing-whitespace`, `end-of-file-fixer` and `mixed-line-ending` in `prek.toml`. Prettier cannot format TOML or a bare `LICENSE`; it can format
+JSON, so `.prettierignore` names the captures.
 
 The reason is the whole point of the comparison: **these are captured bytes, not source we own.** A copy held byte-identical to a commit and an unconditional
 formatter cannot both exist, and it is the formatter that has to yield. A copy reindented on the way in fails against the commit it genuinely matched when it
@@ -48,11 +50,12 @@ was made, and the resulting failure names the fixture rather than the hook that 
 It is not hypothetical, only untriggered so far. Those three hooks cover `tests/`, and they leave the copies alone only because every one happens to be
 newline-terminated with LF endings and no trailing whitespace. The first one vendored without a final newline would be rewritten on commit.
 
-The scope is two patterns rather than the whole directory, because only these copies have this property. `tests/fixtures/README.md` and
+The scope is these patterns rather than the whole directory, because only these copies have this property. `tests/fixtures/README.md` and
 `captures/README.md` are prose this repository owns and should keep being formatted; the migration YAMLs are hand-written source; `unread_declarations/`,
 despite being a mechanically-checked inventory, is hand-maintained — its values are one-line human explanations; and `expected_entities/` and `topology/` are
 written by their test in the form the hooks already accept. `pyproject_*` is `tests/test_library_path_hook.py`'s own vocabulary and `captures/*-tree-v1.json`
-is `tests/captures_replay.py`'s, so the next copy taken under either is covered without anyone remembering to widen the rule.
+is `tests/captures_replay.py`'s, so the next copy taken under either is covered without anyone remembering to widen the rule. `captures/LICENSE` is named
+outright: there is one upstream notice, and it travels with the copies it covers.
 
 The read-only hooks still cover these files, `check-toml` and `check-json` in particular. A copy that does not parse is worth hearing about wherever it came
 from.

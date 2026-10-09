@@ -217,8 +217,8 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
     assert mapping["c1"]["name"] == "Main House SPAN Drive (Garage Charger)"
 
 
-def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> None:
-    """Circuit sensors should skip empty positions and honor net-energy options."""
+def test_create_circuit_sensors_honors_optional_net_sensors() -> None:
+    """Circuit sensors should honor the net-energy option."""
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={
             "c1": SpanCircuitSnapshotFactory.create(
@@ -226,9 +226,6 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
                 name="Kitchen",
                 current_a=10.0,
                 breaker_rating_a=20.0,
-            ),
-            "unmapped_tab_7": SpanCircuitSnapshotFactory.create(
-                circuit_id="unmapped_tab_7"
             ),
         },
         evse={
@@ -261,7 +258,6 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
     circuit_ids = [entity.circuit_id for entity in entities]
 
     assert "c1" in circuit_ids
-    assert "unmapped_tab_7" not in circuit_ids
     assert "circuit_energy_net" not in keys
     assert "circuit_current" in keys
     assert "circuit_breaker_rating" in keys

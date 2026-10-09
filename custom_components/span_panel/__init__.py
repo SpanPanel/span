@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import logging
+from typing import Final
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
@@ -24,11 +25,13 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.hass_dict import HassKey
+import httpx
 from span_panel_api import (
     LeafNameMismatch,
     SpanMqttClient,
     SpanPanelSnapshot,
     ca_fingerprint,
+    get_v2_status,
 )
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -61,6 +64,7 @@ from .ca_repairs import (
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
+    PanelRestTransport,
     as_port,
     async_ca_signs_panel_leaf,
     async_fetch_panel_ca,
@@ -95,6 +99,12 @@ from .frontend import (
     async_save_panel_settings as async_save_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
+from .hardware_guard import hardware_verdict, refuses_entities
+from .hardware_repairs import (
+    RefusedHardware,
+    async_clear_unvalidated_hardware,
+    async_raise_unvalidated_hardware,
+)
 from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_mismatch
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
@@ -160,6 +170,9 @@ class _DeferredReload:
 
 _DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_deferred_reloads")
 """Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
+
+HARDWARE_READ_TIMEOUT_S: Final = 5.0
+"""How long setup waits for the panel's status before going on without it."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -290,6 +303,63 @@ async def _async_pinned_ca(
         fingerprint,
     )
     return ca_pem
+
+
+async def _async_read_hardware_version(
+    hass: HomeAssistant, host: str, transport: PanelRestTransport
+) -> str | None:
+    """Read the panel's REST `hardwareVersion`, or None when it cannot be had.
+
+    Fail-open by design: a timeout, a refused or reset connection, a certificate
+    the pin rejects and a body that cannot be read all answer None, which the
+    verdict treats exactly as firmware that does not publish the field. This
+    read exists only to refuse unvalidated hardware, so it must never be the
+    reason a panel the connect path accepts is locked out; that path still owns
+    readiness, and reports every one of these failures in its own terms.
+
+    Over the entry's own transport -- the pinned anchor on the HTTPS port when
+    it holds one -- and Home Assistant's shared client otherwise, as the panel
+    client below is given.
+    """
+    try:
+        async with asyncio.timeout(HARDWARE_READ_TIMEOUT_S):
+            status = await get_v2_status(
+                host,
+                port=transport.port,
+                httpx_client=get_async_client(hass),
+                ssl_context=transport.ssl_context,
+            )
+    except (TimeoutError, SpanPanelError, httpx.HTTPError) as err:
+        _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %s", host, err)
+        return None
+    return status.hardware_version
+
+
+@callback
+def _async_enforce_hardware_verdict(
+    hass: HomeAssistant,
+    entry: SpanPanelConfigEntry,
+    hardware_version: str | None,
+    model: str | None,
+) -> None:
+    """Refuse a panel this release has not been validated with, or clear a standing refusal.
+
+    `hardware_version` is the REST value read before connecting and `model` the
+    panel's `info/model` from the first refresh. A refusal raises the Repair and
+    a `ConfigEntryError`, which is terminal: the hardware will not change by
+    retrying, and a release validated with it is the remedy. A setup that
+    proceeds clears the Repair a previous one raised.
+    """
+    if not refuses_entities(hardware_verdict(hardware_version), model):
+        async_clear_unvalidated_hardware(hass, entry)
+        return
+    refused = RefusedHardware(version=hardware_version or "", model=model or None)
+    async_raise_unvalidated_hardware(hass, entry, refused)
+    raise ConfigEntryError(
+        translation_domain=DOMAIN,
+        translation_key=refused.translation_key,
+        translation_placeholders=refused.translation_placeholders,
+    )
 
 
 async def _async_rest_tls_verdict(
@@ -465,6 +535,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                     f"The stored CA for SPAN panel {entry.title} cannot be read; "
                     "re-acquire it in Settings > Repairs"
                 ) from err
+
+            # Read before the broker is dialled. What the version alone cannot
+            # settle waits for the first refresh, the only thing that says
+            # which model the panel is.
+            hardware_version = await _async_read_hardware_version(hass, host, transport)
 
             broker_config = MqttClientConfig(
                 broker_host=host,
@@ -648,6 +723,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
             await coordinator.async_config_entry_first_refresh()
+
+            # Before streaming starts and before any platform is forwarded, so a
+            # refused panel has no entity and no task left running. Raised inside
+            # this `try`, whose handler shuts the coordinator down -- which stops
+            # dispatch and closes the client -- before the error leaves setup.
+            _async_enforce_hardware_verdict(hass, entry, hardware_version, coordinator.data.model)
+
             await coordinator.async_setup_streaming()
 
             if entry.options.get(
@@ -803,6 +885,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_ca_unusable(hass, entry)
     async_clear_rest_tls_untrusted(hass, entry)
     async_clear_leaf_name_mismatch(hass, entry)
+    async_clear_unvalidated_hardware(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)

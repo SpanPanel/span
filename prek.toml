@@ -5,7 +5,8 @@ default_stages = ["pre-commit"]
 # by tests/test_library_path_hook.py -- they are what proves the library-path gate
 # fires, so they have to stay the real files rather than approximations of them.
 # `tests/fixtures/captures/*-tree-v1.json` are panels' retained trees vendored from the
-# emitter's published fixtures, held to their recorded digests by
+# emitter's published fixtures, and `tests/fixtures/captures/LICENSE` is the notice
+# they are published under, all held to their recorded digests by
 # tests/test_expected_entities.py for the same reason.
 #
 # The three hooks below that *rewrite* files -- trailing-whitespace,
@@ -31,9 +32,9 @@ hooks = [
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
-  { id = "trailing-whitespace", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "end-of-file-fixer", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/.*-tree-v1\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "trailing-whitespace", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/(.*-tree-v1\.json|LICENSE)$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "end-of-file-fixer", exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/(.*-tree-v1\.json|LICENSE)$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/pyproject_.*\.toml$|^tests/fixtures/captures/(.*-tree-v1\.json|LICENSE)$|\.\S*_cache/.*|dist/.*|venv/.*' },
 ]
 
 # The library path override in pyproject.toml must name the checkout, not a

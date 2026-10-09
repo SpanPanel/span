@@ -39,6 +39,16 @@ MANIFEST = REPO / "custom_components" / "span_panel" / "manifest.json"
 PYPROJECT = REPO / "pyproject.toml"
 REQUIREMENTS_TEST = REPO / "requirements_test.txt"
 
+CORE_PACKAGE = "span-panel-api"
+"""The library core, which every adapter package requires with a lower bound.
+
+Home Assistant installs the manifest's requirements one at a time, each with
+uv's `--upgrade`. An adapter's floor such as `span-panel-api>=3.7.0b1` admits any
+later pre-release, so installing the adapter can lift the core past its pin. Only
+an install of the core itself after the adapters puts it back in the same pass,
+which is why the manifest must list it last.
+"""
+
 # One requirement: a PEP 508 name, then a specifier that runs to the end. The
 # version half is deliberately unconstrained -- `3.0.0b7`, `1.0.0rc1`, `2.6.4`,
 # `1.0.0.post1` and `>=1,<2` all have to survive it, and enumerating version
@@ -53,7 +63,7 @@ class SyncError(Exception):
 
 
 def manifest_pins() -> dict[str, str]:
-    """Return the manifest's requirements, keyed by package name.
+    """Return the manifest's requirements, keyed by package name, in the manifest's order.
 
     Raises rather than returning empty on a bad manifest. An unreadable source of
     truth is not a reason to leave every copy alone and report success.
@@ -152,13 +162,21 @@ def sync_requirements_test(pins: dict[str, str]) -> list[str]:
 
 
 def verify(pins: dict[str, str]) -> None:
-    """Read the rewritten files back and confirm they say what was intended.
+    """Confirm the manifest's order, then read the rewritten files back against it.
 
     The point of the whole rewrite. A regex that matches nothing produces no
     changes, which is indistinguishable from a file that was already correct --
     that is exactly how the previous version stayed silently broken. Checking the
     result against the manifest turns a miss into a failure.
     """
+    order = list(pins)
+    if order[-1] != CORE_PACKAGE:
+        raise SyncError(
+            f"{MANIFEST.relative_to(REPO)} must list {CORE_PACKAGE} as its last requirement, "
+            f"but lists {order}: Home Assistant installs each requirement with --upgrade, "
+            "and an adapter installed after the core can lift it past its pin"
+        )
+
     declared = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["dependencies"]
     for requirement in declared:
         match = REQUIREMENT.match(str(requirement).strip())

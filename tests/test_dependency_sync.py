@@ -51,9 +51,9 @@ def repo(tmp_path: Path) -> Path:
             {
                 "domain": "span_panel",
                 "requirements": [
-                    "span-panel-api==3.0.0b7",
                     "span-panel-api-schema-0==1.0.0b5",
                     "span-panel-api-schema-1==0.1.0b6",
+                    "span-panel-api==3.0.0b7",
                 ],
             },
             indent=2,
@@ -203,6 +203,41 @@ def test_an_unpinned_manifest_requirement_is_an_error(repo: Path) -> None:
 
     assert result.returncode == 1
     assert "no version specifier" in result.stderr
+
+
+def test_a_manifest_that_does_not_list_the_core_last_is_an_error(repo: Path) -> None:
+    """Home Assistant installs each requirement with `--upgrade`, in order.
+
+    An adapter's floor on the core admits a later pre-release, so an adapter
+    installed after the core can lift it past its pin; only the core's own
+    install, last, puts it back. The commit stops on any other order.
+    """
+    manifest = repo / "custom_components" / "span_panel" / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "requirements": [
+                    "span-panel-api==3.0.0b7",
+                    "span-panel-api-schema-0==1.0.0b5",
+                    "span-panel-api-schema-1==0.1.0b6",
+                ]
+            },
+            indent=2,
+        )
+    )
+
+    result = _sync(repo)
+
+    assert result.returncode == 1
+    assert "must list span-panel-api as its last requirement" in result.stderr
+
+
+def test_the_real_manifest_lists_the_core_last() -> None:
+    """Asserted on the file itself as well, so a reordering reads as this and not as a sync failure."""
+    manifest = json.loads(
+        (REPO / "custom_components" / "span_panel" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["requirements"][-1].startswith("span-panel-api==")
 
 
 def test_the_real_repository_is_in_sync() -> None:
