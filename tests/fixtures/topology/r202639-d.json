@@ -194,6 +194,8 @@
   "device_id": "xg-1334-066e8",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 24,
   "panel_device_id": "xg-1334-066e8",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

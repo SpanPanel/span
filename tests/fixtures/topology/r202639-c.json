@@ -139,6 +139,8 @@
   "device_id": "xg-7814-15i6h",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 9,
+  "last_position": 48,
   "panel_device_id": "xg-7814-15i6h",
   "panel_entities": {
     "battery_level": "sensor.span_panel_battery_battery_level",

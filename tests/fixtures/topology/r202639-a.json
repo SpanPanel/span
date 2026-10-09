@@ -81,6 +81,8 @@
   "device_id": "xg-3940-9ooto",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 14,
+  "last_position": 16,
   "panel_device_id": "xg-3940-9ooto",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",
