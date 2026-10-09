@@ -439,13 +439,14 @@ this field is topology rather than a reading, so schema_1 lists it in
 panel that resolved the field and the panel that never looked -- exactly the
 distinction that has to be drawn.
 
-**This is a workaround for a library type, and it is meant to be deleted.**
-`SpanPanelSnapshot.lugs_at_service_entrance` is a plain `bool` defaulting to
-True, alone among the snapshot's conditional members in having no `None` to mean
-"not answered". Once span-panel-api makes it `bool | None` (wanted for 3.1.1),
-the honest test is `is not None` on the value itself, this constant goes, and the
-integration stops needing to know which adapter is running -- which it knows
-nowhere else, deliberately.
+**Why the value alone cannot settle it.**
+`SpanPanelSnapshot.lugs_at_service_entrance` is `bool | None`, but its `None`
+means only that the parent/child lugs declare a feed they have not published
+yet. The flat adapter never writes the field, so a flat panel still reads the
+dataclass default, `True`, and `is not None` cannot tell that default from a
+reading. Until the library gives the flat schema a `None` of its own, the
+integration has to know which adapter is running -- which it knows nowhere
+else, deliberately.
 """
 
 
@@ -466,9 +467,13 @@ def _service_entrance_was_read(coordinator: SpanPanelCoordinator) -> bool:
     The test is where the value came from and never what it is. Suppressing
     `True` as "probably a default" would silence the real reading a panel at the
     service entrance publishes, which is the same mistake in the other
-    direction.
+    direction. `None` is the parent/child adapter saying the lugs have not
+    answered yet, so it is omitted for the same reason a default is.
     """
-    return coordinator.client.schema_major == _SERVICE_ENTRANCE_ADAPTER
+    return (
+        coordinator.client.schema_major == _SERVICE_ENTRANCE_ADAPTER
+        and coordinator.data.lugs_at_service_entrance is not None
+    )
 
 
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):

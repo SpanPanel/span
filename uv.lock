@@ -2604,7 +2604,7 @@ dev = [
 
 [[package]]
 name = "span-panel-api"
-version = "3.7.0b1"
+version = "3.8.0b1"
 source = { editable = "../../span/span-panel-api" }
 dependencies = [
     { name = "httpx" },
@@ -2657,7 +2657,7 @@ requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-ap
 
 [[package]]
 name = "span-panel-api-schema-1"
-version = "1.3.0b1"
+version = "1.4.0b1"
 source = { editable = "../../span/span-panel-api/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },

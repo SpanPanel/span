@@ -463,7 +463,7 @@ def test_the_battery_less_variant_declares_no_battery_and_forecasts_no_backup() 
     nodes = description(tree, panel).get("nodes")
 
     assert devices_of_type(tree, BATTERY_TYPE) == []
-    assert snapshot(tree).battery == SpanBatterySnapshot()
+    assert snapshot(tree).battery == SpanBatterySnapshot(present=False)
     assert _published_on(tree, panel, BACKUP_FORECAST_NODE) == []
     assert isinstance(nodes, dict) and BACKUP_FORECAST_NODE in nodes, "the declarations stay"
 
