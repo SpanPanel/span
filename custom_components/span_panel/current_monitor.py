@@ -160,6 +160,8 @@ class CurrentMonitor:
     def process_snapshot(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for all circuits and mains legs."""
         self._last_snapshot = snapshot
+        if self._fold_member_overrides(snapshot):
+            self._hass.async_create_task(self.async_save_overrides())
         self._evaluate_circuits(snapshot)
         self._evaluate_mains(snapshot)
 
@@ -172,20 +174,54 @@ class CurrentMonitor:
         return self._mains_states.get(leg)
 
     def set_circuit_override(self, circuit_id: str, overrides: MonitoringSettings) -> None:
-        """Set per-circuit threshold overrides."""
-        existing = self._circuit_overrides.get(circuit_id, {})
+        """Set per-circuit threshold overrides; a shared meter's member sets its group's."""
+        key = self._override_key(circuit_id)
+        existing = self._circuit_overrides.get(key, {})
         existing.update(overrides)
         if self._is_redundant_override(existing):
-            self._circuit_overrides.pop(circuit_id, None)
+            self._circuit_overrides.pop(key, None)
         else:
-            self._circuit_overrides[circuit_id] = existing
+            self._circuit_overrides[key] = existing
         self._hass.async_create_task(self.async_save_overrides())
 
     def clear_circuit_override(self, circuit_id: str) -> None:
-        """Remove per-circuit threshold overrides."""
-        self._circuit_overrides.pop(circuit_id, None)
-        self._circuit_states.pop(circuit_id, None)
+        """Remove per-circuit threshold overrides; a shared meter's member clears its group's."""
+        key = self._override_key(circuit_id)
+        self._circuit_overrides.pop(key, None)
+        self._circuit_states.pop(key, None)
         self._hass.async_create_task(self.async_save_overrides())
+
+    def _override_key(self, circuit_id: str) -> str:
+        """Return the key a circuit's override and state are held under.
+
+        The monitored point's id: the circuit's own, or for a member of a shared
+        meter the group's first member, which is the key every reader uses. The
+        circuit's own id while no snapshot has said which group it is in.
+        """
+        snapshot = self._last_snapshot
+        point = monitored_circuits(snapshot).get(circuit_id) if snapshot else None
+        return point.point_id if point is not None else circuit_id
+
+    def _fold_member_overrides(self, snapshot: SpanPanelSnapshot) -> bool:
+        """Move overrides held under a shared meter's other members onto the group's key.
+
+        Overrides written before a meter was known to be shared, or loaded from
+        storage, sit under a member's own id, where no reader looks. The group's
+        own key wins where it already holds one; otherwise the first member, in
+        group order, that holds one does. The rest are dropped. Returns whether
+        anything moved, so the caller persists the result.
+        """
+        moved = False
+        for key, members in shared_meter_groups(snapshot.circuits).items():
+            stored = [m for m in members if m != key and m in self._circuit_overrides]
+            if not stored:
+                continue
+            if key not in self._circuit_overrides:
+                self._circuit_overrides[key] = self._circuit_overrides[stored[0]]
+            for member in stored:
+                del self._circuit_overrides[member]
+            moved = True
+        return moved
 
     def set_mains_override(self, leg: str, overrides: MonitoringSettings) -> None:
         """Set per-mains-leg threshold overrides."""
@@ -503,9 +539,10 @@ class CurrentMonitor:
     # --- Threshold resolution (delegated to threshold_evaluator) ---
 
     def _resolve_circuit_thresholds(self, circuit_id: str) -> tuple[int, int, int, int]:
-        """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a circuit."""
+        """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a circuit, or its shared meter."""
         return resolve_thresholds(
-            self._circuit_overrides.get(circuit_id, {}), self.get_global_settings()
+            self._circuit_overrides.get(self._override_key(circuit_id), {}),
+            self.get_global_settings(),
         )
 
     def _resolve_mains_thresholds(self, leg: str) -> tuple[int, int, int, int]:
