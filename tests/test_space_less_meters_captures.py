@@ -13,12 +13,15 @@ import pytest
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.current_monitor import CurrentMonitor
+from custom_components.span_panel.diagnostics import async_get_config_entry_diagnostics
 from custom_components.span_panel.helpers import outside_meter_label
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
 )
+from custom_components.span_panel.runtime import loaded_runtime_data
 
 from .captures_replay import CAPTURES, Capture, RetainedTree, description, devices_of_type
 from .test_expected_entities import _install, _topology
@@ -116,3 +119,53 @@ async def test_topology_names_a_space_less_meter_like_its_entities(
         if circuit_id in meters:
             assert row["name"] == outside_meter_label(circuit_id)
             assert row["tabs"] == []
+
+
+BREAKER_ATTRIBUTES = (
+    "always_on",
+    "relay_state",
+    "relay_requester",
+    "shed_priority",
+    "is_sheddable",
+)
+"""What a breaker's power sensor reports about its relay and shedding; a meter has neither."""
+
+
+@pytest.mark.parametrize("captured", WITH_METERS, ids=[c.name for c in WITH_METERS])
+async def test_a_space_less_meter_never_looks_like_a_breaker(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, captured: Capture
+) -> None:
+    """No relay, shed or backup fact anywhere, no monitored breaker, and its label wherever it is named."""
+    tree = captured.tree()
+    entry = await _install(hass, tree, captured.name)
+    serial = str(entry.unique_id)
+    registry = er.async_get(hass)
+    runtime = loaded_runtime_data(entry)
+    assert runtime is not None
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    topology = await _topology(hass, hass_ws_client, entry)
+    assert isinstance(topology, dict)
+    monitor = CurrentMonitor(hass, entry)
+    monitor.process_snapshot(runtime.coordinator.data)
+    monitored = monitor.get_monitoring_status()["circuits"]
+
+    for meter in _space_less(tree):
+        label = outside_meter_label(meter)
+        for key in ("instantPowerW", "current"):
+            entity_id = registry.async_get_entity_id(
+                "sensor", DOMAIN, build_circuit_unique_id(serial, meter, key)
+            )
+            assert entity_id is not None, (meter, key)
+            state = hass.states.get(entity_id)
+            assert state is not None
+            assert not set(BREAKER_ATTRIBUTES) & set(state.attributes), (meter, key)
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if meter in entity.unique_id:
+                assert entity.domain == "sensor", entity.entity_id
+                assert entity.original_name and entity.original_name.startswith(label), entity
+
+        row = topology["circuits"][meter]
+        assert (row["always_on"], row["is_never_backup"]) == (None, None)
+        assert diagnostics["circuits"][meter]["name"] == label
+        assert monitor.get_circuit_state(meter) is None
+        assert all(meter not in entity_id for entity_id in monitored), monitored
