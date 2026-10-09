@@ -485,6 +485,9 @@
     "favorite_not_span_entity": {
       "message": "La entidad {entity_id} no es una entidad de SPAN Panel. Seleccione un sensor de circuito, batería (BESS) o cargador EV (EVSE)."
     },
+    "favorite_panel_not_loaded": {
+      "message": "El SPAN Panel al que pertenece la entidad {entity_id} no está cargado, por lo que no se pueden resolver sus circuitos. Inténtelo de nuevo cuando el panel haya terminado de configurarse."
+    },
     "favorite_subdevice_no_span_parent": {
       "message": "El subdispositivo {entity_id} no tiene un dispositivo SPAN Panel principal — su via_device_id no apunta a un panel SPAN."
     },
@@ -496,6 +499,9 @@
     },
     "graph_horizon_not_available": {
       "message": "El gestor del horizonte del gráfico no está disponible para el SPAN Panel seleccionado."
+    },
+    "monitoring_entity_on_another_panel": {
+      "message": "La entidad {entity_id} pertenece a un SPAN Panel distinto de la entrada de configuración {config_entry_id}. Omita config_entry_id o indique el panel propio de la entidad."
     },
     "monitoring_not_enabled": {
       "message": "Ningún SPAN Panel tiene el monitoreo de corriente habilitado."

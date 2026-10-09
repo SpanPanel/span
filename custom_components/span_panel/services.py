@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection, Mapping
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -37,7 +38,7 @@ from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
 from .helpers import is_unmapped_tab
-from .id_builder import build_circuit_unique_id, extract_circuit_uuid_from_unique_id
+from .id_builder import build_circuit_unique_id, match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -248,6 +249,34 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
     )
 
 
+def _threshold_panel_entry_id(
+    hass: HomeAssistant, target: str, requested: str | None
+) -> str | None:
+    """Return the config entry whose panel a threshold call acts on, or None for the first loaded.
+
+    `target` is what the call names: one of this integration's entities, or a
+    raw circuit id or leg name. An entity belongs to one panel, its own config
+    entry, and that entry decides, so an automation that names only the entity
+    reaches the right panel among several. A `requested` entry naming another
+    panel is refused rather than obeyed: acting on the other panel would put a
+    mains override on that panel's leg of the same name, or store a circuit
+    override under an id that panel does not publish. A raw id belongs to no
+    entity, so `requested`, or else the first loaded panel, decides as before.
+    """
+    entity_entry = er.async_get(hass).async_get(target)
+    if entity_entry is None or entity_entry.platform != DOMAIN:
+        return requested
+    owner = entity_entry.config_entry_id
+    if owner is not None and requested is not None and requested != owner:
+        raise ServiceValidationError(
+            f"Entity {target} belongs to a different SPAN Panel than config entry {requested}.",
+            translation_domain=DOMAIN,
+            translation_key="monitoring_entity_on_another_panel",
+            translation_placeholders={"entity_id": target, "config_entry_id": requested},
+        )
+    return owner or requested
+
+
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services."""
 
@@ -267,17 +296,23 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
                 return runtime_data, entry
         return None
 
-    def _get_monitor(
-        call: ServiceCall,
-        config_entry_id: str | None = None,
-    ) -> CurrentMonitor:
-        """Find the CurrentMonitor for the given entry."""
-        entry_id = config_entry_id or call.data.get("config_entry_id")
-        result = _get_runtime_data(entry_id)
+    def _get_monitored(
+        call: ServiceCall, target: str
+    ) -> tuple[CurrentMonitor, SpanPanelRuntimeData]:
+        """Find the CurrentMonitor for the panel `target` belongs to, with its runtime data.
+
+        The panel is `_threshold_panel_entry_id`'s choice. The runtime data comes
+        with the monitor because a circuit is resolved against the coordinator's
+        live circuit ids, which the monitor itself does not hold until the
+        coordinator's next push.
+        """
+        result = _get_runtime_data(
+            _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
+        )
         if result is not None:
             runtime_data, _entry = result
             if runtime_data.coordinator.current_monitor is not None:
-                return runtime_data.coordinator.current_monitor
+                return runtime_data.coordinator.current_monitor, runtime_data
         raise ServiceValidationError(
             "No SPAN panel with current monitoring enabled.",
             translation_domain=DOMAIN,
@@ -310,30 +345,34 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
         data = dict(call.data)
         entity_id = data.pop("circuit_id")
         data.pop("config_entry_id", None)
-        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
+        monitor, runtime_data = _get_monitored(call, entity_id)
+        circuit_id = monitor.resolve_entity_to_circuit_id(
+            entity_id, runtime_data.coordinator.data.circuits.keys()
+        )
         monitor.set_circuit_override(circuit_id, data)
 
     async def async_handle_clear_circuit_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
         entity_id = call.data["circuit_id"]
-        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
+        monitor, runtime_data = _get_monitored(call, entity_id)
+        circuit_id = monitor.resolve_entity_to_circuit_id(
+            entity_id, runtime_data.coordinator.data.circuits.keys()
+        )
         monitor.clear_circuit_override(circuit_id)
 
     async def async_handle_set_mains_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
         data = dict(call.data)
         entity_id = data.pop("leg")
         data.pop("config_entry_id", None)
+        monitor, _runtime_data = _get_monitored(call, entity_id)
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.set_mains_override(leg, data)
 
     async def async_handle_clear_mains_threshold(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
         entity_id = call.data["leg"]
+        monitor, _runtime_data = _get_monitored(call, entity_id)
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.clear_mains_override(leg)
 
@@ -570,18 +609,35 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
     The public API takes ``entity_id`` — any sensor on a SPAN circuit or
     sub-device — and resolves it server-side to the internal
     ``(panel_device_id, kind, target_id)`` tuple used in storage. Circuit
-    UUIDs and HA device IDs are not part of the user-visible surface.
+    ids and HA device IDs are not part of the user-visible surface.
     """
 
-    def _resolve_entity_to_favorite_target(entity_id: str) -> tuple[str, FavoriteKind, str]:
+    def _live_circuit_ids(config_entry_id: str | None) -> Collection[str] | None:
+        """Return the circuit ids the entry's live snapshot holds, or None if it is not loaded."""
+        config_entry = (
+            hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
+        )
+        runtime_data = loaded_runtime_data(config_entry) if config_entry is not None else None
+        if runtime_data is None:
+            return None
+        return runtime_data.coordinator.data.circuits.keys()
+
+    def _resolve_entity_to_favorite_target(
+        entity_id: str, stored: Mapping[str, Mapping[str, Collection[str]]]
+    ) -> tuple[str, FavoriteKind, str]:
         """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
-        ``target_id`` is the panel-local circuit uuid (extracted from the
-        entity's unique_id). For sub-devices, ``target_id`` is the HA device id
-        of the sub-device; the panel id walks up via ``via_device_id``. Nothing
-        here enumerates the kinds, so a new one -- the PV inverter most recently
-        -- is favouritable the day its device exists.
+        ``target_id`` is the panel-local circuit id that the entity's unique_id
+        names, among the live snapshot's ids and the panel's circuits in
+        ``stored``. Removal passes the stored favorites, which are ids the panel
+        once published, so a circuit that has left the panel, or a panel that is
+        not loaded, can still have its favorite removed; adding passes none, so
+        only a circuit the panel publishes now becomes one. For sub-devices,
+        ``target_id`` is the HA device id of the sub-device; the panel id walks
+        up via ``via_device_id``. Nothing here enumerates the kinds, so a new
+        one -- the PV inverter most recently -- is favouritable the day its
+        device exists.
 
         Failure paths use distinct translation keys so users see the
         actual reason their pick was rejected.
@@ -640,7 +696,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         # Rationale: the device card on the dashboard already represents
         # both the sub-device's status sensors AND its feed-circuit
         # power. Routing a feed-circuit sensor (current/power, whose
-        # unique_id encodes a circuit UUID) to a circuit favorite would
+        # unique_id encodes a circuit id) to a circuit favorite would
         # make a Favorites view show the same physical thing twice — a
         # device card and a circuit row — and prevent the user from
         # ever favoriting "the device" via a click on a feed-circuit
@@ -650,19 +706,28 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             return panel_device_id, "sub_devices", device_entry.id
 
         # Main-panel entity (regular breaker circuit) — favorite the
-        # circuit. Requires a unique_id that embeds the 32-char circuit
-        # UUID (``span_{serial}_{circuit_uuid}_{suffix}``).
-        circuit_uuid = (
-            extract_circuit_uuid_from_unique_id(entry.unique_id) if entry.unique_id else None
-        )
-        if circuit_uuid is not None:
-            return panel_device_id, "circuits", circuit_uuid
-
+        # circuit. Its unique_id names a circuit id
+        # (``span_{serial}_{circuit_id}_{suffix}``); an id is opaque, so it is
+        # found among the ids the panel publishes, or once published, rather
+        # than by its shape.
         if not entry.unique_id:
             raise ServiceValidationError(
                 f"Entity {entity_id} has no unique id to resolve.",
                 translation_domain=DOMAIN,
                 translation_key="favorite_no_unique_id",
+                translation_placeholders={"entity_id": entity_id},
+            )
+        live = _live_circuit_ids(entry.config_entry_id)
+        known = {*(live or ()), *stored.get(panel_device_id, {}).get("circuits", ())}
+        circuit_id = match_circuit_id(entry.unique_id, known)
+        if circuit_id is not None:
+            return panel_device_id, "circuits", circuit_id
+
+        if live is None:
+            raise ServiceValidationError(
+                f"The SPAN Panel that entity {entity_id} belongs to is not loaded.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_panel_not_loaded",
                 translation_placeholders={"entity_id": entity_id},
             )
         raise ServiceValidationError(
@@ -693,14 +758,16 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
     async def async_handle_add_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
-        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
+        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id, {})
         return _favorites_response(
             await async_set_favorite(hass, panel_device_id, kind, target_id, True)
         )
 
     async def async_handle_remove_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
-        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
+        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(
+            entity_id, await async_get_favorites(hass)
+        )
         return _favorites_response(
             await async_set_favorite(hass, panel_device_id, kind, target_id, False)
         )

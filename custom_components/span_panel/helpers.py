@@ -48,7 +48,7 @@ from .id_builder import (  # noqa: F401
     get_panel_entity_suffix,
     get_suffix_from_sensor_key,
     get_user_friendly_suffix,
-    is_panel_level_sensor_key,
+    match_circuit_id,
 )
 
 __all__ = [
@@ -102,8 +102,8 @@ __all__ = [
     "has_shed_forecast",
     "identity_digest",
     "pv_inverter_capability_tokens",
-    "is_panel_level_sensor_key",
     "is_unmapped_tab",
+    "match_circuit_id",
     "remove_withdrawn_controls",
     "resolve_evse_display_suffix",
     "resolve_pv_display_suffix",

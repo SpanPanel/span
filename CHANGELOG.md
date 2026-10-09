@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
 - **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,
   instead of a false 0 W that history and statistics could not tell from a real reading.
 - **Get monitoring status reports no current or utilization for a circuit or main breaker that has not been measured yet**, instead of 0 A and 0%.
+- **Favorites, current-monitoring overrides and the dashboard find circuits whatever their ids look like.**
+- **With more than one panel, a current-monitoring threshold set through an entity applies to that entity's panel**, and a call naming a different panel is
+  refused.
+- **Diagnostics redact the Wi-Fi network name.**
 
 ## [2.1.2] - 10/2026
 

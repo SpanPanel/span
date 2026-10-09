@@ -11,7 +11,7 @@ from homeassistant.components.diagnostics import REDACTED
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
 
@@ -31,6 +31,7 @@ from custom_components.span_panel.curation import (
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
@@ -121,7 +122,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         "lugs_at_service_entrance": True,
         "instant_grid_power_w": 2500.75,
         "power_flow_grid": None,
-        "wifi_ssid": "Span WiFi",
+        "wifi_ssid": REDACTED,
         "eth0_link": True,
         "wlan_link": False,
     }
@@ -500,3 +501,80 @@ async def test_a_withheld_inverters_device_id_key_is_digested(hass: HomeAssistan
         }
     }
     assert SERIAL_PV not in json.dumps(block)
+
+
+# -- site data never leaves the house in a dump ------------------------------
+
+
+def _reference_entry(snapshot: SpanPanelSnapshot) -> MockConfigEntry:
+    """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it."""
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    return entry
+
+
+async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> None:
+    """The network name says where the panel is, and a dump is posted where anyone reads it.
+
+    That the panel reports one is kept, because it says the panel is on Wi-Fi;
+    what it is, is not.
+    """
+    snapshot = schema_one_snapshot()
+    assert snapshot.wifi_ssid
+
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot))
+
+    assert result["panel"]["wifi_ssid"] == REDACTED
+    assert snapshot.wifi_ssid not in json.dumps(result, default=str)
+
+
+async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
+    """The postal code the panel publishes reaches no dump, and its entity is not taken away.
+
+    The entity is disabled by default and stays: removing it would remove one a
+    user may have enabled.
+    """
+    snapshot = schema_one_snapshot()
+    (postal_code,) = (
+        row for row in snapshot.extension_properties if row.path == "status/postal-code"
+    )
+    assert postal_code.value
+
+    entry = _reference_entry(snapshot)
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert postal_code.value not in json.dumps(result, default=str)
+
+    entry.add_to_hass(hass)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, snapshot.serial_number)},
+        name="Span Panel",
+    )
+    sensors = create_extension_sensors(
+        entry.runtime_data.coordinator,
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        config_entry_id=entry.entry_id,
+        overlay=CurationOverlay.empty(),
+        pv_binding=entry.runtime_data.pv_binding,
+    )
+    (postal_code_sensor,) = (
+        sensor
+        for sensor in sensors
+        if (sensor.extra_state_attributes or {}).get("wire_path") == postal_code.path
+    )
+    assert postal_code_sensor.entity_registry_enabled_default is False

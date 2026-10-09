@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import websocket_api
@@ -21,7 +21,7 @@ from .helpers import (
     construct_voltage_attribute,
     is_unmapped_tab,
 )
-from .id_builder import build_binary_sensor_unique_id
+from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -318,13 +318,15 @@ def _offered_roles(
 
 
 def _build_circuit_entity_map(
-    circuit_ids: set[str],
+    circuit_ids: Collection[str],
     entities: list[er.RegistryEntry],
 ) -> dict[str, dict[str, str]]:
     """Build a circuit_id to {role: entity_id} map in a single pass.
 
-    Iterates over entities once, matching each to a circuit by checking
-    whether its unique_id contains a known circuit UUID.
+    Iterates over entities once, matching each to the circuit its unique_id
+    names among the known circuit ids (`match_circuit_id`). The match is on
+    whole `_`-separated segments, so neither `1` inside `15` nor `b-7` inside
+    `sub-b-7` is taken for the other, whichever id is tried first.
     """
     result: dict[str, dict[str, str]] = {}
 
@@ -335,23 +337,7 @@ def _build_circuit_entity_map(
         if not uid:
             continue
 
-        # Find which circuit this entity belongs to.
-        matched_circuit_id: str | None = None
-        for cid in circuit_ids:
-            # Avoid plain substring matching to prevent collisions like "1" in "15".
-            idx = uid.find(cid)
-            if idx == -1:
-                continue
-
-            # Require delimiters (or string boundaries) around the circuit_id.
-            before_ok = idx == 0 or uid[idx - 1] in "_-"
-            after_index = idx + len(cid)
-            after_ok = after_index == len(uid) or uid[after_index] in "_-"
-
-            if before_ok and after_ok:
-                matched_circuit_id = cid
-                break
-
+        matched_circuit_id = match_circuit_id(uid, circuit_ids)
         if matched_circuit_id is None:
             continue
 
