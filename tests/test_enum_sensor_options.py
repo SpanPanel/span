@@ -36,7 +36,6 @@ from custom_components.span_panel.sensor_definitions import (
     PCS_SENSORS,
     PV_METADATA_SENSORS,
     STATUS_SENSORS,
-    UNMAPPED_SENSORS,
 )
 
 _COMPONENT = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
@@ -55,7 +54,6 @@ def _enum_descriptions() -> list[Any]:
     groups = (
         PANEL_DATA_STATUS_SENSORS,
         STATUS_SENSORS,
-        UNMAPPED_SENSORS,
         MID_SENSORS,
         BESS_METADATA_SENSORS,
         BESS_TELEMETRY_SENSORS,

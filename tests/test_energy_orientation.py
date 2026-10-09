@@ -34,7 +34,6 @@ from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
     PANEL_ENERGY_SENSORS,
-    UNMAPPED_SENSORS,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
 )
@@ -192,7 +191,7 @@ def test_each_circuit_energy_description_declares_its_role() -> None:
         "circuit_energy_consumed": EnergyRole.CONSUMED,
         "circuit_energy_net": EnergyRole.NET,
     }
-    for other in (*UNMAPPED_SENSORS, CIRCUIT_CURRENT_SENSOR, CIRCUIT_BREAKER_RATING_SENSOR):
+    for other in (CIRCUIT_CURRENT_SENSOR, CIRCUIT_BREAKER_RATING_SENSOR):
         assert other.energy_role is None, other.key
 
 

@@ -5,7 +5,6 @@ This file contains sensor definitions for all native integration sensors:
 - Hardware status sensors (software version)
 - Panel power and energy sensors (grid, feedthrough, battery, site)
 - Circuit power and energy sensors
-- Unmapped circuit sensors (invisible backing data)
 - Battery sensor
 
 Disabled by default from 2.1.0, because the SPAN API's own values are unreliable
@@ -215,53 +214,6 @@ STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription,] = (
         translation_key="software_version",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.firmware_version,
-    ),
-)
-
-# Unmapped circuit sensor definitions (invisible backing data)
-# Keys are inline string literals preserving the v1 camelCase values for unique_id stability
-UNMAPPED_SENSORS: tuple[
-    SpanPanelCircuitsSensorEntityDescription,
-    SpanPanelCircuitsSensorEntityDescription,
-    SpanPanelCircuitsSensorEntityDescription,
-] = (
-    SpanPanelCircuitsSensorEntityDescription(
-        key="instantPowerW",
-        field_path="circuit.instant_power_w",
-        name="Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.POWER,
-        value_fn=lambda c: c.instant_power_w,
-        entity_registry_enabled_default=True,
-        entity_registry_visible_default=False,
-    ),
-    SpanPanelCircuitsSensorEntityDescription(
-        key="producedEnergyWh",
-        field_path="circuit.produced_energy_wh",
-        name="Produced Energy",
-        legacy_names=("Energy Produced",),
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda c: c.produced_energy_wh,
-        entity_registry_enabled_default=True,
-        entity_registry_visible_default=False,
-    ),
-    SpanPanelCircuitsSensorEntityDescription(
-        key="consumedEnergyWh",
-        field_path="circuit.consumed_energy_wh",
-        name="Consumed Energy",
-        legacy_names=("Energy Consumed",),
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda c: c.consumed_energy_wh,
-        entity_registry_enabled_default=True,
-        entity_registry_visible_default=False,
     ),
 )
 
@@ -1391,16 +1343,14 @@ EVSE_SENSORS: tuple[
 def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
     """Every sensor description, without deduplication.
 
-    A tuple rather than a dict because no one key identifies a description:
-    `description.key` and `field_path` are different namespaces, and neither is
-    unique across the whole set — several field paths are read by two
-    descriptions. Callers key by whichever suits them; see
+    A tuple rather than a dict because no one key identifies every description:
+    `description.key` and `field_path` are different namespaces, and not every
+    description names a field. Callers key by whichever suits them; see
     `sensor_descriptions_by_field_path`.
     """
     return (
         *PANEL_DATA_STATUS_SENSORS,
         *STATUS_SENSORS,
-        *UNMAPPED_SENSORS,
         *MID_SENSORS,
         *BESS_METADATA_SENSORS,
         *BESS_TELEMETRY_SENSORS,
@@ -1442,11 +1392,11 @@ def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
     produces the row publishes a unit, and this integration's sensor declares
     one, and they can disagree.
 
-    A few field paths are read by two descriptions (an unmapped-circuit raw key
-    and its named-circuit twin), and only the first is kept. That is safe only
-    while such readers agree on `native_unit_of_measurement`, which is all this
-    map is consulted for; `test_readers_of_the_same_field_path_agree_on_unit`
-    pins that rather than leaving it to chance.
+    Each field path has one reader today. Were a second added, only the first
+    would be kept, which is safe only while the two agree on
+    `native_unit_of_measurement`, all this map is consulted for;
+    `test_readers_of_the_same_field_path_agree_on_unit` pins that rather than
+    leaving it to chance.
 
     Lives here rather than at the call site so no consumer has to know how a
     description declares its field; `field_paths.iter_source_field_declarations`

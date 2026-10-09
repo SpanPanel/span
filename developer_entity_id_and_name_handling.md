@@ -88,7 +88,6 @@ base and clears a stale `suggested_object_id`. The row is never frozen at creati
 | Circuit numbers (`use_circuit_numbers`) | `Circuit 15`, `Circuit 30 32` (every tab, sorted)         | `helpers.construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)`        |
 | Friendly names, circuit has a name      | the panel's name, verbatim                                | `circuit.name`                                                                    |
 | Friendly names, circuit unnamed         | `Solar` (PV), `EV Charger` (EVSE), else `Circuit 7` (tab) | `_unnamed_circuit_fallback` — never `None`, so two unnamed circuits never collide |
-| Unmapped tab (either mode)              | `Unmapped Tab 32`                                         | `SpanUnmappedCircuitSensor._object_id_parts`                                      |
 
 The identifier **always answers**. A `None` identifier lets Core compose from the label alone, which gives every unnamed circuit the same ID and leaves the
 registry to disambiguate with `_2`, `_3` — the pre-2.1.0 behavior that is now gone.

@@ -113,9 +113,6 @@ General Options form, so saving that form never changes what the sensors do."""
 NEW_INSTALL_ENERGY_DIP_COMPENSATION = True
 """The config flow's starting choice for a new install, which it stores."""
 
-# Unmapped circuit sensor configuration
-ENABLE_UNMAPPED_CIRCUIT_SENSORS = "enable_unmapped_circuit_sensors"
-
 # Current monitoring configuration
 ENABLE_CURRENT_MONITORING = "enable_current_monitoring"
 DEFAULT_CONTINUOUS_THRESHOLD_PCT = 80

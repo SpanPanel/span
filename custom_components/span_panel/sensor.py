@@ -16,7 +16,6 @@ from .const import (
     CONF_DEVICE_NAME,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
-    ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
@@ -31,16 +30,13 @@ from .helpers import (
     has_power_flows,
     has_pv,
     has_shed_forecast,
+    is_unmapped_tab,
     resolve_evse_display_suffix,
     resolve_pv_display_suffixes,
 )
 from .runtime import SpanPanelConfigEntry
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
-from .sensor_circuit import (
-    SpanCircuitEnergySensor,
-    SpanCircuitPowerSensor,
-    SpanUnmappedCircuitSensor,
-)
+from .sensor_circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor
 from .sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
@@ -66,7 +62,6 @@ from .sensor_definitions import (
     SHED_FORECAST_SENSORS,
     SITE_POWER_SENSOR,
     STATUS_SENSORS,
-    UNMAPPED_SENSORS,
     UPSTREAM_L1_CURRENT_SENSOR,
     UPSTREAM_L2_CURRENT_SENSOR,
 )
@@ -109,7 +104,6 @@ __all__ = [
     "SpanPcsSensor",
     "SpanSensorBase",
     "SpanShedForecastSensor",
-    "SpanUnmappedCircuitSensor",
 ]
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -267,8 +261,8 @@ def create_circuit_sensors(
     # Build EVSE device info so feed circuit sensors land on the charger device
     evse_device_map = _build_evse_device_info_map(coordinator, snapshot)
 
-    # Add circuit sensors for all named circuits
-    named_circuits = [cid for cid in snapshot.circuits if not cid.startswith("unmapped_tab_")]
+    # Add circuit sensors for every circuit, skipping empty positions
+    named_circuits = [cid for cid in snapshot.circuits if not is_unmapped_tab(cid)]
     circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
 
     for circuit_id in named_circuits:
@@ -326,24 +320,6 @@ def create_circuit_sensors(
                     device_info_override=device_override,
                 )
             )
-
-    return entities
-
-
-def create_unmapped_circuit_sensors(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
-) -> list[SpanUnmappedCircuitSensor]:
-    """Create unmapped circuit sensors for synthetic calculations."""
-    entities: list[SpanUnmappedCircuitSensor] = []
-
-    # Add unmapped circuit sensors (native sensors for synthetic calculations)
-    # These are invisible sensors that provide stable entity IDs for solar synthetics
-    unmapped_circuits = [cid for cid in snapshot.circuits if cid.startswith("unmapped_tab_")]
-    for circuit_id in unmapped_circuits:
-        entities.extend(
-            SpanUnmappedCircuitSensor(coordinator, unmapped_description, snapshot, circuit_id)
-            for unmapped_description in UNMAPPED_SENSORS
-        )
 
     return entities
 
@@ -635,7 +611,6 @@ def create_native_sensors(
     | SpanPanelEnergySensor
     | SpanCircuitPowerSensor
     | SpanCircuitEnergySensor
-    | SpanUnmappedCircuitSensor
     | SpanPanelBattery
     | SpanBessMetadataSensor
     | SpanPVMetadataSensor
@@ -653,7 +628,6 @@ def create_native_sensors(
         | SpanPanelEnergySensor
         | SpanCircuitPowerSensor
         | SpanCircuitEnergySensor
-        | SpanUnmappedCircuitSensor
         | SpanPanelBattery
         | SpanBessMetadataSensor
         | SpanPVMetadataSensor
@@ -667,8 +641,6 @@ def create_native_sensors(
     # Create different sensor types
     entities.extend(create_panel_sensors(coordinator, snapshot, config_entry))
     entities.extend(create_circuit_sensors(coordinator, snapshot, config_entry))
-    if config_entry.options.get(ENABLE_UNMAPPED_CIRCUIT_SENSORS, False):
-        entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
     entities.extend(create_battery_sensors(coordinator, snapshot))
     entities.extend(create_mid_sensors(coordinator, snapshot))
     entities.extend(create_shed_forecast_sensors(coordinator, snapshot))

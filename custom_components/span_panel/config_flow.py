@@ -163,7 +163,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
     VERSION = 7
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
     domain = DOMAIN
 
     def is_matching(self, other_flow: SpanPanelConfigFlow) -> bool:
