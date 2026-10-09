@@ -22,6 +22,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         3
       ],
@@ -49,6 +51,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         11
       ],
@@ -76,6 +80,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         19
       ],
@@ -103,6 +109,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14,
         16
@@ -129,6 +137,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         22,
         24
@@ -155,6 +165,8 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         13,
         15
@@ -183,6 +195,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         6,
         8

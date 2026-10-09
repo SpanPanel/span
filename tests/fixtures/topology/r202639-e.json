@@ -22,6 +22,8 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         1,
         3
@@ -50,6 +52,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         23
       ],
@@ -77,6 +81,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         25
       ],
@@ -104,6 +110,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         27
       ],
@@ -131,6 +139,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         29
       ],
@@ -158,6 +168,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         31
       ],
@@ -185,6 +197,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         33
       ],
@@ -212,6 +226,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         35
       ],
@@ -239,6 +255,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         37
       ],
@@ -266,6 +284,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         5,
         7
@@ -294,6 +314,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         43
       ],
@@ -321,6 +343,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         45
       ],
@@ -348,6 +372,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         47
       ],
@@ -375,6 +401,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         10
       ],
@@ -402,6 +430,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         12
       ],
@@ -429,6 +459,8 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14
       ],
@@ -456,6 +488,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         16
       ],
@@ -483,6 +517,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         18
       ],
@@ -510,6 +546,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         2,
         4
@@ -538,6 +576,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         22
       ],
@@ -565,6 +605,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         24
       ],
@@ -592,6 +634,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         26
       ],
@@ -619,6 +663,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         28
       ],
@@ -646,6 +692,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         30
       ],
@@ -673,6 +721,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         32
       ],
@@ -700,6 +750,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         34
       ],
@@ -727,6 +779,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         38
       ],
@@ -754,6 +808,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         40
       ],
@@ -781,6 +837,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         6,
         8
@@ -809,6 +867,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         36
       ],
@@ -836,6 +896,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         20
       ],
@@ -863,6 +925,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         39
       ],
@@ -890,6 +954,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         9
       ],
@@ -917,6 +983,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         41
       ],
@@ -944,6 +1012,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         42
       ],
@@ -971,6 +1041,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
       "tabs": [
         44
       ],
@@ -998,6 +1070,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
       "tabs": [
         44
       ],
@@ -1025,6 +1099,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
       "tabs": [
         46
       ],
@@ -1052,6 +1128,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
       "tabs": [
         46
       ],
@@ -1079,6 +1157,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
       "tabs": [
         48
       ],
@@ -1106,6 +1186,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
       "tabs": [
         48
       ],
@@ -1133,6 +1215,8 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         11
       ],
@@ -1158,6 +1242,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         19,
         21
@@ -1186,6 +1272,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         13
       ],
@@ -1213,6 +1301,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         15
       ],
@@ -1240,6 +1330,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         17
       ],
