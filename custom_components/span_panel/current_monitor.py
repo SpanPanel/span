@@ -69,9 +69,14 @@ _STORAGE_KEY_PREFIX = "span_panel_current_monitor"
 
 @dataclass
 class MonitoredPointState:
-    """Tracking state for a single monitored point (circuit or mains leg)."""
+    """Tracking state for a single monitored point (circuit or mains leg).
 
-    last_current_a: float = 0.0
+    `last_current_a` is None until the point's first sample: a current nobody
+    read is not 0 A. Only the monitoring status reads it; threshold checks are
+    handed each sample directly.
+    """
+
+    last_current_a: float | None = None
     over_threshold_since: datetime | None = None
     last_spike_alert: datetime | None = None
     last_continuous_alert: datetime | None = None
@@ -300,8 +305,12 @@ class CurrentMonitor:
             rating = (
                 float(circuit.breaker_rating_a) if circuit and circuit.breaker_rating_a else None
             )
-            last_current = state.last_current_a if state else 0.0
-            utilization = round(last_current / rating * 100, 1) if rating else None
+            last_current = state.last_current_a if state else None
+            utilization = (
+                round(last_current / rating * 100, 1)
+                if rating and last_current is not None
+                else None
+            )
             cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
                 self._circuit_overrides.get(cid, {}), self.get_global_settings()
             )
@@ -334,14 +343,21 @@ class CurrentMonitor:
 
         # Present mains as a single entry using the higher of the two upstream legs.
         # The main breaker is a single 240V breaker; internally we still evaluate
-        # per-leg, but the UI shows one combined "Mains Breaker" point.
+        # per-leg, but the UI shows one combined "Mains Breaker" point. Only legs
+        # that have been sampled count; with neither, there is no current to show.
         mains: dict[str, dict[str, Any]] = {}
-        l1_state = self._mains_states.get("upstream_l1")
-        l2_state = self._mains_states.get("upstream_l2")
-        l1_current = l1_state.last_current_a if l1_state else 0.0
-        l2_current = l2_state.last_current_a if l2_state else 0.0
-        peak_current = max(l1_current, l2_current)
-        utilization = round(peak_current / main_rating * 100, 1) if main_rating else None
+        upstream = (self._mains_states.get("upstream_l1"), self._mains_states.get("upstream_l2"))
+        sampled = [
+            leg.last_current_a
+            for leg in upstream
+            if leg is not None and leg.last_current_a is not None
+        ]
+        peak_current = max(sampled) if sampled else None
+        utilization = (
+            round(peak_current / main_rating * 100, 1)
+            if main_rating and peak_current is not None
+            else None
+        )
 
         # Use upstream_l1 thresholds as the representative (they're the same unless overridden)
         cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(

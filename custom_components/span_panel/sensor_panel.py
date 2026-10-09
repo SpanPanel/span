@@ -540,15 +540,12 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         # Add voltage attribute (standard panel voltage)
         attributes["voltage"] = 240
 
-        # Calculate amperage from power (P = V * I, so I = P / V)
-        if self.native_value is not None and isinstance(self.native_value, int | float):
-            try:
-                amperage = float(self.native_value) / 240.0
-                attributes["amperage"] = round(amperage, 2)
-            except (ValueError, ZeroDivisionError):
-                attributes["amperage"] = 0.0
+        # Calculate amperage from power (P = V * I, so I = P / V). A power the
+        # panel did not report, offline or otherwise, has no amperage either.
+        if isinstance(self.native_value, int | float):
+            attributes["amperage"] = round(float(self.native_value) / 240.0, 2)
         else:
-            attributes["amperage"] = 0.0
+            attributes["amperage"] = None
 
         if self._description_key == _GRID_POWER_KEY and _service_entrance_was_read(
             self.coordinator

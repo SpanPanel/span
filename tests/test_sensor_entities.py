@@ -43,16 +43,20 @@ from custom_components.span_panel.sensor_circuit import (
     _unnamed_circuit_fallback,
 )
 from custom_components.span_panel.sensor_definitions import (
+    BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
     BESS_METADATA_SENSORS,
     CIRCUIT_BREAKER_RATING_SENSOR,
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
     EVSE_SENSORS,
+    GRID_POWER_FLOW_SENSOR,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
     PV_METADATA_SENSORS,
+    PV_POWER_SENSOR,
+    SITE_POWER_SENSOR,
     STATUS_SENSORS,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
@@ -145,8 +149,8 @@ def test_panel_power_sensor_extra_state_attributes_include_amperage() -> None:
     }
 
 
-def test_panel_power_sensor_defaults_amperage_when_value_not_numeric() -> None:
-    """Panel power attributes should fall back to 0.0 amperage when value is unknown."""
+def test_panel_power_sensor_reports_no_amperage_when_value_not_numeric() -> None:
+    """A power that is unknown has no amperage either, rather than a 0 A nobody measured."""
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
     coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
@@ -157,7 +161,7 @@ def test_panel_power_sensor_defaults_amperage_when_value_not_numeric() -> None:
 
     assert sensor.extra_state_attributes == {
         "voltage": 240,
-        "amperage": 0.0,
+        "amperage": None,
         "at_service_entrance": True,
     }
 
@@ -895,19 +899,74 @@ def test_parse_numeric_state_ignores_non_numeric_value() -> None:
     assert _parse_numeric_state(restored) == (None, None)
 
 
-def test_panel_power_sensor_stays_available_while_panel_offline() -> None:
-    """Base sensor availability should stay true during panel-offline handling."""
-    snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=250.0)
+_PANEL_LEVEL_POWER_SENSORS: Final = (
+    *PANEL_POWER_SENSORS,
+    BATTERY_POWER_SENSOR,
+    PV_POWER_SENSOR,
+    GRID_POWER_FLOW_SENSOR,
+    SITE_POWER_SENSOR,
+)
+
+
+@pytest.mark.parametrize("description", _PANEL_LEVEL_POWER_SENSORS, ids=lambda d: d.key)
+def test_panel_power_sensor_reads_unknown_while_panel_offline(
+    description: SpanPanelDataSensorEntityDescription,
+) -> None:
+    """An offline panel's power is unknown, never a 0 W nobody measured.
+
+    The sensor stays available, as every sensor does through an outage, so it
+    renders as unknown; its amperage, derived from the power, goes with it.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        instant_grid_power_w=250.0,
+        feedthrough_power_w=40.0,
+        power_flow_battery=-500.0,
+        power_flow_pv=-1500.0,
+        power_flow_grid=300.0,
+        power_flow_site=1300.0,
+    )
     coordinator = _make_coordinator(snapshot)
-    coordinator.panel_offline = True
-    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
-
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
+    sensor._update_native_value()
+    assert isinstance(sensor.native_value, float)
 
+    coordinator.panel_offline = True
     sensor._update_native_value()
 
     assert sensor.available is True
-    assert sensor.native_value == 0.0
+    assert sensor.native_value is None
+    attributes = sensor.extra_state_attributes
+    assert attributes is not None
+    assert attributes["amperage"] is None
+
+
+def test_circuit_power_reads_unknown_offline_and_recovers_when_the_panel_returns() -> None:
+    """The offline unknown lasts only as long as the outage."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Kitchen", instant_power_w=1200.0
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(snapshot)
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_power")
+    sensor = SpanCircuitPowerSensor(coordinator, description, snapshot, "c1")
+
+    sensor._update_native_value()
+    assert sensor.native_value == 1200.0
+
+    coordinator.panel_offline = True
+    sensor._update_native_value()
+
+    assert sensor.available is True
+    assert sensor.native_value is None
+
+    returned = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Kitchen", instant_power_w=900.0
+    )
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"c1": returned})
+    coordinator.panel_offline = False
+    sensor._update_native_value()
+
+    assert sensor.native_value == 900.0
 
 
 def test_panel_status_sensor_reports_unknown_when_offline() -> None:

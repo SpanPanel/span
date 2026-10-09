@@ -1033,7 +1033,7 @@ BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensor
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: (-s.power_flow_battery or 0.0) if s.power_flow_battery is not None else 0.0,
+    value_fn=lambda s: _negated(s.power_flow_battery),
 )
 
 # PV power sensor (conditionally created when PV is commissioned)
@@ -1045,7 +1045,7 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: (-s.power_flow_pv or 0.0) if s.power_flow_pv is not None else 0.0,
+    value_fn=lambda s: _negated(s.power_flow_pv),
 )
 
 # Grid power flow sensor (conditionally created when power-flows data is available)
@@ -1057,7 +1057,7 @@ GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSens
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: (-s.power_flow_grid or 0.0) if s.power_flow_grid is not None else 0.0,
+    value_fn=lambda s: _negated(s.power_flow_grid),
 )
 
 # Site power sensor (conditionally created when power-flows data is available)
@@ -1069,7 +1069,7 @@ SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: s.power_flow_site if s.power_flow_site is not None else 0.0,
+    value_fn=lambda s: s.power_flow_site,
 )
 
 # Each meter's Net, declared once: the description's value function and the

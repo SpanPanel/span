@@ -1,10 +1,17 @@
 name: Main
 
 on:
+  # Pre-release lines live on `prerelease/<version>` branches and ship betas from
+  # there, so they are held to the same checks as main.
   push:
-    branches: [ main ]
+    branches: [ main, "prerelease/**" ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, "prerelease/**" ]
+  # Re-runs the checks against any ref on demand, for a commit whose push or
+  # pull_request delivery never arrived:
+  #
+  #   gh workflow run main.yml --ref <branch>
+  workflow_dispatch:
 
 permissions:
   contents: read

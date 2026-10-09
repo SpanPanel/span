@@ -346,8 +346,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         The transport probe runs for the same reason and answers the harder
         case: a grace period is a bet that the reading will be true again
         shortly, and a transport that has stopped for good makes that bet
-        unpayable. `_handle_offline_state` gives POWER sensors 0.0 while it
-        runs, which is a reading nobody took.
+        unpayable.
         """
         if self._reads_an_unresolved_field:
             return False
@@ -387,19 +386,23 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         self._handle_online_state()
 
     def _handle_offline_state(self) -> None:
-        """Handle sensor state when panel is offline."""
+        """Report unknown while the panel is offline, power included.
+
+        Power used to read 0.0 here, which is a reading nobody took: a dashboard
+        cannot tell it from a panel drawing nothing, and the recorder averages it
+        into the hours of the outage. It has no grace period either. That holds
+        an energy counter's last value, which stays true while the panel is gone
+        because the next reading carries on from it; an instantaneous reading
+        held past the moment it was taken is a claim about now that nothing
+        measured. The counters with a grace period never reach this method:
+        `SpanEnergySensorBase` takes the offline path itself.
+        """
         _LOGGER.debug(
             "STATUS_SENSOR_DEBUG: Panel is offline for %s",
             self.entity_id or self._attr_unique_id,
         )
 
-        device_class = getattr(self.entity_description, "device_class", None)
-        if device_class == SensorDeviceClass.POWER:
-            self._attr_native_value = 0.0
-        elif device_class == SensorDeviceClass.ENERGY:
-            self._attr_native_value = None
-        else:
-            self._attr_native_value = self._unknown_value()
+        self._attr_native_value = self._unknown_value()
 
     def _handle_online_state(self) -> None:
         """Handle sensor state when panel is online."""
