@@ -253,11 +253,15 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if voltage is not None:
             attributes["voltage"] = voltage
 
-        attributes["always_on"] = circuit.always_on
-        attributes["relay_state"] = circuit.relay_state
-        attributes["relay_requester"] = circuit.relay_requester
-        attributes["shed_priority"] = circuit.priority
-        attributes["is_sheddable"] = circuit.is_sheddable
+        # A breaker's relay and shedding facts. A meter outside the panel has no
+        # relay and is never shed, so it carries none of them rather than
+        # defaults that would make it read as a breaker.
+        if not circuit.measures_outside_panel:
+            attributes["always_on"] = circuit.always_on
+            attributes["relay_state"] = circuit.relay_state
+            attributes["relay_requester"] = circuit.relay_requester
+            attributes["shed_priority"] = circuit.priority
+            attributes["is_sheddable"] = circuit.is_sheddable
 
         # This circuit's participation in the enclosure's Power Control System,
         # beside its load-shed participation above. Two policies on the same
