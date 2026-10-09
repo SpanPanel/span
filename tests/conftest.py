@@ -132,16 +132,16 @@ VALIDATED_PANEL_STATUS = V2StatusInfo(
 
 @pytest.fixture(autouse=True)
 def panel_status(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:
-    """Answer setup's unauthenticated status read without touching the network.
+    """Answer the unauthenticated status read without touching the network.
 
-    Autouse because every test that runs `async_setup_entry` reaches the read,
-    and the harness refuses the socket it would open. The default is a validated
-    hardware version, so setup proceeds exactly as it did before the read
-    existed; a test about the guard sets `return_value` or `side_effect` on the
-    mock this yields.
+    Autouse because every test that runs `async_setup_entry` or a credential
+    rotation reaches the read, and the harness refuses the socket it would open.
+    The default is a validated hardware version, so setup and rotation proceed
+    exactly as they did before the read existed; a test about the hardware
+    version sets `return_value` or `side_effect` on the mock this yields.
     """
     with patch(
-        "custom_components.span_panel.get_v2_status",
+        "custom_components.span_panel.hardware_guard.get_v2_status",
         new=AsyncMock(return_value=VALIDATED_PANEL_STATUS),
     ) as status:
         yield status
