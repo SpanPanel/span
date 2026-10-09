@@ -9,6 +9,7 @@ from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from span_panel_api import shared_meter_groups
 import voluptuous as vol
 
 from .const import DOMAIN
@@ -20,6 +21,7 @@ from .helpers import (
     circuit_has_a_priority_select,
     construct_voltage_attribute,
     outside_meter_label,
+    shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -148,6 +150,12 @@ async def handle_panel_topology(
     # The `power` role of every circuit, for the `solar` blocks below.
     circuit_power = {cid: roles["power"] for cid, roles in entity_map.items() if "power" in roles}
 
+    # The group each circuit's meter and relay belong to, by the group's key;
+    # a circuit that shares neither is in no group. Membership only: every
+    # member reports the one meter's readings, so the card counts a group once.
+    meter_group = _group_of(shared_meter_groups(snapshot.circuits))
+    relay_group = _group_of(shared_relay_groups(snapshot.circuits))
+
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
@@ -166,6 +174,8 @@ async def handle_panel_topology(
             ),
             # Outside the panel: no breaker space, so no slot in the breaker grid.
             "outside_panel": circuit.measures_outside_panel,
+            "shared_meter_group": meter_group.get(circuit_id),
+            "shared_relay_group": relay_group.get(circuit_id),
             # Same inference as the entity attribute, from the same helper: a
             # pole count answers this for one and two poles and not beyond, and
             # null says so rather than the previous 120, which this branch
@@ -255,6 +265,11 @@ async def handle_panel_topology(
             "sub_devices": sub_devices,
         },
     )
+
+
+def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:
+    """Map every member of every group to its group's key."""
+    return {member: key for key, members in groups.items() for member in members}
 
 
 def _classify_sub_device(device_entry: dr.DeviceEntry) -> str:

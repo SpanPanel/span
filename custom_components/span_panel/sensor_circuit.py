@@ -16,6 +16,7 @@ from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
+    construct_shared_with_attributes,
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_user_friendly_suffix,
@@ -283,6 +284,7 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if circuit.pcs_priority is not None:
             attributes["pcs_priority"] = circuit.pcs_priority
 
+        attributes.update(construct_shared_with_attributes(self.coordinator.data, circuit))
         return attributes
 
 

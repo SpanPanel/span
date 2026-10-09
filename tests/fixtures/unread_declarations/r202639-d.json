@@ -12,8 +12,6 @@
   "circuit/info/locations": "where the circuit's loads are in the home; descriptive commissioning metadata with no Home Assistant counterpart, so not surfaced",
   "circuit/info/nominal-voltage": "read into circuit.nominal_voltage_v, which nothing renders yet; preferring it for the voltage attribute is pending",
   "circuit/info/tags": "free-form commissioning labels; descriptive metadata with no Home Assistant counterpart, so not surfaced",
-  "circuit/meter/shared-with-device-ids": "read into circuit.meter_shared_with, which nothing renders yet; naming the circuits that share a meter is pending",
-  "circuit/switch/shared-with-device-ids": "read into circuit.relay_shared_with, which nothing renders yet; naming the circuits that share a relay is pending",
   "distribution-enclosure/info/address-lines": "site property: it says where the panel is installed, so the library never turns it into a reading",
   "distribution-enclosure/info/country-code": "site property: it says where the panel is installed, so the library never turns it into a reading",
   "distribution-enclosure/info/latitude": "site property: it says where the panel is installed, so the library never turns it into a reading",

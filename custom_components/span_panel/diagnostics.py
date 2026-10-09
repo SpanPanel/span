@@ -8,7 +8,7 @@ from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from span_panel_api import SpanPanelSnapshot, ca_fingerprint
+from span_panel_api import SpanPanelSnapshot, ca_fingerprint, shared_meter_groups
 from span_panel_api.exceptions import SpanPanelValidationError
 
 from .adoption import adopted_control_count, classify
@@ -19,7 +19,7 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
-from .helpers import identity_digest, outside_meter_label
+from .helpers import identity_digest, outside_meter_label, shared_relay_groups
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
@@ -411,6 +411,11 @@ async def async_get_config_entry_diagnostics(
         "entities": _entity_registry_rows(hass, entry),
         "panel": panel_data,
         "circuits": circuit_data,
+        # One row per group of circuits that share one meter or one relay: each
+        # member reports the same readings, so a support case can see a double
+        # count in the Energy dashboard for what it is.
+        "shared_meter_groups": shared_meter_groups(snapshot.circuits),
+        "shared_relay_groups": shared_relay_groups(snapshot.circuits),
         "evse": evse_data,
         "battery": battery_data,
         "pv": _pv(snapshot, entry.runtime_data.pv_binding),
