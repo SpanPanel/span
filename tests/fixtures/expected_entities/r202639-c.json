@@ -220,6 +220,20 @@
       "translation_key": "bess_vendor",
       "unit_of_measurement": null
     },
+    "span_xg-7814-15i6h_busbar_current": {
+      "device": "xg-7814-15i6h",
+      "device_class": "current",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.span_panel_busbar_current",
+      "hidden_by": null,
+      "original_name": "Busbar Current",
+      "platform": "sensor",
+      "state": "1.2",
+      "state_class": "measurement",
+      "translation_key": "busbar_current",
+      "unit_of_measurement": "A"
+    },
     "span_xg-7814-15i6h_circuit-1_breaker_rating": {
       "device": "xg-7814-15i6h",
       "device_class": null,
@@ -808,6 +822,20 @@
       "translation_key": "feedthrough_produced_energy",
       "unit_of_measurement": "Wh"
     },
+    "span_xg-7814-15i6h_frequency": {
+      "device": "xg-7814-15i6h",
+      "device_class": "frequency",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.span_panel_frequency",
+      "hidden_by": null,
+      "original_name": "Frequency",
+      "platform": "sensor",
+      "state": "60.01",
+      "state_class": "measurement",
+      "translation_key": "frequency",
+      "unit_of_measurement": "Hz"
+    },
     "span_xg-7814-15i6h_gfe_override": {
       "device": "xg-7814-15i6h",
       "device_class": null,
@@ -1254,6 +1282,20 @@
       "state": null,
       "state_class": "measurement",
       "translation_key": "upstream_l2_current",
+      "unit_of_measurement": "A"
+    },
+    "span_xg-7814-15i6h_upstream_protection_rating": {
+      "device": "xg-7814-15i6h",
+      "device_class": null,
+      "disabled_by": "integration",
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.span_panel_upstream_protection_rating",
+      "hidden_by": null,
+      "original_name": "Upstream Protection Rating",
+      "platform": "sensor",
+      "state": null,
+      "state_class": null,
+      "translation_key": "upstream_protection_rating",
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_vendor_cloud": {

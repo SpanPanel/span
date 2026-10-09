@@ -358,7 +358,11 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # +2 for `circuit.meter_shared_with` and `circuit.relay_shared_with`, which
     # the shared-with attributes of a circuit's power sensor and switch read.
     # Membership rather than a reading, so no adapter carries a row for either.
-    Producibility.NEITHER: 45,
+    # +5 for a circuit's nominal voltage and protection functions, read by its
+    # attributes, and the panel's busbar current, frequency and upstream
+    # protection rating, read by sensors created only where declared. No
+    # reference payload declares any of the five.
+    Producibility.NEITHER: 50,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-

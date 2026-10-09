@@ -27,7 +27,7 @@
       "tabs": [
         14
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-4": {
       "always_on": false,
@@ -56,7 +56,7 @@
       "tabs": [
         16
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "remote-ct-3": {
       "always_on": false,

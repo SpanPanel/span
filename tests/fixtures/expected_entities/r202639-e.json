@@ -48,6 +48,20 @@
       "translation_key": null,
       "unit_of_measurement": null
     },
+    "span_xg-6159-74dlx_busbar_current": {
+      "device": "xg-6159-74dlx",
+      "device_class": "current",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.span_panel_busbar_current",
+      "hidden_by": null,
+      "original_name": "Busbar Current",
+      "platform": "sensor",
+      "state": "0.1",
+      "state_class": "measurement",
+      "translation_key": "busbar_current",
+      "unit_of_measurement": "A"
+    },
     "span_xg-6159-74dlx_circuit-12_breaker_rating": {
       "device": "xg-6159-74dlx",
       "device_class": null,
@@ -4024,20 +4038,6 @@
       "translation_key": "ethernet_link",
       "unit_of_measurement": null
     },
-    "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_advertised_current": {
-      "device": "xg-6159-74dlx_evse_dt-6692-e9t57",
-      "device_class": "current",
-      "disabled_by": null,
-      "entity_category": null,
-      "entity_id": "sensor.span_panel_ev_charger_span_drive_advertised_current",
-      "hidden_by": null,
-      "original_name": "Advertised Current",
-      "platform": "sensor",
-      "state": "unknown",
-      "state_class": "measurement",
-      "translation_key": "evse_advertised_current",
-      "unit_of_measurement": "A"
-    },
     "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_charge_current_limit": {
       "device": "xg-6159-74dlx_evse_dt-6692-e9t57",
       "device_class": "current",
@@ -4136,6 +4136,20 @@
       "translation_key": "evse_status",
       "unit_of_measurement": null
     },
+    "span_xg-6159-74dlx_evse_dt-6692-e9t57_lock": {
+      "device": "xg-6159-74dlx_evse_dt-6692-e9t57",
+      "device_class": null,
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "lock.span_panel_ev_charger_span_drive_evse_lock",
+      "hidden_by": null,
+      "original_name": "EVSE Lock",
+      "platform": "lock",
+      "state": "unlocked",
+      "state_class": null,
+      "translation_key": "evse_lock",
+      "unit_of_measurement": null
+    },
     "span_xg-6159-74dlx_feed_through_consumed_energy": {
       "device": "xg-6159-74dlx",
       "device_class": "energy",
@@ -4191,6 +4205,20 @@
       "state_class": "total",
       "translation_key": "feedthrough_produced_energy",
       "unit_of_measurement": "Wh"
+    },
+    "span_xg-6159-74dlx_frequency": {
+      "device": "xg-6159-74dlx",
+      "device_class": "frequency",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.span_panel_frequency",
+      "hidden_by": null,
+      "original_name": "Frequency",
+      "platform": "sensor",
+      "state": "60.01",
+      "state_class": "measurement",
+      "translation_key": "frequency",
+      "unit_of_measurement": "Hz"
     },
     "span_xg-6159-74dlx_grid_forming_entity": {
       "device": "xg-6159-74dlx",
@@ -5688,6 +5716,20 @@
       "state": null,
       "state_class": "measurement",
       "translation_key": "upstream_l2_current",
+      "unit_of_measurement": "A"
+    },
+    "span_xg-6159-74dlx_upstream_protection_rating": {
+      "device": "xg-6159-74dlx",
+      "device_class": null,
+      "disabled_by": "integration",
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.span_panel_upstream_protection_rating",
+      "hidden_by": null,
+      "original_name": "Upstream Protection Rating",
+      "platform": "sensor",
+      "state": null,
+      "state_class": null,
+      "translation_key": "upstream_protection_rating",
       "unit_of_measurement": "A"
     },
     "span_xg-6159-74dlx_vendor_cloud": {
