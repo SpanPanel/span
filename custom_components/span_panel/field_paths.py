@@ -275,6 +275,10 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # being one.
         "circuit.pcs_managed": Producibility.NEITHER,
         "circuit.pcs_priority": Producibility.NEITHER,
+        # What a circuit's `connection/feeds-role` declares, which orients its
+        # power and Net Energy as generation where the role is solar
+        # (`energy_orientation.circuit_is_generation`).
+        "circuit.feeds_role": Producibility.NEITHER,
         "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
         # The two backup-planning estimates behind `time_to_priority_shed` and
         # `shed_total_time_remaining`, whose descriptions are

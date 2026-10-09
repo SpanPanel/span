@@ -9,7 +9,6 @@
   "circuit/connection/feeds-device-id": "declared and not published on this panel, so the probe names a device that does not exist and dereferences to nothing. Where it is published it places a DER on its circuit",
   "circuit/connection/feeds-device-status": "declared and not published on this panel; a circuit's link status is read only for the device its feeds-device-id names, and no circuit names one here",
   "circuit/connection/feeds-device-type": "redundant: the library resolves a DER's class by dereferencing feeds-device-id against the tree's declared $type",
-  "circuit/connection/feeds-role": "read into circuit.feeds_role, which nothing renders yet; reading a solar role as generation is pending",
   "circuit/info/dedicated": "whether the circuit serves one appliance; commissioning metadata with no Home Assistant counterpart, so not surfaced",
   "circuit/info/locations": "where the circuit's loads are in the home; descriptive commissioning metadata with no Home Assistant counterpart, so not surfaced",
   "circuit/info/nominal-voltage": "read into circuit.nominal_voltage_v, which nothing renders yet; preferring it for the voltage attribute is pending",

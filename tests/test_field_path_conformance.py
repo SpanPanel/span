@@ -355,7 +355,10 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # `$target` echo it renders as an attribute. Facts about a command rather
     # than readings, so no adapter carries a row for either -- the same shape as
     # the `circuit.*_target` pair.
-    Producibility.NEITHER: 43,
+    # +1 for `circuit.feeds_role`, which orients a solar-role circuit's power
+    # and Net Energy as generation. A role, not a reading, so no adapter carries
+    # a row for it.
+    Producibility.NEITHER: 44,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
