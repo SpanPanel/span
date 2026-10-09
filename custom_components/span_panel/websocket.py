@@ -19,6 +19,7 @@ from .helpers import (
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
     construct_voltage_attribute,
+    outside_meter_label,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -156,7 +157,15 @@ async def handle_panel_topology(
         tabs = sorted(circuit.tabs) if circuit.tabs else []
         circuits[circuit_id] = {
             "tabs": tabs,
-            "name": circuit.name or None,
+            # A meter without a breaker space publishes no name; it carries the
+            # label its entities are named by, so the card never shows it nameless.
+            "name": (
+                outside_meter_label(circuit_id)
+                if circuit.measures_outside_panel
+                else circuit.name or None
+            ),
+            # Outside the panel: no breaker space, so no slot in the breaker grid.
+            "outside_panel": circuit.measures_outside_panel,
             # Same inference as the entity attribute, from the same helper: a
             # pole count answers this for one and two poles and not beyond, and
             # null says so rather than the previous 120, which this branch
