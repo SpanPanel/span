@@ -408,9 +408,15 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> float | None:
 def has_bess(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether a BESS (battery energy storage system) is commissioned.
 
-    Only soe_percentage is a reliable signal — the power-flows node publishes
+    Where the panel declares its devices, the declaration decides: a battery
+    the tree describes is one, before any of its values arrive, so its sensors
+    exist and read unknown rather than appearing only once it reports. Where
+    it does not (`battery.present` is None, as on the flat schema), only
+    soe_percentage is a reliable signal — the power-flows node publishes
     battery=0.0 even on panels without a commissioned BESS.
     """
+    if snapshot.battery.present is not None:
+        return snapshot.battery.present
     return snapshot.battery.soe_percentage is not None
 
 

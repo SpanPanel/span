@@ -500,6 +500,8 @@
   "last_position": 32,
   "panel_device_id": "nt-9874-s7rxt",
   "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
     "current_power": "sensor.span_panel_current_power",
     "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
     "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
@@ -518,6 +520,71 @@
   "panel_size": 32,
   "serial": "nt-9874-s7rxt",
   "sub_devices": {
+    "nt-9874-s7rxt_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_nt-9874-s7rxt_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_nt-9874-s7rxt_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_nt-9874-s7rxt_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_nt-9874-s7rxt_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_nt-9874-s7rxt_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_nt-9874-s7rxt_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_nt-9874-s7rxt_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_nt-9874-s7rxt_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_nt-9874-s7rxt_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_nt-9874-s7rxt_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_nt-9874-s7rxt_bess_vendor"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Powerwall 2 AC",
+      "name": "Span Panel Battery",
+      "serial_number": "tg681049356k0x",
+      "sw_version": "26.26.4 68c2bc82",
+      "type": "bess"
+    },
     "nt-9874-s7rxt_mid": {
       "entities": {
         "sensor.span_panel_microgrid_interconnect_grid_state": {

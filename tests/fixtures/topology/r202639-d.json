@@ -219,6 +219,8 @@
   "last_position": 24,
   "panel_device_id": "xg-1334-066e8",
   "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
     "current_power": "sensor.span_panel_current_power",
     "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
     "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
@@ -235,6 +237,76 @@
   "panel_size": 24,
   "serial": "xg-1334-066e8",
   "sub_devices": {
+    "xg-1334-066e8_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_xg-1334-066e8_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_xg-1334-066e8_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_xg-1334-066e8_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_xg-1334-066e8_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_xg-1334-066e8_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_xg-1334-066e8_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_xg-1334-066e8_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_xg-1334-066e8_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-1334-066e8_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_xg-1334-066e8_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_xg-1334-066e8_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_xg-1334-066e8_bess_vendor"
+        }
+      },
+      "manufacturer": "Lucid",
+      "model": "Battery Storage",
+      "name": "Span Panel Battery",
+      "serial_number": "6689454643",
+      "sw_version": null,
+      "type": "bess"
+    },
     "xg-1334-066e8_evse_dt-5599-00321": {
       "entities": {
         "binary_sensor.span_panel_ev_charger_flex_charging": {
