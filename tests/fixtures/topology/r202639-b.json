@@ -14,6 +14,7 @@
         "select": "select.span_panel_breaker_1_circuit_priority",
         "switch": "switch.span_panel_breaker_1_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-1",
@@ -22,10 +23,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         9
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-18": {
       "always_on": false,
@@ -41,6 +44,7 @@
         "select": "select.span_panel_breaker_2_circuit_priority",
         "switch": "switch.span_panel_breaker_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-2",
@@ -49,10 +53,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         10
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-19": {
       "always_on": false,
@@ -68,6 +74,7 @@
         "select": "select.span_panel_breaker_3_circuit_priority",
         "switch": "switch.span_panel_breaker_3_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-3",
@@ -76,10 +83,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         11
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-20": {
       "always_on": false,
@@ -95,6 +104,7 @@
         "select": "select.span_panel_breaker_4_circuit_priority",
         "switch": "switch.span_panel_breaker_4_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-4",
@@ -103,10 +113,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         12
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-21": {
       "always_on": false,
@@ -122,6 +134,7 @@
         "select": "select.span_panel_breaker_5_circuit_priority",
         "switch": "switch.span_panel_breaker_5_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-5",
@@ -130,10 +143,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         13
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-22": {
       "always_on": false,
@@ -149,6 +164,7 @@
         "select": "select.span_panel_breaker_6_circuit_priority",
         "switch": "switch.span_panel_breaker_6_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-6",
@@ -157,10 +173,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-23": {
       "always_on": false,
@@ -176,6 +194,7 @@
         "select": "select.span_panel_breaker_7_circuit_priority",
         "switch": "switch.span_panel_breaker_7_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-7",
@@ -184,10 +203,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         15
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-24": {
       "always_on": false,
@@ -203,6 +224,7 @@
         "select": "select.span_panel_breaker_8_circuit_priority",
         "switch": "switch.span_panel_breaker_8_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-8",
@@ -211,10 +233,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         16
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-25": {
       "always_on": false,
@@ -230,6 +254,7 @@
         "select": "select.span_panel_breaker_9_circuit_priority",
         "switch": "switch.span_panel_breaker_9_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-9",
@@ -238,10 +263,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         17
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-26": {
       "always_on": false,
@@ -257,6 +284,7 @@
         "select": "select.span_panel_breaker_10_circuit_priority",
         "switch": "switch.span_panel_breaker_10_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-10",
@@ -265,10 +293,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         18
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-27": {
       "always_on": false,
@@ -284,6 +314,7 @@
         "select": "select.span_panel_breaker_11_circuit_priority",
         "switch": "switch.span_panel_breaker_11_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-11",
@@ -292,10 +323,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         19
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-28": {
       "always_on": false,
@@ -311,6 +344,7 @@
         "select": "select.span_panel_breaker_12_circuit_priority",
         "switch": "switch.span_panel_breaker_12_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-12",
@@ -319,10 +353,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         20
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-29": {
       "always_on": false,
@@ -338,6 +374,7 @@
         "select": "select.span_panel_breaker_13_circuit_priority",
         "switch": "switch.span_panel_breaker_13_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-13",
@@ -346,10 +383,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         21
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-30": {
       "always_on": false,
@@ -365,6 +404,7 @@
         "select": "select.span_panel_breaker_14_circuit_priority",
         "switch": "switch.span_panel_breaker_14_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-14",
@@ -373,10 +413,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         22
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-31": {
       "always_on": false,
@@ -392,6 +434,7 @@
         "select": "select.span_panel_breaker_15_circuit_priority",
         "switch": "switch.span_panel_breaker_15_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-15",
@@ -400,10 +443,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         23
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-32": {
       "always_on": false,
@@ -419,6 +464,7 @@
         "select": "select.span_panel_breaker_16_circuit_priority",
         "switch": "switch.span_panel_breaker_16_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-16",
@@ -427,10 +473,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         24
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "remote-ct-3": {
       "always_on": null,
@@ -443,6 +491,7 @@
         "power": "sensor.span_panel_remote_ct_3_power",
         "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": null,
       "is_user_controllable": false,
       "name": "Remote CT 3",
@@ -451,6 +500,8 @@
       "priority_target": null,
       "relay_state": "UNKNOWN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [],
       "voltage": null
     }
@@ -459,6 +510,8 @@
   "device_id": "xg-1155-18fkf",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 9,
+  "last_position": 24,
   "panel_device_id": "xg-1155-18fkf",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

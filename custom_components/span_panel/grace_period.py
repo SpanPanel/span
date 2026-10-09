@@ -89,6 +89,11 @@ class SpanEnergyExtraStoredData(SensorExtraStoredData):
     confirmed_dip_baseline: float | None = None
     confirmed_dip_delta: float | None = None
     confirmed_dip_ticks_left: int | None = None
+    # A reading beyond what the circuit's breaker could ever have passed, and
+    # when it was first seen. Kept so the flag outlives a restart; records
+    # written before it existed restore both as None, which is what they were.
+    implausible_reading: float | None = None
+    implausible_since: str | None = None  # ISO format datetime string
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dict representation of the extra data.
@@ -115,6 +120,8 @@ class SpanEnergyExtraStoredData(SensorExtraStoredData):
             "confirmed_dip_baseline": self.confirmed_dip_baseline,
             "confirmed_dip_delta": self.confirmed_dip_delta,
             "confirmed_dip_ticks_left": self.confirmed_dip_ticks_left,
+            "implausible_reading": self.implausible_reading,
+            "implausible_since": self.implausible_since,
         }
 
     @classmethod
@@ -142,6 +149,8 @@ class SpanEnergyExtraStoredData(SensorExtraStoredData):
                 confirmed_dip_baseline=restored.get("confirmed_dip_baseline"),
                 confirmed_dip_delta=restored.get("confirmed_dip_delta"),
                 confirmed_dip_ticks_left=restored.get("confirmed_dip_ticks_left"),
+                implausible_reading=restored.get("implausible_reading"),
+                implausible_since=restored.get("implausible_since"),
             )
         except (AttributeError, KeyError, TypeError):
             return None

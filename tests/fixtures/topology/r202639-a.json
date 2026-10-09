@@ -14,6 +14,7 @@
         "select": "select.span_panel_7_bathroom_outlets_circuit_priority",
         "switch": "switch.span_panel_7_bathroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "7 Bathroom / Outlets",
@@ -22,10 +23,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-4": {
       "always_on": false,
@@ -41,6 +44,7 @@
         "select": "select.span_panel_6_kitchen_outlets_circuit_priority",
         "switch": "switch.span_panel_6_kitchen_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "6 Kitchen / Outlets",
@@ -49,10 +53,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         16
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "remote-ct-3": {
       "always_on": null,
@@ -65,6 +71,7 @@
         "power": "sensor.span_panel_remote_ct_3_power",
         "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": null,
       "is_user_controllable": false,
       "name": "Remote CT 3",
@@ -73,6 +80,8 @@
       "priority_target": null,
       "relay_state": "UNKNOWN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [],
       "voltage": null
     }
@@ -81,6 +90,8 @@
   "device_id": "xg-3940-9ooto",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 14,
+  "last_position": 16,
   "panel_device_id": "xg-3940-9ooto",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

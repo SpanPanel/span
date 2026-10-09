@@ -14,6 +14,7 @@
         "select": "select.span_panel_circuit_12_circuit_priority",
         "switch": "switch.span_panel_circuit_12_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 12",
@@ -22,6 +23,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         12
       ],
@@ -41,6 +44,7 @@
         "select": "select.span_panel_circuit_10_circuit_priority",
         "switch": "switch.span_panel_circuit_10_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 10",
@@ -49,6 +53,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         10
       ],
@@ -68,6 +74,7 @@
         "select": "select.span_panel_circuit_5_circuit_priority",
         "switch": "switch.span_panel_circuit_5_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 5",
@@ -76,6 +83,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         5
       ],
@@ -95,6 +104,7 @@
         "select": "select.span_panel_circuit_19_circuit_priority",
         "switch": "switch.span_panel_circuit_19_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 19",
@@ -103,6 +113,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         24
       ],
@@ -122,6 +134,7 @@
         "select": "select.span_panel_circuit_6_circuit_priority",
         "switch": "switch.span_panel_circuit_6_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 6",
@@ -130,6 +143,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         6
       ],
@@ -149,6 +164,7 @@
         "select": "select.span_panel_circuit_18_circuit_priority",
         "switch": "switch.span_panel_circuit_18_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 18",
@@ -157,6 +173,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         22
       ],
@@ -176,6 +194,7 @@
         "select": "select.span_panel_circuit_1_circuit_priority",
         "switch": "switch.span_panel_circuit_1_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 1",
@@ -184,6 +203,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         1
       ],
@@ -203,6 +224,7 @@
         "select": "select.span_panel_circuit_2_circuit_priority",
         "switch": "switch.span_panel_circuit_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 2",
@@ -211,6 +233,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         2
       ],
@@ -230,6 +254,7 @@
         "select": "select.span_panel_circuit_9_circuit_priority",
         "switch": "switch.span_panel_circuit_9_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 9",
@@ -238,6 +263,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         9
       ],
@@ -257,6 +284,7 @@
         "select": "select.span_panel_circuit_11_circuit_priority",
         "switch": "switch.span_panel_circuit_11_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 11",
@@ -265,6 +293,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         11
       ],
@@ -284,6 +314,7 @@
         "select": "select.span_panel_circuit_4_circuit_priority",
         "switch": "switch.span_panel_circuit_4_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 4",
@@ -292,6 +323,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         4
       ],
@@ -311,6 +344,7 @@
         "select": "select.span_panel_circuit_14_circuit_priority",
         "switch": "switch.span_panel_circuit_14_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 14",
@@ -319,6 +353,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14
       ],
@@ -338,6 +374,7 @@
         "select": "select.span_panel_circuit_3_circuit_priority",
         "switch": "switch.span_panel_circuit_3_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 3",
@@ -346,6 +383,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         3
       ],
@@ -365,6 +404,7 @@
         "select": "select.span_panel_circuit_15_circuit_priority",
         "switch": "switch.span_panel_circuit_15_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 15",
@@ -373,6 +413,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         16
       ],
@@ -392,6 +434,7 @@
         "select": "select.span_panel_circuit_7_circuit_priority",
         "switch": "switch.span_panel_circuit_7_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 7",
@@ -400,6 +443,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         7
       ],
@@ -419,6 +464,7 @@
         "select": "select.span_panel_circuit_13_circuit_priority",
         "switch": "switch.span_panel_circuit_13_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 13",
@@ -427,6 +473,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         13,
         15
@@ -447,6 +495,7 @@
         "select": "select.span_panel_circuit_17_circuit_priority",
         "switch": "switch.span_panel_circuit_17_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 17",
@@ -455,6 +504,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         20
       ],
@@ -474,6 +525,7 @@
         "select": "select.span_panel_circuit_16_circuit_priority",
         "switch": "switch.span_panel_circuit_16_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 16",
@@ -482,6 +534,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         18
       ],
@@ -501,6 +555,7 @@
         "select": "select.span_panel_circuit_8_circuit_priority",
         "switch": "switch.span_panel_circuit_8_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Circuit 8",
@@ -509,6 +564,8 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         8
       ],
@@ -519,6 +576,8 @@
   "device_id": "nt-0000-panel",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202633/02",
+  "first_position": 1,
+  "last_position": 32,
   "panel_device_id": "nt-0000-panel",
   "panel_entities": {
     "battery_level": "sensor.span_panel_battery_battery_level",

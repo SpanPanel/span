@@ -14,6 +14,7 @@
         "select": "select.span_panel_hvac_circuit_priority",
         "switch": "switch.span_panel_hvac_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "HVAC",
@@ -22,11 +23,13 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         1,
         3
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-12": {
       "always_on": false,
@@ -42,6 +45,7 @@
         "select": "select.span_panel_kitchen_sink_garbage_disposal_circuit_priority",
         "switch": "switch.span_panel_kitchen_sink_garbage_disposal_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen Sink Garbage Disposal",
@@ -50,10 +54,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         23
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-13": {
       "always_on": false,
@@ -69,6 +75,7 @@
         "select": "select.span_panel_dishwasher_circuit_priority",
         "switch": "switch.span_panel_dishwasher_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dishwasher",
@@ -77,10 +84,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         25
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-14": {
       "always_on": false,
@@ -96,6 +105,7 @@
         "select": "select.span_panel_main_office_fam_tv_circuit_priority",
         "switch": "switch.span_panel_main_office_fam_tv_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Main Office & Fam TV",
@@ -104,10 +114,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         27
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-15": {
       "always_on": false,
@@ -123,6 +135,7 @@
         "select": "select.span_panel_basement_outlets_french_door_wall_circuit_priority",
         "switch": "switch.span_panel_basement_outlets_french_door_wall_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement Outlets French Door Wall",
@@ -131,10 +144,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         29
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-16": {
       "always_on": false,
@@ -150,6 +165,7 @@
         "select": "select.span_panel_basement_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_basement_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
@@ -158,10 +174,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         31
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-17": {
       "always_on": false,
@@ -177,6 +195,7 @@
         "select": "select.span_panel_utility_room_circuit_priority",
         "switch": "switch.span_panel_utility_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility Room",
@@ -185,10 +204,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         33
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-18": {
       "always_on": false,
@@ -204,6 +225,7 @@
         "select": "select.span_panel_hood_circuit_priority",
         "switch": "switch.span_panel_hood_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Hood",
@@ -212,10 +234,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         35
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-19": {
       "always_on": false,
@@ -231,6 +255,7 @@
         "select": "select.span_panel_basement_lights_outlets_circuit_priority_2",
         "switch": "switch.span_panel_basement_lights_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
@@ -239,10 +264,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         37
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-2": {
       "always_on": false,
@@ -258,6 +285,7 @@
         "select": "select.span_panel_heat_pump_water_heater_circuit_priority",
         "switch": "switch.span_panel_heat_pump_water_heater_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Heat Pump Water Heater",
@@ -266,11 +294,13 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         5,
         7
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-21": {
       "always_on": false,
@@ -286,6 +316,7 @@
         "select": "select.span_panel_electric_infared_sauna_circuit_priority",
         "switch": "switch.span_panel_electric_infared_sauna_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric Infared Sauna",
@@ -294,10 +325,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         43
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-22": {
       "always_on": false,
@@ -313,6 +346,7 @@
         "select": "select.span_panel_main_office_dedicated_outlets_circuit_priority",
         "switch": "switch.span_panel_main_office_dedicated_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Main Office Dedicated Outlets",
@@ -321,10 +355,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         45
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-23": {
       "always_on": false,
@@ -340,6 +376,7 @@
         "select": "select.span_panel_bidet_outlets_basement_main_floor_circuit_priority",
         "switch": "switch.span_panel_bidet_outlets_basement_main_floor_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bidet Outlets Basement & Main Floor",
@@ -348,10 +385,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         47
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-24": {
       "always_on": false,
@@ -367,6 +406,7 @@
         "select": "select.span_panel_dining_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_dining_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Lights & Outlets",
@@ -375,10 +415,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         10
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-25": {
       "always_on": false,
@@ -394,6 +436,7 @@
         "select": "select.span_panel_kitchen_fr_door_isle_alt_outlets_circuit_priority",
         "switch": "switch.span_panel_kitchen_fr_door_isle_alt_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen fr. door & Isle Alt. Outlets",
@@ -402,10 +445,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         12
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-26": {
       "always_on": false,
@@ -421,6 +466,7 @@
         "select": "select.span_panel_furnace_circuit_priority",
         "switch": "switch.span_panel_furnace_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Furnace",
@@ -429,10 +475,12 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         14
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-27": {
       "always_on": false,
@@ -448,6 +496,7 @@
         "select": "select.span_panel_bed_2_shared_bath_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_bed_2_shared_bath_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bed 2 & Shared Bath Lights & Outlets",
@@ -456,10 +505,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         16
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-28": {
       "always_on": false,
@@ -475,6 +526,7 @@
         "select": "select.span_panel_primary_bedroom_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_primary_bedroom_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary bedroom / Lights & Outlets",
@@ -483,10 +535,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         18
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-3": {
       "always_on": false,
@@ -502,6 +556,7 @@
         "select": "select.span_panel_electric_double_oven_circuit_priority",
         "switch": "switch.span_panel_electric_double_oven_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric Double-Oven",
@@ -510,11 +565,13 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         2,
         4
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-30": {
       "always_on": false,
@@ -530,6 +587,7 @@
         "select": "select.span_panel_primary_bath_closets_circuit_priority",
         "switch": "switch.span_panel_primary_bath_closets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary Bath & Closets",
@@ -538,10 +596,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         22
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-31": {
       "always_on": false,
@@ -557,6 +617,7 @@
         "select": "select.span_panel_smoke_co_detectors_circuit_priority",
         "switch": "switch.span_panel_smoke_co_detectors_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Smoke/CO Detectors",
@@ -565,10 +626,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         24
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-32": {
       "always_on": false,
@@ -584,6 +647,7 @@
         "select": "select.span_panel_basement_outlets_exit_door_wall_circuit_priority",
         "switch": "switch.span_panel_basement_outlets_exit_door_wall_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement Outlets exit door wall",
@@ -592,10 +656,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         26
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-33": {
       "always_on": false,
@@ -611,6 +677,7 @@
         "select": "select.span_panel_living_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_living_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Lights & Outlets",
@@ -619,10 +686,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         28
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-34": {
       "always_on": false,
@@ -638,6 +707,7 @@
         "select": "select.span_panel_sump_pump_circuit_priority",
         "switch": "switch.span_panel_sump_pump_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Sump Pump",
@@ -646,10 +716,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         30
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-35": {
       "always_on": false,
@@ -665,6 +737,7 @@
         "select": "select.span_panel_kitchen_lights_circuit_priority",
         "switch": "switch.span_panel_kitchen_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
@@ -673,10 +746,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         32
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-36": {
       "always_on": false,
@@ -692,6 +767,7 @@
         "select": "select.span_panel_security_system_circuit_priority",
         "switch": "switch.span_panel_security_system_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Security system",
@@ -700,10 +776,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         34
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-37": {
       "always_on": false,
@@ -719,6 +797,7 @@
         "select": "select.span_panel_refrigerator_circuit_priority",
         "switch": "switch.span_panel_refrigerator_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Refrigerator",
@@ -727,10 +806,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         38
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-38": {
       "always_on": false,
@@ -746,6 +827,7 @@
         "select": "select.span_panel_freezer_circuit_priority",
         "switch": "switch.span_panel_freezer_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Freezer",
@@ -754,10 +836,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         40
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-4": {
       "always_on": false,
@@ -773,6 +857,7 @@
         "select": "select.span_panel_laundry_room_circuit_priority",
         "switch": "switch.span_panel_laundry_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Laundry Room",
@@ -781,11 +866,13 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         6,
         8
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-41": {
       "always_on": false,
@@ -801,6 +888,7 @@
         "select": "select.span_panel_utility_room_dedicated_circuit_priority",
         "switch": "switch.span_panel_utility_room_dedicated_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility Room Dedicated",
@@ -809,10 +897,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         36
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-48": {
       "always_on": false,
@@ -828,6 +918,7 @@
         "select": "select.span_panel_bedroom_outlets_circuit_priority",
         "switch": "switch.span_panel_bedroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
@@ -836,10 +927,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         20
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-49": {
       "always_on": false,
@@ -855,6 +948,7 @@
         "select": "select.span_panel_bathroom_outlets_circuit_priority",
         "switch": "switch.span_panel_bathroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bathroom / Outlets",
@@ -863,10 +957,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         39
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-5": {
       "always_on": false,
@@ -882,6 +978,7 @@
         "select": "select.span_panel_electric_range_circuit_priority",
         "switch": "switch.span_panel_electric_range_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric range",
@@ -890,10 +987,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         9
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-50": {
       "always_on": false,
@@ -909,6 +1008,7 @@
         "select": "select.span_panel_kitchen_outlets_circuit_priority_2",
         "switch": "switch.span_panel_kitchen_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
@@ -917,10 +1017,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         41
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-51": {
       "always_on": false,
@@ -936,6 +1038,7 @@
         "select": "select.span_panel_kitchen_lights_circuit_priority_2",
         "switch": "switch.span_panel_kitchen_lights_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
@@ -944,10 +1047,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         42
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-52": {
       "always_on": false,
@@ -963,6 +1068,7 @@
         "select": "select.span_panel_bedroom_lights_circuit_priority",
         "switch": "switch.span_panel_bedroom_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Lights",
@@ -971,10 +1077,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
       "tabs": [
         44
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-53": {
       "always_on": false,
@@ -990,6 +1098,7 @@
         "select": "select.span_panel_bedroom_outlets_circuit_priority_2",
         "switch": "switch.span_panel_bedroom_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
@@ -998,10 +1107,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
       "tabs": [
         44
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-54": {
       "always_on": false,
@@ -1017,6 +1128,7 @@
         "select": "select.span_panel_living_room_outlets_circuit_priority",
         "switch": "switch.span_panel_living_room_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Outlets",
@@ -1025,10 +1137,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
       "tabs": [
         46
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-55": {
       "always_on": false,
@@ -1044,6 +1158,7 @@
         "select": "select.span_panel_living_room_lights_circuit_priority",
         "switch": "switch.span_panel_living_room_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Lights",
@@ -1052,10 +1167,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
       "tabs": [
         46
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-56": {
       "always_on": false,
@@ -1071,6 +1188,7 @@
         "select": "select.span_panel_dining_room_outlets_circuit_priority",
         "switch": "switch.span_panel_dining_room_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Outlets",
@@ -1079,10 +1197,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
       "tabs": [
         48
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-57": {
       "always_on": false,
@@ -1098,6 +1218,7 @@
         "select": "select.span_panel_dining_room_lights_circuit_priority",
         "switch": "switch.span_panel_dining_room_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Lights",
@@ -1106,10 +1227,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
       "tabs": [
         48
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-6": {
       "always_on": false,
@@ -1125,6 +1248,7 @@
         "select": "select.span_panel_microwave_circuit_priority",
         "switch": "switch.span_panel_microwave_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Microwave",
@@ -1133,10 +1257,12 @@
       "priority_target": null,
       "relay_state": "OPEN",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         11
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-60": {
       "always_on": false,
@@ -1150,6 +1276,7 @@
         "power": "sensor.span_panel_ev_charger_span_drive_power",
         "produced_energy": "sensor.span_panel_ev_charger_span_drive_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "SPAN Drive",
@@ -1158,11 +1285,13 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         19,
         21
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-7": {
       "always_on": false,
@@ -1178,6 +1307,7 @@
         "select": "select.span_panel_primary_bath_outlets_circuit_priority",
         "switch": "switch.span_panel_primary_bath_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary Bath Outlets",
@@ -1186,10 +1316,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         13
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-8": {
       "always_on": false,
@@ -1205,6 +1337,7 @@
         "select": "select.span_panel_kitchen_outlets_circuit_priority",
         "switch": "switch.span_panel_kitchen_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
@@ -1213,10 +1346,12 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         15
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-9": {
       "always_on": false,
@@ -1232,6 +1367,7 @@
         "select": "select.span_panel_family_room_circuit_priority",
         "switch": "switch.span_panel_family_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Family Room",
@@ -1240,16 +1376,20 @@
       "priority_target": null,
       "relay_state": "CLOSED",
       "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "tabs": [
         17
       ],
-      "voltage": 120
+      "voltage": 120.0
     }
   },
   "config_entry_id": "entry-r202639-e",
   "device_id": "xg-6159-74dlx",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 48,
   "panel_device_id": "xg-6159-74dlx",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",
@@ -1285,15 +1425,15 @@
           "original_name": "EVSE Panel Link",
           "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_panel_link"
         },
+        "lock.span_panel_ev_charger_span_drive_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_lock"
+        },
         "number.span_panel_ev_charger_span_drive_evse_charge_current_limit": {
           "domain": "number",
           "original_name": "EVSE Charge Current Limit",
           "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_charge_current_limit"
-        },
-        "sensor.span_panel_ev_charger_span_drive_advertised_current": {
-          "domain": "sensor",
-          "original_name": "Advertised Current",
-          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_advertised_current"
         },
         "sensor.span_panel_ev_charger_span_drive_breaker_rating": {
           "domain": "sensor",

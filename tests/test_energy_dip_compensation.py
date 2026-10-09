@@ -62,6 +62,8 @@ class DummyDipSensor(SpanEnergySensorBase):
         self._last_dip_delta: float | None = None
         self._pending_dip: PendingDip | None = None
         self._recently_confirmed_dip: PendingDip | None = None
+        self._implausible_reading: float | None = None
+        self._implausible_since = None
         self._is_total_increasing: bool = state_class == SensorStateClass.TOTAL_INCREASING
         self._dip_compensation_enabled: bool = dip_enabled
 
