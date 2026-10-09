@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
@@ -19,6 +20,7 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
+from .counter_plausibility import implausible_counters
 from .helpers import identity_digest, shared_relay_groups
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
@@ -414,6 +416,9 @@ async def async_get_config_entry_diagnostics(
         # count in the Energy dashboard for what it is.
         "shared_meter_groups": shared_meter_groups(snapshot.circuits),
         "shared_relay_groups": shared_relay_groups(snapshot.circuits),
+        # Counter readings beyond what the circuit's breaker could ever have
+        # passed: shown as published, never used as the dip baseline.
+        "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],
         "evse": evse_data,
         "battery": battery_data,
         "pv": _pv(snapshot, entry.runtime_data.pv_binding),
