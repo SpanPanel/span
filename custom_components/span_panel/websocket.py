@@ -237,6 +237,10 @@ async def handle_panel_topology(
             "serial": snapshot.serial_number,
             "firmware": snapshot.firmware_version,
             "panel_size": snapshot.panel_size,
+            # The panel's first and last breaker positions, occupied or not, as
+            # the snapshot reports them; null where the panel does not say.
+            "first_position": snapshot.first_position,
+            "last_position": snapshot.last_position,
             "device_id": msg["device_id"],
             # The panel's current device and the entry that owns it. They differ
             # from what the request carried only when that was an id saved before

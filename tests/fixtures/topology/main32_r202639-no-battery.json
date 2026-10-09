@@ -448,6 +448,8 @@
   "device_id": "nt-9874-s7rxt",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 32,
   "panel_device_id": "nt-9874-s7rxt",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

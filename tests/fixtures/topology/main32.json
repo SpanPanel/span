@@ -519,6 +519,8 @@
   "device_id": "nt-0000-panel",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202633/02",
+  "first_position": 1,
+  "last_position": 32,
   "panel_device_id": "nt-0000-panel",
   "panel_entities": {
     "battery_level": "sensor.span_panel_battery_battery_level",
