@@ -29,6 +29,7 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
+    UnitOfFrequency,
     UnitOfPower,
     UnitOfTime,
 )
@@ -366,6 +367,62 @@ MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
         entity_registry_enabled_default=False,
         value_fn=lambda s: s.main_breaker_rating_a,
     )
+)
+
+
+class DeclaredPanelReading(NamedTuple):
+    """A panel sensor created only where the panel declares the property it reads."""
+
+    field_path: str
+    """The snapshot field, as the adapter's field metadata names it."""
+
+    description: SpanPanelDataSensorEntityDescription
+
+
+# Panel readings the flat schema has no property for, and that no reference
+# payload declares either, so neither adapter's reference metadata produces
+# them and each is `NO_SOURCE_FIELD` to the producible gate. Where a panel does
+# declare one, schema_1 publishes a resolved row for it, and that row is what
+# creates the sensor (`sensor._declared`): a panel without the property gains
+# no permanently unknown entity.
+BUSBAR_CURRENT_SENSOR: Final = SpanPanelDataSensorEntityDescription(
+    key="busbar_current",
+    derived=DerivedReason.NO_SOURCE_FIELD,
+    translation_key="busbar_current",
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    suggested_display_precision=1,
+    value_fn=lambda s: s.busbar_current_a,
+)
+
+FREQUENCY_SENSOR: Final = SpanPanelDataSensorEntityDescription(
+    key="frequency",
+    derived=DerivedReason.NO_SOURCE_FIELD,
+    translation_key="frequency",
+    device_class=SensorDeviceClass.FREQUENCY,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=UnitOfFrequency.HERTZ,
+    suggested_display_precision=2,
+    value_fn=lambda s: s.frequency_hz,
+)
+
+UPSTREAM_PROTECTION_RATING_SENSOR: Final = SpanPanelDataSensorEntityDescription(
+    key="upstream_protection_rating",
+    derived=DerivedReason.NO_SOURCE_FIELD,
+    translation_key="upstream_protection_rating",
+    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    entity_registry_enabled_default=False,
+    value_fn=lambda s: s.upstream_protection_rating_a,
+)
+"""The protection ahead of the upstream lugs, beside `main_breaker_rating` and shaped like it."""
+
+DECLARED_PANEL_READINGS: Final = (
+    DeclaredPanelReading("panel.busbar_current_a", BUSBAR_CURRENT_SENSOR),
+    DeclaredPanelReading("panel.frequency_hz", FREQUENCY_SENSOR),
+    DeclaredPanelReading("panel.upstream_protection_rating_a", UPSTREAM_PROTECTION_RATING_SENSOR),
 )
 
 # ---------------------------------------------------------------------------
@@ -1373,6 +1430,7 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
         DOWNSTREAM_L1_CURRENT_SENSOR,
         DOWNSTREAM_L2_CURRENT_SENSOR,
         MAIN_BREAKER_RATING_SENSOR,
+        *(reading.description for reading in DECLARED_PANEL_READINGS),
         CIRCUIT_CURRENT_SENSOR,
         CIRCUIT_BREAKER_RATING_SENSOR,
     )

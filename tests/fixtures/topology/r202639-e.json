@@ -1,0 +1,1492 @@
+{
+  "circuits": {
+    "circuit-1": {
+      "always_on": false,
+      "breaker_rating_a": 35.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hvac_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hvac_consumed_energy",
+        "current": "sensor.span_panel_hvac_current",
+        "net_energy": "sensor.span_panel_hvac_net_energy",
+        "power": "sensor.span_panel_hvac_power",
+        "produced_energy": "sensor.span_panel_hvac_produced_energy",
+        "select": "select.span_panel_hvac_circuit_priority",
+        "switch": "switch.span_panel_hvac_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "HVAC",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "OPEN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        1,
+        3
+      ],
+      "voltage": 240.0
+    },
+    "circuit-12": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_sink_garbage_disposal_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_sink_garbage_disposal_consumed_energy",
+        "current": "sensor.span_panel_kitchen_sink_garbage_disposal_current",
+        "net_energy": "sensor.span_panel_kitchen_sink_garbage_disposal_net_energy",
+        "power": "sensor.span_panel_kitchen_sink_garbage_disposal_power",
+        "produced_energy": "sensor.span_panel_kitchen_sink_garbage_disposal_produced_energy",
+        "select": "select.span_panel_kitchen_sink_garbage_disposal_circuit_priority",
+        "switch": "switch.span_panel_kitchen_sink_garbage_disposal_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen Sink Garbage Disposal",
+      "outside_panel": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        23
+      ],
+      "voltage": 120.0
+    },
+    "circuit-13": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_dishwasher_breaker_rating",
+        "consumed_energy": "sensor.span_panel_dishwasher_consumed_energy",
+        "current": "sensor.span_panel_dishwasher_current",
+        "net_energy": "sensor.span_panel_dishwasher_net_energy",
+        "power": "sensor.span_panel_dishwasher_power",
+        "produced_energy": "sensor.span_panel_dishwasher_produced_energy",
+        "select": "select.span_panel_dishwasher_circuit_priority",
+        "switch": "switch.span_panel_dishwasher_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Dishwasher",
+      "outside_panel": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        25
+      ],
+      "voltage": 120.0
+    },
+    "circuit-14": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_main_office_fam_tv_breaker_rating",
+        "consumed_energy": "sensor.span_panel_main_office_fam_tv_consumed_energy",
+        "current": "sensor.span_panel_main_office_fam_tv_current",
+        "net_energy": "sensor.span_panel_main_office_fam_tv_net_energy",
+        "power": "sensor.span_panel_main_office_fam_tv_power",
+        "produced_energy": "sensor.span_panel_main_office_fam_tv_produced_energy",
+        "select": "select.span_panel_main_office_fam_tv_circuit_priority",
+        "switch": "switch.span_panel_main_office_fam_tv_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Main Office & Fam TV",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        27
+      ],
+      "voltage": 120.0
+    },
+    "circuit-15": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_basement_outlets_french_door_wall_breaker_rating",
+        "consumed_energy": "sensor.span_panel_basement_outlets_french_door_wall_consumed_energy",
+        "current": "sensor.span_panel_basement_outlets_french_door_wall_current",
+        "net_energy": "sensor.span_panel_basement_outlets_french_door_wall_net_energy",
+        "power": "sensor.span_panel_basement_outlets_french_door_wall_power",
+        "produced_energy": "sensor.span_panel_basement_outlets_french_door_wall_produced_energy",
+        "select": "select.span_panel_basement_outlets_french_door_wall_circuit_priority",
+        "switch": "switch.span_panel_basement_outlets_french_door_wall_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Basement Outlets French Door Wall",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        29
+      ],
+      "voltage": 120.0
+    },
+    "circuit-16": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_basement_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_basement_lights_outlets_current",
+        "net_energy": "sensor.span_panel_basement_lights_outlets_net_energy",
+        "power": "sensor.span_panel_basement_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_basement_lights_outlets_produced_energy",
+        "select": "select.span_panel_basement_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_basement_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Basement / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        31
+      ],
+      "voltage": 120.0
+    },
+    "circuit-17": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_utility_room_breaker_rating",
+        "consumed_energy": "sensor.span_panel_utility_room_consumed_energy",
+        "current": "sensor.span_panel_utility_room_current",
+        "net_energy": "sensor.span_panel_utility_room_net_energy",
+        "power": "sensor.span_panel_utility_room_power",
+        "produced_energy": "sensor.span_panel_utility_room_produced_energy",
+        "select": "select.span_panel_utility_room_circuit_priority",
+        "switch": "switch.span_panel_utility_room_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Utility Room",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        33
+      ],
+      "voltage": 120.0
+    },
+    "circuit-18": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hood_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hood_consumed_energy",
+        "current": "sensor.span_panel_hood_current",
+        "net_energy": "sensor.span_panel_hood_net_energy",
+        "power": "sensor.span_panel_hood_power",
+        "produced_energy": "sensor.span_panel_hood_produced_energy",
+        "select": "select.span_panel_hood_circuit_priority",
+        "switch": "switch.span_panel_hood_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Hood",
+      "outside_panel": false,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        35
+      ],
+      "voltage": 120.0
+    },
+    "circuit-19": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating_2",
+        "consumed_energy": "sensor.span_panel_basement_lights_outlets_consumed_energy_2",
+        "current": "sensor.span_panel_basement_lights_outlets_current_2",
+        "net_energy": "sensor.span_panel_basement_lights_outlets_net_energy_2",
+        "power": "sensor.span_panel_basement_lights_outlets_power_2",
+        "produced_energy": "sensor.span_panel_basement_lights_outlets_produced_energy_2",
+        "select": "select.span_panel_basement_lights_outlets_circuit_priority_2",
+        "switch": "switch.span_panel_basement_lights_outlets_breaker_2"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Basement / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        37
+      ],
+      "voltage": 120.0
+    },
+    "circuit-2": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_heat_pump_water_heater_breaker_rating",
+        "consumed_energy": "sensor.span_panel_heat_pump_water_heater_consumed_energy",
+        "current": "sensor.span_panel_heat_pump_water_heater_current",
+        "net_energy": "sensor.span_panel_heat_pump_water_heater_net_energy",
+        "power": "sensor.span_panel_heat_pump_water_heater_power",
+        "produced_energy": "sensor.span_panel_heat_pump_water_heater_produced_energy",
+        "select": "select.span_panel_heat_pump_water_heater_circuit_priority",
+        "switch": "switch.span_panel_heat_pump_water_heater_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Heat Pump Water Heater",
+      "outside_panel": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        5,
+        7
+      ],
+      "voltage": 240.0
+    },
+    "circuit-21": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_electric_infared_sauna_breaker_rating",
+        "consumed_energy": "sensor.span_panel_electric_infared_sauna_consumed_energy",
+        "current": "sensor.span_panel_electric_infared_sauna_current",
+        "net_energy": "sensor.span_panel_electric_infared_sauna_net_energy",
+        "power": "sensor.span_panel_electric_infared_sauna_power",
+        "produced_energy": "sensor.span_panel_electric_infared_sauna_produced_energy",
+        "select": "select.span_panel_electric_infared_sauna_circuit_priority",
+        "switch": "switch.span_panel_electric_infared_sauna_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Electric Infared Sauna",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        43
+      ],
+      "voltage": 120.0
+    },
+    "circuit-22": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_main_office_dedicated_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_main_office_dedicated_outlets_consumed_energy",
+        "current": "sensor.span_panel_main_office_dedicated_outlets_current",
+        "net_energy": "sensor.span_panel_main_office_dedicated_outlets_net_energy",
+        "power": "sensor.span_panel_main_office_dedicated_outlets_power",
+        "produced_energy": "sensor.span_panel_main_office_dedicated_outlets_produced_energy",
+        "select": "select.span_panel_main_office_dedicated_outlets_circuit_priority",
+        "switch": "switch.span_panel_main_office_dedicated_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Main Office Dedicated Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        45
+      ],
+      "voltage": 120.0
+    },
+    "circuit-23": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bidet_outlets_basement_main_floor_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bidet_outlets_basement_main_floor_consumed_energy",
+        "current": "sensor.span_panel_bidet_outlets_basement_main_floor_current",
+        "net_energy": "sensor.span_panel_bidet_outlets_basement_main_floor_net_energy",
+        "power": "sensor.span_panel_bidet_outlets_basement_main_floor_power",
+        "produced_energy": "sensor.span_panel_bidet_outlets_basement_main_floor_produced_energy",
+        "select": "select.span_panel_bidet_outlets_basement_main_floor_circuit_priority",
+        "switch": "switch.span_panel_bidet_outlets_basement_main_floor_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bidet Outlets Basement & Main Floor",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        47
+      ],
+      "voltage": 120.0
+    },
+    "circuit-24": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_dining_room_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_dining_room_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_dining_room_lights_outlets_current",
+        "net_energy": "sensor.span_panel_dining_room_lights_outlets_net_energy",
+        "power": "sensor.span_panel_dining_room_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_dining_room_lights_outlets_produced_energy",
+        "select": "select.span_panel_dining_room_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_dining_room_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Dining room / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10
+      ],
+      "voltage": 120.0
+    },
+    "circuit-25": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_consumed_energy",
+        "current": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_current",
+        "net_energy": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_net_energy",
+        "power": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_power",
+        "produced_energy": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_produced_energy",
+        "select": "select.span_panel_kitchen_fr_door_isle_alt_outlets_circuit_priority",
+        "switch": "switch.span_panel_kitchen_fr_door_isle_alt_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen fr. door & Isle Alt. Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        12
+      ],
+      "voltage": 120.0
+    },
+    "circuit-26": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_furnace_breaker_rating",
+        "consumed_energy": "sensor.span_panel_furnace_consumed_energy",
+        "current": "sensor.span_panel_furnace_current",
+        "net_energy": "sensor.span_panel_furnace_net_energy",
+        "power": "sensor.span_panel_furnace_power",
+        "produced_energy": "sensor.span_panel_furnace_produced_energy",
+        "select": "select.span_panel_furnace_circuit_priority",
+        "switch": "switch.span_panel_furnace_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Furnace",
+      "outside_panel": false,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "OPEN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14
+      ],
+      "voltage": 120.0
+    },
+    "circuit-27": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bed_2_shared_bath_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bed_2_shared_bath_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_bed_2_shared_bath_lights_outlets_current",
+        "net_energy": "sensor.span_panel_bed_2_shared_bath_lights_outlets_net_energy",
+        "power": "sensor.span_panel_bed_2_shared_bath_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_bed_2_shared_bath_lights_outlets_produced_energy",
+        "select": "select.span_panel_bed_2_shared_bath_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_bed_2_shared_bath_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bed 2 & Shared Bath Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        16
+      ],
+      "voltage": 120.0
+    },
+    "circuit-28": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_primary_bedroom_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_primary_bedroom_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_primary_bedroom_lights_outlets_current",
+        "net_energy": "sensor.span_panel_primary_bedroom_lights_outlets_net_energy",
+        "power": "sensor.span_panel_primary_bedroom_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_primary_bedroom_lights_outlets_produced_energy",
+        "select": "select.span_panel_primary_bedroom_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_primary_bedroom_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Primary bedroom / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        18
+      ],
+      "voltage": 120.0
+    },
+    "circuit-3": {
+      "always_on": false,
+      "breaker_rating_a": 40.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_electric_double_oven_breaker_rating",
+        "consumed_energy": "sensor.span_panel_electric_double_oven_consumed_energy",
+        "current": "sensor.span_panel_electric_double_oven_current",
+        "net_energy": "sensor.span_panel_electric_double_oven_net_energy",
+        "power": "sensor.span_panel_electric_double_oven_power",
+        "produced_energy": "sensor.span_panel_electric_double_oven_produced_energy",
+        "select": "select.span_panel_electric_double_oven_circuit_priority",
+        "switch": "switch.span_panel_electric_double_oven_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Electric Double-Oven",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        2,
+        4
+      ],
+      "voltage": 240.0
+    },
+    "circuit-30": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_primary_bath_closets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_primary_bath_closets_consumed_energy",
+        "current": "sensor.span_panel_primary_bath_closets_current",
+        "net_energy": "sensor.span_panel_primary_bath_closets_net_energy",
+        "power": "sensor.span_panel_primary_bath_closets_power",
+        "produced_energy": "sensor.span_panel_primary_bath_closets_produced_energy",
+        "select": "select.span_panel_primary_bath_closets_circuit_priority",
+        "switch": "switch.span_panel_primary_bath_closets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Primary Bath & Closets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22
+      ],
+      "voltage": 120.0
+    },
+    "circuit-31": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_smoke_co_detectors_breaker_rating",
+        "consumed_energy": "sensor.span_panel_smoke_co_detectors_consumed_energy",
+        "current": "sensor.span_panel_smoke_co_detectors_current",
+        "net_energy": "sensor.span_panel_smoke_co_detectors_net_energy",
+        "power": "sensor.span_panel_smoke_co_detectors_power",
+        "produced_energy": "sensor.span_panel_smoke_co_detectors_produced_energy",
+        "select": "select.span_panel_smoke_co_detectors_circuit_priority",
+        "switch": "switch.span_panel_smoke_co_detectors_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Smoke/CO Detectors",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        24
+      ],
+      "voltage": 120.0
+    },
+    "circuit-32": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_basement_outlets_exit_door_wall_breaker_rating",
+        "consumed_energy": "sensor.span_panel_basement_outlets_exit_door_wall_consumed_energy",
+        "current": "sensor.span_panel_basement_outlets_exit_door_wall_current",
+        "net_energy": "sensor.span_panel_basement_outlets_exit_door_wall_net_energy",
+        "power": "sensor.span_panel_basement_outlets_exit_door_wall_power",
+        "produced_energy": "sensor.span_panel_basement_outlets_exit_door_wall_produced_energy",
+        "select": "select.span_panel_basement_outlets_exit_door_wall_circuit_priority",
+        "switch": "switch.span_panel_basement_outlets_exit_door_wall_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Basement Outlets exit door wall",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        26
+      ],
+      "voltage": 120.0
+    },
+    "circuit-33": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_living_room_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_living_room_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_living_room_lights_outlets_current",
+        "net_energy": "sensor.span_panel_living_room_lights_outlets_net_energy",
+        "power": "sensor.span_panel_living_room_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_living_room_lights_outlets_produced_energy",
+        "select": "select.span_panel_living_room_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_living_room_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Living room / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        28
+      ],
+      "voltage": 120.0
+    },
+    "circuit-34": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_sump_pump_breaker_rating",
+        "consumed_energy": "sensor.span_panel_sump_pump_consumed_energy",
+        "current": "sensor.span_panel_sump_pump_current",
+        "net_energy": "sensor.span_panel_sump_pump_net_energy",
+        "power": "sensor.span_panel_sump_pump_power",
+        "produced_energy": "sensor.span_panel_sump_pump_produced_energy",
+        "select": "select.span_panel_sump_pump_circuit_priority",
+        "switch": "switch.span_panel_sump_pump_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Sump Pump",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        30
+      ],
+      "voltage": 120.0
+    },
+    "circuit-35": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_lights_consumed_energy",
+        "current": "sensor.span_panel_kitchen_lights_current",
+        "net_energy": "sensor.span_panel_kitchen_lights_net_energy",
+        "power": "sensor.span_panel_kitchen_lights_power",
+        "produced_energy": "sensor.span_panel_kitchen_lights_produced_energy",
+        "select": "select.span_panel_kitchen_lights_circuit_priority",
+        "switch": "switch.span_panel_kitchen_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        32
+      ],
+      "voltage": 120.0
+    },
+    "circuit-36": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_security_system_breaker_rating",
+        "consumed_energy": "sensor.span_panel_security_system_consumed_energy",
+        "current": "sensor.span_panel_security_system_current",
+        "net_energy": "sensor.span_panel_security_system_net_energy",
+        "power": "sensor.span_panel_security_system_power",
+        "produced_energy": "sensor.span_panel_security_system_produced_energy",
+        "select": "select.span_panel_security_system_circuit_priority",
+        "switch": "switch.span_panel_security_system_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Security system",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        34
+      ],
+      "voltage": 120.0
+    },
+    "circuit-37": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_refrigerator_breaker_rating",
+        "consumed_energy": "sensor.span_panel_refrigerator_consumed_energy",
+        "current": "sensor.span_panel_refrigerator_current",
+        "net_energy": "sensor.span_panel_refrigerator_net_energy",
+        "power": "sensor.span_panel_refrigerator_power",
+        "produced_energy": "sensor.span_panel_refrigerator_produced_energy",
+        "select": "select.span_panel_refrigerator_circuit_priority",
+        "switch": "switch.span_panel_refrigerator_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Refrigerator",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        38
+      ],
+      "voltage": 120.0
+    },
+    "circuit-38": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_freezer_breaker_rating",
+        "consumed_energy": "sensor.span_panel_freezer_consumed_energy",
+        "current": "sensor.span_panel_freezer_current",
+        "net_energy": "sensor.span_panel_freezer_net_energy",
+        "power": "sensor.span_panel_freezer_power",
+        "produced_energy": "sensor.span_panel_freezer_produced_energy",
+        "select": "select.span_panel_freezer_circuit_priority",
+        "switch": "switch.span_panel_freezer_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Freezer",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        40
+      ],
+      "voltage": 120.0
+    },
+    "circuit-4": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_laundry_room_breaker_rating",
+        "consumed_energy": "sensor.span_panel_laundry_room_consumed_energy",
+        "current": "sensor.span_panel_laundry_room_current",
+        "net_energy": "sensor.span_panel_laundry_room_net_energy",
+        "power": "sensor.span_panel_laundry_room_power",
+        "produced_energy": "sensor.span_panel_laundry_room_produced_energy",
+        "select": "select.span_panel_laundry_room_circuit_priority",
+        "switch": "switch.span_panel_laundry_room_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Laundry Room",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        6,
+        8
+      ],
+      "voltage": 240.0
+    },
+    "circuit-41": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_utility_room_dedicated_breaker_rating",
+        "consumed_energy": "sensor.span_panel_utility_room_dedicated_consumed_energy",
+        "current": "sensor.span_panel_utility_room_dedicated_current",
+        "net_energy": "sensor.span_panel_utility_room_dedicated_net_energy",
+        "power": "sensor.span_panel_utility_room_dedicated_power",
+        "produced_energy": "sensor.span_panel_utility_room_dedicated_produced_energy",
+        "select": "select.span_panel_utility_room_dedicated_circuit_priority",
+        "switch": "switch.span_panel_utility_room_dedicated_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Utility Room Dedicated",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        36
+      ],
+      "voltage": 120.0
+    },
+    "circuit-48": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_bedroom_outlets_current",
+        "net_energy": "sensor.span_panel_bedroom_outlets_net_energy",
+        "power": "sensor.span_panel_bedroom_outlets_power",
+        "produced_energy": "sensor.span_panel_bedroom_outlets_produced_energy",
+        "select": "select.span_panel_bedroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_bedroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bedroom / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        20
+      ],
+      "voltage": 120.0
+    },
+    "circuit-49": {
+      "always_on": false,
+      "breaker_rating_a": 10.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bathroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_bathroom_outlets_current",
+        "net_energy": "sensor.span_panel_bathroom_outlets_net_energy",
+        "power": "sensor.span_panel_bathroom_outlets_power",
+        "produced_energy": "sensor.span_panel_bathroom_outlets_produced_energy",
+        "select": "select.span_panel_bathroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_bathroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bathroom / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        39
+      ],
+      "voltage": 120.0
+    },
+    "circuit-5": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_electric_range_breaker_rating",
+        "consumed_energy": "sensor.span_panel_electric_range_consumed_energy",
+        "current": "sensor.span_panel_electric_range_current",
+        "net_energy": "sensor.span_panel_electric_range_net_energy",
+        "power": "sensor.span_panel_electric_range_power",
+        "produced_energy": "sensor.span_panel_electric_range_produced_energy",
+        "select": "select.span_panel_electric_range_circuit_priority",
+        "switch": "switch.span_panel_electric_range_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Electric range",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9
+      ],
+      "voltage": 120.0
+    },
+    "circuit-50": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating_2",
+        "consumed_energy": "sensor.span_panel_kitchen_outlets_consumed_energy_2",
+        "current": "sensor.span_panel_kitchen_outlets_current_2",
+        "net_energy": "sensor.span_panel_kitchen_outlets_net_energy_2",
+        "power": "sensor.span_panel_kitchen_outlets_power_2",
+        "produced_energy": "sensor.span_panel_kitchen_outlets_produced_energy_2",
+        "select": "select.span_panel_kitchen_outlets_circuit_priority_2",
+        "switch": "switch.span_panel_kitchen_outlets_breaker_2"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        41
+      ],
+      "voltage": 120.0
+    },
+    "circuit-51": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating_2",
+        "consumed_energy": "sensor.span_panel_kitchen_lights_consumed_energy_2",
+        "current": "sensor.span_panel_kitchen_lights_current_2",
+        "net_energy": "sensor.span_panel_kitchen_lights_net_energy_2",
+        "power": "sensor.span_panel_kitchen_lights_power_2",
+        "produced_energy": "sensor.span_panel_kitchen_lights_produced_energy_2",
+        "select": "select.span_panel_kitchen_lights_circuit_priority_2",
+        "switch": "switch.span_panel_kitchen_lights_breaker_2"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        42
+      ],
+      "voltage": 120.0
+    },
+    "circuit-52": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_lights_consumed_energy",
+        "current": "sensor.span_panel_bedroom_lights_current",
+        "net_energy": "sensor.span_panel_bedroom_lights_net_energy",
+        "power": "sensor.span_panel_bedroom_lights_power",
+        "produced_energy": "sensor.span_panel_bedroom_lights_produced_energy",
+        "select": "select.span_panel_bedroom_lights_circuit_priority",
+        "switch": "switch.span_panel_bedroom_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bedroom / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
+      "tabs": [
+        44
+      ],
+      "voltage": 120.0
+    },
+    "circuit-53": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating_2",
+        "consumed_energy": "sensor.span_panel_bedroom_outlets_consumed_energy_2",
+        "current": "sensor.span_panel_bedroom_outlets_current_2",
+        "net_energy": "sensor.span_panel_bedroom_outlets_net_energy_2",
+        "power": "sensor.span_panel_bedroom_outlets_power_2",
+        "produced_energy": "sensor.span_panel_bedroom_outlets_produced_energy_2",
+        "select": "select.span_panel_bedroom_outlets_circuit_priority_2",
+        "switch": "switch.span_panel_bedroom_outlets_breaker_2"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bedroom / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-52",
+      "shared_relay_group": "circuit-52",
+      "tabs": [
+        44
+      ],
+      "voltage": 120.0
+    },
+    "circuit-54": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_living_room_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_living_room_outlets_consumed_energy",
+        "current": "sensor.span_panel_living_room_outlets_current",
+        "net_energy": "sensor.span_panel_living_room_outlets_net_energy",
+        "power": "sensor.span_panel_living_room_outlets_power",
+        "produced_energy": "sensor.span_panel_living_room_outlets_produced_energy",
+        "select": "select.span_panel_living_room_outlets_circuit_priority",
+        "switch": "switch.span_panel_living_room_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Living room / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
+      "tabs": [
+        46
+      ],
+      "voltage": 120.0
+    },
+    "circuit-55": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_living_room_lights_consumed_energy",
+        "current": "sensor.span_panel_living_room_lights_current",
+        "net_energy": "sensor.span_panel_living_room_lights_net_energy",
+        "power": "sensor.span_panel_living_room_lights_power",
+        "produced_energy": "sensor.span_panel_living_room_lights_produced_energy",
+        "select": "select.span_panel_living_room_lights_circuit_priority",
+        "switch": "switch.span_panel_living_room_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Living room / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-54",
+      "shared_relay_group": "circuit-54",
+      "tabs": [
+        46
+      ],
+      "voltage": 120.0
+    },
+    "circuit-56": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_dining_room_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_dining_room_outlets_consumed_energy",
+        "current": "sensor.span_panel_dining_room_outlets_current",
+        "net_energy": "sensor.span_panel_dining_room_outlets_net_energy",
+        "power": "sensor.span_panel_dining_room_outlets_power",
+        "produced_energy": "sensor.span_panel_dining_room_outlets_produced_energy",
+        "select": "select.span_panel_dining_room_outlets_circuit_priority",
+        "switch": "switch.span_panel_dining_room_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Dining room / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
+      "tabs": [
+        48
+      ],
+      "voltage": 120.0
+    },
+    "circuit-57": {
+      "always_on": false,
+      "breaker_rating_a": 10.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_dining_room_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_dining_room_lights_consumed_energy",
+        "current": "sensor.span_panel_dining_room_lights_current",
+        "net_energy": "sensor.span_panel_dining_room_lights_net_energy",
+        "power": "sensor.span_panel_dining_room_lights_power",
+        "produced_energy": "sensor.span_panel_dining_room_lights_produced_energy",
+        "select": "select.span_panel_dining_room_lights_circuit_priority",
+        "switch": "switch.span_panel_dining_room_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Dining room / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": "circuit-56",
+      "shared_relay_group": "circuit-56",
+      "tabs": [
+        48
+      ],
+      "voltage": 120.0
+    },
+    "circuit-6": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_microwave_breaker_rating",
+        "consumed_energy": "sensor.span_panel_microwave_consumed_energy",
+        "current": "sensor.span_panel_microwave_current",
+        "net_energy": "sensor.span_panel_microwave_net_energy",
+        "power": "sensor.span_panel_microwave_power",
+        "produced_energy": "sensor.span_panel_microwave_produced_energy",
+        "select": "select.span_panel_microwave_circuit_priority",
+        "switch": "switch.span_panel_microwave_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Microwave",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "OPEN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        11
+      ],
+      "voltage": 120.0
+    },
+    "circuit-60": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_type": "evse",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ev_charger_span_drive_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ev_charger_span_drive_consumed_energy",
+        "current": "sensor.span_panel_ev_charger_span_drive_current",
+        "net_energy": "sensor.span_panel_ev_charger_span_drive_net_energy",
+        "power": "sensor.span_panel_ev_charger_span_drive_power",
+        "produced_energy": "sensor.span_panel_ev_charger_span_drive_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "SPAN Drive",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        19,
+        21
+      ],
+      "voltage": 240.0
+    },
+    "circuit-7": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_primary_bath_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_primary_bath_outlets_consumed_energy",
+        "current": "sensor.span_panel_primary_bath_outlets_current",
+        "net_energy": "sensor.span_panel_primary_bath_outlets_net_energy",
+        "power": "sensor.span_panel_primary_bath_outlets_power",
+        "produced_energy": "sensor.span_panel_primary_bath_outlets_produced_energy",
+        "select": "select.span_panel_primary_bath_outlets_circuit_priority",
+        "switch": "switch.span_panel_primary_bath_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Primary Bath Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13
+      ],
+      "voltage": 120.0
+    },
+    "circuit-8": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_outlets_consumed_energy",
+        "current": "sensor.span_panel_kitchen_outlets_current",
+        "net_energy": "sensor.span_panel_kitchen_outlets_net_energy",
+        "power": "sensor.span_panel_kitchen_outlets_power",
+        "produced_energy": "sensor.span_panel_kitchen_outlets_produced_energy",
+        "select": "select.span_panel_kitchen_outlets_circuit_priority",
+        "switch": "switch.span_panel_kitchen_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Kitchen / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        15
+      ],
+      "voltage": 120.0
+    },
+    "circuit-9": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_family_room_breaker_rating",
+        "consumed_energy": "sensor.span_panel_family_room_consumed_energy",
+        "current": "sensor.span_panel_family_room_current",
+        "net_energy": "sensor.span_panel_family_room_net_energy",
+        "power": "sensor.span_panel_family_room_power",
+        "produced_energy": "sensor.span_panel_family_room_produced_energy",
+        "select": "select.span_panel_family_room_circuit_priority",
+        "switch": "switch.span_panel_family_room_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Family Room",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17
+      ],
+      "voltage": 120.0
+    }
+  },
+  "config_entry_id": "entry-r202639-e",
+  "device_id": "xg-6159-74dlx",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 48,
+  "panel_device_id": "xg-6159-74dlx",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 48,
+  "serial": "xg-6159-74dlx",
+  "sub_devices": {
+    "xg-6159-74dlx_evse_dt-6692-e9t57": {
+      "entities": {
+        "binary_sensor.span_panel_ev_charger_span_drive_charging": {
+          "domain": "binary_sensor",
+          "original_name": "Charging",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_charging"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_ev_connected": {
+          "domain": "binary_sensor",
+          "original_name": "EV Connected",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_ev_connected"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_evse_panel_link": {
+          "domain": "binary_sensor",
+          "original_name": "EVSE Panel Link",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_panel_link"
+        },
+        "lock.span_panel_ev_charger_span_drive_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_lock"
+        },
+        "number.span_panel_ev_charger_span_drive_evse_charge_current_limit": {
+          "domain": "number",
+          "original_name": "EVSE Charge Current Limit",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_charge_current_limit"
+        },
+        "sensor.span_panel_ev_charger_span_drive_breaker_rating": {
+          "domain": "sensor",
+          "original_name": "Breaker Rating",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_breaker_rating"
+        },
+        "sensor.span_panel_ev_charger_span_drive_charger_status": {
+          "domain": "sensor",
+          "original_name": "Charger Status",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_status"
+        },
+        "sensor.span_panel_ev_charger_span_drive_consumed_energy": {
+          "domain": "sensor",
+          "original_name": "Consumed Energy",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_energy_consumed"
+        },
+        "sensor.span_panel_ev_charger_span_drive_current": {
+          "domain": "sensor",
+          "original_name": "Current",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_current"
+        },
+        "sensor.span_panel_ev_charger_span_drive_lock_state": {
+          "domain": "sensor",
+          "original_name": "Lock State",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_lock_state"
+        },
+        "sensor.span_panel_ev_charger_span_drive_net_energy": {
+          "domain": "sensor",
+          "original_name": "Net Energy",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_energy_net"
+        },
+        "sensor.span_panel_ev_charger_span_drive_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-6159-74dlx_evse_dt-6692-e9t57_evse_part_number"
+        },
+        "sensor.span_panel_ev_charger_span_drive_power": {
+          "domain": "sensor",
+          "original_name": "Power",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_power"
+        },
+        "sensor.span_panel_ev_charger_span_drive_produced_energy": {
+          "domain": "sensor",
+          "original_name": "Produced Energy",
+          "unique_id": "span_xg-6159-74dlx_circuit-60_energy_produced"
+        }
+      },
+      "manufacturer": "SPAN",
+      "model": "SPAN Drive",
+      "name": "Span Panel EV Charger (SPAN Drive)",
+      "serial_number": "dt-6692-e9t57",
+      "sw_version": null,
+      "type": "evse"
+    }
+  }
+}

@@ -864,34 +864,6 @@
       "translation_key": null,
       "unit_of_measurement": "W"
     },
-    "span_nt-9874-s7rxt_adopted_panel/status/postal-code": {
-      "device": "nt-9874-s7rxt",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_postal_code",
-      "hidden_by": null,
-      "original_name": "Status Postal Code",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
-    "span_nt-9874-s7rxt_adopted_panel/status/time-zone": {
-      "device": "nt-9874-s7rxt",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_time_zone",
-      "hidden_by": null,
-      "original_name": "Status Time Zone",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
     "span_nt-9874-s7rxt_battery_power": {
       "device": "nt-9874-s7rxt_bess",
       "device_class": "power",

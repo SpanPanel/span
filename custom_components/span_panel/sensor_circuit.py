@@ -12,13 +12,16 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
+from .counter_plausibility import exceeds_lifetime_bound
 from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
+    construct_shared_with_attributes,
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_user_friendly_suffix,
+    outside_meter_label,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
@@ -67,7 +70,13 @@ def _resolve_circuit_identifier(
     on the panel the same `sensor.<panel>_power` and leaves the registry to tell
     them apart with `_2`, `_3`, ... in whatever order they were added. The tab
     fallback names them after the breaker position they occupy instead.
+
+    A meter without a breaker space has neither a name nor a position, so it is
+    named by `outside_meter_label` in both modes.
     """
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
+
     use_circuit_numbers = options.get(USE_CIRCUIT_NUMBERS, False)
 
     if use_circuit_numbers:
@@ -82,6 +91,8 @@ def _resolve_circuit_identifier(
 
 def _resolve_circuit_identifier_for_sync(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
     """Resolve the circuit identifier for name-sync (always panel name, with fallback)."""
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
     name: str = circuit.name
     if name:
         return name
@@ -243,11 +254,15 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if voltage is not None:
             attributes["voltage"] = voltage
 
-        attributes["always_on"] = circuit.always_on
-        attributes["relay_state"] = circuit.relay_state
-        attributes["relay_requester"] = circuit.relay_requester
-        attributes["shed_priority"] = circuit.priority
-        attributes["is_sheddable"] = circuit.is_sheddable
+        # A breaker's relay and shedding facts. A meter outside the panel has no
+        # relay and is never shed, so it carries none of them rather than
+        # defaults that would make it read as a breaker.
+        if not circuit.measures_outside_panel:
+            attributes["always_on"] = circuit.always_on
+            attributes["relay_state"] = circuit.relay_state
+            attributes["relay_requester"] = circuit.relay_requester
+            attributes["shed_priority"] = circuit.priority
+            attributes["is_sheddable"] = circuit.is_sheddable
 
         # This circuit's participation in the enclosure's Power Control System,
         # beside its load-shed participation above. Two policies on the same
@@ -270,6 +285,12 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if circuit.pcs_priority is not None:
             attributes["pcs_priority"] = circuit.pcs_priority
 
+        # The protections the breaker provides, where it says: a breaker that
+        # does not list them has not said it provides none.
+        if circuit.protection_functions is not None:
+            attributes["protection_functions"] = list(circuit.protection_functions)
+
+        attributes.update(construct_shared_with_attributes(self.coordinator.data, circuit))
         return attributes
 
 
@@ -326,6 +347,12 @@ class SpanCircuitEnergySensor(
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
+
+    def _reading_is_implausible(self, reading: float) -> bool:
+        """Whether the reading is beyond anything this circuit's breaker could ever have passed."""
+        snapshot: SpanPanelSnapshot | None = self.coordinator.data
+        circuit = snapshot.circuits.get(self.circuit_id) if snapshot else None
+        return circuit is not None and exceeds_lifetime_bound(circuit, reading)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
