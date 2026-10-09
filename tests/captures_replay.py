@@ -35,7 +35,13 @@ from .adapter_fixtures import tree_snapshot
 CAPTURES_DIR: Final = Path(__file__).parent / "fixtures" / "captures"
 CAPTURE_SUFFIX: Final = "-tree-v1.json"
 DIGESTS: Final = CAPTURES_DIR / "SHA256SUMS"
-"""`sha256sum` lines for every capture, held to the upstream copies by a test."""
+"""`sha256sum` lines for every vendored file, held to the upstream copies by a test."""
+
+UPSTREAM_LICENSE: Final = CAPTURES_DIR / "LICENSE"
+"""The emitter's license, which the captures are published under and which travels with them."""
+
+OWN_FILES: Final = frozenset({"README.md", "SHA256SUMS"})
+"""The files in the directory this repository wrote; everything else is vendored."""
 
 PANEL_TYPE: Final = "energy.ebus.device.distribution-enclosure"
 HOMIE_PREFIX: Final = "ebus/5"

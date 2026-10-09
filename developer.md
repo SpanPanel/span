@@ -241,7 +241,8 @@ than a worktree an override is pointing at.
 
 ## What each captured panel produces
 
-`tests/fixtures/captures/` holds real panels' retained trees, vendored byte for byte from the emitter's published fixtures (its `README.md` names the tag).
+`tests/fixtures/captures/` holds panels' retained trees, vendored byte for byte from the emitter's published fixtures with the emitter's MIT `LICENSE` (its
+`README.md` names the tag and what upstream says each tree is).
 `tests/captures_replay.py` replays one through the pinned library the way the broker delivers it, and `tests/test_expected_entities.py` sets each replay up
 through the real `async_setup_entry`. The MQTT client is replaced whole by a static replay of the capture, so no reconnect, offline, connection,
 schema-change or streaming path runs; availability and offline behaviour stay with their own tests. Two files per stem record the result:
