@@ -29,7 +29,7 @@ from custom_components.span_panel.pv_binding import (
 from custom_components.span_panel.solar_sources import SolarSource, solar_sources
 from custom_components.span_panel.solar_topology import solar_topology
 
-from .captures_replay import CAPTURES, Capture, snapshot
+from .captures_replay import MAIN32_CAPTURES, Capture, snapshot
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 from .test_diagnostics import _reference_entry
 
@@ -57,7 +57,7 @@ def _roles_panel(
     return replace(panel, publishes_solar_roles=True)
 
 
-@pytest.mark.parametrize("captured", CAPTURES, ids=[c.stem for c in CAPTURES])
+@pytest.mark.parametrize("captured", MAIN32_CAPTURES, ids=[c.name for c in MAIN32_CAPTURES])
 def test_main32_sources_equal_pv_inverters(captured: Capture) -> None:
     """Identical mapping, iteration order included, so the binding is what it was."""
     replayed = snapshot(captured.tree())

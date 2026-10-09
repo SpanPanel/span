@@ -14,6 +14,7 @@
         "select": "select.span_panel_breaker_1_circuit_priority",
         "switch": "switch.span_panel_breaker_1_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-1",
@@ -43,6 +44,7 @@
         "select": "select.span_panel_breaker_2_circuit_priority",
         "switch": "switch.span_panel_breaker_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-2",
@@ -72,6 +74,7 @@
         "select": "select.span_panel_breaker_3_circuit_priority",
         "switch": "switch.span_panel_breaker_3_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-3",
@@ -101,6 +104,7 @@
         "select": "select.span_panel_breaker_4_circuit_priority",
         "switch": "switch.span_panel_breaker_4_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-4",
@@ -130,6 +134,7 @@
         "select": "select.span_panel_breaker_5_circuit_priority",
         "switch": "switch.span_panel_breaker_5_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-5",
@@ -159,6 +164,7 @@
         "select": "select.span_panel_breaker_6_circuit_priority",
         "switch": "switch.span_panel_breaker_6_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-6",
@@ -188,6 +194,7 @@
         "select": "select.span_panel_breaker_7_circuit_priority",
         "switch": "switch.span_panel_breaker_7_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-7",
@@ -217,6 +224,7 @@
         "select": "select.span_panel_breaker_8_circuit_priority",
         "switch": "switch.span_panel_breaker_8_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-8",
@@ -246,6 +254,7 @@
         "select": "select.span_panel_breaker_9_circuit_priority",
         "switch": "switch.span_panel_breaker_9_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-9",
@@ -275,6 +284,7 @@
         "select": "select.span_panel_breaker_10_circuit_priority",
         "switch": "switch.span_panel_breaker_10_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-10",
@@ -304,6 +314,7 @@
         "select": "select.span_panel_breaker_11_circuit_priority",
         "switch": "switch.span_panel_breaker_11_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-11",
@@ -333,6 +344,7 @@
         "select": "select.span_panel_breaker_12_circuit_priority",
         "switch": "switch.span_panel_breaker_12_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-12",
@@ -362,6 +374,7 @@
         "select": "select.span_panel_breaker_13_circuit_priority",
         "switch": "switch.span_panel_breaker_13_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-13",
@@ -391,6 +404,7 @@
         "select": "select.span_panel_breaker_14_circuit_priority",
         "switch": "switch.span_panel_breaker_14_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-14",
@@ -420,6 +434,7 @@
         "select": "select.span_panel_breaker_15_circuit_priority",
         "switch": "switch.span_panel_breaker_15_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-15",
@@ -449,6 +464,7 @@
         "select": "select.span_panel_breaker_16_circuit_priority",
         "switch": "switch.span_panel_breaker_16_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-16",
@@ -475,6 +491,7 @@
         "power": "sensor.span_panel_remote_ct_3_power",
         "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": false,
       "name": "Remote CT 3",

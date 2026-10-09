@@ -14,6 +14,7 @@
         "select": "select.span_panel_hvac_circuit_priority",
         "switch": "switch.span_panel_hvac_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "HVAC",
@@ -44,6 +45,7 @@
         "select": "select.span_panel_kitchen_sink_garbage_disposal_circuit_priority",
         "switch": "switch.span_panel_kitchen_sink_garbage_disposal_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen Sink Garbage Disposal",
@@ -73,6 +75,7 @@
         "select": "select.span_panel_dishwasher_circuit_priority",
         "switch": "switch.span_panel_dishwasher_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dishwasher",
@@ -102,6 +105,7 @@
         "select": "select.span_panel_main_office_fam_tv_circuit_priority",
         "switch": "switch.span_panel_main_office_fam_tv_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Main Office & Fam TV",
@@ -131,6 +135,7 @@
         "select": "select.span_panel_basement_outlets_french_door_wall_circuit_priority",
         "switch": "switch.span_panel_basement_outlets_french_door_wall_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement Outlets French Door Wall",
@@ -160,6 +165,7 @@
         "select": "select.span_panel_basement_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_basement_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
@@ -189,6 +195,7 @@
         "select": "select.span_panel_utility_room_circuit_priority",
         "switch": "switch.span_panel_utility_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility Room",
@@ -218,6 +225,7 @@
         "select": "select.span_panel_hood_circuit_priority",
         "switch": "switch.span_panel_hood_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Hood",
@@ -247,6 +255,7 @@
         "select": "select.span_panel_basement_lights_outlets_circuit_priority_2",
         "switch": "switch.span_panel_basement_lights_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
@@ -276,6 +285,7 @@
         "select": "select.span_panel_heat_pump_water_heater_circuit_priority",
         "switch": "switch.span_panel_heat_pump_water_heater_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Heat Pump Water Heater",
@@ -306,6 +316,7 @@
         "select": "select.span_panel_electric_infared_sauna_circuit_priority",
         "switch": "switch.span_panel_electric_infared_sauna_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric Infared Sauna",
@@ -335,6 +346,7 @@
         "select": "select.span_panel_main_office_dedicated_outlets_circuit_priority",
         "switch": "switch.span_panel_main_office_dedicated_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Main Office Dedicated Outlets",
@@ -364,6 +376,7 @@
         "select": "select.span_panel_bidet_outlets_basement_main_floor_circuit_priority",
         "switch": "switch.span_panel_bidet_outlets_basement_main_floor_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bidet Outlets Basement & Main Floor",
@@ -393,6 +406,7 @@
         "select": "select.span_panel_dining_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_dining_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Lights & Outlets",
@@ -422,6 +436,7 @@
         "select": "select.span_panel_kitchen_fr_door_isle_alt_outlets_circuit_priority",
         "switch": "switch.span_panel_kitchen_fr_door_isle_alt_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen fr. door & Isle Alt. Outlets",
@@ -451,6 +466,7 @@
         "select": "select.span_panel_furnace_circuit_priority",
         "switch": "switch.span_panel_furnace_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Furnace",
@@ -480,6 +496,7 @@
         "select": "select.span_panel_bed_2_shared_bath_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_bed_2_shared_bath_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bed 2 & Shared Bath Lights & Outlets",
@@ -509,6 +526,7 @@
         "select": "select.span_panel_primary_bedroom_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_primary_bedroom_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary bedroom / Lights & Outlets",
@@ -538,6 +556,7 @@
         "select": "select.span_panel_electric_double_oven_circuit_priority",
         "switch": "switch.span_panel_electric_double_oven_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric Double-Oven",
@@ -568,6 +587,7 @@
         "select": "select.span_panel_primary_bath_closets_circuit_priority",
         "switch": "switch.span_panel_primary_bath_closets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary Bath & Closets",
@@ -597,6 +617,7 @@
         "select": "select.span_panel_smoke_co_detectors_circuit_priority",
         "switch": "switch.span_panel_smoke_co_detectors_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Smoke/CO Detectors",
@@ -626,6 +647,7 @@
         "select": "select.span_panel_basement_outlets_exit_door_wall_circuit_priority",
         "switch": "switch.span_panel_basement_outlets_exit_door_wall_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Basement Outlets exit door wall",
@@ -655,6 +677,7 @@
         "select": "select.span_panel_living_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_living_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Lights & Outlets",
@@ -684,6 +707,7 @@
         "select": "select.span_panel_sump_pump_circuit_priority",
         "switch": "switch.span_panel_sump_pump_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Sump Pump",
@@ -713,6 +737,7 @@
         "select": "select.span_panel_kitchen_lights_circuit_priority",
         "switch": "switch.span_panel_kitchen_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
@@ -742,6 +767,7 @@
         "select": "select.span_panel_security_system_circuit_priority",
         "switch": "switch.span_panel_security_system_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Security system",
@@ -771,6 +797,7 @@
         "select": "select.span_panel_refrigerator_circuit_priority",
         "switch": "switch.span_panel_refrigerator_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Refrigerator",
@@ -800,6 +827,7 @@
         "select": "select.span_panel_freezer_circuit_priority",
         "switch": "switch.span_panel_freezer_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Freezer",
@@ -829,6 +857,7 @@
         "select": "select.span_panel_laundry_room_circuit_priority",
         "switch": "switch.span_panel_laundry_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Laundry Room",
@@ -859,6 +888,7 @@
         "select": "select.span_panel_utility_room_dedicated_circuit_priority",
         "switch": "switch.span_panel_utility_room_dedicated_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility Room Dedicated",
@@ -888,6 +918,7 @@
         "select": "select.span_panel_bedroom_outlets_circuit_priority",
         "switch": "switch.span_panel_bedroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
@@ -917,6 +948,7 @@
         "select": "select.span_panel_bathroom_outlets_circuit_priority",
         "switch": "switch.span_panel_bathroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bathroom / Outlets",
@@ -946,6 +978,7 @@
         "select": "select.span_panel_electric_range_circuit_priority",
         "switch": "switch.span_panel_electric_range_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric range",
@@ -975,6 +1008,7 @@
         "select": "select.span_panel_kitchen_outlets_circuit_priority_2",
         "switch": "switch.span_panel_kitchen_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
@@ -1004,6 +1038,7 @@
         "select": "select.span_panel_kitchen_lights_circuit_priority_2",
         "switch": "switch.span_panel_kitchen_lights_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
@@ -1033,6 +1068,7 @@
         "select": "select.span_panel_bedroom_lights_circuit_priority",
         "switch": "switch.span_panel_bedroom_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Lights",
@@ -1062,6 +1098,7 @@
         "select": "select.span_panel_bedroom_outlets_circuit_priority_2",
         "switch": "switch.span_panel_bedroom_outlets_breaker_2"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
@@ -1091,6 +1128,7 @@
         "select": "select.span_panel_living_room_outlets_circuit_priority",
         "switch": "switch.span_panel_living_room_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Outlets",
@@ -1120,6 +1158,7 @@
         "select": "select.span_panel_living_room_lights_circuit_priority",
         "switch": "switch.span_panel_living_room_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Lights",
@@ -1149,6 +1188,7 @@
         "select": "select.span_panel_dining_room_outlets_circuit_priority",
         "switch": "switch.span_panel_dining_room_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Outlets",
@@ -1178,6 +1218,7 @@
         "select": "select.span_panel_dining_room_lights_circuit_priority",
         "switch": "switch.span_panel_dining_room_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Dining room / Lights",
@@ -1207,6 +1248,7 @@
         "select": "select.span_panel_microwave_circuit_priority",
         "switch": "switch.span_panel_microwave_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Microwave",
@@ -1234,6 +1276,7 @@
         "power": "sensor.span_panel_ev_charger_span_drive_power",
         "produced_energy": "sensor.span_panel_ev_charger_span_drive_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "SPAN Drive",
@@ -1264,6 +1307,7 @@
         "select": "select.span_panel_primary_bath_outlets_circuit_priority",
         "switch": "switch.span_panel_primary_bath_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Primary Bath Outlets",
@@ -1293,6 +1337,7 @@
         "select": "select.span_panel_kitchen_outlets_circuit_priority",
         "switch": "switch.span_panel_kitchen_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
@@ -1322,6 +1367,7 @@
         "select": "select.span_panel_family_room_circuit_priority",
         "switch": "switch.span_panel_family_room_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Family Room",

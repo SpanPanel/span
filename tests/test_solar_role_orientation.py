@@ -89,7 +89,7 @@ def test_any_other_role_leaves_a_circuit_load_oriented(role: FeedsRole | None) -
     assert circuit_net_orientation(circuit) is LOAD
 
 
-@pytest.mark.parametrize("captured", CAPTURES, ids=[c.stem for c in CAPTURES])
+@pytest.mark.parametrize("captured", CAPTURES, ids=[c.name for c in CAPTURES])
 def test_the_captures_orientation_is_their_device_types(captured: Capture) -> None:
     """Every captured circuit is oriented exactly as its device type alone orients it."""
     circuits = snapshot(captured.tree()).circuits
