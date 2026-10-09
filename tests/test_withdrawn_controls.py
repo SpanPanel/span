@@ -45,7 +45,6 @@ INVERTER: Final = "second-inverter"
 KITCHEN: Final = "kitchen"
 WELL: Final = "well-pump"
 GONE: Final = "removed-from-panel"
-UNMAPPED: Final = "unmapped_tab_32"
 
 
 @pytest.fixture(autouse=True)
@@ -240,9 +239,8 @@ async def test_a_never_backup_circuit_keeps_its_switch_and_loses_its_select(hass
 async def test_a_circuit_absent_from_the_setup_snapshot_is_never_judged(hass: HomeAssistant) -> None:
     entry = _entry(hass, "entry-absent", SERIAL)
     gone = _seed(hass, entry, "switch", build_switch_unique_id(SERIAL, GONE), "span_panel_gone_breaker")
-    unmapped = SpanCircuitSnapshotFactory.create(circuit_id=UNMAPPED, tabs=[32], is_user_controllable=False)
 
-    await _set_up(hass, entry, _panel(KITCHEN_CIRCUIT, unmapped))
+    await _set_up(hass, entry, _panel(KITCHEN_CIRCUIT))
 
     assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, build_switch_unique_id(SERIAL, GONE)) == gone
 

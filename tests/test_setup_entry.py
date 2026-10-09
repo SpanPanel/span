@@ -2,24 +2,40 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+import logging
+import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    ConfigEntryState,
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.httpx_client import get_async_client
+import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelServerError
+from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot, V2StatusInfo
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+    SpanPanelTLSVerificationError,
+)
 
-from custom_components.span_panel import SpanPanelRuntimeData, async_setup_entry
+from custom_components.span_panel import (
+    SpanPanelRuntimeData,
+    async_remove_entry,
+    async_setup_entry,
+)
+from custom_components.span_panel.config_flow_validation import PanelRestTransport
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -32,6 +48,10 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.id_builder import build_pv_inverter_unique_id
+from custom_components.span_panel.migrations import (
+    CURRENT_CONFIG_MINOR_VERSION,
+    CURRENT_CONFIG_VERSION,
+)
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
@@ -751,3 +771,358 @@ def test_runtime_data_refuses_to_be_built_without_a_pv_binding() -> None:
         SpanPanelRuntimeData(
             coordinator=MagicMock(), panel_device_id="panel-device-id", curation=CurationOverlay.empty()
         )
+
+
+# ---------------------------------------------------------------------------
+# Hardware this release has not been validated with
+# ---------------------------------------------------------------------------
+
+UNVALIDATED_HARDWARE_ISSUE = "unvalidated_hardware_entry-setup"
+
+
+@dataclass(frozen=True, slots=True)
+class _PanelUnderSetup:
+    """The stand-ins one setup runs against, kept so a test can ask what happened to them."""
+
+    client: MagicMock
+    coordinator: MagicMock
+    forward: AsyncMock
+
+
+def _panel_with_model(model: str | None) -> _PanelUnderSetup:
+    """A panel whose first refresh reports `model` as its `info/model`."""
+    client = MagicMock()
+    client.connect = AsyncMock()
+    client.close = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.async_shutdown = AsyncMock()
+    coordinator.data = replace(SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001"), model=model)
+    return _PanelUnderSetup(client=client, coordinator=coordinator, forward=AsyncMock())
+
+
+async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> bool:
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=panel.client),
+        patch("custom_components.span_panel.SpanPanelCoordinator", return_value=panel.coordinator),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", panel.forward),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        return await async_setup_entry(hass, entry)
+
+
+def _status(hardware_version: str | None) -> V2StatusInfo:
+    return V2StatusInfo(
+        serial_number="sp3-setup-001",
+        firmware_version="spanos3/r202639/03",
+        hardware_version=hardware_version,
+    )
+
+
+def _unvalidated_hardware_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, UNVALIDATED_HARDWARE_ISSUE)
+
+
+@pytest.mark.parametrize("version", ["1.2", "2.0"])
+async def test_validated_hardware_proceeds(
+    hass: HomeAssistant, panel_status: AsyncMock, version: str
+) -> None:
+    """The two values seen on real MAIN 32 hardware set up whatever the model says."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status(version)
+    panel = _panel_with_model("MAIN_32")
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        TimeoutError(),
+        SpanPanelTimeoutError("Timed out connecting to 192.168.1.50"),
+        SpanPanelConnectionError("Cannot reach panel at 192.168.1.50"),
+        SpanPanelTLSVerificationError("certificate verify failed"),
+        SpanPanelAPIError("192.168.1.50 answered HTTP 200 with a body that is not JSON", 200),
+        httpx.ReadError("connection reset"),
+    ],
+    ids=["timeout", "library-timeout", "connection", "tls", "unparseable-body", "httpx"],
+)
+async def test_a_status_that_cannot_be_read_proceeds(
+    hass: HomeAssistant, panel_status: AsyncMock, failure: Exception
+) -> None:
+    """Fail-open: an unread status says nothing about the hardware, so even an unlisted model proceeds.
+
+    The connect path that follows still owns readiness; a panel with flaky HTTPS
+    must never be locked out by a read that exists only to refuse.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.side_effect = failure
+    panel = _panel_with_model("OTHER_MODEL")
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_a_non_string_hardware_version_proceeds(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """A malformed field reads as absent, and absent proceeds."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = V2StatusInfo.from_status_payload(
+        {"serialNumber": "sp3-setup-001", "firmwareVersion": "spanos3/r202639/03", "hardwareVersion": 9.9}
+    )
+    panel = _panel_with_model("OTHER_MODEL")
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_a_status_without_hardware_version_proceeds(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """Firmware before r202639 publishes no `hardwareVersion`: no Repair is raised, only cleared."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = V2StatusInfo.from_status_payload(
+        {"serialNumber": "sp3-setup-001", "firmwareVersion": "spanos3/r202633/04"}
+    )
+    panel = _panel_with_model("MAIN_32")
+
+    with (
+        patch("custom_components.span_panel.async_raise_unvalidated_hardware") as raise_issue,
+        patch("custom_components.span_panel.async_clear_unvalidated_hardware") as clear_issue,
+    ):
+        assert await _set_up(hass, entry, panel) is True
+
+    raise_issue.assert_not_called()
+    clear_issue.assert_called_once_with(hass, entry)
+    panel.forward.assert_awaited_once()
+
+
+@pytest.mark.parametrize("version", ["UNKNOWN", "9.9"])
+async def test_main_32_always_proceeds(hass: HomeAssistant, panel_status: AsyncMock, version: str) -> None:
+    """The model escape: `UNKNOWN`, or a value no release has listed, never refuses a MAIN 32."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status(version)
+    panel = _panel_with_model("MAIN_32")
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.coordinator.async_setup_streaming.assert_awaited_once()
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_unknown_with_no_model_proceeds(hass: HomeAssistant, panel_status: AsyncMock) -> None:
+    """Nothing says the hardware is unvalidated: `UNKNOWN` is undetermined, and no model was published."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("UNKNOWN")
+    panel = _panel_with_model(None)
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_unknown_with_another_model_is_refused(hass: HomeAssistant, panel_status: AsyncMock) -> None:
+    """Refused after the first refresh, with the Repair, and nothing left running.
+
+    The coordinator is shut down on the way out, which stops dispatch and closes
+    the client; no stream is started and no platform is forwarded, so no entity
+    exists.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("UNKNOWN")
+    panel = _panel_with_model("OTHER_MODEL")
+
+    with pytest.raises(ConfigEntryError) as raised:
+        await _set_up(hass, entry, panel)
+
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == "unvalidated_hardware"
+    assert raised.value.translation_placeholders == {"version": "UNKNOWN", "model": "OTHER_MODEL"}
+    panel.coordinator.async_config_entry_first_refresh.assert_awaited_once()
+    panel.coordinator.async_setup_streaming.assert_not_awaited()
+    panel.coordinator.async_shutdown.assert_awaited_once()
+    panel.forward.assert_not_awaited()
+    issue = _unvalidated_hardware_issue(hass)
+    assert issue is not None
+    assert issue.translation_key == "unvalidated_hardware"
+    assert issue.translation_placeholders == {"version": "UNKNOWN", "model": "OTHER_MODEL"}
+    assert issue.severity is ir.IssueSeverity.ERROR
+    assert issue.is_fixable is False
+
+
+async def test_a_validated_version_with_any_model_proceeds(hass: HomeAssistant, panel_status: AsyncMock) -> None:
+    """A listed hardware version proceeds before the model is ever consulted."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("1.2")
+    panel = _panel_with_model("OTHER_MODEL")
+
+    assert await _set_up(hass, entry, panel) is True
+
+    panel.forward.assert_awaited_once()
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+@pytest.mark.parametrize("version", ["9.9", "3.0", "0.1"])
+async def test_an_unlisted_hardware_version_is_refused(
+    hass: HomeAssistant, panel_status: AsyncMock, version: str
+) -> None:
+    """Any hardware version outside the validated set refuses a panel that is not a MAIN 32."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status(version)
+    panel = _panel_with_model("OTHER_MODEL")
+
+    with pytest.raises(ConfigEntryError):
+        await _set_up(hass, entry, panel)
+
+    panel.coordinator.async_setup_streaming.assert_not_awaited()
+    panel.coordinator.async_shutdown.assert_awaited_once()
+    panel.forward.assert_not_awaited()
+    issue = _unvalidated_hardware_issue(hass)
+    assert issue is not None
+    assert issue.translation_placeholders == {"version": version, "model": "OTHER_MODEL"}
+
+
+async def test_a_later_successful_setup_clears_the_repair(hass: HomeAssistant, panel_status: AsyncMock) -> None:
+    """The Repair describes the last setup; one that proceeds takes it down."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("9.9")
+    with pytest.raises(ConfigEntryError):
+        await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
+    assert _unvalidated_hardware_issue(hass) is not None
+
+    panel_status.return_value = _status("2.0")
+    assert await _set_up(hass, entry, _panel_with_model("OTHER_MODEL")) is True
+
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_removing_the_entry_clears_the_repair(hass: HomeAssistant, panel_status: AsyncMock) -> None:
+    """Nothing else could clear it once the entry is gone."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("9.9")
+    with pytest.raises(ConfigEntryError):
+        await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
+
+    await async_remove_entry(hass, entry)
+
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_the_status_is_read_before_connecting_over_the_entrys_rest_transport(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """The entry's own port and anchor, the shared client, and before the broker is dialled."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    anchor = MagicMock(spec=ssl.SSLContext)
+    transport = PanelRestTransport(port=8443, ssl_context=anchor, httpx_client=None, ca_pem="pem")
+    panel = _panel_with_model("MAIN_32")
+    order: list[str] = []
+    panel_status.side_effect = lambda *_args, **_kwargs: order.append("status") or _status("2.0")
+    panel.client.connect = AsyncMock(side_effect=lambda: order.append("connect"))
+
+    with patch("custom_components.span_panel.panel_rest_transport", return_value=transport):
+        assert await _set_up(hass, entry, panel) is True
+
+    panel_status.assert_awaited_once_with(
+        "192.168.1.50",
+        port=8443,
+        httpx_client=get_async_client(hass),
+        ssl_context=anchor,
+    )
+    assert order == ["status", "connect"]
+
+
+async def test_a_refused_panel_with_no_model_is_named_without_one(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """A panel that publishes no model gets the sentence for that, never an empty model in the text."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("9.9")
+    panel = _panel_with_model(None)
+
+    with pytest.raises(ConfigEntryError) as raised:
+        await _set_up(hass, entry, panel)
+
+    assert raised.value.translation_key == "unvalidated_hardware_no_model"
+    assert raised.value.translation_placeholders == {"version": "9.9"}
+    issue = _unvalidated_hardware_issue(hass)
+    assert issue is not None
+    assert issue.translation_key == "unvalidated_hardware_no_model"
+    assert issue.translation_placeholders == {"version": "9.9"}
+
+
+async def test_a_refused_setup_logs_one_error_naming_the_hardware(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """Home Assistant's own setup error is the one line, in the Repair's words."""
+    # At the current version, so setup runs as it does for an installed entry rather than
+    # after a migration.
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=dict(_create_v2_entry().data),
+        entry_id="entry-setup",
+        title="sp3-setup-001",
+        unique_id="sp3-setup-001",
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+    )
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("9.9")
+    panel = _panel_with_model("OTHER_MODEL")
+    errors = _ErrorRecords()
+    root = logging.getLogger()
+    root.addHandler(errors)
+
+    try:
+        with (
+            patch("custom_components.span_panel.async_register_commands"),
+            patch("custom_components.span_panel.SpanMqttClient", return_value=panel.client),
+            patch("custom_components.span_panel.SpanPanelCoordinator", return_value=panel.coordinator),
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is False
+    finally:
+        root.removeHandler(errors)
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert len(errors.messages) == 1, errors.messages
+    assert "Hardware version 9.9 with model OTHER_MODEL has not been validated" in errors.messages[0]
+
+
+class _ErrorRecords(logging.Handler):
+    """Every message logged at ERROR or above while attached; the suite's logging setup replaces caplog's handler."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())

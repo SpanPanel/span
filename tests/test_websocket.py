@@ -559,41 +559,6 @@ class TestHandlePanelTopology:
         assert bedroom_data["entities"] == {}
 
     @pytest.mark.asyncio
-    async def test_unmapped_circuits_excluded(self, hass: HomeAssistant):
-        """Unmapped tab circuits are excluded from the topology."""
-        circuit = SpanCircuitSnapshotFactory.create(circuit_id="uuid_real", name="Real")
-        unmapped = SpanCircuitSnapshotFactory.create(
-            circuit_id="unmapped_tab_5", name="Unmapped"
-        )
-        snapshot = SpanPanelSnapshotFactory.create(
-            circuits={"uuid_real": circuit, "unmapped_tab_5": unmapped},
-        )
-
-        entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-242424-001"
-        )
-        entry.add_to_hass(hass)
-        entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
-            curation=CurationOverlay.empty(),
-            pv_binding=pv_binding_for(snapshot),
-            setup_snapshot=snapshot,
-        )
-
-        device = _register_panel_device(hass, "span_entry")
-
-        connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
-
-        await _handle_panel_topology_inner(hass, connection, msg)
-
-        result = connection.send_result.call_args[0][1]
-        assert "uuid_real" in result["circuits"]
-        assert "unmapped_tab_5" not in result["circuits"]
-
-    @pytest.mark.asyncio
     async def test_sub_devices_included(self, hass: HomeAssistant):
         """BESS and EVSE sub-devices appear in the topology."""
         snapshot = SpanPanelSnapshotFactory.create(

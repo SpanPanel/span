@@ -3873,3 +3873,103 @@ async def test_hassio_pinned_probe_takes_the_stored_tls_port_when_none_is_publis
     call = next(c for c in probe.call_args_list if c.args[0] == "192.168.1.40")
     assert call.kwargs["ssl_context"] is context
     assert call.kwargs["port"] == 8443
+
+
+# ---------- the hardware version is setup's to judge ----------
+
+FLOW_SOURCES = (
+    config_entries.SOURCE_USER,
+    config_entries.SOURCE_ZEROCONF,
+    config_entries.SOURCE_HASSIO,
+)
+
+HARDWARE_PANEL_SERIAL = "SPAN-V2-001"
+HARDWARE_ZEROCONF_HOST = "192.168.1.200"
+HARDWARE_HASSIO_CONFIG: dict[str, str | int] = {
+    "host": "192.168.1.50",
+    "port": 9090,
+    "https_port": 10090,
+    "serial": HARDWARE_PANEL_SERIAL,
+}
+
+ABSENT = "absent"
+"""A status body from firmware before r202639, which publishes no `hardwareVersion`."""
+
+
+def _status_reporting(hardware_version: str) -> V2StatusInfo:
+    """What the library reads from a status body carrying `hardware_version`, or none."""
+    body: dict[str, object] = {"serialNumber": HARDWARE_PANEL_SERIAL, "firmwareVersion": "spanos3/r202639/03"}
+    if hardware_version == ABSENT:
+        body["firmwareVersion"] = "spanos3/r202633/04"
+    else:
+        body["hardwareVersion"] = hardware_version
+    return V2StatusInfo.from_status_payload(body)
+
+
+async def _start_flow(hass: HomeAssistant, source: str, status: V2StatusInfo) -> ConfigFlowResult:
+    """Run `source`'s first step against a panel answering `status`; return what it led to."""
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=DetectionResult(api_version="v2", status_info=status),
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+    ):
+        if source == config_entries.SOURCE_USER:
+            form = await flow.async_init(DOMAIN, context={"source": source})
+            return await flow.async_configure(form["flow_id"], {CONF_HOST: MOCK_HOST})
+        if source == config_entries.SOURCE_ZEROCONF:
+            return await flow.async_init(
+                DOMAIN,
+                context={"source": source},
+                data=ZeroconfServiceInfo(
+                    ip_address=ipaddress.IPv4Address(HARDWARE_ZEROCONF_HOST),
+                    ip_addresses=[ipaddress.IPv4Address(HARDWARE_ZEROCONF_HOST)],
+                    hostname="span-panel.local.",
+                    name="SPAN Panel._ebus._tcp.local.",
+                    port=8883,
+                    properties={},
+                    type="_ebus._tcp.local.",
+                ),
+            )
+        return await flow.async_init(
+            DOMAIN, context={"source": source}, data=_hassio_service_info(HARDWARE_HASSIO_CONFIG)
+        )
+
+
+async def _through_to_the_entry(hass: HomeAssistant, result: ConfigFlowResult) -> ConfigFlowResult:
+    """Drive a flow from its first step's result, by passphrase, to the entry it creates."""
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        # The entry's own setup is not what these tests are about.
+        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)),
+    ):
+        if result.get("step_id") == "confirm_discovery":
+            result = await flow.async_configure(result["flow_id"], {})
+        assert result.get("step_id") == "choose_v2_auth", result
+        result = await flow.async_configure(result["flow_id"], {"next_step_id": "auth_passphrase"})
+        result = await flow.async_configure(result["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE})
+        return await flow.async_configure(result["flow_id"], {"entity_naming_pattern": "friendly_names"})
+
+
+@pytest.mark.parametrize("version", ["1.2", "2.0", "UNKNOWN", "9.9", ABSENT])
+@pytest.mark.parametrize("source", FLOW_SOURCES)
+async def test_every_route_creates_the_entry_whatever_the_hardware_version(
+    hass: HomeAssistant, source: str, version: str
+) -> None:
+    """The flow never judges the hardware; setup does, once the panel's model is known.
+
+    A flow has no model to go on, so refusing here could turn away a panel that
+    setup would accept.
+    """
+    first = await _start_flow(hass, source, _status_reporting(version))
+
+    result = await _through_to_the_entry(hass, first)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PANEL_SERIAL] == HARDWARE_PANEL_SERIAL

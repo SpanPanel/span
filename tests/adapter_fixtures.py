@@ -21,11 +21,15 @@ from __future__ import annotations
 
 from importlib.resources import files
 import json
+from typing import TYPE_CHECKING
 
 from ebus_sdk.homie import DiscoveredDevice
 from span_panel_api.models import FieldMetadata, HomieSchemaTypes, SpanPanelSnapshot, V2HomieSchema
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
+
+if TYPE_CHECKING:
+    from span_panel_api_schema_0.adapter import SchemaZeroAdapter
 
 SCHEMA_ONE_TREE = files("span_panel_api_schema_1") / "reference" / "parent_child_tree.json"
 """The parent/child capture, as `span-panel-api-schema-1` ships it."""
@@ -178,6 +182,11 @@ def schema_zero_snapshot() -> SpanPanelSnapshot:
     factory is what makes that a fact about the adapter instead of a fact the
     test wrote down itself.
     """
+    return schema_zero_adapter().build_snapshot()
+
+
+def schema_zero_adapter() -> SchemaZeroAdapter:
+    """The real flat adapter over the schema it ships, before any topic arrives."""
     from span_panel_api_schema_0.adapter import SchemaZeroAdapter
 
     schema = V2HomieSchema(
@@ -185,7 +194,7 @@ def schema_zero_snapshot() -> SpanPanelSnapshot:
         types_schema_hash="0" * 16,
         types=_schema_zero_types(),
     )
-    return SchemaZeroAdapter(SCHEMA_ZERO_SERIAL, schema).build_snapshot()
+    return SchemaZeroAdapter(SCHEMA_ZERO_SERIAL, schema)
 
 
 def _curated(metadata: dict[str, FieldMetadata]) -> dict[str, FieldMetadata]:

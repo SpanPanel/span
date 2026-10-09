@@ -1,5 +1,6 @@
 """Configure test framework."""
 
+from collections.abc import Iterator
 import logging
 from pathlib import Path
 import sys
@@ -7,6 +8,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from span_panel_api import V2StatusInfo
 
 # The real span_panel_api library is used directly (no sys.modules mocking).
 # Individual tests mock SpanMqttClient as needed.
@@ -118,3 +120,28 @@ def patch_frontend_and_panel_custom():
 def async_add_entities():
     """Mock async_add_entities callback for testing."""
     return AsyncMock()
+
+
+VALIDATED_PANEL_STATUS = V2StatusInfo(
+    serial_number="sp3-status-001",
+    firmware_version="spanos3/r202639/03",
+    hardware_version="2.0",
+)
+"""What the stand-in for setup's status read answers unless a test says otherwise."""
+
+
+@pytest.fixture(autouse=True)
+def panel_status(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:
+    """Answer setup's unauthenticated status read without touching the network.
+
+    Autouse because every test that runs `async_setup_entry` reaches the read,
+    and the harness refuses the socket it would open. The default is a validated
+    hardware version, so setup proceeds exactly as it did before the read
+    existed; a test about the guard sets `return_value` or `side_effect` on the
+    mock this yields.
+    """
+    with patch(
+        "custom_components.span_panel.get_v2_status",
+        new=AsyncMock(return_value=VALIDATED_PANEL_STATUS),
+    ) as status:
+        yield status

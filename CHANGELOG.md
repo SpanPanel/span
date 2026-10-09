@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.3] - 10/2026
 
+### Changed
+
+- **Setup stops with a repair issue when the panel reports a hardware version this release has not been validated with.**
+
 ### Removed
 
 - **The Unmapped Circuit Sensors option is removed**, because the panel publishes nothing for an empty breaker position, and the hidden Unmapped Tab sensors it

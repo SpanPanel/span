@@ -547,6 +547,12 @@
     },
     "rotate_credentials_requires_user": {
       "message": "La rotación de credenciales debe ejecutarla un administrador desde la interfaz de usuario. Las automatizaciones, los scripts y otras integraciones no pueden llamarla."
+    },
+    "unvalidated_hardware": {
+      "message": "La versión de hardware {version} con el modelo {model} no ha sido validada con esta versión de la integración."
+    },
+    "unvalidated_hardware_no_model": {
+      "message": "La versión de hardware {version} con un modelo desconocido no ha sido validada con esta versión de la integración."
     }
   },
   "options": {
@@ -940,6 +946,14 @@
     "panel_leaf_name_mismatch_no_names": {
       "title": "El SPAN Panel no está en la dirección configurada",
       "description": "{panel} está configurado como **{host}**, pero el certificado que sirve no nombra ninguna dirección, por lo que no hay ninguna dirección a la que apuntar la entrada. Se trata de un fallo del certificado del panel y no de la dirección que usted configuró, y suele resolverse cuando el panel lo regenera: lo habitual es reiniciar el panel.\n\nSi persiste, use *Reconfigurar* en la entrada del SPAN Panel para restablecer la conexión. Mientras tanto, la integración sigue reintentando y se recuperará por sí sola si el panel vuelve a nombrar {host}."
+    },
+    "unvalidated_hardware": {
+      "title": "Hardware del SPAN Panel no validado con esta versión",
+      "description": "La versión de hardware {version} con el modelo {model} no ha sido validada con esta versión de la integración. La configuración se ha detenido y no se crean entidades para este panel."
+    },
+    "unvalidated_hardware_no_model": {
+      "title": "Hardware del SPAN Panel no validado con esta versión",
+      "description": "La versión de hardware {version} con un modelo desconocido no ha sido validada con esta versión de la integración. La configuración se ha detenido y no se crean entidades para este panel."
     }
   }
 }
