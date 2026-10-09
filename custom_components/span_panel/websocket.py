@@ -190,7 +190,8 @@ async def handle_panel_topology(
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
             "breaker_rating_a": circuit.breaker_rating_a,
-            "always_on": circuit.always_on,
+            # Backup facts belong to a breaker; a meter outside the panel has none.
+            "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
             "priority_target": circuit.priority_target,
             # Whether `priority` above can be written, which is a different
@@ -201,7 +202,7 @@ async def handle_panel_topology(
             # directions. Carried even though no entity is created for such a
             # circuit, because a consumer rendering from this record has no
             # other way to tell a pinned priority from an absent one.
-            "is_never_backup": circuit.is_never_backup,
+            "is_never_backup": None if circuit.measures_outside_panel else circuit.is_never_backup,
             "entities": _offered_roles(
                 entity_map.get(circuit_id, {}), circuit, runtime_data.control_policy.mode
             ),

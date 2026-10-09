@@ -21,7 +21,7 @@ from .const import (
     PANEL_CA_PENDING,
 )
 from .counter_plausibility import implausible_counters
-from .helpers import has_pv, identity_digest, shared_relay_groups
+from .helpers import has_pv, identity_digest, outside_meter_label, shared_relay_groups
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
@@ -385,7 +385,9 @@ async def async_get_config_entry_diagnostics(
     circuit_data: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
         circuit_data[circuit_id] = {
-            "name": circuit.name,
+            "name": outside_meter_label(circuit_id)
+            if circuit.measures_outside_panel
+            else circuit.name,
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "priority": circuit.priority,

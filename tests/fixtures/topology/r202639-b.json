@@ -481,7 +481,7 @@
       "voltage": 120.0
     },
     "remote-ct-3": {
-      "always_on": false,
+      "always_on": null,
       "breaker_rating_a": null,
       "device_type": "circuit",
       "entities": {
@@ -492,7 +492,7 @@
         "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
       },
       "is_generation": false,
-      "is_never_backup": true,
+      "is_never_backup": null,
       "is_user_controllable": false,
       "name": "Remote CT 3",
       "outside_panel": true,
