@@ -305,6 +305,10 @@ class CurrentMonitor:
         all_circuit_ids = set(self._circuit_states.keys())
         if snapshot:
             all_circuit_ids |= set(snapshot.circuits)
+            # A meter outside the panel has no breaker to monitor against.
+            all_circuit_ids -= {
+                cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
+            }
 
         for cid in all_circuit_ids:
             state = self._circuit_states.get(cid)
@@ -459,6 +463,8 @@ class CurrentMonitor:
     def _evaluate_circuits(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for all circuits in the snapshot."""
         for circuit_id, circuit in snapshot.circuits.items():
+            if circuit.measures_outside_panel:
+                continue
             if circuit.current_a is None or circuit.breaker_rating_a is None:
                 continue
             if is_monitoring_disabled(self._circuit_overrides.get(circuit_id, {})):
