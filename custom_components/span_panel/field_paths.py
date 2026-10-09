@@ -275,6 +275,12 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # being one.
         "circuit.pcs_managed": Producibility.NEITHER,
         "circuit.pcs_priority": Producibility.NEITHER,
+        # The peers a circuit's meter and relay are shared with, named in the
+        # `meter_shared_with` and `relay_shared_with` attributes of its power
+        # sensor and switch. Membership, not a reading, so no adapter carries a
+        # row for either.
+        "circuit.meter_shared_with": Producibility.NEITHER,
+        "circuit.relay_shared_with": Producibility.NEITHER,
         "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
         # The two backup-planning estimates behind `time_to_priority_shed` and
         # `shed_total_time_remaining`, whose descriptions are
