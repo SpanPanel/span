@@ -543,8 +543,9 @@ async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> 
 async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
     """The postal code the panel publishes reaches no dump, and its entity is not taken away.
 
-    The entity is disabled by default and stays: removing it would remove one a
-    user may have enabled.
+    The entity is disabled by default and stays where an install already holds
+    it: removing it would remove one a user may have enabled. A new install
+    creates none (`test_privacy.py`).
     """
     snapshot = schema_one_snapshot()
     (postal_code,) = (
@@ -562,6 +563,12 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, snapshot.serial_number)},
         name="Span Panel",
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"span_{snapshot.serial_number}_adopted_panel/{postal_code.path}",
+        config_entry=entry,
     )
     sensors = create_extension_sensors(
         entry.runtime_data.coordinator,
