@@ -854,8 +854,17 @@ async def test_validated_hardware_proceeds(
         SpanPanelTLSVerificationError("certificate verify failed"),
         SpanPanelAPIError("192.168.1.50 answered HTTP 200 with a body that is not JSON", 200),
         httpx.ReadError("connection reset"),
+        httpx.InvalidURL("Invalid port: 'x'"),
     ],
-    ids=["timeout", "library-timeout", "connection", "tls", "unparseable-body", "httpx"],
+    ids=[
+        "timeout",
+        "library-timeout",
+        "connection",
+        "tls",
+        "unparseable-body",
+        "httpx",
+        "invalid-url",
+    ],
 )
 async def test_a_status_that_cannot_be_read_proceeds(
     hass: HomeAssistant, panel_status: AsyncMock, failure: Exception
@@ -1018,6 +1027,40 @@ async def test_a_later_successful_setup_clears_the_repair(hass: HomeAssistant, p
 
     panel_status.return_value = _status("2.0")
     assert await _set_up(hass, entry, _panel_with_model("OTHER_MODEL")) is True
+
+    assert _unvalidated_hardware_issue(hass) is None
+
+
+async def test_an_unread_status_leaves_the_repair_up(
+    hass: HomeAssistant, panel_status: AsyncMock
+) -> None:
+    """A read that fails says nothing about the hardware, so it neither refuses nor takes the Repair down."""
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status("9.9")
+    with pytest.raises(ConfigEntryError):
+        await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
+    assert _unvalidated_hardware_issue(hass) is not None
+
+    panel_status.side_effect = TimeoutError()
+    assert await _set_up(hass, entry, _panel_with_model("OTHER_MODEL")) is True
+
+    assert _unvalidated_hardware_issue(hass) is not None
+
+
+@pytest.mark.parametrize("version", ["unknown", " UNKNOWN "])
+async def test_unknown_is_read_whatever_its_spelling(
+    hass: HomeAssistant, panel_status: AsyncMock, version: str
+) -> None:
+    """`unknown` is judged by the model like `UNKNOWN`, never refused on its spelling alone.
+
+    With no model published, `UNKNOWN` proceeds where an unlisted version is refused.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    panel_status.return_value = _status(version)
+
+    assert await _set_up(hass, entry, _panel_with_model(None)) is True
 
     assert _unvalidated_hardware_issue(hass) is None
 
