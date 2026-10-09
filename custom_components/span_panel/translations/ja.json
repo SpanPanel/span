@@ -187,6 +187,11 @@
         "name": "GFEオーバーライド：系統接続"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "EVSEロック"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "EVSE充電電流上限"
@@ -469,6 +474,12 @@
     },
     "evse_charge_limit_not_delivered": {
       "message": "充電器 {charger} の充電電流上限をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、上限は変わっていません。"
+    },
+    "evse_lock_failed": {
+      "message": "充電器 {charger} のロックを設定できませんでした: {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "充電器 {charger} のロック操作をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、ロックは変わっていません。"
     },
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"

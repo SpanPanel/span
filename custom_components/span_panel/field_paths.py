@@ -519,6 +519,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
     )
+    from .lock import EVSE_LOCK  # pylint: disable=import-outside-toplevel
     from .number import EVSE_NUMBERS  # pylint: disable=import-outside-toplevel
     from .sensor_definitions import (  # pylint: disable=import-outside-toplevel
         all_sensor_descriptions,
@@ -529,6 +530,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         *BINARY_SENSORS,
         *EVSE_BINARY_SENSORS,
         *EVSE_NUMBERS,
+        EVSE_LOCK,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,

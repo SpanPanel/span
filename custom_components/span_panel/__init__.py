@@ -147,6 +147,9 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    # A charger's connector lock, created only where the charger declares it
+    # settable; nothing on a panel without one.
+    Platform.LOCK,
     # Added with the EVSE charge-current control -- the first number this
     # integration has ever had, and forwarded unconditionally like every other
     # platform: `number.async_setup_entry` creates nothing on a panel with no
