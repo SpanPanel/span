@@ -21,7 +21,15 @@ import pytest
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.diagnostics import async_get_config_entry_diagnostics
 
-from .captures_replay import RetainedTree, capture, description, panel_device_id, snapshot
+from .captures_replay import (
+    CAPTURES,
+    Capture,
+    RetainedTree,
+    capture,
+    description,
+    panel_device_id,
+    snapshot,
+)
 from .test_expected_entities import R202639_CAPTURE, _install
 
 SITE_VALUES: Final = {
@@ -153,3 +161,44 @@ async def test_existing_site_entities_survive_upgrade(hass: HomeAssistant) -> No
 def test_debug_logging_for_the_integration_never_turns_on_homie() -> None:
     """`homie` logs every value it receives at DEBUG, so the manifest never names it."""
     assert not any(name.split(".")[0] == "homie" for name in _manifest_loggers())
+
+
+def _searchable_site_values(tree: RetainedTree) -> list[str]:
+    """Every site value the panel publishes that is distinctive enough to search a dump for.
+
+    A masked capture carries some values so common ("CA", "0.0", "00000") that
+    finding them would say nothing; those are left to the synthetic tree above.
+    """
+    panel = tree[panel_device_id(tree)]
+    values = [
+        value
+        for topic, value in panel.items()
+        if topic.rsplit("/", 1)[-1] in {*SITE_VALUES, "name", "postal-code", "time-zone"}
+        and topic.split("/", 1)[0] in {"info", "status"}
+    ]
+    return [value for value in values if len(value) >= 6 and any(c.isalpha() for c in value)]
+
+
+@pytest.mark.parametrize("captured", CAPTURES, ids=[c.name for c in CAPTURES])
+async def test_no_captured_site_value_reaches_an_entity_diagnostics_or_the_log(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, captured: Capture
+) -> None:
+    tree = captured.tree()
+    searchable = _searchable_site_values(tree)
+    assert searchable, "every capture publishes at least its time zone"
+    caplog.set_level(logging.DEBUG)
+
+    entry = await _install(hass, tree, captured.name)
+    diagnostics = json.dumps(await async_get_config_entry_diagnostics(hass, entry), default=str)
+    states = json.dumps(
+        [(state.state, dict(state.attributes)) for state in hass.states.async_all()], default=str
+    )
+    ours = tuple(_manifest_loggers())
+    logged = "\n".join(
+        record.getMessage() for record in caplog.records if record.name.startswith(ours)
+    )
+
+    for value in searchable:
+        assert value not in states, value
+        assert value not in diagnostics, value
+        assert value not in logged, value

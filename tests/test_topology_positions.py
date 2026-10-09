@@ -43,13 +43,13 @@ async def _positions(
     return topology
 
 
-@pytest.mark.parametrize("captured", CAPTURES, ids=[c.stem for c in CAPTURES])
+@pytest.mark.parametrize("captured", CAPTURES, ids=[c.name for c in CAPTURES])
 async def test_the_topology_carries_the_snapshots_position_range(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator, captured: Capture
 ) -> None:
     tree = captured.tree()
     replayed = snapshot(tree)
-    topology = await _positions(hass, hass_ws_client, tree, captured.stem)
+    topology = await _positions(hass, hass_ws_client, tree, captured.name)
 
     assert (topology["first_position"], topology["last_position"]) == (
         replayed.first_position,
