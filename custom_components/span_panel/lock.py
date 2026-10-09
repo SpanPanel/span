@@ -133,10 +133,16 @@ class SpanEvseLock(SpanPanelEntity, LockEntity):
 
     @property
     def available(self) -> bool:
-        """False while the panel is offline: a control that cannot reach the panel is not a control."""
+        """False while the panel is offline, or the charger no longer offers its lock.
+
+        A control that cannot reach the panel is not a control, and neither is one
+        whose charger has left the snapshot or stopped declaring the lock settable.
+        """
         if not self._transport_available:
             return False
         if self.coordinator.panel_offline:
+            return False
+        if self._evse().lock_control is None:
             return False
         return super().available
 

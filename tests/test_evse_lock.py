@@ -126,3 +126,22 @@ async def test_the_lock_is_unavailable_while_the_panel_is_offline(hass: HomeAssi
     lock.coordinator.panel_offline = True
 
     assert lock.available is False
+
+
+@pytest.mark.parametrize("withdrawn", ["charger_gone", "lock_not_settable"])
+async def test_the_lock_is_withdrawn_when_the_charger_stops_offering_it(
+    hass: HomeAssistant, withdrawn: str
+) -> None:
+    snapshot = _snapshot()
+    (lock,) = await _created(hass, snapshot)
+    lock.coordinator.panel_offline = False
+    assert lock.available is True
+
+    evse = dict(snapshot.evse)
+    if withdrawn == "charger_gone":
+        del evse[SETTABLE]
+    else:
+        evse[SETTABLE] = replace(evse[SETTABLE], lock_control=None)
+    lock.coordinator.data = replace(snapshot, evse=evse)
+
+    assert lock.available is False
