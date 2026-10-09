@@ -2,13 +2,13 @@
 
 This module contains functions that build unique IDs and map suffixes.
 It has NO dependency on Home Assistant, coordinator, or entity registry --
-only logging, re, and span_panel_api types.
+only logging and span_panel_api types.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection
 import logging
-import re
 
 from span_panel_api import SpanPanelSnapshot
 
@@ -188,42 +188,6 @@ def get_suffix_from_sensor_key(sensor_key: str) -> str:
     return name_parts[-1] if name_parts else sensor_name
 
 
-def is_panel_level_sensor_key(sensor_key: str) -> bool:
-    """Check if a sensor key represents a panel-level sensor.
-
-    Panel-level sensors have the form: span_{device_identifier}_{sensor_type}
-    Circuit sensors have the form: span_{device_identifier}_{circuit_id}_{sensor_type}
-
-    Args:
-        sensor_key: Sensor key to check (e.g., "span_span12345678_current_power" or
-            "span_span12345678_12ce227695cd44338864b0ef2ec4168b_instantPowerW").
-
-    Returns:
-        True if this is a panel-level sensor (no circuit ID)
-
-    Examples:
-        is_panel_level_sensor_key("span_span12345678_current_power") → True
-        is_panel_level_sensor_key(
-            "span_span12345678_12ce227695cd44338864b0ef2ec4168b_instantPowerW"
-        ) → False
-
-    """
-
-    # Must start with "span_"
-    if not sensor_key.startswith("span_"):
-        return False
-
-    # Look for UUID pattern (32 hex characters) anywhere in the string after "span_"
-    # Circuit IDs in SPAN are typically formatted as 32 lowercase hex characters without dashes
-    uuid_pattern = re.compile(r"_[a-f0-9]{32}_")
-
-    # If we find a UUID pattern, this is a circuit sensor
-    if uuid_pattern.search(sensor_key):
-        return False
-    # No UUID pattern found, this is a panel-level sensor
-    return True
-
-
 def get_user_friendly_suffix(description_key: str) -> str:
     """Convert API description keys to user-friendly suffixes for consistent naming."""
     # If we have a direct mapping, use it
@@ -247,24 +211,30 @@ def get_panel_entity_suffix(description_key: str) -> str:
     return get_user_friendly_suffix(description_key)
 
 
-def extract_circuit_uuid_from_unique_id(unique_id: str) -> str | None:
-    """Return the 32-char hex circuit UUID embedded in a SPAN entity unique_id.
+def match_circuit_id(unique_id: str, circuit_ids: Collection[str]) -> str | None:
+    """Return the circuit id `unique_id` names, or None.
 
-    SPAN entity unique_ids follow ``span_{serial}_{circuit_uuid}_{suffix}``.
-    The circuit UUID is a 32-char lowercase hex segment. Skips ``parts[0]``
-    (``span``) and ``parts[1]`` (the serial — never a circuit UUID) so a
-    serial that happens to be 32 hex chars cannot shadow the circuit id.
+    A circuit id is opaque: it is compared only as a whole run of `_`-separated
+    segments, after the `span_{serial}_` prefix, against the ids the live snapshot
+    holds. The longest run that is a known id wins, so an id that is a prefix of
+    another, or one containing `_`, resolves to the one meant. With no ids there is
+    no match, never a guess from the id's shape.
 
-    Returns ``None`` for unique_ids with no circuit UUID segment (e.g.
-    panel-level sensors).
+    Skipping the prefix means a serial can never be read as a circuit id. Ids
+    without the prefix are searched whole.
     """
-    if not unique_id:
+    if not circuit_ids:
         return None
-    parts = unique_id.split("_")
-    for part in parts[2:]:
-        if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
-            return part
-    return None
+    segments = unique_id.split("_")
+    if segments[0] == "span" and len(segments) > 2:
+        segments = segments[2:]
+    best: str | None = None
+    for start in range(len(segments)):
+        for end in range(start + 1, len(segments) + 1):
+            candidate = "_".join(segments[start:end])
+            if candidate in circuit_ids and (best is None or len(candidate) > len(best)):
+                best = candidate
+    return best
 
 
 # ---------------------------------------------------------------------------

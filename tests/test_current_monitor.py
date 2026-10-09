@@ -1,6 +1,8 @@
 """Tests for the CurrentMonitor class."""
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,12 +14,15 @@ from custom_components.span_panel.const import (
     DEFAULT_COOLDOWN_DURATION_M,
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
+    DOMAIN,
     ENABLE_CURRENT_MONITORING,
     EVENT_CURRENT_ALERT,
 )
 from homeassistant.core import CoreState
+from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.span_panel.current_monitor import CurrentMonitor
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -25,7 +30,10 @@ from custom_components.span_panel.options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from custom_components.span_panel.runtime import SpanPanelRuntimeData
+from custom_components.span_panel.services import _async_register_monitoring_services
+from span_panel_api import SpanPanelSnapshot
+from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 
 def _make_options(**overrides):
@@ -455,6 +463,284 @@ class TestPerCircuitOverrides:
         )
         monitor.process_snapshot(snapshot)
         assert monitor.get_circuit_state("1").last_spike_alert is None
+
+
+@contextmanager
+def _registry_holding(
+    unique_id: str | None, config_entry_id: str = "panel_a"
+) -> Iterator[None]:
+    """Patch the entity registry to answer every lookup with one of this integration's entities.
+
+    `None` is an id no entity has: a raw circuit id or leg name. Both the
+    services, which choose the panel from the entity's own entry, and the
+    monitor, which reads the entity's unique id, see the same registry.
+    """
+    registry = MagicMock()
+    registry.async_get.return_value = (
+        None
+        if unique_id is None
+        else MagicMock(unique_id=unique_id, platform=DOMAIN, config_entry_id=config_entry_id)
+    )
+    with (
+        patch("custom_components.span_panel.current_monitor.er.async_get", return_value=registry),
+        patch("custom_components.span_panel.services.er.async_get", return_value=registry),
+    ):
+        yield
+
+
+class TestCircuitEntityResolution:
+    """A threshold set through a circuit's entity lands on the circuit the panel names."""
+
+    def test_an_override_for_one_of_two_prefixed_ids_applies_to_that_circuit_only(self):
+        """`c-1` is a prefix of `c-12`, and an override for `c-12` never reaches `c-1`."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(**{SPIKE_THRESHOLD_PCT: 100}))
+        circuits = {
+            cid: SpanCircuitSnapshotFactory.create(
+                circuit_id=cid,
+                name=cid,
+                current_a=18.0,  # 90% of 20A — under the global threshold
+                breaker_rating_a=20.0,
+            )
+            for cid in ("c-1", "c-12")
+        }
+        snapshot = SpanPanelSnapshotFactory.create(circuits=circuits, main_breaker_rating_a=200)
+        monitor.process_snapshot(snapshot)
+
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            circuit_id = monitor.resolve_entity_to_circuit_id(
+                "sensor.c_12_current", snapshot.circuits.keys()
+            )
+        assert circuit_id == "c-12"
+
+        monitor.set_circuit_override(circuit_id, {SPIKE_THRESHOLD_PCT: 90})
+        monitor.process_snapshot(snapshot)
+
+        assert monitor.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor.get_circuit_state("c-1").last_spike_alert is None
+
+    def test_an_opaque_id_resolves_to_its_circuit(self):
+        """A circuit id is not required to be 32 hex characters."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+
+        with _registry_holding("span_nt-0000-test1_b-7_power"):
+            assert monitor.resolve_entity_to_circuit_id("sensor.b_7_power", {"b-7"}) == "b-7"
+
+    def test_with_no_known_ids_the_input_is_taken_as_a_circuit_id(self):
+        """Nothing is guessed from the shape of the unique id."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+
+        with _registry_holding("span_nt-0000-test1_0123456789abcdef0123456789abcdef_power"):
+            assert monitor.resolve_entity_to_circuit_id("sensor.kitchen_power", ()) == (
+                "sensor.kitchen_power"
+            )
+
+
+def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:
+    """Register the monitoring services on a mock hass and return the handlers by name."""
+    handlers: dict[str, Any] = {}
+
+    def _register(_domain: str, service: str, handler: Any, **_kwargs: Any) -> None:
+        handlers[service] = handler
+
+    hass.services.async_register = MagicMock(side_effect=_register)
+    _async_register_monitoring_services(hass)
+    return handlers
+
+
+def _panel_with_a_fresh_monitor(
+    hass: MagicMock, entry_id: str, *circuit_ids: str
+) -> tuple[MagicMock, CurrentMonitor, SpanPanelSnapshot]:
+    """Return a loaded panel's entry and monitor as setup leaves them: created, fed nothing yet.
+
+    The coordinator already holds the first refresh's snapshot, which is what a
+    threshold service resolves against; the monitor sees its first snapshot only
+    on the next push. Every circuit and the upstream L1 leg draw 90% of their
+    rating, under the global spike threshold of 100% and at an override of 90%.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        circuits={
+            cid: SpanCircuitSnapshotFactory.create(
+                circuit_id=cid,
+                name=cid,
+                current_a=18.0,
+                breaker_rating_a=20.0,
+            )
+            for cid in circuit_ids
+        },
+        main_breaker_rating_a=200,
+        upstream_l1_current_a=180.0,
+    )
+    entry = MagicMock()
+    entry.entry_id = entry_id
+    entry.options = _make_options(**{SPIKE_THRESHOLD_PCT: 100})
+    monitor = CurrentMonitor(hass, entry)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.current_monitor = monitor
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=f"{entry_id}-device",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    return entry, monitor, snapshot
+
+
+def _loaded(hass: MagicMock, *entries: MagicMock) -> None:
+    """Make these the loaded entries, in this order: the first is the old default panel."""
+    hass.config_entries.async_loaded_entries = MagicMock(return_value=list(entries))
+
+
+def _call(**data: Any) -> MagicMock:
+    call = MagicMock()
+    call.data = data
+    return call
+
+
+class TestThresholdServicesBeforeTheFirstPush:
+    """Right after setup the monitor has seen no snapshot, and a threshold still lands on its circuit."""
+
+    async def test_a_threshold_set_before_the_first_push_applies_to_its_circuit(self):
+        hass = _make_hass()
+        entry, monitor, snapshot = _panel_with_a_fresh_monitor(hass, "panel_a", "c-1", "c-12")
+        _loaded(hass, entry)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            await handlers["set_circuit_threshold"](
+                _call(circuit_id="sensor.c_12_current", **{SPIKE_THRESHOLD_PCT: 90})
+            )
+
+        monitor.process_snapshot(snapshot)
+        assert monitor.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor.get_circuit_state("c-1").last_spike_alert is None
+
+    async def test_a_threshold_cleared_before_the_first_push_is_cleared(self):
+        hass = _make_hass()
+        entry, monitor, snapshot = _panel_with_a_fresh_monitor(hass, "panel_a", "c-1", "c-12")
+        _loaded(hass, entry)
+        monitor.set_circuit_override("c-12", {SPIKE_THRESHOLD_PCT: 90})
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test1_c-12_current"):
+            await handlers["clear_circuit_threshold"](_call(circuit_id="sensor.c_12_current"))
+
+        monitor.process_snapshot(snapshot)
+        assert monitor.get_circuit_state("c-12").last_spike_alert is None
+
+
+class TestThresholdServicesChooseTheEntitysOwnPanel:
+    """With two panels, a threshold named by an entity lands on that entity's panel.
+
+    Both panels publish a circuit `c-12`; a circuit id is panel-local, so landing
+    on the wrong panel would quietly change the other panel's circuit.
+    """
+
+    def _two_panels(
+        self, hass: MagicMock
+    ) -> tuple[CurrentMonitor, CurrentMonitor, SpanPanelSnapshot, SpanPanelSnapshot]:
+        entry_a, monitor_a, snapshot_a = _panel_with_a_fresh_monitor(hass, "panel_a", "c-12")
+        entry_b, monitor_b, snapshot_b = _panel_with_a_fresh_monitor(hass, "panel_b", "c-12")
+        _loaded(hass, entry_a, entry_b)
+        return monitor_a, monitor_b, snapshot_a, snapshot_b
+
+    async def test_an_automations_call_without_an_entry_lands_on_the_entitys_panel(self):
+        hass = _make_hass()
+        monitor_a, monitor_b, snapshot_a, snapshot_b = self._two_panels(hass)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test2_c-12_current", config_entry_id="panel_b"):
+            await handlers["set_circuit_threshold"](
+                _call(circuit_id="sensor.b_c_12_current", **{SPIKE_THRESHOLD_PCT: 90})
+            )
+
+        monitor_a.process_snapshot(snapshot_a)
+        monitor_b.process_snapshot(snapshot_b)
+        assert monitor_b.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor_a.get_circuit_state("c-12").last_spike_alert is None
+
+    async def test_the_cards_call_naming_the_entitys_own_panel_is_unchanged(self):
+        hass = _make_hass()
+        monitor_a, monitor_b, snapshot_a, snapshot_b = self._two_panels(hass)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test2_c-12_current", config_entry_id="panel_b"):
+            await handlers["set_circuit_threshold"](
+                _call(
+                    circuit_id="sensor.b_c_12_current",
+                    config_entry_id="panel_b",
+                    **{SPIKE_THRESHOLD_PCT: 90},
+                )
+            )
+
+        monitor_a.process_snapshot(snapshot_a)
+        monitor_b.process_snapshot(snapshot_b)
+        assert monitor_b.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor_a.get_circuit_state("c-12").last_spike_alert is None
+
+    @pytest.mark.parametrize(
+        ("service", "target_field"),
+        [
+            ("set_circuit_threshold", "circuit_id"),
+            ("clear_circuit_threshold", "circuit_id"),
+            ("set_mains_threshold", "leg"),
+            ("clear_mains_threshold", "leg"),
+        ],
+    )
+    async def test_an_entry_that_is_not_the_entitys_panel_is_refused(
+        self, service: str, target_field: str
+    ):
+        hass = _make_hass()
+        monitor_a, monitor_b, snapshot_a, snapshot_b = self._two_panels(hass)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test2_c-12_current", config_entry_id="panel_b"):
+            with pytest.raises(ServiceValidationError) as raised:
+                await handlers[service](
+                    _call(**{target_field: "sensor.b_c_12_current", "config_entry_id": "panel_a"})
+                )
+
+        assert raised.value.translation_key == "monitoring_entity_on_another_panel"
+        monitor_a.process_snapshot(snapshot_a)
+        monitor_b.process_snapshot(snapshot_b)
+        for monitor in (monitor_a, monitor_b):
+            assert monitor.get_circuit_state("c-12").last_spike_alert is None
+            assert monitor.get_mains_state("upstream_l1").last_spike_alert is None
+
+    async def test_a_mains_threshold_without_an_entry_lands_on_the_entitys_panel(self):
+        hass = _make_hass()
+        monitor_a, monitor_b, snapshot_a, snapshot_b = self._two_panels(hass)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test2_upstream_l1_current", config_entry_id="panel_b"):
+            await handlers["set_mains_threshold"](
+                _call(leg="sensor.b_upstream_l1_current", **{SPIKE_THRESHOLD_PCT: 90})
+            )
+
+        monitor_a.process_snapshot(snapshot_a)
+        monitor_b.process_snapshot(snapshot_b)
+        assert monitor_b.get_mains_state("upstream_l1").last_spike_alert is not None
+        assert monitor_a.get_mains_state("upstream_l1").last_spike_alert is None
+
+    async def test_a_raw_circuit_id_goes_to_the_panel_the_call_names(self):
+        """A raw id belongs to no entity, so the call's entry chooses the panel, as before."""
+        hass = _make_hass()
+        monitor_a, monitor_b, snapshot_a, snapshot_b = self._two_panels(hass)
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding(None):
+            await handlers["set_circuit_threshold"](
+                _call(circuit_id="c-12", config_entry_id="panel_b", **{SPIKE_THRESHOLD_PCT: 90})
+            )
+
+        monitor_a.process_snapshot(snapshot_a)
+        monitor_b.process_snapshot(snapshot_b)
+        assert monitor_b.get_circuit_state("c-12").last_spike_alert is not None
+        assert monitor_a.get_circuit_state("c-12").last_spike_alert is None
 
 
 class TestPerMainsOverrides:

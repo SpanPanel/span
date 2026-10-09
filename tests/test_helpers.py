@@ -9,7 +9,6 @@ from custom_components.span_panel.helpers import (
     detect_capabilities,
     get_suffix_from_sensor_key,
     get_user_friendly_suffix,
-    is_panel_level_sensor_key,
 )
 
 from .factories import (
@@ -74,17 +73,6 @@ class TestHelperFunctions:
             == "energy_produced"
         )
         assert get_suffix_from_sensor_key("plain_sensor_name") == "name"
-
-    def test_is_panel_level_sensor_key(self):
-        """Test classification of panel-level and circuit-level sensor keys."""
-        assert is_panel_level_sensor_key("span_span12345678_current_power") is True
-        assert (
-            is_panel_level_sensor_key(
-                "span_span12345678_12ce227695cd44338864b0ef2ec4168b_instantPowerW"
-            )
-            is False
-        )
-        assert is_panel_level_sensor_key("invalid_format") is False
 
     def test_construct_synthetic_friendly_name_with_user_name(self):
         """Test construct_synthetic_friendly_name with user-provided name."""

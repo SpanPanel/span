@@ -8,7 +8,7 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -30,7 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import build_circuit_unique_id, build_panel_unique_id, is_unmapped_tab
-from .id_builder import extract_circuit_uuid_from_unique_id
+from .id_builder import match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -237,18 +237,25 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, power_uid)
         return entity_id if entity_id is not None else circuit_id
 
-    def resolve_entity_to_circuit_id(self, entity_id: str) -> str:
+    def resolve_entity_to_circuit_id(self, entity_id: str, circuit_ids: Collection[str]) -> str:
         """Resolve a power sensor entity_id to its internal circuit_id.
 
         Accepts either an entity_id (sensor.span_panel_kitchen_power) or
-        a raw circuit_id (UUID) for backwards compatibility.
+        a raw circuit_id for backwards compatibility. The circuit is the one of
+        `circuit_ids` that the entity's unique_id names; an id is opaque, so it is
+        found among them rather than by its shape.
+
+        The caller passes the coordinator's live ids rather than this monitor
+        reading its own last snapshot: the monitor sees a snapshot only on the
+        coordinator's next push after setup, and a threshold set before then
+        must still land on its circuit.
         """
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
         if entry is not None and entry.unique_id:
-            uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
-            if uuid is not None:
-                return uuid
+            circuit_id = match_circuit_id(entry.unique_id, circuit_ids)
+            if circuit_id is not None:
+                return circuit_id
         # Fall through: assume it's already a circuit_id
         return entity_id
 

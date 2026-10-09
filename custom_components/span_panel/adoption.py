@@ -299,8 +299,8 @@ def adopted_unique_id(identifier: str, declaration: AdoptedProperty) -> str:
     `span_{serial}_adopted_{anchor}_{suffix}` -- the same
     `span_{serial}_{scope}_{suffix}` shape every curated id has, built through the
     same suffix helper. Uniform on purpose: a reader that parses an id by
-    position, as `extract_circuit_uuid_from_unique_id` does, must not meet a
-    second grammar. An earlier version lower-cased and de-hyphenated the whole
+    its `_` segments, as `match_circuit_id` does, must not meet a second
+    grammar. An earlier version lower-cased and de-hyphenated the whole
     string, which mangled the panel serial itself -- `span_sp3_242424_001_...`
     where every other id in the integration says `span_sp3-242424-001_...`.
 
