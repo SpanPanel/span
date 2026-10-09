@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- **spanos3/r202639/03 batch 2: more of this firmware's data becomes entities and controls.**
+
 ## [2.1.3] - 10/2026
 
 ### Changed
