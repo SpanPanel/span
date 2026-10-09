@@ -187,6 +187,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         },
         evse={},
         pv_inverters={},
+        publishes_solar_roles=False,
+        power_flow_pv=None,
         battery=None,
         adopted_devices=(),
         lugs_at_service_entrance=True,

@@ -58,6 +58,7 @@ from .id_builder import (  # noqa: F401
     get_user_friendly_suffix,
     match_circuit_id,
 )
+from .solar_sources import solar_sources
 
 __all__ = [
     "ALL_SUFFIX_MAPPINGS",
@@ -414,7 +415,15 @@ def has_bess(snapshot: SpanPanelSnapshot) -> bool:
 
 
 def has_pv(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether PV (solar) is commissioned."""
+    """Detect whether PV (solar) is commissioned.
+
+    Where the panel says where its solar is (`publishes_solar_roles`), only a
+    solar source is evidence: a published inverter, or a circuit whose role is
+    solar. Its power-flows PV figure alone is not, since a panel with a battery
+    and no solar publishes it as 0.0. Elsewhere the rule is unchanged.
+    """
+    if snapshot.publishes_solar_roles:
+        return bool(solar_sources(snapshot))
     return snapshot.power_flow_pv is not None or any(
         c.device_type == "pv" for c in snapshot.circuits.values()
     )
@@ -687,11 +696,13 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
 
 
 def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-    """One token per inverter key, one inverter or several, so a key the panel starts publishing reloads.
+    """One token per solar source key, one source or several, so a key the panel starts publishing reloads.
 
-    Digested because a key can be a device id, which carries the panel serial; see `identity_digest`.
+    Every source, a solar-role circuit as well as a published inverter, so a
+    source appearing re-resolves the binding. Digested because a key can be a
+    device id, which carries the panel serial; see `identity_digest`.
     """
-    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in snapshot.pv_inverters)
+    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in solar_sources(snapshot))
 
 
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:

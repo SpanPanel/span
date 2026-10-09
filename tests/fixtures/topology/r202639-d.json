@@ -14,6 +14,7 @@
         "select": "select.span_panel_bedroom_kitchen_lights_circuit_priority",
         "switch": "switch.span_panel_bedroom_kitchen_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom, Kitchen / Lights",
@@ -43,6 +44,7 @@
         "select": "select.span_panel_office_outlets_circuit_priority",
         "switch": "switch.span_panel_office_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Office / Outlets",
@@ -72,6 +74,7 @@
         "select": "select.span_panel_utility_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_utility_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility room / Lights & Outlets",
@@ -101,6 +104,7 @@
         "select": "select.span_panel_electric_oven_circuit_priority",
         "switch": "switch.span_panel_electric_oven_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric oven",
@@ -129,6 +133,7 @@
         "power": "sensor.span_panel_ev_charger_flex_power",
         "produced_energy": "sensor.span_panel_ev_charger_flex_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "FLEX⁺",
@@ -157,6 +162,7 @@
         "power": "sensor.span_panel_lucid_charger_power",
         "produced_energy": "sensor.span_panel_lucid_charger_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": false,
       "name": "Lucid charger",
@@ -187,6 +193,7 @@
         "select": "select.span_panel_neutral_forming_transformer_nft_circuit_priority",
         "switch": "switch.span_panel_neutral_forming_transformer_nft_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Neutral forming transformer (NFT)",

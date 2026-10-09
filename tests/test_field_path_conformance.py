@@ -362,7 +362,10 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # attributes, and the panel's busbar current, frequency and upstream
     # protection rating, read by sensors created only where declared. No
     # reference payload declares any of the five.
-    Producibility.NEITHER: 50,
+    # +1 for `circuit.feeds_role`, which orients a solar-role circuit's power
+    # and Net Energy as generation. A role, not a reading, so no adapter carries
+    # a row for it.
+    Producibility.NEITHER: 51,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
