@@ -14,6 +14,7 @@ import voluptuous as vol
 
 from .const import DOMAIN
 from .control_gate import ControlMode
+from .energy_orientation import circuit_is_generation
 from .entity_resolver import entity_id_in_entry
 from .helpers import (
     build_panel_unique_id,
@@ -174,6 +175,9 @@ async def handle_panel_topology(
             ),
             # Outside the panel: no breaker space, so no slot in the breaker grid.
             "outside_panel": circuit.measures_outside_panel,
+            # The predicate this circuit's power and energy are oriented by, so
+            # the card never re-derives generation from the device type.
+            "is_generation": circuit_is_generation(circuit),
             "shared_meter_group": meter_group.get(circuit_id),
             "shared_relay_group": relay_group.get(circuit_id),
             # Same inference as the entity attribute, from the same helper: a

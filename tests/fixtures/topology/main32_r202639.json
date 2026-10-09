@@ -14,6 +14,7 @@
         "select": "select.span_panel_attic_back_outlet_circuit_priority",
         "switch": "switch.span_panel_attic_back_outlet_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Attic-Back-Outlet",
@@ -43,6 +44,7 @@
         "select": "select.span_panel_hvac_air_handler_circuit_priority",
         "switch": "switch.span_panel_hvac_air_handler_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "HVAC-Air-Handler",
@@ -73,6 +75,7 @@
         "select": "select.span_panel_clothes_dryer_circuit_priority",
         "switch": "switch.span_panel_clothes_dryer_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Clothes-Dryer",
@@ -103,6 +106,7 @@
         "select": "select.span_panel_espresso_machine_circuit_priority",
         "switch": "switch.span_panel_espresso_machine_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Espresso-Machine",
@@ -133,6 +137,7 @@
         "select": "select.span_panel_shed_240vac_outlet_circuit_priority",
         "switch": "switch.span_panel_shed_240vac_outlet_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Shed-240VAC-Outlet",
@@ -163,6 +168,7 @@
         "select": "select.span_panel_future_240vac_1_circuit_priority",
         "switch": "switch.span_panel_future_240vac_1_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Future-240VAC-1",
@@ -190,6 +196,7 @@
         "power": "sensor.span_panel_commissioned_pv_system_power",
         "produced_energy": "sensor.span_panel_commissioned_pv_system_produced_energy"
       },
+      "is_generation": true,
       "is_never_backup": true,
       "is_user_controllable": false,
       "name": "Commissioned PV System",
@@ -220,6 +227,7 @@
         "select": "select.span_panel_cooktop_stove_circuit_priority",
         "switch": "switch.span_panel_cooktop_stove_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Cooktop/Stove",
@@ -250,6 +258,7 @@
         "select": "select.span_panel_hvac_heat_pump_circuit_priority",
         "switch": "switch.span_panel_hvac_heat_pump_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "HVAC-Heat-Pump",
@@ -280,6 +289,7 @@
         "select": "select.span_panel_ovens_circuit_priority",
         "switch": "switch.span_panel_ovens_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Ovens",
@@ -310,6 +320,7 @@
         "select": "select.span_panel_studio_hvac_circuit_priority",
         "switch": "switch.span_panel_studio_hvac_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Studio-HVAC",
@@ -340,6 +351,7 @@
         "select": "select.span_panel_future_240vac_2_circuit_priority",
         "switch": "switch.span_panel_future_240vac_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Future-240VAC-2",
@@ -370,6 +382,7 @@
         "select": "select.span_panel_kitchen_outlets_1_outlets_2_circuit_priority",
         "switch": "switch.span_panel_kitchen_outlets_1_outlets_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Kitchen-Outlets-1 & Outlets-2",
@@ -400,6 +413,7 @@
         "select": "select.span_panel_wine_refrigerator_circuit_priority",
         "switch": "switch.span_panel_wine_refrigerator_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Wine Refrigerator",
@@ -429,6 +443,7 @@
         "select": "select.span_panel_hvac_heating_coil_circuit_priority",
         "switch": "switch.span_panel_hvac_heating_coil_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "HVAC-Heating-Coil",
@@ -459,6 +474,7 @@
         "select": "select.span_panel_water_heater_circuit_priority",
         "switch": "switch.span_panel_water_heater_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Water-Heater",
