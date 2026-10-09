@@ -14,6 +14,7 @@
         "select": "select.span_panel_bedroom_lights_circuit_priority",
         "switch": "switch.span_panel_bedroom_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom / Lights",
@@ -27,7 +28,7 @@
       "tabs": [
         9
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-2": {
       "always_on": false,
@@ -43,6 +44,7 @@
         "select": "select.span_panel_bathroom_outlets_circuit_priority",
         "switch": "switch.span_panel_bathroom_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bathroom / Outlets",
@@ -56,7 +58,7 @@
       "tabs": [
         17
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-3": {
       "always_on": false,
@@ -72,6 +74,7 @@
         "select": "select.span_panel_living_room_lights_circuit_priority",
         "switch": "switch.span_panel_living_room_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Living room / Lights",
@@ -85,7 +88,7 @@
       "tabs": [
         19
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-4": {
       "always_on": false,
@@ -100,6 +103,7 @@
         "produced_energy": "sensor.span_panel_other_produced_energy",
         "switch": "switch.span_panel_other_breaker"
       },
+      "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": true,
       "name": "Other",
@@ -114,7 +118,7 @@
         10,
         12
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-5": {
       "always_on": true,
@@ -128,6 +132,7 @@
         "power": "sensor.span_panel_tesla_power",
         "produced_energy": "sensor.span_panel_tesla_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": false,
       "name": "Tesla",
@@ -142,7 +147,7 @@
         43,
         45
       ],
-      "voltage": 240
+      "voltage": 240.0
     }
   },
   "config_entry_id": "entry-r202639-c",
@@ -165,7 +170,6 @@
     "l2_voltage": "sensor.span_panel_l2_voltage",
     "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
     "panel_status": "binary_sensor.span_panel_panel_status",
-    "pv_power": "sensor.span_panel_solar_pv_power",
     "site_power": "sensor.span_panel_site_power",
     "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
     "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
@@ -257,44 +261,6 @@
       "serial_number": "tg607533669hu1-esz",
       "sw_version": null,
       "type": "mid"
-    },
-    "xg-7814-15i6h_pv": {
-      "entities": {
-        "sensor.span_panel_solar_pv_nameplate_capacity": {
-          "domain": "sensor",
-          "original_name": "PV Nameplate Capacity",
-          "unique_id": "span_xg-7814-15i6h_pv_nameplate_capacity"
-        },
-        "sensor.span_panel_solar_pv_power": {
-          "domain": "sensor",
-          "original_name": "PV Power",
-          "unique_id": "span_xg-7814-15i6h_pv_power"
-        },
-        "sensor.span_panel_solar_pv_product": {
-          "domain": "sensor",
-          "original_name": "PV Product",
-          "unique_id": "span_xg-7814-15i6h_pv_product"
-        },
-        "sensor.span_panel_solar_pv_vendor": {
-          "domain": "sensor",
-          "original_name": "PV Vendor",
-          "unique_id": "span_xg-7814-15i6h_pv_vendor"
-        }
-      },
-      "manufacturer": "Unknown",
-      "model": "Solar Inverter",
-      "name": "Span Panel Solar",
-      "serial_number": null,
-      "solar": {
-        "feed_circuit_id": null,
-        "model": null,
-        "power_entity_id": null,
-        "role": "site",
-        "site_power_entity_id": "sensor.span_panel_solar_pv_power",
-        "vendor": null
-      },
-      "sw_version": null,
-      "type": "pv"
     }
   }
 }

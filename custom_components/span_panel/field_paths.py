@@ -281,6 +281,22 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # row for either.
         "circuit.meter_shared_with": Producibility.NEITHER,
         "circuit.relay_shared_with": Producibility.NEITHER,
+        # A circuit's declared nominal voltage, which its voltage attribute
+        # prefers, and its breaker's protection functions, an attribute of its
+        # power sensor.
+        "circuit.nominal_voltage_v": Producibility.NEITHER,
+        "circuit.protection_functions": Producibility.NEITHER,
+        # Panel readings created only where the panel declares them, each read by
+        # a `NO_SOURCE_FIELD` description: neither adapter's reference payload
+        # declares them. The upstream protection rating is also the current
+        # monitor's mains limit where the panel has no main breaker.
+        "panel.busbar_current_a": Producibility.NEITHER,
+        "panel.frequency_hz": Producibility.NEITHER,
+        "panel.upstream_protection_rating_a": Producibility.NEITHER,
+        # What a circuit's `connection/feeds-role` declares, which orients its
+        # power and Net Energy as generation where the role is solar
+        # (`energy_orientation.circuit_is_generation`).
+        "circuit.feeds_role": Producibility.NEITHER,
         "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
         # The two backup-planning estimates behind `time_to_priority_shed` and
         # `shed_total_time_remaining`, whose descriptions are
@@ -525,6 +541,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
     )
+    from .lock import EVSE_LOCK  # pylint: disable=import-outside-toplevel
     from .number import EVSE_NUMBERS  # pylint: disable=import-outside-toplevel
     from .sensor_definitions import (  # pylint: disable=import-outside-toplevel
         all_sensor_descriptions,
@@ -535,6 +552,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         *BINARY_SENSORS,
         *EVSE_BINARY_SENSORS,
         *EVSE_NUMBERS,
+        EVSE_LOCK,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,

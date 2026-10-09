@@ -58,6 +58,7 @@ from .id_builder import (  # noqa: F401
     get_user_friendly_suffix,
     match_circuit_id,
 )
+from .solar_sources import solar_sources
 
 __all__ = [
     "ALL_SUFFIX_MAPPINGS",
@@ -351,14 +352,17 @@ def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
     return f"tabs [{':'.join(str(tab) for tab in sorted(circuit.tabs))}]"
 
 
-def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
-    """Return the nominal voltage for a circuit, inferred from its pole count.
+def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> float | None:
+    """Return the nominal voltage for a circuit: the one it declares, else one inferred from its pole count.
 
-    **Nominal, not measured, and there is nothing better to read.** The eBus
-    circuit ``meter`` capability publishes current, active power and energy
-    only; voltage is a panel-level quantity, published as the enclosure's
-    ``meter/voltage-a`` / ``voltage-b``. No per-circuit voltage exists on the
-    wire.
+    **The declared rating comes first.** A circuit that publishes
+    ``info/nominal-voltage`` has said what it is rated for, and that answer
+    needs no inference; everything below is the fallback for one that has not.
+
+    **Nominal, not measured.** The eBus circuit ``meter`` capability publishes
+    current, active power and energy only; measured voltage is a panel-level
+    quantity, published as the enclosure's ``meter/voltage-a`` /
+    ``voltage-b``.
 
     **It is derived from the pole count, not from the positions.** Those are
     different claims and only the second would be unsound: the specification
@@ -384,10 +388,13 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
         circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
-        120 for a single-pole circuit, 240 for a two-pole one, or None when
-        there is no tab information or the pole count does not determine it
+        The declared nominal voltage where there is one; otherwise 120 for a
+        single-pole circuit, 240 for a two-pole one, or None when there is no
+        tab information or the pole count does not determine it
 
     """
+    if circuit.nominal_voltage_v is not None:
+        return circuit.nominal_voltage_v
     if not circuit.tabs:
         return None
 
@@ -408,7 +415,15 @@ def has_bess(snapshot: SpanPanelSnapshot) -> bool:
 
 
 def has_pv(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether PV (solar) is commissioned."""
+    """Detect whether PV (solar) is commissioned.
+
+    Where the panel says where its solar is (`publishes_solar_roles`), only a
+    solar source is evidence: a published inverter, or a circuit whose role is
+    solar. Its power-flows PV figure alone is not, since a panel with a battery
+    and no solar publishes it as 0.0. Elsewhere the rule is unchanged.
+    """
+    if snapshot.publishes_solar_roles:
+        return bool(solar_sources(snapshot))
     return snapshot.power_flow_pv is not None or any(
         c.device_type == "pv" for c in snapshot.circuits.values()
     )
@@ -681,11 +696,13 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
 
 
 def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-    """One token per inverter key, one inverter or several, so a key the panel starts publishing reloads.
+    """One token per solar source key, one source or several, so a key the panel starts publishing reloads.
 
-    Digested because a key can be a device id, which carries the panel serial; see `identity_digest`.
+    Every source, a solar-role circuit as well as a published inverter, so a
+    source appearing re-resolves the binding. Digested because a key can be a
+    device id, which carries the panel serial; see `identity_digest`.
     """
-    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in snapshot.pv_inverters)
+    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in solar_sources(snapshot))
 
 
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:

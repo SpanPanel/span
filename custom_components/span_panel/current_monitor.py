@@ -137,6 +137,20 @@ def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircui
     return points
 
 
+def panel_limit_a(snapshot: SpanPanelSnapshot) -> float | None:
+    """Return the rating the mains legs are judged against.
+
+    The main breaker where the panel has one; otherwise the rating of the
+    protection ahead of its upstream lugs, which is what limits a panel with no
+    main breaker of its own. None where the panel reports neither.
+    """
+    if snapshot.main_breaker_rating_a:
+        return float(snapshot.main_breaker_rating_a)
+    if snapshot.upstream_protection_rating_a:
+        return float(snapshot.upstream_protection_rating_a)
+    return None
+
+
 class CurrentMonitor:
     """Monitors current draw against breaker ratings for overload detection."""
 
@@ -384,11 +398,7 @@ class CurrentMonitor:
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
-        main_rating = (
-            float(snapshot.main_breaker_rating_a)
-            if snapshot and snapshot.main_breaker_rating_a
-            else None
-        )
+        main_rating = panel_limit_a(snapshot) if snapshot else None
 
         circuits: dict[str, dict[str, Any]] = {}
         # Include all circuits from the snapshot, not just those with active state.
@@ -612,10 +622,9 @@ class CurrentMonitor:
 
     def _evaluate_mains(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for all mains legs."""
-        if snapshot.main_breaker_rating_a is None:
+        rating = panel_limit_a(snapshot)
+        if rating is None:
             return
-
-        rating = float(snapshot.main_breaker_rating_a)
 
         for leg, attr in _MAINS_CURRENT_ATTRS.items():
             current_val = getattr(snapshot, attr, None)

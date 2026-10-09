@@ -187,6 +187,11 @@
         "name": "Anulación GFE: Conectado a Red"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "Bloqueo EVSE"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "Límite de Corriente de Carga EVSE"
@@ -337,6 +342,15 @@
       "main_breaker_rating": {
         "name": "Capacidad del Interruptor Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Capacidad de la Protección Aguas Arriba"
+      },
+      "busbar_current": {
+        "name": "Corriente de la Barra"
+      },
+      "frequency": {
+        "name": "Frecuencia"
+      },
       "main_meter_consumed_energy": {
         "name": "Energía Consumida del Medidor Principal"
       },
@@ -469,6 +483,12 @@
     },
     "evse_charge_limit_not_delivered": {
       "message": "El límite de corriente de carga del cargador {charger} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el límite no ha cambiado."
+    },
+    "evse_lock_failed": {
+      "message": "No se pudo establecer el bloqueo del cargador {charger}: {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "La orden de bloqueo del cargador {charger} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el bloqueo no ha cambiado."
     },
     "export_manifest_no_entries": {
       "message": "No hay entradas de configuración de SPAN Panel cargadas. Agregue y configure un SPAN Panel antes de llamar a este servicio."

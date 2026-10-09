@@ -14,6 +14,7 @@
         "select": "select.span_panel_bedroom_kitchen_lights_circuit_priority",
         "switch": "switch.span_panel_bedroom_kitchen_lights_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Bedroom, Kitchen / Lights",
@@ -27,7 +28,7 @@
       "tabs": [
         3
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-2": {
       "always_on": false,
@@ -43,6 +44,7 @@
         "select": "select.span_panel_office_outlets_circuit_priority",
         "switch": "switch.span_panel_office_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Office / Outlets",
@@ -56,7 +58,7 @@
       "tabs": [
         11
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-3": {
       "always_on": false,
@@ -72,6 +74,7 @@
         "select": "select.span_panel_utility_room_lights_outlets_circuit_priority",
         "switch": "switch.span_panel_utility_room_lights_outlets_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Utility room / Lights & Outlets",
@@ -85,7 +88,7 @@
       "tabs": [
         19
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-4": {
       "always_on": false,
@@ -101,6 +104,7 @@
         "select": "select.span_panel_electric_oven_circuit_priority",
         "switch": "switch.span_panel_electric_oven_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Electric oven",
@@ -115,7 +119,7 @@
         14,
         16
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-5": {
       "always_on": false,
@@ -129,6 +133,7 @@
         "power": "sensor.span_panel_ev_charger_flex_power",
         "produced_energy": "sensor.span_panel_ev_charger_flex_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "FLEX⁺",
@@ -143,7 +148,7 @@
         22,
         24
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-8": {
       "always_on": true,
@@ -157,6 +162,7 @@
         "power": "sensor.span_panel_lucid_charger_power",
         "produced_energy": "sensor.span_panel_lucid_charger_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": false,
       "name": "Lucid charger",
@@ -171,7 +177,7 @@
         13,
         15
       ],
-      "voltage": 240
+      "voltage": 240.0
     },
     "circuit-9": {
       "always_on": false,
@@ -187,6 +193,7 @@
         "select": "select.span_panel_neutral_forming_transformer_nft_circuit_priority",
         "switch": "switch.span_panel_neutral_forming_transformer_nft_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "Neutral forming transformer (NFT)",
@@ -201,7 +208,7 @@
         6,
         8
       ],
-      "voltage": 240
+      "voltage": 240.0
     }
   },
   "config_entry_id": "entry-r202639-d",
@@ -245,15 +252,15 @@
           "original_name": "EVSE Panel Link",
           "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_panel_link"
         },
+        "lock.span_panel_ev_charger_flex_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_lock"
+        },
         "number.span_panel_ev_charger_flex_evse_charge_current_limit": {
           "domain": "number",
           "original_name": "EVSE Charge Current Limit",
           "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_charge_current_limit"
-        },
-        "sensor.span_panel_ev_charger_flex_advertised_current": {
-          "domain": "sensor",
-          "original_name": "Advertised Current",
-          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_advertised_current"
         },
         "sensor.span_panel_ev_charger_flex_breaker_rating": {
           "domain": "sensor",

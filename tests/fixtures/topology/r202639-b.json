@@ -14,6 +14,7 @@
         "select": "select.span_panel_breaker_1_circuit_priority",
         "switch": "switch.span_panel_breaker_1_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-1",
@@ -27,7 +28,7 @@
       "tabs": [
         9
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-18": {
       "always_on": false,
@@ -43,6 +44,7 @@
         "select": "select.span_panel_breaker_2_circuit_priority",
         "switch": "switch.span_panel_breaker_2_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-2",
@@ -56,7 +58,7 @@
       "tabs": [
         10
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-19": {
       "always_on": false,
@@ -72,6 +74,7 @@
         "select": "select.span_panel_breaker_3_circuit_priority",
         "switch": "switch.span_panel_breaker_3_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-3",
@@ -85,7 +88,7 @@
       "tabs": [
         11
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-20": {
       "always_on": false,
@@ -101,6 +104,7 @@
         "select": "select.span_panel_breaker_4_circuit_priority",
         "switch": "switch.span_panel_breaker_4_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-4",
@@ -114,7 +118,7 @@
       "tabs": [
         12
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-21": {
       "always_on": false,
@@ -130,6 +134,7 @@
         "select": "select.span_panel_breaker_5_circuit_priority",
         "switch": "switch.span_panel_breaker_5_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-5",
@@ -143,7 +148,7 @@
       "tabs": [
         13
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-22": {
       "always_on": false,
@@ -159,6 +164,7 @@
         "select": "select.span_panel_breaker_6_circuit_priority",
         "switch": "switch.span_panel_breaker_6_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-6",
@@ -172,7 +178,7 @@
       "tabs": [
         14
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-23": {
       "always_on": false,
@@ -188,6 +194,7 @@
         "select": "select.span_panel_breaker_7_circuit_priority",
         "switch": "switch.span_panel_breaker_7_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-7",
@@ -201,7 +208,7 @@
       "tabs": [
         15
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-24": {
       "always_on": false,
@@ -217,6 +224,7 @@
         "select": "select.span_panel_breaker_8_circuit_priority",
         "switch": "switch.span_panel_breaker_8_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-8",
@@ -230,7 +238,7 @@
       "tabs": [
         16
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-25": {
       "always_on": false,
@@ -246,6 +254,7 @@
         "select": "select.span_panel_breaker_9_circuit_priority",
         "switch": "switch.span_panel_breaker_9_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-9",
@@ -259,7 +268,7 @@
       "tabs": [
         17
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-26": {
       "always_on": false,
@@ -275,6 +284,7 @@
         "select": "select.span_panel_breaker_10_circuit_priority",
         "switch": "switch.span_panel_breaker_10_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-10",
@@ -288,7 +298,7 @@
       "tabs": [
         18
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-27": {
       "always_on": false,
@@ -304,6 +314,7 @@
         "select": "select.span_panel_breaker_11_circuit_priority",
         "switch": "switch.span_panel_breaker_11_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-11",
@@ -317,7 +328,7 @@
       "tabs": [
         19
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-28": {
       "always_on": false,
@@ -333,6 +344,7 @@
         "select": "select.span_panel_breaker_12_circuit_priority",
         "switch": "switch.span_panel_breaker_12_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-12",
@@ -346,7 +358,7 @@
       "tabs": [
         20
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-29": {
       "always_on": false,
@@ -362,6 +374,7 @@
         "select": "select.span_panel_breaker_13_circuit_priority",
         "switch": "switch.span_panel_breaker_13_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-13",
@@ -375,7 +388,7 @@
       "tabs": [
         21
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-30": {
       "always_on": false,
@@ -391,6 +404,7 @@
         "select": "select.span_panel_breaker_14_circuit_priority",
         "switch": "switch.span_panel_breaker_14_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-14",
@@ -404,7 +418,7 @@
       "tabs": [
         22
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-31": {
       "always_on": false,
@@ -420,6 +434,7 @@
         "select": "select.span_panel_breaker_15_circuit_priority",
         "switch": "switch.span_panel_breaker_15_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-15",
@@ -433,7 +448,7 @@
       "tabs": [
         23
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "circuit-32": {
       "always_on": false,
@@ -449,6 +464,7 @@
         "select": "select.span_panel_breaker_16_circuit_priority",
         "switch": "switch.span_panel_breaker_16_breaker"
       },
+      "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
       "name": "breaker-16",
@@ -462,7 +478,7 @@
       "tabs": [
         24
       ],
-      "voltage": 120
+      "voltage": 120.0
     },
     "remote-ct-3": {
       "always_on": null,
@@ -475,6 +491,7 @@
         "power": "sensor.span_panel_remote_ct_3_power",
         "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
       },
+      "is_generation": false,
       "is_never_backup": null,
       "is_user_controllable": false,
       "name": "Remote CT 3",
