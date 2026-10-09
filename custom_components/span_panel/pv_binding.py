@@ -22,10 +22,20 @@ makes it unanswerable.
 The record is needed because the moment it matters -- a second inverter
 appearing -- is the moment neither the wire nor the registry can say which
 inverter came first.
+
+**A circuit whose role is solar is a source too.** Where a panel says where its
+solar is without publishing an inverter device behind the circuit (eBus
+`connection/feeds-role` SOLAR), that circuit is a solar source keyed by its own
+id -- the key a `pv` device it later publishes would get, so nothing moves when
+one appears. `solar_sources` lists the published inverters first, exactly as
+`pv_inverters` holds them, then such circuits by id; on a panel that publishes
+no roles it is `pv_inverters` itself. The rules above are unchanged: a lone
+solar-role circuit binds at first sight as a lone circuit-fed inverter does.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Final, Literal, TypedDict
@@ -38,6 +48,7 @@ from .const import DOMAIN, PV_PANEL_LINK_KEY
 from .entity_resolver import entity_id_in_entry
 from .id_builder import build_binary_sensor_unique_id, build_pv_inverter_unique_id
 from .sensor_definitions import PV_METADATA_SENSORS
+from .solar_sources import SolarSource, solar_sources
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -139,15 +150,15 @@ def read_record(stored: object) -> StoredPvBinding | None:
     return None
 
 
-def _lone_fed_circuit(snapshot: SpanPanelSnapshot) -> str | None:
-    """Return the lone inverter's circuit, where exactly one inverter is published and a circuit feeds it."""
-    if len(snapshot.pv_inverters) != 1:
+def _lone_fed_source(sources: Mapping[str, SolarSource]) -> str | None:
+    """Return the lone source's key, where there is exactly one source and a circuit feeds it."""
+    if len(sources) != 1:
         return None
-    key, pv = next(iter(snapshot.pv_inverters.items()))
-    return key if pv.feed_circuit_id is not None else None
+    key, source = next(iter(sources.items()))
+    return key if source.feed_circuit_id is not None else None
 
 
-def _reads_link_records(snapshot: SpanPanelSnapshot, bound: str | None) -> bool:
+def _reads_link_records(sources: Mapping[str, SolarSource], bound: str | None) -> bool:
     """Whether every inverter the Solar card reads publishes a link record.
 
     Bound, that is the bound inverter, which must be published to have one.
@@ -157,14 +168,13 @@ def _reads_link_records(snapshot: SpanPanelSnapshot, bound: str | None) -> bool:
     with a reading.
     """
     if bound is not None:
-        pv = snapshot.pv_inverters.get(bound)
-        return pv is not None and pv.connected is not None
-    inverters = snapshot.pv_inverters.values()
-    return bool(inverters) and all(pv.connected is not None for pv in inverters)
+        source = sources.get(bound)
+        return source is not None and source.connected is not None
+    return bool(sources) and all(source.connected is not None for source in sources.values())
 
 
 def _inverter_links(
-    snapshot: SpanPanelSnapshot,
+    sources: Mapping[str, SolarSource],
     legacy: str | None,
     withheld: frozenset[str],
     inverter_links_held: frozenset[str],
@@ -172,10 +182,10 @@ def _inverter_links(
     """Return the carded keys whose link exists: registered already, or recorded by their circuit."""
     return frozenset(
         key
-        for key, pv in snapshot.pv_inverters.items()
+        for key, source in sources.items()
         if key != legacy
         and key not in withheld
-        and (key in inverter_links_held or pv.connected is not None)
+        and (key in inverter_links_held or source.connected is not None)
     )
 
 
@@ -187,7 +197,30 @@ def resolve(
     link_held: bool,
     inverter_links_held: frozenset[str],
 ) -> tuple[PvBinding, StoredPvBinding | None]:
+    """Decide this setup's identity from a snapshot's solar sources; see `resolve_sources`."""
+    return resolve_sources(
+        solar_sources(snapshot),
+        snapshot.circuits,
+        record,
+        held,
+        link_held=link_held,
+        inverter_links_held=inverter_links_held,
+    )
+
+
+def resolve_sources(
+    sources: Mapping[str, SolarSource],
+    circuits: Collection[str],
+    record: StoredPvBinding | None,
+    held: frozenset[str],
+    *,
+    link_held: bool,
+    inverter_links_held: frozenset[str],
+) -> tuple[PvBinding, StoredPvBinding | None]:
     """Decide this setup's identity, and the record to keep.
+
+    Independent of the order `sources` iterates in: the only positional read is
+    of a map holding exactly one source, and every set built here is a set.
 
     `held` is the inverter keys that already have a card of their own,
     `link_held` whether the Solar card's link entity is already registered, and
@@ -197,11 +230,10 @@ def resolve(
     way. A key in `held` always keeps its card, and a held link is always kept:
     nothing here withdraws any of them.
     """
-    inverters = snapshot.pv_inverters
-    lone_fed = _lone_fed_circuit(snapshot)
+    lone_fed = _lone_fed_source(sources)
     bindable = lone_fed if lone_fed is not None and lone_fed not in held else None
     if record is None:
-        if not inverters:
+        if not sources:
             undecided = PvBinding(
                 "undecided",
                 None,
@@ -216,21 +248,21 @@ def resolve(
         record = StoredPvBinding(circuit_id=bindable)
     bound = record["circuit_id"]
     if bound is not None:
-        pending = bound not in inverters and bound in snapshot.circuits
+        pending = bound not in sources and bound in circuits
         withheld = frozenset(
             key
-            for key, pv in inverters.items()
-            if pending and pv.feed_circuit_id is None and key not in held
+            for key, source in sources.items()
+            if pending and source.feed_circuit_id is None and key not in held
         )
         # A bound key that somehow holds a card (a store restored from an older backup) keeps it.
         legacy = None if bound in held else bound
-        solar_link = link_held or _reads_link_records(snapshot, bound)
-        links = _inverter_links(snapshot, legacy, withheld, inverter_links_held)
+        solar_link = link_held or _reads_link_records(sources, bound)
+        links = _inverter_links(sources, legacy, withheld, inverter_links_held)
         return PvBinding("inverter", bound, legacy, withheld, solar_link, links), record
-    lone = next(iter(inverters)) if len(inverters) == 1 else None
+    lone = next(iter(sources)) if len(sources) == 1 else None
     legacy = lone if lone is not None and lone not in held else None
-    solar_link = link_held or _reads_link_records(snapshot, None)
-    links = _inverter_links(snapshot, legacy, frozenset(), inverter_links_held)
+    solar_link = link_held or _reads_link_records(sources, None)
+    links = _inverter_links(sources, legacy, frozenset(), inverter_links_held)
     return PvBinding("unbound", None, legacy, frozenset(), solar_link, links), record
 
 
@@ -308,13 +340,10 @@ async def async_resolve_pv_binding(
     store = store_for(hass, entry)
     record = read_record(await store.async_load())
     registry = er.async_get(hass)
-    held = keys_holding_cards(
-        registry, entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
-    )
+    sources = solar_sources(snapshot)
+    held = keys_holding_cards(registry, entry.entry_id, snapshot.serial_number, sources)
     link_held = solar_link_held(registry, entry.entry_id, snapshot.serial_number)
-    links_held = inverter_links_held(
-        registry, entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
-    )
+    links_held = inverter_links_held(registry, entry.entry_id, snapshot.serial_number, sources)
     identity, kept = resolve(
         snapshot, record, held, link_held=link_held, inverter_links_held=links_held
     )
