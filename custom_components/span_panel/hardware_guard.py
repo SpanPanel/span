@@ -2,8 +2,9 @@
 
 The verdict reads the REST `hardwareVersion` from `GET /api/v2/status` only, never
 MQTT `info/hardware-version`, which is a free string an emulator may set to anything.
-The values allowed are the ones the public r202639 changelog lists. A panel that
-reports `UNKNOWN` is judged again once its model is known; `MAIN_32` always proceeds.
+The values allowed are the hardware version strings this release has been validated
+with. A panel that reports `UNKNOWN` is judged again once its model is known;
+`MAIN_32` always proceeds.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Final
 
-VALIDATED_HARDWARE_VERSIONS: Final = frozenset({"1.2", "2.0"})
+VALIDATED_HARDWARE_VERSIONS: Final = frozenset({"1.2", "2.0", "3.0"})
 UNDETERMINED_HARDWARE_VERSION: Final = "UNKNOWN"
 VALIDATED_MODEL: Final = "MAIN_32"
 

@@ -973,11 +973,14 @@ async def test_unknown_with_another_model_is_refused(hass: HomeAssistant, panel_
     assert issue.is_fixable is False
 
 
-async def test_a_validated_version_with_any_model_proceeds(hass: HomeAssistant, panel_status: AsyncMock) -> None:
-    """A listed hardware version proceeds before the model is ever consulted."""
+@pytest.mark.parametrize("version", ["1.2", "2.0", "3.0"])
+async def test_a_validated_hardware_version_string_with_any_model_proceeds(
+    hass: HomeAssistant, panel_status: AsyncMock, version: str
+) -> None:
+    """A validated hardware version string proceeds before the model is ever consulted."""
     entry = _create_v2_entry()
     entry.add_to_hass(hass)
-    panel_status.return_value = _status("1.2")
+    panel_status.return_value = _status(version)
     panel = _panel_with_model("OTHER_MODEL")
 
     assert await _set_up(hass, entry, panel) is True
@@ -986,7 +989,7 @@ async def test_a_validated_version_with_any_model_proceeds(hass: HomeAssistant, 
     assert _unvalidated_hardware_issue(hass) is None
 
 
-@pytest.mark.parametrize("version", ["9.9", "3.0", "0.1"])
+@pytest.mark.parametrize("version", ["9.9", "4.0", "0.1"])
 async def test_an_unlisted_hardware_version_is_refused(
     hass: HomeAssistant, panel_status: AsyncMock, version: str
 ) -> None:
