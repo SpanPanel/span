@@ -1,18 +1,18 @@
 # Test fixtures
 
-The files here are committed source this repository owns, with two exceptions, both held byte for byte to where they came from by a guard:
-
-- the **historical `pyproject.toml` copies** (`pyproject_*.toml`) are this repository's own file at the two commits where the library path override went wrong;
-- the **captured panels** (`captures/*-tree-v1.json`) are vendored from the emitter's published fixtures, with the emitter's `LICENSE` beside them;
-  `captures/README.md` names the tag and the commit.
+The files here are committed source this repository owns, with one exception: the **historical `pyproject.toml` copies** (`pyproject_*.toml`) are this
+repository's own file at the two commits where the library path override went wrong, held to those commits by a guard.
 
 The schema-adapter payloads the conformance tests replay are **not** here. They are package data of `span-panel-api-schema-0` and `span-panel-api-schema-1`,
 read out of the installed wheels by `tests/adapter_fixtures.py`; the pin in `custom_components/span_panel/manifest.json` is what says which capture the suite
 replays, and bumping the pin is what moves it.
 
-What each captured panel produces is recorded beside it, per stem: `expected_entities/` and `topology/`, written by `tests/test_expected_entities.py` under
-`--update-capture-fixtures` and compared otherwise, and `unread_declarations/`, the hand-kept baselines of `tests/test_declared_but_unread.py` (one per tree,
-the adapter's reference payload included as `parent_child_tree.json`).
+Nor are the captured panels. They are the reference captures `ebus-panel-sim` ships as package data, read by `tests/captures_replay.py` through
+`ebus_panel_sim.load_reference_capture` under their handles; the test-only pin in `pyproject.toml`'s `dev` group says which release the suite replays.
+
+What each captured panel produces is recorded here, per stem (a capture's handle, or a variant derived from it in-test): `expected_entities/` and `topology/`,
+written by `tests/test_expected_entities.py` under `--update-capture-fixtures` and compared otherwise, and `unread_declarations/`, the hand-kept baselines of
+`tests/test_declared_but_unread.py` (one per tree, the adapter's reference payload included as `parent_child_tree.json`).
 
 ## The historical pyproject copies
 
@@ -39,26 +39,23 @@ Re-vendor either with `git show <commit>:pyproject.toml > tests/fixtures/<name>.
 
 ## The historical copies are exempt from formatting
 
-`tests/fixtures/pyproject_*.toml`, `tests/fixtures/captures/*-tree-v1.json` and `tests/fixtures/captures/LICENSE` are excluded from every hook that rewrites
-files — `trailing-whitespace`, `end-of-file-fixer` and `mixed-line-ending` in `prek.toml`. Prettier cannot format TOML or a bare `LICENSE`; it can format
-JSON, so `.prettierignore` names the captures.
+`tests/fixtures/pyproject_*.toml` is excluded from every hook that rewrites files — `trailing-whitespace`, `end-of-file-fixer` and `mixed-line-ending` in
+`prek.toml`. Prettier cannot format TOML, so `.prettierignore` needs no line for them.
 
 The reason is the whole point of the comparison: **these are captured bytes, not source we own.** A copy held byte-identical to a commit and an unconditional
 formatter cannot both exist, and it is the formatter that has to yield. A copy reindented on the way in fails against the commit it genuinely matched when it
 was made, and the resulting failure names the fixture rather than the hook that broke it — so the person debugging it starts in the wrong place.
 
-It is not hypothetical, only untriggered so far. Those three hooks cover `tests/`, and they leave the copies alone only because every one happens to be
+It is not hypothetical, only untriggered so far. Those three hooks cover `tests/`, and they leave the copies alone only because both happen to be
 newline-terminated with LF endings and no trailing whitespace. The first one vendored without a final newline would be rewritten on commit.
 
-The scope is these patterns rather than the whole directory, because only these copies have this property. `tests/fixtures/README.md` and
-`captures/README.md` are prose this repository owns and should keep being formatted; the migration YAMLs are hand-written source; `unread_declarations/`,
-despite being a mechanically-checked inventory, is hand-maintained — its values are one-line human explanations; and `expected_entities/` and `topology/` are
-written by their test in the form the hooks already accept. `pyproject_*` is `tests/test_library_path_hook.py`'s own vocabulary and `captures/*-tree-v1.json`
-is `tests/captures_replay.py`'s, so the next copy taken under either is covered without anyone remembering to widen the rule. `captures/LICENSE` is named
-outright: there is one upstream notice, and it travels with the copies it covers.
+The scope is one prefix rather than the whole directory, because only these copies have this property. `tests/fixtures/README.md` is prose this repository owns
+and should keep being formatted; the migration YAMLs are hand-written source; `unread_declarations/`, despite being a mechanically-checked inventory, is
+hand-maintained — its values are one-line human explanations; and `expected_entities/` and `topology/` are written by their test in the form the hooks already
+accept. `pyproject_*` is `tests/test_library_path_hook.py`'s own vocabulary, so the next copy taken under it is covered without anyone remembering to widen the
+rule.
 
-The read-only hooks still cover these files, `check-toml` and `check-json` in particular. A copy that does not parse is worth hearing about wherever it came
-from.
+The read-only hooks still cover these files, `check-toml` in particular. A copy that does not parse is worth hearing about wherever it came from.
 
 ## Derived variants of the parent/child capture
 
@@ -70,8 +67,8 @@ conformance tests pass for the wrong reason. Note `bess-mid` is typed `energy.eb
 The batteryless tree proves a panel with no BESS produces **no** `battery.*` entries — hardware absence, not degradation. The PV-less tree proves the same for a
 panel that has power-flows telemetry but no PV device, which is the case telemetry-based capability detection gets wrong.
 
-The captured r202639 panel's battery-less, unvalued-battery and unpublished-readings variants are derived the same way, in `tests/test_expected_entities.py`. A captured battery
-carries its islanding device as its own child, so `captures_replay.without_device` drops the device with everything beneath it and every `connection/*` value
-naming one of them. The battery-less variant also drops the panel's `shed-forecast/*` values, keeping their declarations: a panel without a battery makes no
-backup forecast. Together that is what a panel that never had the battery publishes. The unpublished-readings variant keeps every declaration and drops
-only values: the panel's `power-flows/*` and one drawing circuit's `meter/active-power`, so its expected file holds sensors reading unknown.
+The captured r202639 panel's battery-less, unvalued-battery and unpublished-readings variants are derived the same way, in `tests/test_expected_entities.py`. A
+captured battery carries its islanding device as its own child, so `captures_replay.without_device` drops the device with everything beneath it and every
+`connection/*` value naming one of them. The battery-less variant also drops the panel's `shed-forecast/*` values, keeping their declarations: a panel without a
+battery makes no backup forecast. Together that is what a panel that never had the battery publishes. The unpublished-readings variant keeps every declaration
+and drops only values: the panel's `power-flows/*` and one drawing circuit's `meter/active-power`, so its expected file holds sensors reading unknown.

@@ -241,15 +241,17 @@ than a worktree an override is pointing at.
 
 ## What each captured panel produces
 
-`tests/fixtures/captures/` holds panels' retained trees, vendored byte for byte from the emitter's published fixtures with the emitter's MIT `LICENSE` (its
-`README.md` names the tag and what upstream says each tree is).
-`tests/captures_replay.py` replays one through the pinned library the way the broker delivers it, and `tests/test_expected_entities.py` sets each replay up
-through the real `async_setup_entry`. The MQTT client is replaced whole by a static replay of the capture, so no reconnect, offline, connection,
-schema-change or streaming path runs; availability and offline behaviour stay with their own tests. Two files per stem record the result:
+The captured panels are not committed here either. They are the reference captures `ebus-panel-sim` ships as package data, a test-only dependency pinned exactly
+in `pyproject.toml`'s `dev` group and `requirements_test.txt`, never in `manifest.json`. `tests/captures_replay.py` names the ones the suite replays by their
+handles there (`main32_r202633`, `main32_r202639`) and reads each through `ebus_panel_sim.load_reference_capture`, so moving to a newer capture is a bump of
+that pin, as it is for the adapter payloads. It replays one through the pinned library the way the broker delivers it, and `tests/test_expected_entities.py`
+sets each replay up through the real `async_setup_entry`. The MQTT client is replaced whole by a static replay of the capture, so no reconnect, offline,
+connection, schema-change or streaming path runs; availability and offline behaviour stay with their own tests. Two files per stem, a capture's handle or a
+variant derived from it in-test, record the result:
 
 - `tests/fixtures/expected_entities/<stem>.json`: every device a fresh install registers (name, manufacturer, model, hardware and software version, serial,
-  parent device) and every entity, by unique id, with its platform, entity id, name, translation key, device, device class, state class, unit, entity
-  category, whether it is disabled or hidden by default, and its state once the first snapshot has been delivered;
+  parent device) and every entity, by unique id, with its platform, entity id, name, translation key, device, device class, state class, unit, entity category,
+  whether it is disabled or hidden by default, and its state once the first snapshot has been delivered;
 - `tests/fixtures/topology/<stem>.json`: what `span_panel/panel_topology` answers, with registry device ids replaced by device identifiers; the card renders
   these in its own suite.
 
@@ -259,7 +261,7 @@ must read unknown.
 
 A change that moves any of this fails until the file is regenerated in the same diff, where review sees it:
 `pytest tests/test_expected_entities.py --update-capture-fixtures -k "<stem>]"`, regenerating only the stems the change means to touch. The closing bracket
-matches the end of a test id, so `-k "main32]"` selects that stem alone rather than every stem that begins with it. Say why in the PR.
+matches the end of a test id, so `-k "main32_r202639]"` selects that stem alone rather than every variant that begins with it. Say why in the PR.
 
 ## Knowing what the panel publishes that nothing reads
 
@@ -270,7 +272,7 @@ The panel declares more than this integration surfaces, and the gap is tracked m
 `tests/test_declared_but_unread.py` asserts that **every property declared in a device's `$description`** is one of three things: mapped to a snapshot field by
 an adapter, consumed by a known internal route (topology, dispatch, device_info, role resolution), or listed in that tree's baseline,
 `tests/fixtures/unread_declarations/<stem>.json`, with a one-line reason. It runs over the adapter's reference payload (`parent_child_tree.json`) and over every
-captured panel in `tests/fixtures/captures/`, each against its own baseline, because a property can be read on one panel's shape and not on another's.
+captured panel `tests/captures_replay.py` names, each against its own baseline, because a property can be read on one panel's shape and not on another's.
 
 It decides "read" **by experiment**, not by inspecting a map. For each declared property it republishes a legal different value derived from the property's own
 `datatype`/`format`, rebuilds the snapshot through the real adapter, and checks whether any field a consumer reads actually moved. That is why it sees
@@ -300,7 +302,7 @@ opt-in disabled entity does only if the user asks for it.
 
 ### What it does not cover
 
-The gate reads the **adapter's reference capture and the vendored captures**, so it answers "what do those trees declare that we do not read". It cannot see a
+The gate reads the **adapter's reference capture and the captured panels**, so it answers "what do those trees declare that we do not read". It cannot see a
 property a real panel starts publishing in the field. The runtime half below is what answers that.
 
 Note also that a property can be _read on one device and not another_ and the gate will not see it — it asks whether anything moved, not whether everything did.
