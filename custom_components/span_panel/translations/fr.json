@@ -24,6 +24,8 @@
       "invalid_auth": "Authentification invalide",
       "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
       "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
+      "rate_limited": "Le panneau limite les tentatives d'enregistrement. Réessayez dans {retry_after} secondes.",
+      "rate_limited_no_retry_after": "Le panneau limite les tentatives d'enregistrement. Patientez une minute, puis réessayez.",
       "proximity_failed": "Proximité non prouvée. Veuillez ouvrir et fermer la porte du panneau 3 fois et réessayer.",
       "unknown": "Erreur inattendue"
     },
@@ -561,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Relancez le renouvellement pour obtenir une phrase secrète connue. Si le panneau refuse ce renouvellement, réauthentifiez l'intégration ; si l'ancienne phrase secrète n'est plus acceptée, utilisez la preuve de proximité."
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Relancez le renouvellement pour obtenir une phrase secrète connue. Si le panneau refuse ce renouvellement, réauthentifiez l'intégration avec la phrase secrète affichée dans l'application SPAN."
     },
     "rotate_credentials_requires_admin": {
       "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."

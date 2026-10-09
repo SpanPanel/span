@@ -24,6 +24,8 @@
       "invalid_auth": "Autenticación invalida",
       "panel_not_ready": "El panel aún no está listo para registrar Home Assistant, normalmente porque todavía se está iniciando. Espere un momento e intente de nuevo.",
       "passphrase_unavailable": "El panel no puede emitir credenciales porque su frase de contraseña aún no está disponible. Esto no significa que se haya introducido una frase de contraseña incorrecta. Espere unos minutos e intente de nuevo.",
+      "rate_limited": "El panel está limitando los intentos de registro. Intente de nuevo en {retry_after} segundos.",
+      "rate_limited_no_retry_after": "El panel está limitando los intentos de registro. Espere un minuto e intente de nuevo.",
       "proximity_failed": "Proximidad no comprobada. Por favor abra y cierre la puerta del panel 3 veces e intente de nuevo.",
       "unknown": "Error inesperado"
     },
@@ -561,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "El SPAN Panel en {host} no informó el resultado de la rotación de credenciales. La frase de acceso del panel y la contraseña del broker pueden haber cambiado. Vuelva a ejecutar la rotación para obtener una frase de acceso conocida. Si el panel rechaza esa rotación, vuelva a autenticar la integración; si la frase de acceso anterior ya no se acepta, use la prueba de proximidad."
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "El SPAN Panel en {host} no informó el resultado de la rotación de credenciales. La frase de acceso del panel y la contraseña del broker pueden haber cambiado. Vuelva a ejecutar la rotación para obtener una frase de acceso conocida. Si el panel rechaza esa rotación, vuelva a autenticar la integración con la frase de acceso que muestra la aplicación SPAN."
     },
     "rotate_credentials_requires_admin": {
       "message": "Solo un administrador de Home Assistant puede rotar las credenciales del SPAN Panel."
