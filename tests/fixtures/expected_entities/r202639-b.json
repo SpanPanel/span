@@ -11,34 +11,6 @@
     }
   },
   "entities": {
-    "span_xg-1155-18fkf_adopted_panel/status/postal-code": {
-      "device": "xg-1155-18fkf",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_postal_code",
-      "hidden_by": null,
-      "original_name": "Status Postal Code",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
-    "span_xg-1155-18fkf_adopted_panel/status/time-zone": {
-      "device": "xg-1155-18fkf",
-      "device_class": null,
-      "disabled_by": "integration",
-      "entity_category": "diagnostic",
-      "entity_id": "sensor.span_panel_status_time_zone",
-      "hidden_by": null,
-      "original_name": "Status Time Zone",
-      "platform": "sensor",
-      "state": null,
-      "state_class": null,
-      "translation_key": null,
-      "unit_of_measurement": null
-    },
     "span_xg-1155-18fkf_busbar_current": {
       "device": "xg-1155-18fkf",
       "device_class": "current",
