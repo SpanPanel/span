@@ -52,7 +52,13 @@ class Capture:
         return retained_tree(_published_tree(self.name))
 
 
-CAPTURES: Final = (Capture("main32_r202633"), Capture("main32_r202639"))
+MAIN32_CAPTURES: Final = (Capture("main32_r202633"), Capture("main32_r202639"))
+"""The MAIN 32 captures, whose expected files are the record no change may move."""
+
+R202639_CAPTURES: Final = tuple(Capture(f"r202639-{handle}") for handle in "abcde")
+"""The r202639 reference captures, by their opaque handles."""
+
+CAPTURES: Final = (*MAIN32_CAPTURES, *R202639_CAPTURES)
 """The captures every replay runs over, by handle; each has its expected files on record."""
 
 

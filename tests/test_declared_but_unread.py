@@ -395,29 +395,37 @@ def test_every_baseline_entry_is_still_declared(source: Source) -> None:
     )
 
 
-@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
-def test_no_internal_route_is_observable_after_all(source: Source) -> None:
-    """An internal-route entry must be the only thing keeping its property out.
+def test_no_internal_route_is_observable_after_all() -> None:
+    """An internal-route entry must be the only thing keeping its property out on some tree.
 
     This is the entry that could quietly become an allowlist: unlike the
     baseline it claims the property *is* consumed, and a claim the experiment
-    could check is one it should. So the moment a route's property does move a
-    field the integration reads, the entry has to go — otherwise the next
-    property added beside it inherits an exemption nobody re-examined.
+    could check is one it should. So the moment a route's property moves a
+    field the integration reads on every tree that declares it, the entry has to
+    go — otherwise the next property added beside it inherits an exemption
+    nobody re-examined. A tree where it does reach a reader only shows the route
+    is not the sole consumer there; another tree can still need it.
     """
-    surfaced, _ = _classified(source)
-    redundant = sorted(str(key) for key in _INTERNAL_ROUTES if key in surfaced)
+    surfaced_on = {source.stem: _classified(source)[0] for source in SOURCES}
+    declared_on = {source.stem: set(_declared(source.tree())) for source in SOURCES}
+    redundant = sorted(
+        str(key)
+        for key in _INTERNAL_ROUTES
+        if all(
+            key in surfaced_on[stem] for stem, declared in declared_on.items() if key in declared
+        )
+    )
     assert not redundant, (
-        f"internal-route entries whose property now reaches a reader: {redundant}. "
-        "The route is no longer the only thing consuming it; delete the entry."
+        f"internal-route entries whose property now reaches a reader on every tree: {redundant}. "
+        "The route is no longer the only thing consuming it anywhere; delete the entry."
     )
 
 
-@pytest.mark.parametrize("source", SOURCES, ids=SOURCE_IDS)
-def test_every_internal_route_is_still_declared(source: Source) -> None:
-    declared = set(_declared(source.tree()))
+def test_every_internal_route_is_still_declared() -> None:
+    """Each route names a property some tree still declares; one no tree declares has gone away."""
+    declared = set().union(*(_declared(source.tree()) for source in SOURCES))
     stale = sorted(str(key) for key in _INTERNAL_ROUTES if key not in declared)
-    assert not stale, f"internal-route entries {source.stem} does not declare: {stale}"
+    assert not stale, f"internal-route entries no tree declares: {stale}"
 
 
 @pytest.mark.parametrize(
