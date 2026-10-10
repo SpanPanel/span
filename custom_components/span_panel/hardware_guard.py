@@ -10,9 +10,9 @@ with. A panel that reports `UNKNOWN` is judged again once its model is known;
 from __future__ import annotations
 
 import asyncio
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 import logging
-from typing import Final
+from typing import Final, Literal
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
@@ -35,6 +35,19 @@ HARDWARE_READ_TIMEOUT_S: Final = 5.0
 """How long a caller waits for the panel's status before going on without it."""
 
 
+class _HardwareRead(Enum):
+    """A status read that failed, so nothing is known about the hardware."""
+
+    UNREAD = auto()
+
+
+HARDWARE_UNREAD: Final = _HardwareRead.UNREAD
+"""What `async_read_hardware_version` answers when the status cannot be read."""
+
+type HardwareRead = str | None | Literal[_HardwareRead.UNREAD]
+"""A hardware version as published, None where the firmware publishes none, or `HARDWARE_UNREAD`."""
+
+
 class HardwareVerdict(StrEnum):
     """What the REST hardware version alone allows."""
 
@@ -44,10 +57,15 @@ class HardwareVerdict(StrEnum):
 
 
 def hardware_verdict(hardware_version: str | None) -> HardwareVerdict:
-    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused."""
-    if not hardware_version or hardware_version in VALIDATED_HARDWARE_VERSIONS:
+    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused.
+
+    Surrounding whitespace and the case of `UNKNOWN` are ignored, so a spelling
+    the changelog did not show cannot alone make the terminal refusal.
+    """
+    version = (hardware_version or "").strip()
+    if not version or version in VALIDATED_HARDWARE_VERSIONS:
         return HardwareVerdict.PROCEED
-    if hardware_version == UNDETERMINED_HARDWARE_VERSION:
+    if version.upper() == UNDETERMINED_HARDWARE_VERSION:
         return HardwareVerdict.CHECK_MODEL
     return HardwareVerdict.REFUSE
 
@@ -61,7 +79,7 @@ def refuses_entities(verdict: HardwareVerdict, model: str | None) -> bool:
     return True
 
 
-def registers_by_passphrase_only(hardware_version: str | None) -> bool:
+def registers_by_passphrase_only(hardware_version: HardwareRead) -> bool:
     """Whether the panel registers by passphrase only, so proximity is never offered.
 
     Unknown hardware answers False: offering proximity to a panel that turns out
@@ -73,15 +91,17 @@ def registers_by_passphrase_only(hardware_version: str | None) -> bool:
 
 async def async_read_hardware_version(
     hass: HomeAssistant, host: str, transport: PanelRestTransport
-) -> str | None:
-    """Read the panel's REST `hardwareVersion`, or None when it cannot be had.
+) -> HardwareRead:
+    """Read the panel's REST `hardwareVersion`, or `HARDWARE_UNREAD` when it cannot be had.
 
     Fail-open by design: a timeout, a refused or reset connection, a certificate
-    the pin rejects and a body that cannot be read all answer None, which every
-    caller treats exactly as firmware that does not publish the field. The read
-    only ever refines what a caller does, so it must never be the reason a panel
-    is locked out or a service fails; the caller's own path reports every one of
-    these failures in its own terms.
+    the pin rejects, an unusable URL and a body that cannot be read all answer
+    `HARDWARE_UNREAD`. Every caller proceeds on it as on firmware that does not
+    publish the field, but setup, unlike there, leaves a standing refusal's Repair
+    up: an unread status is no evidence the hardware changed. The read only ever
+    refines what a caller does, so it must never be the reason a panel is locked
+    out or a service fails; the caller's own path reports every one of these
+    failures in its own terms.
 
     Over the entry's own transport -- the pinned anchor on the HTTPS port when
     it holds one -- and Home Assistant's shared client otherwise.
@@ -94,7 +114,7 @@ async def async_read_hardware_version(
                 httpx_client=get_async_client(hass),
                 ssl_context=transport.ssl_context,
             )
-    except (TimeoutError, SpanPanelError, httpx.HTTPError) as err:
+    except (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL) as err:
         _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %s", host, err)
-        return None
+        return HARDWARE_UNREAD
     return status.hardware_version

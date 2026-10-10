@@ -95,7 +95,13 @@ from .frontend import (
     async_save_panel_settings as async_save_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
-from .hardware_guard import async_read_hardware_version, hardware_verdict, refuses_entities
+from .hardware_guard import (
+    HARDWARE_UNREAD,
+    HardwareRead,
+    async_read_hardware_version,
+    hardware_verdict,
+    refuses_entities,
+)
 from .hardware_repairs import (
     RefusedHardware,
     async_clear_unvalidated_hardware,
@@ -305,7 +311,7 @@ async def _async_pinned_ca(
 def _async_enforce_hardware_verdict(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
-    hardware_version: str | None,
+    hardware_version: HardwareRead,
     model: str | None,
 ) -> None:
     """Refuse a panel this release has not been validated with, or clear a standing refusal.
@@ -314,8 +320,11 @@ def _async_enforce_hardware_verdict(
     panel's `info/model` from the first refresh. A refusal raises the Repair and
     a `ConfigEntryError`, which is terminal: the hardware will not change by
     retrying, and a release validated with it is the remedy. A setup that
-    proceeds clears the Repair a previous one raised.
+    proceeds clears the Repair a previous one raised; one whose status could not
+    be read proceeds without judging, and leaves the Repair as it was.
     """
+    if hardware_version is HARDWARE_UNREAD:
+        return
     if not refuses_entities(hardware_verdict(hardware_version), model):
         async_clear_unvalidated_hardware(hass, entry)
         return
