@@ -173,6 +173,7 @@ _DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_defe
 """Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
 
 HARDWARE_READ_TIMEOUT_S: Final = 5.0
+"""How long setup waits for the panel's status before going on without it."""
 
 
 class _HardwareRead(Enum):
@@ -182,7 +183,7 @@ class _HardwareRead(Enum):
 
 
 HARDWARE_UNREAD: Final = _HardwareRead.UNREAD
-"""How long setup waits for the panel's status before going on without it."""
+"""What `_async_read_hardware_version` answers when the status cannot be read."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
