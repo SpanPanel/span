@@ -354,11 +354,17 @@ class CurrentMonitor:
         reading its own last snapshot: the monitor sees a snapshot only on the
         coordinator's next push after setup, and a threshold set before then
         must still land on its circuit.
+
+        The ids this monitor holds overrides for are searched too, so a circuit
+        that has left the panel can still have its override cleared through its
+        orphaned entity. Only this integration's entities are read: another
+        integration's unique_id could hold a segment equal to a short opaque id.
         """
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
-        if entry is not None and entry.unique_id:
-            circuit_id = match_circuit_id(entry.unique_id, circuit_ids)
+        if entry is not None and entry.platform == DOMAIN and entry.unique_id:
+            known = {*circuit_ids, *self._circuit_overrides}
+            circuit_id = match_circuit_id(entry.unique_id, known)
             if circuit_id is not None:
                 return circuit_id
         # Fall through: assume it's already a circuit_id

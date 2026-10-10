@@ -261,6 +261,30 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
     )
 
 
+def _raise_if_entitys_panel_not_loaded(
+    hass: HomeAssistant, target: str, panel_entry_id: str | None
+) -> None:
+    """Refuse a threshold call whose entity's own panel is chosen but not loaded.
+
+    Said as that, rather than as monitoring being off, which nothing has read. A
+    loaded panel, no chosen panel, and a raw id, which belongs to no entity, are
+    all left to the caller's own refusal.
+    """
+    if panel_entry_id is None:
+        return
+    config_entry = hass.config_entries.async_get_entry(panel_entry_id)
+    if config_entry is not None and loaded_runtime_data(config_entry) is not None:
+        return
+    entity_entry = er.async_get(hass).async_get(target)
+    if entity_entry is not None and entity_entry.platform == DOMAIN:
+        raise ServiceValidationError(
+            f"The SPAN Panel that entity {target} belongs to is not loaded.",
+            translation_domain=DOMAIN,
+            translation_key="favorite_panel_not_loaded",
+            translation_placeholders={"entity_id": target},
+        )
+
+
 def _threshold_panel_entry_id(
     hass: HomeAssistant, target: str, requested: str | None
 ) -> str | None:
@@ -318,13 +342,13 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         live circuit ids, which the monitor itself does not hold until the
         coordinator's next push.
         """
-        result = _get_runtime_data(
-            _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
-        )
+        panel_entry_id = _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
+        result = _get_runtime_data(panel_entry_id)
         if result is not None:
             runtime_data, _entry = result
             if runtime_data.coordinator.current_monitor is not None:
                 return runtime_data.coordinator.current_monitor, runtime_data
+        _raise_if_entitys_panel_not_loaded(hass, target, panel_entry_id)
         raise ServiceValidationError(
             "No SPAN panel with current monitoring enabled.",
             translation_domain=DOMAIN,

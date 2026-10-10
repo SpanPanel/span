@@ -537,6 +537,35 @@ class TestCircuitEntityResolution:
                 "sensor.kitchen_power"
             )
 
+    def test_a_departed_circuit_with_an_override_still_resolves(self):
+        """An orphaned entity reaches the override stored for its circuit, so it can be cleared."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor.set_circuit_override("b-7", {SPIKE_THRESHOLD_PCT: 90})
+
+        with _registry_holding("span_nt-0000-test1_b-7_power"):
+            circuit_id = monitor.resolve_entity_to_circuit_id("sensor.b_7_power", {"c-1"})
+        assert circuit_id == "b-7"
+
+        monitor.clear_circuit_override(circuit_id)
+        assert "b-7" not in monitor._circuit_overrides
+
+    def test_another_integrations_entity_is_not_matched(self):
+        """A foreign unique_id with a segment equal to a circuit id names no circuit."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        registry = MagicMock()
+        registry.async_get.return_value = MagicMock(
+            unique_id="x_c-1_y", platform="template", config_entry_id=None
+        )
+
+        with patch(
+            "custom_components.span_panel.current_monitor.er.async_get", return_value=registry
+        ):
+            assert monitor.resolve_entity_to_circuit_id("sensor.some_template", {"c-1"}) == (
+                "sensor.some_template"
+            )
+
 
 def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:
     """Register the monitoring services on a mock hass and return the handlers by name."""
@@ -631,6 +660,35 @@ class TestThresholdServicesBeforeTheFirstPush:
 
         monitor.process_snapshot(snapshot)
         assert monitor.get_circuit_state("c-12").last_spike_alert is None
+
+    async def test_the_override_of_a_circuit_that_left_the_panel_is_cleared(self):
+        """Its orphaned entity still names it, though the coordinator no longer publishes it."""
+        hass = _make_hass()
+        entry, monitor, _snapshot = _panel_with_a_fresh_monitor(hass, "panel_a", "c-1")
+        _loaded(hass, entry)
+        monitor.set_circuit_override("gone", {SPIKE_THRESHOLD_PCT: 90})
+        handlers = _monitoring_handlers(hass)
+
+        with _registry_holding("span_nt-0000-test1_gone_current"):
+            await handlers["clear_circuit_threshold"](_call(circuit_id="sensor.gone_current"))
+
+        assert "gone" not in monitor._circuit_overrides
+
+    async def test_an_entity_whose_panel_is_not_loaded_says_so(self):
+        """Not that monitoring is off: nothing about monitoring was read."""
+        hass = _make_hass()
+        entry, _monitor, _snapshot = _panel_with_a_fresh_monitor(hass, "panel_a", "c-1")
+        _loaded(hass, entry)
+        handlers = _monitoring_handlers(hass)
+
+        with (
+            _registry_holding("span_nt-0000-test2_c-1_current", config_entry_id="panel_b"),
+            pytest.raises(ServiceValidationError) as raised,
+        ):
+            await handlers["clear_circuit_threshold"](_call(circuit_id="sensor.b_c_1_current"))
+
+        assert raised.value.translation_key == "favorite_panel_not_loaded"
+        assert raised.value.translation_placeholders == {"entity_id": "sensor.b_c_1_current"}
 
 
 class TestThresholdServicesChooseTheEntitysOwnPanel:
