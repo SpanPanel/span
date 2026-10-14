@@ -52,14 +52,14 @@ from custom_components.span_panel.const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
-from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_panel_unique_id,
     build_switch_unique_id,
 )
 from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
-from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL
+from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL, CONTROL_MODE
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -484,6 +484,24 @@ async def test_a_new_entry_refuses_control_without_a_logged_in_user(
     )
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
     assert ControlPolicy.from_options(entry.options).allow_contextless is False
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_new_entry_lets_only_administrators_operate_the_panel(
+    hass: HomeAssistant,
+) -> None:
+    """A new install starts with control restricted to administrators, and says so in its options.
+
+    Stored rather than left absent, so an older release reading the entry after
+    a downgrade does not take the missing key for its own default of any user.
+    """
+    result = await _create_v2_entry(hass)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert entry.options[CONTROL_MODE] == ControlMode.ADMIN_ONLY.value
+    assert ControlPolicy.from_options(entry.options).mode is ControlMode.ADMIN_ONLY
 
 
 async def _reach_the_ca_step(hass: HomeAssistant):
@@ -945,7 +963,7 @@ async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
-    assert (entry.version, entry.minor_version) == (7, 3)
+    assert (entry.version, entry.minor_version) == (CURRENT_CONFIG_VERSION, CURRENT_CONFIG_MINOR_VERSION)
     assert _UNMAPPED_TAB_OPTION not in entry.options
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
 
@@ -975,8 +993,87 @@ async def test_v7_3_migration_on_an_entry_that_never_set_the_option(
 
     assert await async_migrate_entry(hass, entry) is True
 
-    assert entry.minor_version == 3
-    assert dict(entry.options) == {ALLOW_CONTEXTLESS_CONTROL: True}
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    # Only the 7.4 step's pin is added; the 7.3 step itself had nothing to take.
+    assert dict(entry.options) == {
+        ALLOW_CONTEXTLESS_CONTROL: True,
+        CONTROL_MODE: ControlMode.ALL_USERS.value,
+    }
+
+
+def _v7_3_entry(options: dict[str, object]) -> MockConfigEntry:
+    """Build a v2 entry as the release before control defaulted to administrators left it."""
+    return MockConfigEntry(
+        version=7,
+        minor_version=3,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options=options,
+        unique_id="SPAN-V2-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v7_4_migration_keeps_control_open_to_every_user(
+    hass: HomeAssistant,
+) -> None:
+    """An entry that never chose who may operate the panel read it as any user, and still does."""
+    entry = _v7_3_entry({})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
+    assert ControlPolicy.from_options(entry.options).mode is ControlMode.ALL_USERS
+
+
+@pytest.mark.parametrize("mode", list(ControlMode))
+@pytest.mark.asyncio
+async def test_v7_4_migration_keeps_a_chosen_mode(hass: HomeAssistant, mode: ControlMode) -> None:
+    """A user who already chose made a choice the migration must not undo."""
+    entry = _v7_3_entry({CONTROL_MODE: mode.value})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.options[CONTROL_MODE] == mode.value
+
+
+@pytest.mark.parametrize("stored", ["nonsense", None, 1, ["admin_only"]])
+@pytest.mark.asyncio
+async def test_v7_4_migration_reads_an_unreadable_mode_as_it_was_read(
+    hass: HomeAssistant, stored: object
+) -> None:
+    """Anything but a known mode resolved to any user before, so the migration writes that."""
+    entry = _v7_3_entry({CONTROL_MODE: stored})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
+
+
+@pytest.mark.asyncio
+async def test_home_assistant_actually_runs_the_v7_4_migration(hass: HomeAssistant) -> None:
+    """Core must decide to migrate a v7.3 entry, which it does only if the flow's minor version moved too."""
+    entry = _v7_3_entry({})
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
 
 
 # ---------- zeroconf v2 discovery ----------

@@ -88,6 +88,16 @@ class ControlMode(StrEnum):
     see the platforms."""
 
 
+DEFAULT_CONTROL_MODE = ControlMode.ADMIN_ONLY
+"""Who may operate the panel, for an entry that never said.
+
+Administrators, because an install that has made no choice should not hand
+every non-admin user the panel's relays. Entries created before this default
+existed allowed any user; migration 7.4 writes that into each one's options, so
+this constant only ever decides for an entry created since.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class ControlCaller:
     """Who issued the command currently being published, if anyone.
@@ -143,9 +153,9 @@ class ControlPolicy:
     Every default reproduces the behaviour an existing entry already has. A
     silent tightening on upgrade that breaks a household's automations is a worse
     outcome than the status quo, and the user cannot diagnose it from the
-    entity's error. `allow_contextless` departs from what an older entry did, and
-    can only because migration 7.2 stored that older behaviour in every such
-    entry before this reads it.
+    entity's error. `mode` and `allow_contextless` depart from what an older
+    entry did, and can only because migrations 7.4 and 7.2 stored that older
+    behaviour in every such entry before this reads it.
     """
 
     mode: ControlMode
@@ -166,7 +176,7 @@ class ControlPolicy:
         four constants repeated at each reader.
         """
         return cls(
-            mode=ControlMode.ALL_USERS,
+            mode=DEFAULT_CONTROL_MODE,
             allow_contextless=DEFAULT_ALLOW_CONTEXTLESS_CONTROL,
             lock_timeout_minutes=None,
             relay_debounce_seconds=DEFAULT_RELAY_DEBOUNCE_SECONDS,
@@ -177,7 +187,7 @@ class ControlPolicy:
         """Resolve the policy from one entry's options."""
         raw_mode = options.get(CONTROL_MODE)
         try:
-            mode = ControlMode(raw_mode) if isinstance(raw_mode, str) else ControlMode.ALL_USERS
+            mode = ControlMode(raw_mode) if isinstance(raw_mode, str) else DEFAULT_CONTROL_MODE
         except ValueError:
             _LOGGER.warning("Unknown control_mode %r; falling back to all_users", raw_mode)
             mode = ControlMode.ALL_USERS

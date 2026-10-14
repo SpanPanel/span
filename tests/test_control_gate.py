@@ -668,16 +668,16 @@ def test_only_failed_means_it_will_never_be_delivered(
 
 
 def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
-    """Permissive except for contextless control, which an older entry has stored.
+    """Administrators only, with no contextless control, both of which an older entry has stored.
 
-    A silent tightening on upgrade is worse than the status quo, so the one
-    default that tightens is safe only because migration 7.2 wrote the old
-    behaviour into every entry from before it; see the two tests above.
+    A silent tightening on upgrade is worse than the status quo, so the two
+    defaults that tighten are safe only because migrations 7.2 and 7.4 wrote
+    the old behaviour into every entry from before them.
     """
     policy = ControlPolicy.from_options({})
 
     assert policy == ControlPolicy.default()
-    assert policy.mode is ControlMode.ALL_USERS
+    assert policy.mode is ControlMode.ADMIN_ONLY
     assert policy.allow_contextless is False
     assert policy.lock_enabled is False
     assert policy.relay_debounce_seconds == 2.0
