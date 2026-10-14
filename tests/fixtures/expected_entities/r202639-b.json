@@ -1392,7 +1392,7 @@
       "hidden_by": null,
       "original_name": "Current Run Config",
       "platform": "sensor",
-      "state": "unknown",
+      "state": "panel_on_grid",
       "state_class": null,
       "translation_key": "current_run_config",
       "unit_of_measurement": null
@@ -1448,7 +1448,7 @@
       "hidden_by": null,
       "original_name": "DSM Grid State",
       "platform": "sensor",
-      "state": "unknown",
+      "state": "dsm_on_grid",
       "state_class": null,
       "translation_key": "dsm_grid_state",
       "unit_of_measurement": null
