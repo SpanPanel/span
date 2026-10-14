@@ -8,27 +8,19 @@ All notable changes to this project will be documented in this file.
 
 - **A meter the panel reports without a breaker space** gets power, energy and current sensors, no switch, and its own place outside the breaker grid.
 - **Circuits that share a meter or relay name each other**, the panel view draws them as one slot, and current monitoring uses their combined rating.
-- **An EV charger lock** where the panel lets the charger be locked, and **busbar current, line frequency and upstream protection rating** sensors where the panel
-  publishes them.
+- **An EV charger lock** where the panel lets the charger be locked, and **busbar current, line frequency and upstream protection rating** sensors where the
+  panel publishes them.
 - **A battery the panel declares gets its device before its first reading**, reading unknown until then, and a battery fed by a circuit reports its connection.
 - **Registration says when to retry** if the panel limits attempts, and setup asks only for the passphrase where the panel does not support proximity.
 
 ### Changed
 
 - **Circuits with a solar role read and display as generation**, and solar fed through such a circuit gets a Solar device without a separate inverter device.
-- **A panel that publishes no solar source no longer gets a Solar device or PV Power sensor**; on an upgraded install those entities stay unavailable until removed.
-- **New installs no longer create the Status Postal Code and Status Time Zone sensors**; existing ones stay and keep updating, and diagnostics redact both values.
+- **A panel that publishes no solar source no longer gets a Solar device or PV Power sensor**; on an upgraded install those entities stay unavailable until
+  removed.
+- **New installs no longer create the Status Postal Code and Status Time Zone sensors, which say where the panel is installed**; existing ones stay and keep
+  updating, and diagnostics redact both values.
 - **The panel view draws only the breaker positions the panel has**, and shows a battery charge the panel has not reported as unknown rather than 0%.
-
-### Fixed
-
-- **An energy counter reading beyond what its breaker could ever carry is never used as the dip-compensation baseline**, so it cannot skew energy totals.
-- **The current-monitoring summary is hidden while monitoring is off**, instead of reading "0 circuits".
-
-## [2.1.3] - 10/2026
-
-### Changed
-
 - **Setup stops with a repair issue when the panel reports a hardware version this release has not been validated with.**
 
 ### Removed
@@ -38,6 +30,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **An energy counter reading beyond what its breaker could ever carry is never used as the dip-compensation baseline**, so it cannot skew energy totals.
+- **The current-monitoring summary is hidden while monitoring is off**, instead of reading "0 circuits".
+- **DSM State, DSM Grid State and Current Run Config stay on-grid on a panel with no Microgrid Interconnect Device**, instead of dropping to unknown for a
+  moment whenever Grid Power read near zero.
 - **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,
   instead of a false 0 W that history and statistics could not tell from a real reading.
 - **Get monitoring status reports no current or utilization for a circuit or main breaker that has not been measured yet**, instead of 0 A and 0%.
