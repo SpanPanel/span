@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
   updating, and diagnostics redact both values.
 - **The panel view draws only the breaker positions the panel has**, and shows a battery charge the panel has not reported as unknown rather than 0%.
 - **Setup stops with a repair issue when the panel reports a hardware version this release has not been validated with.**
+- **New installs let only administrators operate the panel**, and an existing install keeps the Who may operate the panel setting it had.
 
 ### Removed
 
