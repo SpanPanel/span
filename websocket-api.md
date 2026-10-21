@@ -200,27 +200,27 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Circuit Object
 
-| Field                     | Type        | Description                                                                                                       |
-| ------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `tabs`                    | int[]       | Sorted breaker slot positions (1-indexed)                                                                         |
-| `name`                    | string/null | Circuit name from the panel (null if unnamed)                                                                     |
-| `outside_panel`           | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer                            |
-| `is_generation`           | bool        | Whether the circuit's power and energy read as generation, such as solar                                          |
-| `shared_meter_group`      | string/null | The key of the group of circuits that share this circuit's meter, or null                                         |
-| `shared_relay_group`      | string/null | The key of the group of circuits that share this circuit's relay, or null                                         |
-| `voltage`                 | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say                                     |
-| `device_type`             | string      | `circuit`, `pv`, or `evse`                                                                                        |
-| `relay_state`             | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                                                    |
-| `relay_state_target`      | string/null | The relay state last commanded and not yet reached, or null                                                       |
-| `always_on`               | bool        | Whether the panel keeps this circuit on and offers no relay control                                               |
-| `priority`                | string      | Shed priority as the panel publishes it: `NEVER`, `SOC_THRESHOLD`, `OFF_GRID` or `UNKNOWN`                        |
-| `priority_target`         | string/null | The priority last commanded and not yet reached, or null                                                          |
-| `is_never_backup`         | bool        | Whether the panel pins the priority, so it cannot be set                                                          |
-| `is_user_controllable`    | bool        | Whether the circuit relay can be toggled                                                                          |
-| `breaker_rating_a`        | float/null  | Breaker rating in force: the user's override where one applies, else the panel's (null if the panel reports none) |
-| `panel_breaker_rating_a`  | float/null  | The rating the panel publishes (null if not reported)                                                             |
-| `breaker_rating_user_set` | bool        | Whether a user's override applies, so `breaker_rating_a` differs from the panel's                                 |
-| `entities`                | object      | Role-keyed map of entity IDs (see below)                                                                          |
+| Field                     | Type        | Description                                                                                                                                                                  |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabs`                    | int[]       | Sorted breaker slot positions (1-indexed)                                                                                                                                    |
+| `name`                    | string/null | Circuit name from the panel (null if unnamed)                                                                                                                                |
+| `outside_panel`           | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer                                                                                       |
+| `is_generation`           | bool        | Whether the circuit's power and energy read as generation, such as solar                                                                                                     |
+| `shared_meter_group`      | string/null | The key of the group of circuits that share this circuit's meter, or null                                                                                                    |
+| `shared_relay_group`      | string/null | The key of the group of circuits that share this circuit's relay, or null                                                                                                    |
+| `voltage`                 | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say                                                                                                |
+| `device_type`             | string      | `circuit`, `pv`, or `evse`                                                                                                                                                   |
+| `relay_state`             | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                                                                                                               |
+| `relay_state_target`      | string/null | The relay state last commanded and not yet reached, or null                                                                                                                  |
+| `always_on`               | bool        | Whether the panel keeps this circuit on and offers no relay control                                                                                                          |
+| `priority`                | string      | Shed priority as the panel publishes it: `NEVER`, `SOC_THRESHOLD`, `OFF_GRID` or `UNKNOWN`                                                                                   |
+| `priority_target`         | string/null | The priority last commanded and not yet reached, or null                                                                                                                     |
+| `is_never_backup`         | bool        | Whether the panel pins the priority, so it cannot be set                                                                                                                     |
+| `is_user_controllable`    | bool        | Whether the circuit relay can be toggled                                                                                                                                     |
+| `breaker_rating_a`        | float/null  | Breaker rating in force: the user's override where one applies, else the panel's (null if the panel reports none, or while an override waits for the panel's service rating) |
+| `panel_breaker_rating_a`  | float/null  | The rating the panel publishes (null if not reported)                                                                                                                        |
+| `breaker_rating_user_set` | bool        | Whether a user's override applies, so `breaker_rating_a` differs from the panel's                                                                                            |
+| `entities`                | object      | Role-keyed map of entity IDs (see below)                                                                                                                                     |
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys

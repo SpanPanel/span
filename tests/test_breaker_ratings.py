@@ -113,11 +113,29 @@ def test_resolve_pending_panel_rating_is_unrated() -> None:
     )
 
 
-def test_resolve_pending_service_rating_shows_panel() -> None:
+def test_resolve_pending_service_rating_is_unrated() -> None:
+    """A corrected circuit is not judged against the rating the user corrected, even for a moment.
+
+    The panel's own rating is still reported beside it: it is the wire value, and
+    known.
+    """
+    pending = BreakerRating(None, PANEL_A, False)
+    assert resolve(_circuit(), _override(), None, "declared") == pending
+    assert resolve(_circuit(), _override(), SERVICE_A, "unknown") == pending
+    assert resolve(_circuit(), _override(), None, "unknown") == pending
+
+
+def test_resolve_pending_service_rating_without_an_override_shows_panel() -> None:
     expected = BreakerRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), _override(), None, "declared") == expected
-    assert resolve(_circuit(), _override(), SERVICE_A, "unknown") == expected
+    assert resolve(_circuit(), None, None, "declared") == expected
+    assert resolve(_circuit(), None, SERVICE_A, "unknown") == expected
+
+
+def test_resolve_undeclared_service_rating_shows_panel() -> None:
+    """No service rating published: the override is being deleted, and the panel's rating applies."""
+    expected = BreakerRating(PANEL_A, PANEL_A, False)
     assert resolve(_circuit(), _override(), None, "undeclared") == expected
+    assert resolve(_circuit(), _override(), SERVICE_A, "undeclared") == expected
 
 
 def test_resolve_override_above_service_shows_panel() -> None:

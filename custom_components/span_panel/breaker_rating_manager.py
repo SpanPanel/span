@@ -186,9 +186,9 @@ class BreakerRatingManager:
     def resolve(self, circuit_id: str, snapshot: SpanPanelSnapshot) -> BreakerRating:
         """Return the rating a reader should use for one circuit.
 
-        Judged against the service rating declaration of the most recent
-        reconcile, which is "unknown" until `begin`, so before then it returns
-        the panel's rating.
+        Judged against the panel's service rating declaration, which is
+        "unknown" until `begin`, so before then a corrected circuit is pending
+        and has no effective rating.
         """
         return resolve_rating(
             snapshot.circuits.get(circuit_id),

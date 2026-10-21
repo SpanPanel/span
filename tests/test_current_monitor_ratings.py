@@ -138,6 +138,23 @@ class TestAlerts:
         status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
         assert status["utilization_pct"] == 60.0
 
+    async def test_a_corrected_circuit_is_skipped_while_the_service_rating_is_pending(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Declared with no value yet: not judged against the 20 A the user corrected."""
+        snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
+        monitor, manager = await _monitor(hass, snapshot)
+        manager.set_override("circuit-2", snapshot, 50)
+        pending = replace(snapshot, main_breaker_rating_a=None)
+
+        monitor.process_snapshot(pending)
+
+        # Skipped as an unrated circuit is: no state is kept, so nothing can alert.
+        assert monitor.get_circuit_state("circuit-2") is None
+        assert manager.resolve("circuit-2", pending).effective_a is None
+        status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert (status["breaker_rating_a"], status["breaker_rating_user_set"]) == (None, False)
+
     async def test_the_alert_names_the_corrected_rating(self, hass: HomeAssistant) -> None:
         """At 45 A a 50 A breaker is over 80%; the event and the text say 50 A."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 45.0))

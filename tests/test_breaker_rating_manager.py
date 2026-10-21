@@ -127,8 +127,8 @@ async def test_a_set_override_is_saved_and_loaded_by_the_next_manager(
     await reloaded.async_load()
     reloaded.reconcile(_snapshot(), _DECLARED)  # inert; resolve uses the loaded overrides
     rating = reloaded.resolve("circuit-2", _snapshot())
-    # The declaration is unknown until a reconcile has run, so the panel's rating shows.
-    assert (rating.effective_a, rating.panel_a, rating.user_set) == (20.0, 20.0, False)
+    # The declaration is unknown until `begin`, so the correction is pending: unrated.
+    assert (rating.effective_a, rating.panel_a, rating.user_set) == (None, 20.0, False)
     reloaded.begin(_snapshot(), _DECLARED)
     rating = reloaded.resolve("circuit-2", _snapshot())
     assert (rating.effective_a, rating.panel_a, rating.user_set) == (50.0, 20.0, True)

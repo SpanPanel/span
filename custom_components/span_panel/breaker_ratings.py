@@ -10,8 +10,9 @@ whether it applies, so every reader of a rating agrees. First match wins:
    the circuit has left a complete snapshot: the override is deleted and the
    user told.
 3. The circuit's rating, or the service rating, is declared but has no value
-   yet, or whether it is declared is not known: the override is kept and the
-   panel's rating shows, silently. It applies again when the value arrives.
+   yet, or whether it is declared is not known: the override is kept,
+   silently, and the circuit has no effective rating, so nothing shows it as
+   user-set and monitoring skips it. It applies again when the value arrives.
 4. The override is above the service rating, or equals the panel's rating:
    deleted and the user told. When the panel has caught up, a later change by
    the panel should show through rather than be masked.
@@ -130,19 +131,25 @@ def resolve(
     service_a: float | None,
     service: Declaration,
 ) -> BreakerRating:
-    """Return the rating a reader should use for one circuit."""
+    """Return the rating a reader should use for one circuit.
+
+    A corrected circuit whose service rating is pending, declared with no value
+    yet or with its declaration not known, has no effective rating: the
+    correction cannot be checked against its bound, and the panel's rating is
+    the one the user corrected. Judging a tandem breaker against it even for a
+    moment raises the false alert the correction exists to stop. The panel's
+    rating is still reported, since it is known.
+    """
     if circuit is None:
         return BreakerRating(None, None, False)
     panel = circuit.breaker_rating_a
     if panel is None:
         return BreakerRating(None, None, False)
-    if (
-        override is not None
-        and service == "declared"
-        and service_a is not None
-        and override.rating_a <= service_a
-        and override.rating_a != panel
-    ):
+    if override is None or service == "undeclared":
+        return BreakerRating(panel, panel, False)
+    if service == "unknown" or service_a is None:
+        return BreakerRating(None, panel, False)
+    if override.rating_a <= service_a and override.rating_a != panel:
         return BreakerRating(float(override.rating_a), panel, True)
     return BreakerRating(panel, panel, False)
 
