@@ -353,6 +353,22 @@ def is_standing(hass: HomeAssistant, entry: ConfigEntry, notice_id: str) -> bool
 
 
 @callback
+def async_withdraw(hass: HomeAssistant, entry: ConfigEntry, notice_id: str) -> None:
+    """Take a notice down because what it reported has been undone before it was read.
+
+    For a caller whose notice reports the current state of something, replaced
+    in place as that changes, when the state returns to where the user last saw
+    it: left standing, the notice would report a change that, as things stand,
+    did not happen.
+
+    Dismissing the notification is enough: `_on_change` observes the removal and
+    drops the standing record, as for a dismissal by the user, and leaves the
+    announcement record alone. Quiet when the notice is not on screen.
+    """
+    async_dismiss(hass, _notification_id(entry, notice_id))
+
+
+@callback
 def _on_change(
     hass: HomeAssistant,
     entry: ConfigEntry,

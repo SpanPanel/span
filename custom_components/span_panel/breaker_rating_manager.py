@@ -13,6 +13,7 @@ Nothing here decides whether a rating applies. Every comparison is a call into
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
@@ -223,8 +224,7 @@ class BreakerRatingManager:
             self._save()
         if result.changes:
             self._fire(change.circuit_id for change in result.changes)
-            self._announce_pending = True
-            self._hass.async_create_task(self._async_announce())
+            self._announce()
 
     def set_override(self, circuit_id: str, snapshot: SpanPanelSnapshot, rating_a: int) -> None:
         """Correct a circuit's breaker rating.
@@ -284,18 +284,46 @@ class BreakerRatingManager:
             self._hass.async_create_task(self._async_announce())
 
     def _record(self, changes: tuple[OverrideChange, ...]) -> None:
-        """Merge changes into those the user has not seen, the latest per circuit winning.
+        """Merge changes into those the user has not seen, each circuit as it stands.
 
         What the user has seen is what was on screen: once the notice has been
         dismissed the earlier changes are spent. A notice still waiting to be
         raised counts as on screen, or two changes in a row would drop the first.
+
+        A circuit already listed keeps the panel rating it was listed from, the
+        last one the user saw, and takes everything else from the latest change.
+        A correction still in force whose panel rating is back where it was has
+        nothing to report, so its line goes; a removal always stands, since the
+        correction is gone whatever the panel now says.
         """
         if not self._announce_pending and not notices.is_standing(
             self._hass, self._entry, _NOTICE_ID
         ):
             self._unacknowledged = {}
         for change in changes:
-            self._unacknowledged[change.circuit_id] = change
+            earlier = self._unacknowledged.get(change.circuit_id)
+            merged = (
+                change
+                if earlier is None
+                else replace(change, panel_before_a=earlier.panel_before_a)
+            )
+            if merged.removed or merged.panel_after_a != merged.panel_before_a:
+                self._unacknowledged[change.circuit_id] = merged
+            else:
+                self._unacknowledged.pop(change.circuit_id, None)
+
+    def _announce(self) -> None:
+        """Raise the notice again as it now stands, or take it down if nothing is left.
+
+        Taking it down is for the panel undoing its own change before the user
+        read it. A user's change that empties the notice goes through `_forget`,
+        which leaves the notice for the user to dismiss.
+        """
+        if self._unacknowledged:
+            self._announce_pending = True
+            self._hass.async_create_task(self._async_announce())
+        else:
+            notices.async_withdraw(self._hass, self._entry, _NOTICE_ID)
 
     async def _async_announce(self) -> None:
         """Raise the notice listing every unacknowledged change.
@@ -309,6 +337,11 @@ class BreakerRatingManager:
             )
         finally:
             self._announce_pending = False
+        if not self._unacknowledged:
+            # Emptied while the text was read: by `_forget`, which leaves what
+            # stands alone, or by the panel undoing its change, which took the
+            # notice down already.
+            return
         lines = [
             "- "
             + text.get(change.reason, "**{circuit}**").format(

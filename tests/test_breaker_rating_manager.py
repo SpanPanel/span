@@ -363,6 +363,98 @@ async def test_changes_accumulate_while_the_notice_stands_and_reset_after_dismis
     assert "circuit-3" in _message(hass, entry)
 
 
+async def test_a_change_and_change_back_before_the_user_looks_is_not_reported(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """50 A set against 20 A; the panel says 25 A, then 20 A again, before the notice is dismissed.
+
+    As it stands nothing changed, so the line goes; it must not report "now 20 A
+    (was 25 A)", a value the user never saw. With no other line the notice has
+    nothing left to say, and is taken down.
+    """
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    await hass.async_block_till_done()
+    assert "now reports 25 A (was 20 A)" in _message(hass, entry)
+
+    manager.reconcile(_snapshot({"circuit-2": 20.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    assert not is_standing(hass, entry, _NOTICE)
+    assert _notification_id(entry) not in hass.data["persistent_notification"]
+    stored = await _stored(hass, entry)
+    assert stored["unacknowledged"] == {}
+    assert stored["overrides"]["circuit-2"] == {
+        "rating_a": 50,
+        "panel_a_at_set": 20.0,
+        "label": "Name of circuit-2",
+    }
+    assert manager.resolve("circuit-2", _snapshot()).user_set
+
+
+async def test_a_change_and_change_back_leaves_the_other_circuits_lines(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    manager.set_override("circuit-2", _snapshot(ratings), 50)
+    manager.set_override("circuit-3", _snapshot(ratings), 40)
+    manager.reconcile(_snapshot({"circuit-2": 25.0, "circuit-3": 30.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    manager.reconcile(_snapshot({"circuit-2": 20.0, "circuit-3": 30.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    message = _message(hass, entry)
+    assert "circuit-2" not in message
+    assert "**Name of circuit-3**: the panel now reports 30 A (was 15 A)" in message
+    assert list((await _stored(hass, entry))["unacknowledged"]) == ["circuit-3"]
+
+
+async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last_saw(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """20 A, then 25 A, then 50 A, which matches the correction: removed, and "was 20 A"."""
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    manager.reconcile(_snapshot({"circuit-2": 50.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
+    assert isinstance(change, dict)
+    assert (change["reason"], change["removed"]) == ("panel_agrees", True)
+    assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 50.0)
+    assert "**Name of circuit-2**: the panel now reports 50 A" in _message(hass, entry)
+
+
+async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """20 A, then 25 A, then 20 A with the service rating cut to 40 A: removed, so the user is told.
+
+    The panel's rating is back where the user last saw it, which would drop a
+    line for a correction still in force; this one is gone.
+    """
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    await hass.async_block_till_done()
+
+    manager.reconcile(_snapshot({"circuit-2": 20.0}, main=40), _DECLARED)
+    await hass.async_block_till_done()
+
+    change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
+    assert isinstance(change, dict)
+    assert (change["reason"], change["removed"]) == ("above_service_rating", True)
+    assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 20.0)
+    assert is_standing(hass, entry, _NOTICE)
+    assert "**Name of circuit-2**: your 50 A is above" in _message(hass, entry)
+
+
 async def test_two_changes_before_the_notice_is_raised_are_both_kept(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -391,6 +483,30 @@ async def test_two_changes_before_the_notice_is_raised_are_both_kept(
 
     assert "circuit-2" in _message(hass, entry)
     assert "circuit-3" in _message(hass, entry)
+
+
+async def test_a_change_and_change_back_before_the_notice_is_raised_raises_nothing(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Both land while the first notice's text is still being read: no empty notice follows."""
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    release = threading.Event()
+
+    def held(language: str, section: str) -> dict[str, str]:
+        release.wait(timeout=5)
+        return read_translations(language, section)
+
+    with patch(
+        "custom_components.span_panel.breaker_rating_manager.notices.read_translations", held
+    ):
+        manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+        manager.reconcile(_snapshot({"circuit-2": 20.0}), _DECLARED)
+        release.set()
+        await hass.async_block_till_done()
+
+    assert not is_standing(hass, entry, _NOTICE)
+    assert _notification_id(entry) not in hass.data.get("persistent_notification", {})
 
 
 async def test_unacknowledged_changes_are_stored_and_a_reloaded_manager_adds_to_them(
