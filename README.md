@@ -421,38 +421,6 @@ A remote current transformer (CT) the panel reads appears as **Remote CT** follo
 sensors, and Current where the panel reports it. Its Power is positive for power flowing into the panel. It has no breaker, so it gets no Breaker switch, no
 Circuit Priority select and no current monitoring, its Power sensor carries no relay or shed attributes, and the panel view draws it outside the breaker grid.
 
-### Setting a Monitoring Rating
-
-Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as one
-circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to
-judge the circuit against instead.
-
-Set it in the dashboard, in the circuit's **Monitoring** section while monitoring is on for that circuit, or with the `span_panel.set_circuit_monitoring_rating`
-and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's service rating, and only a circuit the panel
-publishes a breaker rating for can be given one. Enter the most current the measured wire can carry; for a tandem in one space, that is the sum of its breakers.
-Turning monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
-
-Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
-show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
-changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the panel's rating, and
-energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the
-rating judged against, and `monitoring_rating_user_set` beside it.
-
-For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel measures,
-and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit is the safer
-choice than guessing.
-
-A notification tells you when the panel overtakes a monitoring rating:
-
-- the panel's rating for the circuit changed, and the monitoring rating still applies;
-- the panel's rating now matches the monitoring rating, which was removed;
-- the panel no longer reports a rating for the circuit, and the monitoring rating was removed;
-- the circuit is no longer on the panel, and the monitoring rating was removed;
-- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed.
-
-Each line names the circuit, your monitoring rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed
-back before you looked is not reported.
-
 ### Circuit Energy Sensor Attributes
 
 | Attribute | Type   | Notes                                                                                                                                   |
@@ -852,7 +820,7 @@ integration shows one, such as "20A".
 both loads against one breaker.
 
 **A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and set its monitoring rating to the sum of the two breakers (20-20A is
-40 A). The Breaker Rating sensor keeps showing the panel's rating. See [Setting a Monitoring Rating](#setting-a-monitoring-rating).
+40 A). The Breaker Rating sensor keeps showing the panel's rating. See [Setting a Monitoring Rating](frontend.md#setting-a-monitoring-rating).
 
 **A package across several spaces**, such as a 240 V breaker sharing a leg with a 120 V one: the right value depends on which leg the panel measures, and the
 panel does not publish that. Turn monitoring off for that circuit rather than guess, since a value set too high hides a real overload.

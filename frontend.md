@@ -120,6 +120,41 @@ values.
 
 ![Monitoring Configuration](images/monitoring.png)
 
+### Setting a Monitoring Rating
+
+Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as
+one circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring
+what to judge the circuit against instead.
+
+Set it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit, or with the
+`span_panel.set_circuit_monitoring_rating` and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's
+service rating, and only a circuit the panel publishes a breaker rating for can be given one. Enter the most current the measured wire can carry; for a tandem
+in one space, that is the sum of its breakers.
+
+Entering the panel's own rating clears the monitoring rating, as does the reset beside it, and the circuit is judged against the panel's rating again.
+Turning monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
+
+Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
+show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
+changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the panel's rating, and
+energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the
+rating judged against, and `monitoring_rating_user_set` beside it.
+
+For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel
+measures, and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit
+is the safer choice than guessing.
+
+A notification tells you when the panel overtakes a monitoring rating:
+
+- the panel's rating for the circuit changed, and the monitoring rating still applies;
+- the panel's rating now matches the monitoring rating, which was removed;
+- the panel no longer reports a rating for the circuit, and the monitoring rating was removed;
+- the circuit is no longer on the panel, and the monitoring rating was removed;
+- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed.
+
+Each line names the circuit, your monitoring rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed
+back before you looked is not reported.
+
 ## Adopted View
 
 The Adopted tab is where you tell the integration what an adopted entity means. Your panel's schema is vendor-extensible, so it can publish devices and readings
