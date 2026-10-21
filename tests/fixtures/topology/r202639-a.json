@@ -3,6 +3,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_7_bathroom_outlets_breaker_rating",
@@ -19,6 +20,7 @@
       "is_user_controllable": true,
       "name": "7 Bathroom / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -33,6 +35,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_6_kitchen_outlets_breaker_rating",
@@ -49,6 +52,7 @@
       "is_user_controllable": true,
       "name": "6 Kitchen / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -63,6 +67,7 @@
     "remote-ct-3": {
       "always_on": null,
       "breaker_rating_a": null,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",
@@ -76,6 +81,7 @@
       "is_user_controllable": false,
       "name": "Remote CT 3",
       "outside_panel": true,
+      "panel_breaker_rating_a": null,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "UNKNOWN",

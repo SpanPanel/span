@@ -3,6 +3,7 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 35.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hvac_breaker_rating",
@@ -19,6 +20,7 @@
       "is_user_controllable": true,
       "name": "HVAC",
       "outside_panel": false,
+      "panel_breaker_rating_a": 35.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "OPEN",
@@ -34,6 +36,7 @@
     "circuit-12": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_sink_garbage_disposal_breaker_rating",
@@ -50,6 +53,7 @@
       "is_user_controllable": true,
       "name": "Kitchen Sink Garbage Disposal",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -64,6 +68,7 @@
     "circuit-13": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dishwasher_breaker_rating",
@@ -80,6 +85,7 @@
       "is_user_controllable": true,
       "name": "Dishwasher",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -94,6 +100,7 @@
     "circuit-14": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_main_office_fam_tv_breaker_rating",
@@ -110,6 +117,7 @@
       "is_user_controllable": true,
       "name": "Main Office & Fam TV",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -124,6 +132,7 @@
     "circuit-15": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_outlets_french_door_wall_breaker_rating",
@@ -140,6 +149,7 @@
       "is_user_controllable": true,
       "name": "Basement Outlets French Door Wall",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -154,6 +164,7 @@
     "circuit-16": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating",
@@ -170,6 +181,7 @@
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -184,6 +196,7 @@
     "circuit-17": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_breaker_rating",
@@ -200,6 +213,7 @@
       "is_user_controllable": true,
       "name": "Utility Room",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -214,6 +228,7 @@
     "circuit-18": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hood_breaker_rating",
@@ -230,6 +245,7 @@
       "is_user_controllable": true,
       "name": "Hood",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -244,6 +260,7 @@
     "circuit-19": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating_2",
@@ -260,6 +277,7 @@
       "is_user_controllable": true,
       "name": "Basement / Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -274,6 +292,7 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_heat_pump_water_heater_breaker_rating",
@@ -290,6 +309,7 @@
       "is_user_controllable": true,
       "name": "Heat Pump Water Heater",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -305,6 +325,7 @@
     "circuit-21": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_infared_sauna_breaker_rating",
@@ -321,6 +342,7 @@
       "is_user_controllable": true,
       "name": "Electric Infared Sauna",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -335,6 +357,7 @@
     "circuit-22": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_main_office_dedicated_outlets_breaker_rating",
@@ -351,6 +374,7 @@
       "is_user_controllable": true,
       "name": "Main Office Dedicated Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -365,6 +389,7 @@
     "circuit-23": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bidet_outlets_basement_main_floor_breaker_rating",
@@ -381,6 +406,7 @@
       "is_user_controllable": true,
       "name": "Bidet Outlets Basement & Main Floor",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -395,6 +421,7 @@
     "circuit-24": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_lights_outlets_breaker_rating",
@@ -411,6 +438,7 @@
       "is_user_controllable": true,
       "name": "Dining room / Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -425,6 +453,7 @@
     "circuit-25": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_breaker_rating",
@@ -441,6 +470,7 @@
       "is_user_controllable": true,
       "name": "Kitchen fr. door & Isle Alt. Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -455,6 +485,7 @@
     "circuit-26": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_furnace_breaker_rating",
@@ -471,6 +502,7 @@
       "is_user_controllable": true,
       "name": "Furnace",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "OPEN",
@@ -485,6 +517,7 @@
     "circuit-27": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bed_2_shared_bath_lights_outlets_breaker_rating",
@@ -501,6 +534,7 @@
       "is_user_controllable": true,
       "name": "Bed 2 & Shared Bath Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -515,6 +549,7 @@
     "circuit-28": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bedroom_lights_outlets_breaker_rating",
@@ -531,6 +566,7 @@
       "is_user_controllable": true,
       "name": "Primary bedroom / Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -545,6 +581,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 40.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_double_oven_breaker_rating",
@@ -561,6 +598,7 @@
       "is_user_controllable": true,
       "name": "Electric Double-Oven",
       "outside_panel": false,
+      "panel_breaker_rating_a": 40.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -576,6 +614,7 @@
     "circuit-30": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bath_closets_breaker_rating",
@@ -592,6 +631,7 @@
       "is_user_controllable": true,
       "name": "Primary Bath & Closets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -606,6 +646,7 @@
     "circuit-31": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_smoke_co_detectors_breaker_rating",
@@ -622,6 +663,7 @@
       "is_user_controllable": true,
       "name": "Smoke/CO Detectors",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -636,6 +678,7 @@
     "circuit-32": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_outlets_exit_door_wall_breaker_rating",
@@ -652,6 +695,7 @@
       "is_user_controllable": true,
       "name": "Basement Outlets exit door wall",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -666,6 +710,7 @@
     "circuit-33": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_outlets_breaker_rating",
@@ -682,6 +727,7 @@
       "is_user_controllable": true,
       "name": "Living room / Lights & Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -696,6 +742,7 @@
     "circuit-34": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_sump_pump_breaker_rating",
@@ -712,6 +759,7 @@
       "is_user_controllable": true,
       "name": "Sump Pump",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -726,6 +774,7 @@
     "circuit-35": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating",
@@ -742,6 +791,7 @@
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -756,6 +806,7 @@
     "circuit-36": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_security_system_breaker_rating",
@@ -772,6 +823,7 @@
       "is_user_controllable": true,
       "name": "Security system",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -786,6 +838,7 @@
     "circuit-37": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_refrigerator_breaker_rating",
@@ -802,6 +855,7 @@
       "is_user_controllable": true,
       "name": "Refrigerator",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -816,6 +870,7 @@
     "circuit-38": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_freezer_breaker_rating",
@@ -832,6 +887,7 @@
       "is_user_controllable": true,
       "name": "Freezer",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -846,6 +902,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_laundry_room_breaker_rating",
@@ -862,6 +919,7 @@
       "is_user_controllable": true,
       "name": "Laundry Room",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -877,6 +935,7 @@
     "circuit-41": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_dedicated_breaker_rating",
@@ -893,6 +952,7 @@
       "is_user_controllable": true,
       "name": "Utility Room Dedicated",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -907,6 +967,7 @@
     "circuit-48": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating",
@@ -923,6 +984,7 @@
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -937,6 +999,7 @@
     "circuit-49": {
       "always_on": false,
       "breaker_rating_a": 10.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
@@ -953,6 +1016,7 @@
       "is_user_controllable": true,
       "name": "Bathroom / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 10.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -967,6 +1031,7 @@
     "circuit-5": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_range_breaker_rating",
@@ -983,6 +1048,7 @@
       "is_user_controllable": true,
       "name": "Electric range",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -997,6 +1063,7 @@
     "circuit-50": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating_2",
@@ -1013,6 +1080,7 @@
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1027,6 +1095,7 @@
     "circuit-51": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating_2",
@@ -1043,6 +1112,7 @@
       "is_user_controllable": true,
       "name": "Kitchen / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1057,6 +1127,7 @@
     "circuit-52": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
@@ -1073,6 +1144,7 @@
       "is_user_controllable": true,
       "name": "Bedroom / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1087,6 +1159,7 @@
     "circuit-53": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating_2",
@@ -1103,6 +1176,7 @@
       "is_user_controllable": true,
       "name": "Bedroom / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1117,6 +1191,7 @@
     "circuit-54": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_outlets_breaker_rating",
@@ -1133,6 +1208,7 @@
       "is_user_controllable": true,
       "name": "Living room / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1147,6 +1223,7 @@
     "circuit-55": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
@@ -1163,6 +1240,7 @@
       "is_user_controllable": true,
       "name": "Living room / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1177,6 +1255,7 @@
     "circuit-56": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_outlets_breaker_rating",
@@ -1193,6 +1272,7 @@
       "is_user_controllable": true,
       "name": "Dining room / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1207,6 +1287,7 @@
     "circuit-57": {
       "always_on": false,
       "breaker_rating_a": 10.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_lights_breaker_rating",
@@ -1223,6 +1304,7 @@
       "is_user_controllable": true,
       "name": "Dining room / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 10.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1237,6 +1319,7 @@
     "circuit-6": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_microwave_breaker_rating",
@@ -1253,6 +1336,7 @@
       "is_user_controllable": true,
       "name": "Microwave",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "OPEN",
@@ -1267,6 +1351,7 @@
     "circuit-60": {
       "always_on": false,
       "breaker_rating_a": 60.0,
+      "breaker_rating_user_set": false,
       "device_type": "evse",
       "entities": {
         "breaker_rating": "sensor.span_panel_ev_charger_span_drive_breaker_rating",
@@ -1281,6 +1366,7 @@
       "is_user_controllable": true,
       "name": "SPAN Drive",
       "outside_panel": false,
+      "panel_breaker_rating_a": 60.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1296,6 +1382,7 @@
     "circuit-7": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bath_outlets_breaker_rating",
@@ -1312,6 +1399,7 @@
       "is_user_controllable": true,
       "name": "Primary Bath Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1326,6 +1414,7 @@
     "circuit-8": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating",
@@ -1342,6 +1431,7 @@
       "is_user_controllable": true,
       "name": "Kitchen / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -1356,6 +1446,7 @@
     "circuit-9": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_family_room_breaker_rating",
@@ -1372,6 +1463,7 @@
       "is_user_controllable": true,
       "name": "Family Room",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",

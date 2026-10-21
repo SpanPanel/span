@@ -379,14 +379,14 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit-Level Sensors (per circuit)
 
-| Sensor          | Device Class | Unit | Notes                                                                                         |
-| --------------- | ------------ | ---- | --------------------------------------------------------------------------------------------- |
-| Power           | Power        | W    | Instantaneous circuit power (+producing for PV and solar-role circuits, +consuming otherwise) |
-| Produced Energy | Energy       | Wh   | Cumulative energy produced                                                                    |
-| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                                                    |
-| Net Energy      | Energy       | Wh   | Net energy (sign depends on what the circuit feeds — PV and solar-role circuits invert)       |
-| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`                                  |
-| Breaker Rating  | —            | A    | Circuit breaker amperage (diagnostic, off by default). Only when reported                     |
+| Sensor          | Device Class | Unit | Notes                                                                                                                      |
+| --------------- | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| Power           | Power        | W    | Instantaneous circuit power (+producing for PV and solar-role circuits, +consuming otherwise)                              |
+| Produced Energy | Energy       | Wh   | Cumulative energy produced                                                                                                 |
+| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                                                                                 |
+| Net Energy      | Energy       | Wh   | Net energy (sign depends on what the circuit feeds — PV and solar-role circuits invert)                                    |
+| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`                                                               |
+| Breaker Rating  | —            | A    | Breaker rating in force (diagnostic, off by default): a correction where one applies, else the panel's. Only when reported |
 
 ### Circuit Power Sensor Attributes
 
@@ -420,6 +420,23 @@ tandem-quad comes to its two-pole rating plus the larger of its single-pole ones
 A remote current transformer (CT) the panel reads appears as **Remote CT** followed by its number, with Power, Produced Energy, Consumed Energy and Net Energy
 sensors, and Current where the panel reports it. Its Power is positive for power flowing into the panel. It has no breaker, so it gets no Breaker switch, no
 Circuit Priority select and no current monitoring, its Power sensor carries no relay or shed attributes, and the panel view draws it outside the breaker grid.
+
+### Breaker Rating Sensor Attributes
+
+In addition to the circuit power sensor attributes, the Breaker Rating sensor carries:
+
+| Attribute                 | Type       | Notes                                                                  |
+| ------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `panel_breaker_rating_a`  | float/null | The rating the panel publishes, null where it publishes none           |
+| `breaker_rating_user_set` | bool       | Whether a correction applies, so the sensor's value is not the panel's |
+
+### Correcting a Breaker Rating and Current Monitoring
+
+A circuit's breaker rating can be corrected where the panel's commissioned rating is wrong, as on a tandem breaker, which the panel publishes at the rating of
+one half. A correction is made in the dashboard, or with the `span_panel.set_circuit_breaker_rating` and `span_panel.clear_circuit_breaker_rating` services, and
+is bounded by the panel's service rating. Current monitoring judges a circuit against its corrected rating, so its thresholds, utilization and alert text all
+use it, and the Breaker Rating sensor and the panel view show it with the panel's rating beside it. The correction is dropped, and you are told, when the
+panel's rating changes to agree with it or the panel stops publishing a rating for the circuit. Energy counter checks keep using the panel's rating.
 
 ### Circuit Energy Sensor Attributes
 

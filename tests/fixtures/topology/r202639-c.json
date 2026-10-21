@@ -3,6 +3,7 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
@@ -19,6 +20,7 @@
       "is_user_controllable": true,
       "name": "Bedroom / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -33,6 +35,7 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
@@ -49,6 +52,7 @@
       "is_user_controllable": true,
       "name": "Bathroom / Outlets",
       "outside_panel": false,
+      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -63,6 +67,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
@@ -79,6 +84,7 @@
       "is_user_controllable": true,
       "name": "Living room / Lights",
       "outside_panel": false,
+      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -93,6 +99,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_other_breaker_rating",
@@ -108,6 +115,7 @@
       "is_user_controllable": true,
       "name": "Other",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -123,6 +131,7 @@
     "circuit-5": {
       "always_on": true,
       "breaker_rating_a": 60.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_tesla_breaker_rating",
@@ -137,6 +146,7 @@
       "is_user_controllable": false,
       "name": "Tesla",
       "outside_panel": false,
+      "panel_breaker_rating_a": 60.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",

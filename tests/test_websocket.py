@@ -826,12 +826,63 @@ class TestHandlePanelTopology:
             "relay_state_target",
             "is_user_controllable",
             "breaker_rating_a",
+            "panel_breaker_rating_a",
+            "breaker_rating_user_set",
             "always_on",
             "priority",
             "priority_target",
             "is_never_backup",
             "entities",
         }
+
+    @pytest.mark.asyncio
+    async def test_topology_reports_the_effective_breaker_rating(self, hass: HomeAssistant):
+        """`breaker_rating_a` is the rating in force; the panel's rides beside it."""
+        kitchen = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_kitchen", name="Kitchen", tabs=[5, 6], breaker_rating_a=20
+        )
+        bedroom = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_bedroom", name="Bedroom", tabs=[15], breaker_rating_a=15
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number="sp3-test-001",
+            circuits={"uuid_kitchen": kitchen, "uuid_bedroom": bedroom},
+        )
+        coordinator = _make_coordinator(snapshot)
+
+        def resolve(circuit_id, snap):
+            if circuit_id == "uuid_kitchen":
+                return BreakerRating(50.0, 20.0, True)
+            return _panel_rating(circuit_id, snap)
+
+        coordinator.breaker_rating_manager.resolve.side_effect = resolve
+        entry = MockConfigEntry(
+            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-test-001"
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator,
+            panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
+        )
+        device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        circuits = connection.send_result.call_args[0][1]["circuits"]
+        kitchen_data = circuits["uuid_kitchen"]
+        assert kitchen_data["breaker_rating_a"] == 50.0
+        assert kitchen_data["panel_breaker_rating_a"] == 20
+        assert kitchen_data["breaker_rating_user_set"] is True
+        bedroom_data = circuits["uuid_bedroom"]
+        assert bedroom_data["breaker_rating_a"] == 15
+        assert bedroom_data["panel_breaker_rating_a"] == 15
+        assert bedroom_data["breaker_rating_user_set"] is False
 
     @pytest.mark.asyncio
     async def test_topology_reports_priority_settability_apart_from_the_relay(

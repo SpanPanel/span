@@ -54,7 +54,8 @@ top of the panel header) → **List View Columns**.
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
-circuit's breaker rating, then delivers notifications through configurable channels.
+circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit's rating has been corrected, thresholds and utilization use
+the corrected rating.
 
 ### Global Settings
 
@@ -74,17 +75,17 @@ circuit's breaker rating, then delivers notifications through configurable chann
 - **Priority** — Notification priority level (controls iOS interruption level and Android notification channel)
 - **Title/Message Templates** — Customizable templates with the following variables:
 
-  | Variable             | Description                     | Example                     |
-  | -------------------- | ------------------------------- | --------------------------- |
-  | `{name}`             | Circuit or mains friendly name  | Kitchen Oven                |
-  | `{entity_id}`        | HA entity ID                    | sensor.kitchen_oven_current |
-  | `{alert_type}`       | Alert category                  | spike, continuous_overload  |
-  | `{current_a}`        | Current draw in amps            | 18.3                        |
-  | `{breaker_rating_a}` | Breaker rating in amps          | 20                          |
-  | `{threshold_pct}`    | Configured threshold percentage | 80                          |
-  | `{utilization_pct}`  | Actual utilization percentage   | 91.5                        |
-  | `{window_m}`         | Window duration in minutes      | 5                           |
-  | `{local_time}`       | Local time of the alert         | 2:15 PM                     |
+  | Variable             | Description                                                          | Example                     |
+  | -------------------- | -------------------------------------------------------------------- | --------------------------- |
+  | `{name}`             | Circuit or mains friendly name                                       | Kitchen Oven                |
+  | `{entity_id}`        | HA entity ID                                                         | sensor.kitchen_oven_current |
+  | `{alert_type}`       | Alert category                                                       | spike, continuous_overload  |
+  | `{current_a}`        | Current draw in amps                                                 | 18.3                        |
+  | `{breaker_rating_a}` | Breaker rating in amps (the corrected rating where the user set one) | 20                          |
+  | `{threshold_pct}`    | Configured threshold percentage                                      | 80                          |
+  | `{utilization_pct}`  | Actual utilization percentage                                        | 91.5                        |
+  | `{window_m}`         | Window duration in minutes                                           | 5                           |
+  | `{local_time}`       | Local time of the alert                                              | 2:15 PM                     |
 
 ### Monitored Points
 

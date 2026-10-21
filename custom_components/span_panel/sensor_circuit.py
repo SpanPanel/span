@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
+from .breaker_ratings import BreakerRating
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
 from .counter_plausibility import exceeds_lifetime_bound
@@ -323,6 +324,42 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
             attributes["protection_functions"] = list(circuit.protection_functions)
 
         attributes.update(construct_shared_with_attributes(self.coordinator.data, circuit))
+        return attributes
+
+
+class SpanCircuitBreakerRatingSensor(SpanCircuitPowerSensor):
+    """A circuit's breaker rating: the rating in force, with the panel's beside it.
+
+    A user may correct a rating the panel publishes wrongly, as on a tandem
+    breaker, so the value is the panel's `BreakerRatingManager` answer rather than
+    the snapshot's field. The panel's own figure and whether a correction applies
+    are attributes of this sensor alone; the power and current sensors, which share
+    the parent class, carry neither.
+    """
+
+    def _read_raw_value(
+        self,
+        value_function: Callable[[SpanCircuitSnapshot], float | int | str | None],
+        data_source: SpanCircuitSnapshot,
+    ) -> float | None:
+        """Read the effective rating, not the field the description names."""
+        return self._rating().effective_a
+
+    def _rating(self) -> BreakerRating:
+        """Return this circuit's rating as the manager resolves it on the latest snapshot."""
+        return self.coordinator.breaker_rating_manager.resolve(
+            self.circuit_id, self.coordinator.data
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the parent's attributes plus the panel's rating and whether it is overridden."""
+        attributes = super().extra_state_attributes
+        if attributes is None:
+            return None
+        rating = self._rating()
+        attributes["panel_breaker_rating_a"] = rating.panel_a
+        attributes["breaker_rating_user_set"] = rating.user_set
         return attributes
 
 

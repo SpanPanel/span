@@ -176,6 +176,7 @@ async def handle_panel_topology(
             continue
 
         tabs = sorted(circuit.tabs) if circuit.tabs else []
+        rating = coordinator.breaker_rating_manager.resolve(circuit_id, snapshot)
         circuits[circuit_id] = {
             "tabs": tabs,
             # A meter without a breaker space publishes no name; it carries the
@@ -201,7 +202,12 @@ async def handle_panel_topology(
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
-            "breaker_rating_a": circuit.breaker_rating_a,
+            # The rating in force: the user's correction where one applies, else
+            # the panel's. The panel's own rides beside it for a consumer that
+            # needs the wire value.
+            "breaker_rating_a": rating.effective_a,
+            "panel_breaker_rating_a": rating.panel_a,
+            "breaker_rating_user_set": rating.user_set,
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
@@ -288,9 +294,10 @@ async def handle_panel_topology(
 class MeterGroupRecord(TypedDict):
     """One shared meter in the topology: its members, and the capacity it is judged against.
 
-    `breaker_rating_a` is the group's capacity over the ratings the panel
-    publishes, by `current_monitor.meter_capacity_a`, and null where unknown. A
-    member's own `breaker_rating_a` stays that circuit's rating.
+    `breaker_rating_a` is the group's capacity over its members' ratings in
+    force, each a user's override where one applies, by
+    `current_monitor.meter_capacity_a`, and null where unknown. A member's own
+    `breaker_rating_a` stays that circuit's rating in force.
     """
 
     members: list[str]

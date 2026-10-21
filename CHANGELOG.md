@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.0] - unreleased
 
+### Added
+
+- **A circuit's breaker rating can be corrected in the dashboard** where the panel's commissioned rating is wrong, as on a tandem breaker; the Breaker Rating
+  sensor, the panel view and current monitoring use the corrected rating and show the panel's beside it.
+
+### Changed
+
+- **The panel topology's `breaker_rating_a` is the rating in force**, the user's correction where one applies; `panel_breaker_rating_a` carries the panel's.
+
 ### Fixed
 
 - **On panels other than MAIN 32, the Solar device and PV Power are created again wherever the panel publishes a PV power figure, 0 W included**, so solar the

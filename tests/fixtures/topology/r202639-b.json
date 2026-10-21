@@ -3,6 +3,7 @@
     "circuit-17": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_1_breaker_rating",
@@ -19,6 +20,7 @@
       "is_user_controllable": true,
       "name": "breaker-1",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -33,6 +35,7 @@
     "circuit-18": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_2_breaker_rating",
@@ -49,6 +52,7 @@
       "is_user_controllable": true,
       "name": "breaker-2",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -63,6 +67,7 @@
     "circuit-19": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_3_breaker_rating",
@@ -79,6 +84,7 @@
       "is_user_controllable": true,
       "name": "breaker-3",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -93,6 +99,7 @@
     "circuit-20": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_4_breaker_rating",
@@ -109,6 +116,7 @@
       "is_user_controllable": true,
       "name": "breaker-4",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -123,6 +131,7 @@
     "circuit-21": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_5_breaker_rating",
@@ -139,6 +148,7 @@
       "is_user_controllable": true,
       "name": "breaker-5",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -153,6 +163,7 @@
     "circuit-22": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_6_breaker_rating",
@@ -169,6 +180,7 @@
       "is_user_controllable": true,
       "name": "breaker-6",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -183,6 +195,7 @@
     "circuit-23": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_7_breaker_rating",
@@ -199,6 +212,7 @@
       "is_user_controllable": true,
       "name": "breaker-7",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -213,6 +227,7 @@
     "circuit-24": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_8_breaker_rating",
@@ -229,6 +244,7 @@
       "is_user_controllable": true,
       "name": "breaker-8",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -243,6 +259,7 @@
     "circuit-25": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_9_breaker_rating",
@@ -259,6 +276,7 @@
       "is_user_controllable": true,
       "name": "breaker-9",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -273,6 +291,7 @@
     "circuit-26": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_10_breaker_rating",
@@ -289,6 +308,7 @@
       "is_user_controllable": true,
       "name": "breaker-10",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -303,6 +323,7 @@
     "circuit-27": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_11_breaker_rating",
@@ -319,6 +340,7 @@
       "is_user_controllable": true,
       "name": "breaker-11",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -333,6 +355,7 @@
     "circuit-28": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_12_breaker_rating",
@@ -349,6 +372,7 @@
       "is_user_controllable": true,
       "name": "breaker-12",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -363,6 +387,7 @@
     "circuit-29": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_13_breaker_rating",
@@ -379,6 +404,7 @@
       "is_user_controllable": true,
       "name": "breaker-13",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -393,6 +419,7 @@
     "circuit-30": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_14_breaker_rating",
@@ -409,6 +436,7 @@
       "is_user_controllable": true,
       "name": "breaker-14",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -423,6 +451,7 @@
     "circuit-31": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_15_breaker_rating",
@@ -439,6 +468,7 @@
       "is_user_controllable": true,
       "name": "breaker-15",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -453,6 +483,7 @@
     "circuit-32": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_16_breaker_rating",
@@ -469,6 +500,7 @@
       "is_user_controllable": true,
       "name": "breaker-16",
       "outside_panel": false,
+      "panel_breaker_rating_a": 30.0,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -483,6 +515,7 @@
     "remote-ct-3": {
       "always_on": null,
       "breaker_rating_a": null,
+      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",
@@ -496,6 +529,7 @@
       "is_user_controllable": false,
       "name": "Remote CT 3",
       "outside_panel": true,
+      "panel_breaker_rating_a": null,
       "priority": "UNKNOWN",
       "priority_target": null,
       "relay_state": "UNKNOWN",
