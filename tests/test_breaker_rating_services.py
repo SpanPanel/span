@@ -338,10 +338,16 @@ class TestPanelChoice:
         assert raised.value.translation_key == "favorite_panel_not_loaded"
         assert entry_a.state is ConfigEntryState.LOADED
 
-    async def test_with_no_panel_loaded_the_call_says_so(self, hass: HomeAssistant) -> None:
-        """With no panel loaded the call says so."""
+    @pytest.mark.parametrize("service", ["set", "clear"])
+    async def test_with_no_panel_loaded_the_call_says_so(
+        self, hass: HomeAssistant, service: str
+    ) -> None:
+        """With no panel loaded either call says so, with the one message that fits both."""
         with pytest.raises(ServiceValidationError) as raised:
-            await _set(hass, circuit_id="circuit-2", breaker_rating_a=30)
+            if service == "set":
+                await _set(hass, circuit_id="circuit-2", breaker_rating_a=30)
+            else:
+                await _clear(hass, circuit_id="circuit-2")
 
         assert raised.value.translation_key == "breaker_rating_panel_not_loaded"
 

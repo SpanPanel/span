@@ -461,7 +461,7 @@
       "message": "Ce panneau n'a aucun circuit avec cet identifiant."
     },
     "breaker_rating_panel_not_loaded": {
-      "message": "Aucun SPAN Panel n'est chargé pour y définir un calibre de disjoncteur."
+      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre de disjoncteur ne peut donc être défini ni effacé."
     },
     "breaker_rating_no_service_rating": {
       "message": "Le panneau ne publie pas de calibre de service ; une correction du calibre du disjoncteur ne peut donc pas être définie."
@@ -700,7 +700,7 @@
     },
     "set_circuit_breaker_rating": {
       "name": "Définir le calibre du disjoncteur du circuit",
-      "description": "Corriger le calibre du disjoncteur d'un circuit dont le panneau publie un calibre erroné ou absent. Il ne peut pas dépasser le calibre de service du panneau.",
+      "description": "Corriger le calibre du disjoncteur que le panneau publie pour un circuit lorsqu'il est erroné. Seul un calibre publié par le panneau peut être corrigé, et la correction ne peut pas dépasser le calibre de service du panneau.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

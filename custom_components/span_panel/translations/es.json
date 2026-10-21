@@ -455,19 +455,19 @@
       "message": "La escritura de {property} en {device} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el valor no ha cambiado ni cambiará más tarde."
     },
     "breaker_rating_above_service_rating": {
-      "message": "La capacidad de un disyuntor no puede superar la capacidad de servicio del panel, de {service_rating} A."
+      "message": "La capacidad de un interruptor no puede superar la capacidad de servicio del panel, de {service_rating} A."
     },
     "breaker_rating_circuit_unknown": {
       "message": "Este panel no tiene ningún circuito con ese identificador."
     },
     "breaker_rating_panel_not_loaded": {
-      "message": "No hay ningún SPAN Panel cargado en el que establecer una capacidad de interruptor."
+      "message": "No hay ningún SPAN Panel cargado, por lo que no se puede establecer ni borrar una capacidad de interruptor."
     },
     "breaker_rating_no_service_rating": {
-      "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una corrección de la capacidad del disyuntor."
+      "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una corrección de la capacidad del interruptor."
     },
     "breaker_rating_not_published": {
-      "message": "El panel no publica una capacidad de disyuntor para este circuito, por lo que no se puede establecer una corrección."
+      "message": "El panel no publica una capacidad de interruptor para este circuito, por lo que no se puede establecer una corrección."
     },
     "circuit_priority_failed": {
       "message": "Se rechazó el cambio de prioridad para {circuit}: {reason}. No se envió nada al panel, por lo que la prioridad no ha cambiado."
@@ -700,7 +700,7 @@
     },
     "set_circuit_breaker_rating": {
       "name": "Establecer capacidad del interruptor del circuito",
-      "description": "Corregir la capacidad del interruptor de un circuito cuyo panel publica una capacidad errónea o ausente. No puede superar la capacidad de servicio del panel.",
+      "description": "Corregir la capacidad del interruptor que el panel publica para un circuito cuando es errónea. Solo se puede corregir una capacidad que el panel publica, y la corrección no puede superar la capacidad de servicio del panel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

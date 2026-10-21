@@ -461,7 +461,7 @@
       "message": "Este painel não tem nenhum circuito com esse identificador."
     },
     "breaker_rating_panel_not_loaded": {
-      "message": "Não há nenhum SPAN Panel carregado onde definir uma capacidade de disjuntor."
+      "message": "Não há nenhum SPAN Panel carregado, por isso não é possível definir nem limpar uma capacidade de disjuntor."
     },
     "breaker_rating_no_service_rating": {
       "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma correção da capacidade do disjuntor."
@@ -700,7 +700,7 @@
     },
     "set_circuit_breaker_rating": {
       "name": "Definir capacidade do disjuntor do circuito",
-      "description": "Corrigir a capacidade do disjuntor de um circuito cujo painel publica uma capacidade errada ou em falta. Não pode ser superior à capacidade de serviço do painel.",
+      "description": "Corrigir a capacidade do disjuntor que o painel publica para um circuito quando está errada. Só é possível corrigir uma capacidade que o painel publica, e a correção não pode ser superior à capacidade de serviço do painel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

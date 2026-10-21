@@ -593,7 +593,7 @@
       "message": "This panel has no circuit with that id."
     },
     "breaker_rating_panel_not_loaded": {
-      "message": "No SPAN Panel is loaded to set a breaker rating on."
+      "message": "No SPAN Panel is loaded, so no breaker rating can be set or cleared."
     }
   },
   "options": {
@@ -700,7 +700,7 @@
     },
     "set_circuit_breaker_rating": {
       "name": "Set circuit breaker rating",
-      "description": "Correct the breaker rating of a circuit whose panel publishes a wrong or missing rating. It cannot exceed the panel's service rating.",
+      "description": "Correct the breaker rating the panel publishes for a circuit where it is wrong. Only a rating the panel publishes can be corrected, and the correction cannot exceed the panel's service rating.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
