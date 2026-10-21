@@ -454,6 +454,18 @@
     "adopted_control_not_delivered": {
       "message": "La escritura de {property} en {device} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el valor no ha cambiado ni cambiará más tarde."
     },
+    "breaker_rating_above_service_rating": {
+      "message": "La capacidad de un disyuntor no puede superar la capacidad de servicio del panel, de {service_rating} A."
+    },
+    "breaker_rating_circuit_unknown": {
+      "message": "Este panel no tiene ningún circuito con ese identificador."
+    },
+    "breaker_rating_no_service_rating": {
+      "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una corrección de la capacidad del disyuntor."
+    },
+    "breaker_rating_not_published": {
+      "message": "El panel no publica una capacidad de disyuntor para este circuito, por lo que no se puede establecer una corrección."
+    },
     "circuit_priority_failed": {
       "message": "Se rechazó el cambio de prioridad para {circuit}: {reason}. No se envió nada al panel, por lo que la prioridad no ha cambiado."
     },

@@ -24,6 +24,7 @@ from custom_components.span_panel.notices import (
     async_forget,
     async_raise,
     async_restore,
+    is_standing,
     read_translations,
 )
 
@@ -173,6 +174,28 @@ async def test_dismissing_one_panels_notice_leaves_the_other_panels_alone(
 
     assert _id(entry) not in _standing(hass)
     assert _standing(hass)[_id(other)]["message"] == "Second panel"
+
+
+# -- Whether a notice is standing -------------------------------------------
+
+
+async def test_is_standing_follows_raise_and_dismissal(
+    hass: HomeAssistant, entry: MockConfigEntry, other: MockConfigEntry
+) -> None:
+    """Standing is raised-and-not-dismissed, per entry; no live view is not standing."""
+    assert not is_standing(hass, entry, _NOTICE)  # no live view yet
+    await async_restore(hass, entry)
+    await async_restore(hass, other)
+    assert not is_standing(hass, entry, _NOTICE)
+
+    async_raise(hass, entry, _NOTICE, title="Upgraded", message="Body")
+    assert is_standing(hass, entry, _NOTICE)
+    assert not is_standing(hass, entry, "another_notice")
+    assert not is_standing(hass, other, _NOTICE)
+
+    async_dismiss(hass, _id(entry))
+    await hass.async_block_till_done()
+    assert not is_standing(hass, entry, _NOTICE)
 
 
 # -- The reload race ---------------------------------------------------------

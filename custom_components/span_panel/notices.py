@@ -341,6 +341,18 @@ def async_raise_on_change(
 
 
 @callback
+def is_standing(hass: HomeAssistant, entry: ConfigEntry, notice_id: str) -> bool:
+    """Whether this entry's notice is on screen, raised and not yet dismissed.
+
+    For a caller that accumulates into a notice while it stands and starts afresh
+    once the user has dismissed it. False for an entry with no live view, which is
+    the same answer: nothing is on screen to add to.
+    """
+    notices = hass.data.get(_DATA, {}).get(entry.entry_id)
+    return notices is not None and notice_id in notices.standing
+
+
+@callback
 def _on_change(
     hass: HomeAssistant,
     entry: ConfigEntry,

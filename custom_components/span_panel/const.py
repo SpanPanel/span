@@ -133,6 +133,10 @@ NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
 )
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
 
+# Fired on every change to a circuit's breaker rating override, so a card can re-fetch
+# the ratings it shows. Carries `config_entry_id` and `circuit_ids`.
+EVENT_BREAKER_RATING_CHANGED = "span_panel_breaker_rating_changed"
+
 # Fired alongside a schema Repair so an automation can react without polling
 # the issue registry. Same bus-event shape as the current alert above.
 EVENT_SCHEMA_ISSUE = "span_panel_schema_issue"

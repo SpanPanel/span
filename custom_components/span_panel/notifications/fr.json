@@ -15,5 +15,15 @@
   "extension_overflow": {
     "title": "Panneau SPAN : certaines mesures du fabricant n'ont pas été ajoutées",
     "body": "Un appareil de votre panneau déclare plus de mesures du fabricant que cette intégration n'en ajoute pour un seul appareil ({limit}). Les autres ont été laissées de côté : {devices}.\n\nRien de ce que vous avez déjà n'est affecté et rien n'est cassé. Les mesures laissées de côté figurent toujours dans le téléchargement des diagnostics de cette intégration, qu'il convient de joindre si vous souhaitez les voir apparaître."
+  },
+  "breaker_rating_changed": {
+    "title": "Les calibres de disjoncteur du panneau SPAN ont changé",
+    "intro": "Le panneau a modifié le calibre d'un disjoncteur que vous aviez corrigé. Examinez chaque circuit dans le tableau de bord Span Panel, dans les paramètres du disjoncteur du circuit.",
+    "panel_changed": "**{circuit}** : le panneau indique maintenant {after} A (auparavant {before} A). Votre correction de {rating} A s'applique toujours.",
+    "panel_agrees": "**{circuit}** : le panneau indique maintenant {after} A, ce qui correspond à votre correction ; la correction a donc été supprimée.",
+    "rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre pour ce circuit ; votre correction de {rating} A a donc été supprimée.",
+    "circuit_removed": "**{circuit}** : ce circuit n'est plus sur le panneau ; votre correction de {rating} A a donc été supprimée.",
+    "above_service_rating": "**{circuit}** : vos {rating} A dépassent le calibre de service du panneau, soit {service} A ; la correction a donc été supprimée.",
+    "service_rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre de service ; votre correction de {rating} A a donc été supprimée."
   }
 }

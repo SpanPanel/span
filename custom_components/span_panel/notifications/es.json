@@ -15,5 +15,15 @@
   "extension_overflow": {
     "title": "Panel SPAN: algunas lecturas del fabricante no se añadieron",
     "body": "Un dispositivo de tu panel declara más lecturas del fabricante de las que esta integración añade para un solo dispositivo ({limit}). El resto quedó fuera: {devices}.\n\nNada de lo que ya tienes se ve afectado y nada está roto. Las lecturas que quedaron fuera siguen apareciendo en la descarga de diagnósticos de esta integración, que es lo que conviene adjuntar si quieres que se muestren."
+  },
+  "breaker_rating_changed": {
+    "title": "Cambiaron las capacidades de disyuntor del Panel SPAN",
+    "intro": "El panel cambió la capacidad de un disyuntor que habías corregido. Revisa cada circuito en el panel de control de Span Panel, en los ajustes de disyuntor del circuito.",
+    "panel_changed": "**{circuit}**: el panel ahora informa {after} A (antes {before} A). Tu corrección de {rating} A sigue aplicándose.",
+    "panel_agrees": "**{circuit}**: el panel ahora informa {after} A, igual que tu corrección, por lo que la corrección se eliminó.",
+    "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito, por lo que tu corrección de {rating} A se eliminó.",
+    "circuit_removed": "**{circuit}**: este circuito ya no está en el panel, por lo que tu corrección de {rating} A se eliminó.",
+    "above_service_rating": "**{circuit}**: tus {rating} A superan la capacidad de servicio del panel, de {service} A, por lo que se eliminó.",
+    "service_rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad de servicio, por lo que tu corrección de {rating} A se eliminó."
   }
 }

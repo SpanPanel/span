@@ -15,5 +15,15 @@
   "extension_overflow": {
     "title": "SPAN パネル: 一部のベンダー測定値は追加されませんでした",
     "body": "パネル上のあるデバイスが、この統合が 1 台あたりに追加する上限（{limit}）を超える数のベンダー測定値を宣言しています。残りは追加されませんでした: {devices}。\n\n既存のものには影響はなく、故障でもありません。追加されなかった測定値は、この統合の診断ダウンロードには引き続き記載されています。表示を希望する場合は、それを添付してください。"
+  },
+  "breaker_rating_changed": {
+    "title": "SPAN パネルのブレーカー定格が変更されました",
+    "intro": "パネルが、補正済みのブレーカー定格を変更しました。Span Panel ダッシュボードで、各回路のブレーカー設定を確認してください。",
+    "panel_changed": "**{circuit}**: パネルは現在 {after} A を報告しています(以前は {before} A)。{rating} A の補正は引き続き適用されます。",
+    "panel_agrees": "**{circuit}**: パネルは現在 {after} A を報告しており、補正値と一致するため、補正は削除されました。",
+    "rating_undeclared": "**{circuit}**: パネルがこの回路の定格を報告しなくなったため、{rating} A の補正は削除されました。",
+    "circuit_removed": "**{circuit}**: この回路はパネルにもうないため、{rating} A の補正は削除されました。",
+    "above_service_rating": "**{circuit}**: {rating} A はパネルのサービス定格 {service} A を超えているため、削除されました。",
+    "service_rating_undeclared": "**{circuit}**: パネルがサービス定格を報告しなくなったため、{rating} A の補正は削除されました。"
   }
 }
