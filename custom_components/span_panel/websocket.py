@@ -161,7 +161,7 @@ async def handle_panel_topology(
     # What each shared meter is judged against, from the monitor's own points so
     # the capacity rule runs in one place; the card reads it and adds nothing up.
     points = monitored_circuits(
-        snapshot, lambda cid: coordinator.breaker_rating_manager.resolve(cid, snapshot)
+        snapshot, lambda cid: coordinator.monitoring_rating_manager.resolve(cid, snapshot)
     )
     meter_groups = {
         point.point_id: _meter_group_record(point)
@@ -176,7 +176,7 @@ async def handle_panel_topology(
             continue
 
         tabs = sorted(circuit.tabs) if circuit.tabs else []
-        rating = coordinator.breaker_rating_manager.resolve(circuit_id, snapshot)
+        rating = coordinator.monitoring_rating_manager.resolve(circuit_id, snapshot)
         circuits[circuit_id] = {
             "tabs": tabs,
             # A meter without a breaker space publishes no name; it carries the
@@ -202,10 +202,10 @@ async def handle_panel_topology(
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
-            # The rating in force: the user's correction where one applies, else
+            # The rating in force: the user's monitoring rating where one applies, else
             # the panel's. The panel's own rides beside it for a consumer that
             # needs the wire value.
-            "breaker_rating_a": rating.effective_a,
+            "breaker_rating_a": rating.judged_a,
             "panel_breaker_rating_a": rating.panel_a,
             "breaker_rating_user_set": rating.user_set,
             # Backup facts belong to a breaker; a meter outside the panel has none.

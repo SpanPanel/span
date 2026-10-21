@@ -1,28 +1,29 @@
-"""When a user's correction of a circuit's breaker rating applies.
+"""When a user's monitoring rating for a circuit applies.
 
 The panel publishes a rating for each breaker, and a user may know better: a
-tandem breaker is published at the rating of one half. The correction is an
-override stored by the integration, and this module is the one rule that says
-whether it applies, so every reader of a rating agrees. First match wins:
+tandem breaker is published at the rating of one half. The user's value is a
+monitoring rating, the rating current monitoring judges the circuit against,
+stored by the integration. This module is the one rule that says whether it
+applies, so every reader of a rating agrees. First match wins:
 
-1. No override: the panel's rating.
+1. No monitoring rating: the panel's rating.
 2. The panel declares no service rating, or the circuit declares no rating, or
-   the circuit has left a complete snapshot: the override is deleted and the
+   the circuit has left a complete snapshot: the monitoring rating is deleted and the
    user told.
 3. The circuit's rating, or the service rating, is declared but has no value
-   yet, or whether it is declared is not known: the override is kept,
-   silently, and the circuit has no effective rating, so nothing shows it as
+   yet, or whether it is declared is not known: the monitoring rating is kept,
+   silently, and the circuit has no judged rating, so nothing shows it as
    user-set and monitoring skips it. It applies again when the value arrives.
-4. The override is above the service rating, or equals the panel's rating:
+4. The monitoring rating is above the service rating, or equals the panel's rating:
    deleted and the user told. When the panel has caught up, a later change by
    the panel should show through rather than be masked.
-5. Otherwise the override applies. When the panel's rating differs from the
-   one the override was set against, the override is kept and the change is
+5. Otherwise the monitoring rating applies. When the panel's rating differs from the
+   one the monitoring rating was set against, it is kept and the change is
    reported once, then that rating becomes the confirmed value.
 
 "Not declared" differs from "not arrived": a rating's retained value can land
 after its description, after a restart, a reconnect or a bridge rebuild. Read
-as "not published", that moment would delete a correction and tell the user
+as "not published", that moment would delete a monitoring rating and tell the user
 about a change that never happened. Only a declaration the panel has made
 (`breaker_rating_declared is False`, a service rating no device declares)
 counts as absence; a value not yet arrived, or a declaration not yet known
@@ -51,7 +52,7 @@ type ChangeReason = Literal[
     "above_service_rating",
     "service_rating_undeclared",
 ]
-"""Why the user is told about an override: kept under a new panel rating, or removed."""
+"""Why the user is told about a monitoring rating: kept under a new panel rating, or removed."""
 
 _CHANGE_REASONS: Final = frozenset(
     reason for reason in get_args(ChangeReason.__value__) if isinstance(reason, str)
@@ -67,8 +68,8 @@ def is_change_reason(value: object) -> TypeIs[ChangeReason]:
 
 
 @dataclass(frozen=True, slots=True)
-class StoredOverride:
-    """A user's correction as stored: the rating, the panel rating it was set against, and the circuit's last label."""
+class StoredRating:
+    """A user's monitoring rating as stored: the rating, the panel rating it was set against, and the circuit's last label."""
 
     rating_a: int
     panel_a_at_set: float
@@ -76,21 +77,21 @@ class StoredOverride:
 
 
 @dataclass(frozen=True, slots=True)
-class BreakerRating:
+class MonitoringRating:
     """A circuit's rating as readers see it, with the rating the panel published."""
 
-    effective_a: float | None
+    judged_a: float | None
     panel_a: float | None
     user_set: bool
 
 
 @dataclass(frozen=True, slots=True)
-class OverrideChange:
-    """Something the user is to be told about an override: kept with a new panel rating, or removed."""
+class RatingChange:
+    """Something the user is to be told about a monitoring rating: kept with a new panel rating, or removed."""
 
     circuit_id: str
     label: str
-    """The circuit's label, carried so the notice reads the same after the override is gone."""
+    """The circuit's label, carried so the notice reads the same after the monitoring rating is gone."""
     reason: ChangeReason
     rating_a: int
     panel_before_a: float
@@ -101,14 +102,14 @@ class OverrideChange:
 
 @dataclass(frozen=True, slots=True)
 class Reconciled:
-    """The overrides that remain after a snapshot, and what to tell the user."""
+    """The ratings that remain after a snapshot, and what to tell the user."""
 
-    overrides: dict[str, StoredOverride]
-    changes: tuple[OverrideChange, ...]
+    ratings: dict[str, StoredRating]
+    changes: tuple[RatingChange, ...]
 
 
 def service_rating_a(snapshot: SpanPanelSnapshot) -> float | None:
-    """Return the rating the mains legs, and any override, are judged against.
+    """Return the rating the mains legs, and any monitoring rating, are judged against.
 
     The main breaker where the panel has one; otherwise the rating of the
     protection ahead of its upstream lugs, which is what limits a panel with no
@@ -138,48 +139,48 @@ def service_rating_declaration(field_metadata: Mapping[str, FieldMetadata] | Non
 
 def resolve(
     circuit: SpanCircuitSnapshot | None,
-    override: StoredOverride | None,
+    stored: StoredRating | None,
     service_a: float | None,
     service: Declaration,
-) -> BreakerRating:
+) -> MonitoringRating:
     """Return the rating a reader should use for one circuit.
 
-    A corrected circuit whose service rating is pending, declared with no value
-    yet or with its declaration not known, has no effective rating: the
-    correction cannot be checked against its bound, and the panel's rating is
-    the one the user corrected. Judging a tandem breaker against it even for a
-    moment raises the false alert the correction exists to stop. The panel's
+    A circuit with a monitoring rating whose service rating is pending, declared with no value
+    yet or with its declaration not known, has no judged rating: the
+    monitoring rating cannot be checked against its bound, and the panel's rating is
+    the one the user set a monitoring rating against. Judging a tandem breaker against it even for a
+    moment raises the false alert the monitoring rating exists to stop. The panel's
     rating is still reported, since it is known.
     """
     if circuit is None:
-        return BreakerRating(None, None, False)
+        return MonitoringRating(None, None, False)
     panel = circuit.breaker_rating_a
     if panel is None:
-        return BreakerRating(None, None, False)
-    if override is None or service == "undeclared":
-        return BreakerRating(panel, panel, False)
+        return MonitoringRating(None, None, False)
+    if stored is None or service == "undeclared":
+        return MonitoringRating(panel, panel, False)
     if service == "unknown" or service_a is None:
-        return BreakerRating(None, panel, False)
-    if override.rating_a <= service_a and override.rating_a != panel:
-        return BreakerRating(float(override.rating_a), panel, True)
-    return BreakerRating(panel, panel, False)
+        return MonitoringRating(None, panel, False)
+    if stored.rating_a <= service_a and stored.rating_a != panel:
+        return MonitoringRating(float(stored.rating_a), panel, True)
+    return MonitoringRating(panel, panel, False)
 
 
 def _change(
     circuit_id: str,
-    override: StoredOverride,
+    stored: StoredRating,
     reason: ChangeReason,
     panel_after_a: float | None,
     service_a: float | None,
     *,
     removed: bool,
-) -> OverrideChange:
-    return OverrideChange(
+) -> RatingChange:
+    return RatingChange(
         circuit_id,
-        override.label,
+        stored.label,
         reason,
-        override.rating_a,
-        override.panel_a_at_set,
+        stored.rating_a,
+        stored.panel_a_at_set,
         panel_after_a,
         service_a,
         removed,
@@ -187,33 +188,33 @@ def _change(
 
 
 def reconcile(
-    overrides: Mapping[str, StoredOverride],
+    ratings: Mapping[str, StoredRating],
     snapshot: SpanPanelSnapshot,
     service: Declaration,
     label_of: Callable[[SpanCircuitSnapshot, str], str],
 ) -> Reconciled:
-    """Apply the rule to every stored override against one complete snapshot.
+    """Apply the rule to every stored monitoring rating against one complete snapshot.
 
     A snapshot holding a circuit is complete by construction, so a circuit
-    absent from it has left the panel. Returns the overrides to keep, with
+    absent from it has left the panel. Returns the ratings to keep, with
     labels refreshed and a changed panel rating confirmed, and a change for
-    each override removed or kept under a new panel rating.
+    each monitoring rating removed or kept under a new panel rating.
     """
     service_a = service_rating_a(snapshot)
-    kept: dict[str, StoredOverride] = {}
-    changes: list[OverrideChange] = []
+    kept: dict[str, StoredRating] = {}
+    changes: list[RatingChange] = []
 
-    for circuit_id, override in overrides.items():
+    for circuit_id, stored in ratings.items():
         circuit = snapshot.circuits.get(circuit_id)
         panel = circuit.breaker_rating_a if circuit is not None else None
         if circuit is not None:
-            override = replace(override, label=label_of(circuit, circuit_id))
+            stored = replace(stored, label=label_of(circuit, circuit_id))
 
         if service == "undeclared":
             changes.append(
                 _change(
                     circuit_id,
-                    override,
+                    stored,
                     "service_rating_undeclared",
                     panel,
                     service_a,
@@ -223,34 +224,32 @@ def reconcile(
             continue
         if circuit is None:
             changes.append(
-                _change(circuit_id, override, "circuit_removed", panel, service_a, removed=True)
+                _change(circuit_id, stored, "circuit_removed", panel, service_a, removed=True)
             )
             continue
         if circuit.breaker_rating_declared is False:
             changes.append(
-                _change(circuit_id, override, "rating_undeclared", panel, service_a, removed=True)
+                _change(circuit_id, stored, "rating_undeclared", panel, service_a, removed=True)
             )
             continue
         if panel is None or service == "unknown" or service_a is None:
-            kept[circuit_id] = override
+            kept[circuit_id] = stored
             continue
-        if override.rating_a > service_a:
+        if stored.rating_a > service_a:
             changes.append(
-                _change(
-                    circuit_id, override, "above_service_rating", panel, service_a, removed=True
-                )
+                _change(circuit_id, stored, "above_service_rating", panel, service_a, removed=True)
             )
             continue
-        if override.rating_a == panel:
+        if stored.rating_a == panel:
             changes.append(
-                _change(circuit_id, override, "panel_agrees", panel, service_a, removed=True)
+                _change(circuit_id, stored, "panel_agrees", panel, service_a, removed=True)
             )
             continue
-        if panel != override.panel_a_at_set:
+        if panel != stored.panel_a_at_set:
             changes.append(
-                _change(circuit_id, override, "panel_changed", panel, service_a, removed=False)
+                _change(circuit_id, stored, "panel_changed", panel, service_a, removed=False)
             )
-            override = replace(override, panel_a_at_set=panel)
-        kept[circuit_id] = override
+            stored = replace(stored, panel_a_at_set=panel)
+        kept[circuit_id] = stored
 
     return Reconciled(kept, tuple(changes))

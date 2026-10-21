@@ -2,7 +2,7 @@
 
 A user may correct a circuit's published rating (a tandem breaker is published at
 the rating of one half). The monitor never stores that correction: it asks the
-panel's `BreakerRatingManager` for each circuit's rating on every snapshot, so the
+panel's `MonitoringRatingManager` for each circuit's rating on every snapshot, so the
 correction applies to alerts and to the status, and survives anything that
 resets the monitor's own state.
 """
@@ -20,10 +20,10 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
 from custom_components.span_panel.const import DOMAIN, EVENT_CURRENT_ALERT
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor
+from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
     NOTIFY_TARGETS,
@@ -32,7 +32,7 @@ from custom_components.span_panel.options import (
 )
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import (
-    _async_register_breaker_rating_services,
+    _async_register_monitoring_rating_services,
     _async_register_monitoring_services,
 )
 
@@ -64,8 +64,8 @@ def _shared(circuit: SpanCircuitSnapshot, peer: str, tab: int) -> SpanCircuitSna
 
 async def _begun(
     hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot
-) -> BreakerRatingManager:
-    manager = BreakerRatingManager(hass, entry)
+) -> MonitoringRatingManager:
+    manager = MonitoringRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     return manager
@@ -90,7 +90,7 @@ def _entry(hass: HomeAssistant, **options: object) -> MockConfigEntry:
 
 async def _monitor(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, **options: object
-) -> tuple[CurrentMonitor, BreakerRatingManager]:
+) -> tuple[CurrentMonitor, MonitoringRatingManager]:
     entry = _entry(hass, **options)
     manager = await _begun(hass, entry, snapshot)
     return CurrentMonitor(hass, entry, manager), manager
@@ -108,7 +108,7 @@ def _run_past_the_window(monitor: CurrentMonitor, snapshot: SpanPanelSnapshot, c
 class TestAlerts:
     """A circuit is judged against the rating the user corrected it to."""
 
-    async def test_a_20a_circuit_at_30a_alerts_continuously_without_an_override(
+    async def test_a_20a_circuit_at_30a_alerts_continuously_without_a_monitoring_rating(
         self, hass: HomeAssistant
     ) -> None:
         """Without a correction the panel's rating applies, 30 A on 20 A."""
@@ -128,7 +128,7 @@ class TestAlerts:
         """30 A is 60% of a 50 A breaker, under the 80% continuous threshold."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         _run_past_the_window(monitor, snapshot, "circuit-2")
@@ -144,14 +144,14 @@ class TestAlerts:
         """Declared with no value yet: not judged against the 20 A the user corrected."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         pending = replace(snapshot, main_breaker_rating_a=None)
 
         monitor.process_snapshot(pending)
 
         # Skipped as an unrated circuit is: no state is kept, so nothing can alert.
         assert monitor.get_circuit_state("circuit-2") is None
-        assert manager.resolve("circuit-2", pending).effective_a is None
+        assert manager.resolve("circuit-2", pending).judged_a is None
         status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
         assert (status["breaker_rating_a"], status["breaker_rating_user_set"]) == (None, False)
 
@@ -159,7 +159,7 @@ class TestAlerts:
         """At 45 A a 50 A breaker is over 80%; the event and the text say 50 A."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 45.0))
         monitor, manager = await _monitor(hass, snapshot, **{NOTIFY_TARGETS: "event_bus,notify.x"})
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         with patch(
@@ -195,7 +195,7 @@ class TestStatus:
         """Effective is the correction; the panel's rating stays beside it."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         monitor.process_snapshot(snapshot)
 
         entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
@@ -206,7 +206,7 @@ class TestStatus:
         assert entry["utilization_pct"] == 20.0
 
     async def test_the_mains_entry_has_the_same_shape(self, hass: HomeAssistant) -> None:
-        """The mains has no override: its panel rating is its rating and the user did not set it."""
+        """The mains has no stored: its panel rating is its rating and the user did not set it."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, _manager = await _monitor(hass, snapshot)
         monitor.process_snapshot(snapshot)
@@ -230,7 +230,7 @@ class TestSharedMeters:
             _shared(_circuit("circuit-53", 15.0, 12.0), "circuit-52", 44),
         )
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_override("circuit-53", snapshot, 20)
+        manager.set_rating("circuit-53", snapshot, 20)
         monitor.process_snapshot(snapshot)
 
         status = monitor.get_monitoring_status()["circuits"]
@@ -248,7 +248,7 @@ class TestSharedMeters:
         unrated = _shared(_circuit("circuit-53", None, 12.0), "circuit-52", 44)
         snapshot = _panel(rated, unrated)
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_override("circuit-52", snapshot, 20)
+        manager.set_rating("circuit-52", snapshot, 20)
         monitor.process_snapshot(snapshot)
 
         status = monitor.get_monitoring_status()["circuits"]
@@ -259,17 +259,17 @@ class TestSharedMeters:
             assert status[member]["breaker_rating_user_set"] is True
 
 
-class TestOverrideSurvivesTheMonitorsOwnReset:
+class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
     """The correction is the manager's, so the monitor's resets cannot lose it."""
 
     async def _panel_with_services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
-    ) -> tuple[MockConfigEntry, BreakerRatingManager]:
+    ) -> tuple[MockConfigEntry, MonitoringRatingManager]:
         entry = _entry(hass)
         manager = await _begun(hass, entry, snapshot)
         coordinator = MagicMock()
         coordinator.data = snapshot
-        coordinator.breaker_rating_manager = manager
+        coordinator.monitoring_rating_manager = manager
         coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
@@ -279,7 +279,7 @@ class TestOverrideSurvivesTheMonitorsOwnReset:
             setup_snapshot=snapshot,
         )
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        _async_register_breaker_rating_services(hass)
+        _async_register_monitoring_rating_services(hass)
         _async_register_monitoring_services(hass)
         return entry, manager
 
@@ -300,7 +300,7 @@ class TestOverrideSurvivesTheMonitorsOwnReset:
         """Clearing a circuit's thresholds resets its monitor state, not its breaker rating."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         entry.runtime_data.coordinator.current_monitor.process_snapshot(snapshot)
         await hass.services.async_call(
             DOMAIN,
@@ -316,10 +316,10 @@ class TestOverrideSurvivesTheMonitorsOwnReset:
         assert await self._rating_in_status(hass) == (50.0, True)
 
     async def test_monitoring_off_and_on_leaves_the_rating_alone(self, hass: HomeAssistant) -> None:
-        """A new monitor, built when monitoring is turned back on, reads the same override."""
+        """A new monitor, built when monitoring is turned back on, reads the same stored."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
-        manager.set_override("circuit-2", snapshot, 50)
+        manager.set_rating("circuit-2", snapshot, 50)
         original = entry.runtime_data.coordinator.current_monitor
 
         await hass.services.async_call(
@@ -334,17 +334,17 @@ class TestOverrideSurvivesTheMonitorsOwnReset:
         assert await self._rating_in_status(hass) == (50.0, True)
 
 
-@pytest.mark.parametrize("override", [None, 50])
+@pytest.mark.parametrize("stored", [None, 50])
 async def test_a_monitor_is_judged_by_the_manager_it_was_given(
-    hass: HomeAssistant, override: int | None
+    hass: HomeAssistant, stored: int | None
 ) -> None:
     """The rating a monitor uses is the manager's answer, whichever manager that is."""
     snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
     monitor, manager = await _monitor(hass, snapshot)
-    if override is not None:
-        manager.set_override("circuit-2", snapshot, override)
+    if stored is not None:
+        manager.set_rating("circuit-2", snapshot, stored)
     monitor.process_snapshot(snapshot)
 
     entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
 
-    assert entry["breaker_rating_a"] == float(override or 20)
+    assert entry["breaker_rating_a"] == float(stored or 20)

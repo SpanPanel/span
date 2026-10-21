@@ -242,19 +242,19 @@ def _build_clear_mains_threshold_schema() -> vol.Schema:
     )
 
 
-def _build_set_circuit_breaker_rating_schema() -> vol.Schema:
-    """Build schema for set_circuit_breaker_rating service."""
+def _build_set_circuit_monitoring_rating_schema() -> vol.Schema:
+    """Build schema for set_circuit_monitoring_rating service."""
     return vol.Schema(
         {
             vol.Required("circuit_id"): str,
-            vol.Required("breaker_rating_a"): vol.All(int, vol.Range(min=1)),
+            vol.Required("monitoring_rating_a"): vol.All(int, vol.Range(min=1)),
             vol.Optional("config_entry_id"): str,
         }
     )
 
 
-def _build_clear_circuit_breaker_rating_schema() -> vol.Schema:
-    """Build schema for clear_circuit_breaker_rating service."""
+def _build_clear_circuit_monitoring_rating_schema() -> vol.Schema:
+    """Build schema for clear_circuit_monitoring_rating service."""
     return vol.Schema(
         {
             vol.Required("circuit_id"): str,
@@ -391,7 +391,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         runtime_data, entry = result
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
-        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.breaker_rating_manager)
+        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.monitoring_rating_manager)
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
         # Seed the monitor with the coordinator's latest snapshot so that
@@ -531,11 +531,11 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     )
 
 
-def _async_register_breaker_rating_services(hass: HomeAssistant) -> None:
-    """Register the services that set and clear a circuit's breaker rating.
+def _async_register_monitoring_rating_services(hass: HomeAssistant) -> None:
+    """Register the services that set and clear a circuit's monitoring rating.
 
-    Neither touches current monitoring: the rating is the panel's, corrected, and
-    monitoring merely reads it, so both work whether monitoring is on or off.
+    Neither touches current monitoring: monitoring merely reads the rating, so
+    both work whether monitoring is on or off.
     """
 
     def _get_runtime_data(call: ServiceCall, target: str) -> SpanPanelRuntimeData:
@@ -556,40 +556,40 @@ def _async_register_breaker_rating_services(hass: HomeAssistant) -> None:
         raise ServiceValidationError(
             "No SPAN panel is loaded.",
             translation_domain=DOMAIN,
-            translation_key="breaker_rating_panel_not_loaded",
+            translation_key="monitoring_rating_panel_not_loaded",
         )
 
-    async def async_handle_set_circuit_breaker_rating(call: ServiceCall) -> None:
+    async def async_handle_set_circuit_monitoring_rating(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.breaker_rating_manager.set_override(
-            circuit_id, snapshot, call.data["breaker_rating_a"]
+        runtime_data.coordinator.monitoring_rating_manager.set_rating(
+            circuit_id, snapshot, call.data["monitoring_rating_a"]
         )
         # The snapshot is unchanged, so entities would keep the old rating until
         # the next one; tell them to recompute from it now.
         runtime_data.coordinator.async_update_listeners()
 
-    async def async_handle_clear_circuit_breaker_rating(call: ServiceCall) -> None:
+    async def async_handle_clear_circuit_monitoring_rating(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.breaker_rating_manager.clear_override(circuit_id, snapshot)
+        runtime_data.coordinator.monitoring_rating_manager.clear_rating(circuit_id, snapshot)
         runtime_data.coordinator.async_update_listeners()
 
     hass.services.async_register(
         DOMAIN,
-        "set_circuit_breaker_rating",
-        async_handle_set_circuit_breaker_rating,
-        schema=_build_set_circuit_breaker_rating_schema(),
+        "set_circuit_monitoring_rating",
+        async_handle_set_circuit_monitoring_rating,
+        schema=_build_set_circuit_monitoring_rating_schema(),
     )
     hass.services.async_register(
         DOMAIN,
-        "clear_circuit_breaker_rating",
-        async_handle_clear_circuit_breaker_rating,
-        schema=_build_clear_circuit_breaker_rating_schema(),
+        "clear_circuit_monitoring_rating",
+        async_handle_clear_circuit_monitoring_rating,
+        schema=_build_clear_circuit_monitoring_rating_schema(),
     )
 
 

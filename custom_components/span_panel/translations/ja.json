@@ -454,19 +454,19 @@
     "adopted_control_not_delivered": {
       "message": "{device}の{property}への書き込みをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、値は変わっておらず、後から変わることもありません。"
     },
-    "breaker_rating_above_service_rating": {
+    "monitoring_rating_above_service_rating": {
       "message": "ブレーカー定格はパネルのサービス定格 {service_rating} A を超えることはできません。"
     },
-    "breaker_rating_circuit_unknown": {
+    "monitoring_rating_circuit_unknown": {
       "message": "このパネルには、その ID の回路がありません。"
     },
-    "breaker_rating_panel_not_loaded": {
+    "monitoring_rating_panel_not_loaded": {
       "message": "SPAN Panel が読み込まれていないため、ブレーカー定格を設定することもクリアすることもできません。"
     },
-    "breaker_rating_no_service_rating": {
+    "monitoring_rating_no_service_rating": {
       "message": "パネルがサービス定格を公開していないため、ブレーカー定格の補正を設定できません。"
     },
-    "breaker_rating_not_published": {
+    "monitoring_rating_not_published": {
       "message": "パネルはこの回路のブレーカー定格を公開していないため、補正を設定できません。"
     },
     "circuit_priority_failed": {
@@ -698,7 +698,7 @@
         }
       }
     },
-    "set_circuit_breaker_rating": {
+    "set_circuit_monitoring_rating": {
       "name": "回路のブレーカー定格の設定",
       "description": "パネルが公開している回路のブレーカー定格が誤っている場合に補正します。補正できるのはパネルが公開している定格だけで、パネルのサービス定格を超えることはできません。",
       "fields": {
@@ -706,7 +706,7 @@
           "name": "回路",
           "description": "回路電力センサーエンティティ。"
         },
-        "breaker_rating_a": {
+        "monitoring_rating_a": {
           "name": "ブレーカー定格 (A)",
           "description": "アンペア単位のブレーカー定格。1 からパネルのサービス定格までの整数です。"
         },
@@ -716,7 +716,7 @@
         }
       }
     },
-    "clear_circuit_breaker_rating": {
+    "clear_circuit_monitoring_rating": {
       "name": "回路のブレーカー定格のクリア",
       "description": "回路のブレーカー定格の補正を削除し、パネルが公開している定格に戻します。",
       "fields": {

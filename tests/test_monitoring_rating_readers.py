@@ -2,7 +2,7 @@
 
 A user may correct a circuit's published rating. The sensor's value, the topology's
 `breaker_rating_a` and the two fields beside it come from the panel's
-`BreakerRatingManager`, so they agree with current monitoring. The wire value stays
+`MonitoringRatingManager`, so they agree with current monitoring. The wire value stays
 available as `panel_breaker_rating_a`, and the energy-counter bound keeps judging
 against it.
 """
@@ -20,11 +20,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
-from custom_components.span_panel.breaker_ratings import service_rating_a
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.counter_plausibility import LIFETIME_HOURS, lifetime_bound_wh
 from custom_components.span_panel.id_builder import build_circuit_unique_id
+from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
+from custom_components.span_panel.monitoring_ratings import service_rating_a
 from custom_components.span_panel.sensor import create_circuit_sensors
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitBreakerRatingSensor,
@@ -35,16 +35,16 @@ from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
 )
-from custom_components.span_panel.services import _async_register_breaker_rating_services
+from custom_components.span_panel.services import _async_register_monitoring_rating_services
 
 from .captures_replay import CAPTURES, Capture, snapshot
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
-from .test_breaker_rating_services import _loaded_panel
 from .test_expected_entities import _install, _topology
+from .test_monitoring_rating_services import _loaded_panel
 
 SERVICE_A: Final = 100
 PANEL_A: Final = 20.0
-OVERRIDE_A: Final = 50
+MONITORING_A: Final = 50
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
 POWER: Final = next(d for d in CIRCUIT_SENSORS if d.key == "circuit_power")
 
@@ -67,24 +67,24 @@ def _panel() -> SpanPanelSnapshot:
 
 
 async def _manager(
-    hass: HomeAssistant, snap: SpanPanelSnapshot, *, override: bool
-) -> BreakerRatingManager:
+    hass: HomeAssistant, snap: SpanPanelSnapshot, *, rated: bool
+) -> MonitoringRatingManager:
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id=snap.serial_number)
     entry.add_to_hass(hass)
-    manager = BreakerRatingManager(hass, entry)
+    manager = MonitoringRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snap, _DECLARED)
-    if override:
-        manager.set_override("circuit-2", snap, OVERRIDE_A)
+    if rated:
+        manager.set_rating("circuit-2", snap, MONITORING_A)
     return manager
 
 
-def _coordinator(snap: SpanPanelSnapshot, manager: BreakerRatingManager) -> MagicMock:
+def _coordinator(snap: SpanPanelSnapshot, manager: MonitoringRatingManager) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snap
     coordinator.panel_offline = False
     coordinator.transport_dead = False
-    coordinator.breaker_rating_manager = manager
+    coordinator.monitoring_rating_manager = manager
     coordinator.config_entry.options = {}
     coordinator.config_entry.data = {}
     coordinator.config_entry.title = "SPAN Panel"
@@ -94,21 +94,21 @@ def _coordinator(snap: SpanPanelSnapshot, manager: BreakerRatingManager) -> Magi
 # -- The sensor ---------------------------------------------------------------
 
 
-async def test_the_sensor_reports_the_override(hass: HomeAssistant) -> None:
+async def test_the_sensor_reports_the_monitoring_rating(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, override=True))
+    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
 
     sensor = SpanCircuitBreakerRatingSensor(
         coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2"
     )
 
     sensor._update_native_value()
-    assert sensor.native_value == float(OVERRIDE_A)
+    assert sensor.native_value == float(MONITORING_A)
 
 
 async def test_the_sensor_reports_the_panel_rating_without_one(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, override=False))
+    coordinator = _coordinator(snap, await _manager(hass, snap, rated=False))
 
     sensor = SpanCircuitBreakerRatingSensor(
         coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2"
@@ -121,13 +121,13 @@ async def test_the_sensor_reports_the_panel_rating_without_one(hass: HomeAssista
 async def test_the_sensor_carries_both_ratings_as_attributes(hass: HomeAssistant) -> None:
     snap = _panel()
     corrected = SpanCircuitBreakerRatingSensor(
-        _coordinator(snap, await _manager(hass, snap, override=True)),
+        _coordinator(snap, await _manager(hass, snap, rated=True)),
         CIRCUIT_BREAKER_RATING_SENSOR,
         snap,
         "circuit-2",
     ).extra_state_attributes
     plain = SpanCircuitBreakerRatingSensor(
-        _coordinator(snap, await _manager(hass, snap, override=False)),
+        _coordinator(snap, await _manager(hass, snap, rated=False)),
         CIRCUIT_BREAKER_RATING_SENSOR,
         snap,
         "circuit-2",
@@ -144,7 +144,7 @@ async def test_the_sensor_carries_both_ratings_as_attributes(hass: HomeAssistant
 
 async def test_the_power_and_current_sensors_gain_nothing(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, override=True))
+    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
 
     for description in (POWER, CIRCUIT_CURRENT_SENSOR):
         sensor = SpanCircuitPowerSensor(coordinator, description, snap, "circuit-2")
@@ -156,7 +156,7 @@ async def test_the_power_and_current_sensors_gain_nothing(hass: HomeAssistant) -
 
 async def test_the_rating_sensor_keeps_its_identity(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, override=True))
+    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
     plain = SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2")
     rating = SpanCircuitBreakerRatingSensor(
         coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2"
@@ -171,7 +171,7 @@ async def test_the_sensor_is_unknown_where_the_circuit_publishes_no_rating(
     hass: HomeAssistant,
 ) -> None:
     snap = _panel()
-    manager = await _manager(hass, snap, override=False)
+    manager = await _manager(hass, snap, rated=False)
     unrated = replace(
         snap, circuits={"circuit-2": replace(snap.circuits["circuit-2"], breaker_rating_a=None)}
     )
@@ -187,7 +187,7 @@ async def test_the_sensor_is_unknown_where_the_circuit_publishes_no_rating(
 
 async def test_only_the_rating_sensor_is_the_subclass(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, override=True))
+    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
     coordinator.client.schema_major = "schema_1"
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
 
@@ -212,19 +212,19 @@ async def test_the_sensor_follows_the_services_without_a_new_snapshot(
     sensor._update_native_value()
     # The coordinator's listeners are the entities: updating them recomputes the sensor.
     coordinator.async_update_listeners.side_effect = sensor._update_native_value
-    _async_register_breaker_rating_services(hass)
+    _async_register_monitoring_rating_services(hass)
     assert sensor.native_value == PANEL_A
 
     await hass.services.async_call(
         DOMAIN,
-        "set_circuit_breaker_rating",
-        {"circuit_id": "circuit-2", "breaker_rating_a": OVERRIDE_A},
+        "set_circuit_monitoring_rating",
+        {"circuit_id": "circuit-2", "monitoring_rating_a": MONITORING_A},
         blocking=True,
     )
-    assert sensor.native_value == float(OVERRIDE_A)
+    assert sensor.native_value == float(MONITORING_A)
 
     await hass.services.async_call(
-        DOMAIN, "clear_circuit_breaker_rating", {"circuit_id": "circuit-2"}, blocking=True
+        DOMAIN, "clear_circuit_monitoring_rating", {"circuit_id": "circuit-2"}, blocking=True
     )
     assert sensor.native_value == PANEL_A
 
@@ -232,13 +232,15 @@ async def test_the_sensor_follows_the_services_without_a_new_snapshot(
 # -- Counter plausibility keeps the panel rating ---------------------------------
 
 
-async def test_an_override_does_not_change_the_energy_counter_bound(hass: HomeAssistant) -> None:
+async def test_a_monitoring_rating_does_not_change_the_energy_counter_bound(
+    hass: HomeAssistant,
+) -> None:
     snap = _panel()
     circuit: SpanCircuitSnapshot = snap.circuits["circuit-2"]
     before = lifetime_bound_wh(circuit)
-    manager = await _manager(hass, snap, override=True)
+    manager = await _manager(hass, snap, rated=True)
 
-    assert manager.resolve("circuit-2", snap).effective_a == float(OVERRIDE_A)
+    assert manager.resolve("circuit-2", snap).judged_a == float(MONITORING_A)
     assert before == PANEL_A * 120.0 * LIFETIME_HOURS
     assert lifetime_bound_wh(snap.circuits["circuit-2"]) == before
 
@@ -259,7 +261,7 @@ def _capture_with_headroom(captured: Capture) -> tuple[str, float, int] | None:
     return None
 
 
-async def test_a_replay_with_one_stored_override_reports_it(
+async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
     hass: HomeAssistant,
     hass_storage: dict[str, object],
     hass_ws_client: WebSocketGenerator,
@@ -270,16 +272,16 @@ async def test_a_replay_with_one_stored_override_reports_it(
         if (found := _capture_with_headroom(captured)) is not None
     ]
     assert candidates
-    captured, (circuit_id, panel_a, override_a) = candidates[0]
+    captured, (circuit_id, panel_a, monitoring_a) = candidates[0]
     entry_id = f"entry-{captured.name}"
-    hass_storage[f"span_panel_breaker_ratings.{entry_id}"] = {
+    hass_storage[f"span_panel_monitoring_ratings.{entry_id}"] = {
         "version": 1,
         "minor_version": 1,
-        "key": f"span_panel_breaker_ratings.{entry_id}",
+        "key": f"span_panel_monitoring_ratings.{entry_id}",
         "data": {
-            "overrides": {
+            "ratings": {
                 circuit_id: {
-                    "rating_a": override_a,
+                    "rating_a": monitoring_a,
                     "panel_a_at_set": panel_a,
                     "label": "Synthetic label",
                 }
@@ -297,7 +299,7 @@ async def test_a_replay_with_one_stored_override_reports_it(
     rows = topology["circuits"]
     assert isinstance(rows, dict)
     corrected = rows[circuit_id]
-    assert corrected["breaker_rating_a"] == float(override_a)
+    assert corrected["breaker_rating_a"] == float(monitoring_a)
     assert corrected["panel_breaker_rating_a"] == panel_a
     assert corrected["breaker_rating_user_set"] is True
     for other_id, row in rows.items():

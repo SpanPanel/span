@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
-from custom_components.span_panel.breaker_ratings import BreakerRating
+from custom_components.span_panel.monitoring_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
@@ -57,7 +57,7 @@ def _make_coordinator(snapshot):
     coordinator = MagicMock()
     coordinator.data = snapshot
     # No circuit is corrected: each reports the rating its panel published.
-    coordinator.breaker_rating_manager.resolve.side_effect = _panel_rating
+    coordinator.monitoring_rating_manager.resolve.side_effect = _panel_rating
     return coordinator
 
 
@@ -65,7 +65,7 @@ def _panel_rating(circuit_id, snapshot):
     """Resolve a circuit to the rating its panel published, as a manager holding no override does."""
     circuit = snapshot.circuits.get(circuit_id)
     rating = circuit.breaker_rating_a if circuit else None
-    return BreakerRating(rating, rating, False)
+    return MonitoringRating(rating, rating, False)
 
 
 def _register_panel_device(
@@ -852,10 +852,10 @@ class TestHandlePanelTopology:
 
         def resolve(circuit_id, snap):
             if circuit_id == "uuid_kitchen":
-                return BreakerRating(50.0, 20.0, True)
+                return MonitoringRating(50.0, 20.0, True)
             return _panel_rating(circuit_id, snap)
 
-        coordinator.breaker_rating_manager.resolve.side_effect = resolve
+        coordinator.monitoring_rating_manager.resolve.side_effect = resolve
         entry = MockConfigEntry(
             domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-test-001"
         )

@@ -23,7 +23,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
-from custom_components.span_panel.breaker_ratings import BreakerRating
+from custom_components.span_panel.monitoring_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor, monitored_circuits
@@ -132,12 +132,12 @@ def test_each_members_power_sensor_and_switch_carry_its_peers() -> None:
     assert "relay_shared_with" not in lone
 
 
-def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], BreakerRating]:
+def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], MonitoringRating]:
     """Resolve every circuit to the rating its panel published: no user has corrected any."""
 
-    def resolve(circuit_id: str) -> BreakerRating:
+    def resolve(circuit_id: str) -> MonitoringRating:
         rating = snapshot.circuits[circuit_id].breaker_rating_a
-        return BreakerRating(rating, rating, False)
+        return MonitoringRating(rating, rating, False)
 
     return resolve
 

@@ -335,7 +335,7 @@ is scoped to a single panel — circuits, sub-devices, and entity mappings from 
 
 ## Events
 
-### `span_panel_breaker_rating_changed`
+### `span_panel_monitoring_rating_changed`
 
 Fired on the Home Assistant event bus whenever the stored breaker rating overrides of a panel change: a rating is set or cleared, or a new snapshot makes one no
 longer apply. A consumer showing `breaker_rating_a` re-fetches `span_panel/panel_topology` on receiving it.

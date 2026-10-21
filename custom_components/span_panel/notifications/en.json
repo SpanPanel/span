@@ -16,7 +16,7 @@
     "title": "SPAN Panel: some vendor readings were not added",
     "body": "A device on your panel declares more vendor readings than this integration will add for one device ({limit}). The rest were left out: {devices}.\n\nNothing you already have is affected, and nothing is broken. The readings that were left out are still listed in this integration's diagnostics download, which is what to attach if you want them surfaced."
   },
-  "breaker_rating_changed": {
+  "monitoring_rating_changed": {
     "title": "SPAN Panel breaker ratings changed",
     "intro": "The panel changed a breaker rating you had corrected. Review each circuit in the Span Panel dashboard, in the circuit's **Breaker Rating** section.",
     "panel_changed": "**{circuit}**: the panel now reports {after} A (was {before} A). Your {rating} A still applies.",

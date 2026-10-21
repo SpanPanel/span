@@ -2,8 +2,8 @@
 
 Detects spike (instantaneous) and continuous overload conditions by comparing
 current readings against effective ratings with configurable thresholds. A
-circuit's effective rating is its panel rating, or the rating a user corrected
-it to; the monitor asks the `BreakerRatingManager` for it and stores none.
+circuit's effective rating is its panel rating, or the monitoring rating a user set
+for it; the monitor asks the `MonitoringRatingManager` for it and stores none.
 Dispatches notifications via event bus, notify services, and persistent
 notifications.
 """
@@ -21,7 +21,6 @@ from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot, shared_meter_groups
 
 from .alert_dispatcher import dispatch_alert, format_notification
-from .breaker_ratings import service_rating_a
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
@@ -34,6 +33,7 @@ from .const import (
 )
 from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
+from .monitoring_ratings import service_rating_a
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -56,8 +56,8 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-    from .breaker_rating_manager import BreakerRatingManager
-    from .breaker_ratings import BreakerRating
+    from .monitoring_rating_manager import MonitoringRatingManager
+    from .monitoring_ratings import MonitoringRating
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ class MonitoredCircuit:
     For a group, both are capacities by the same rule: `rating_a` over its
     members' effective ratings, `panel_rating_a` over the ratings the panel
     published. `rating_user_set` is whether any member's effective rating is a
-    user's correction, whether or not the capacity is known.
+    user's monitoring rating, whether or not the capacity is known.
     """
 
     point_id: str
@@ -146,7 +146,7 @@ def meter_capacity_a(members: Iterable[tuple[Collection[int], float | None]]) ->
 
 
 def monitored_circuits(
-    snapshot: SpanPanelSnapshot, ratings: Callable[[str], BreakerRating]
+    snapshot: SpanPanelSnapshot, ratings: Callable[[str], MonitoringRating]
 ) -> dict[str, MonitoredCircuit]:
     """Every point the monitor judges, by the id of each circuit it covers.
 
@@ -164,7 +164,7 @@ def monitored_circuits(
                 construct_circuit_label(snapshot.circuits[member], member) for member in members
             ),
             current_a=snapshot.circuits[key].current_a,
-            rating_a=meter_capacity_a((spaces[m], r.effective_a) for m, r in resolved.items()),
+            rating_a=meter_capacity_a((spaces[m], r.judged_a) for m, r in resolved.items()),
             panel_rating_a=meter_capacity_a((spaces[m], r.panel_a) for m, r in resolved.items()),
             rating_user_set=any(r.user_set for r in resolved.values()),
             basis="group",
@@ -179,7 +179,7 @@ def monitored_circuits(
                 members=(circuit_id,),
                 name=circuit.name or circuit_id,
                 current_a=circuit.current_a,
-                rating_a=rating.effective_a,
+                rating_a=rating.judged_a,
                 panel_rating_a=rating.panel_a,
                 rating_user_set=rating.user_set,
                 basis="circuit",
@@ -190,13 +190,13 @@ def monitored_circuits(
 class CurrentMonitor:
     """Monitors current draw against effective breaker ratings for overload detection.
 
-    The ratings come from the panel's `BreakerRatingManager`, which the
+    The ratings come from the panel's `MonitoringRatingManager`, which the
     coordinator reconciles before any listener sees a snapshot. The monitor only
-    resolves them; it holds none, so nothing here can lose a user's correction.
+    resolves them; it holds none, so nothing here can lose a user's monitoring rating.
     """
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, ratings: BreakerRatingManager
+        self, hass: HomeAssistant, entry: ConfigEntry, ratings: MonitoringRatingManager
     ) -> None:
         """Initialize the CurrentMonitor."""
         self._hass = hass

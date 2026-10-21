@@ -21,7 +21,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
-from custom_components.span_panel.breaker_ratings import service_rating_a
+from custom_components.span_panel.monitoring_ratings import service_rating_a
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.helpers import construct_voltage_attribute

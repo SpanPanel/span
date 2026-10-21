@@ -1,4 +1,4 @@
-"""Tests for the coordinator's wiring of breaker rating overrides."""
+"""Tests for the coordinator's wiring of monitoring ratings."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from span_panel_api import FieldMetadata, SpanMqttClient, SpanPanelSnapshot
 
 from custom_components.span_panel import async_setup_entry
-from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -22,16 +21,17 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
     DOMAIN,
-    EVENT_BREAKER_RATING_CHANGED,
+    EVENT_MONITORING_RATING_CHANGED,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
 from custom_components.span_panel.notices import is_standing
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 SERVICE_A = 100
 _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
-_NOTICE = "breaker_rating_changed"
+_NOTICE = "monitoring_rating_changed"
 
 
 def _snapshot(ratings: Mapping[str, float | None]) -> SpanPanelSnapshot:
@@ -51,13 +51,13 @@ def _snapshot(ratings: Mapping[str, float | None]) -> SpanPanelSnapshot:
 
 
 def _seed(hass_storage: dict[str, object], entry: MockConfigEntry, circuit_id: str) -> None:
-    """Leave an override of 40 A, set when the panel said 20 A, on disk for `entry`."""
-    hass_storage[f"span_panel_breaker_ratings.{entry.entry_id}"] = {
+    """Leave a monitoring rating of 40 A, set when the panel said 20 A, on disk for `entry`."""
+    hass_storage[f"span_panel_monitoring_ratings.{entry.entry_id}"] = {
         "version": 1,
         "minor_version": 1,
-        "key": f"span_panel_breaker_ratings.{entry.entry_id}",
+        "key": f"span_panel_monitoring_ratings.{entry.entry_id}",
         "data": {
-            "overrides": {
+            "ratings": {
                 circuit_id: {
                     "rating_a": 40,
                     "panel_a_at_set": 20.0,
@@ -101,8 +101,8 @@ def _coordinator(
 
 async def _begun(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, hass: HomeAssistant
-) -> BreakerRatingManager:
-    manager = coordinator.breaker_rating_manager
+) -> MonitoringRatingManager:
+    manager = coordinator.monitoring_rating_manager
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     await hass.async_block_till_done()
@@ -110,7 +110,7 @@ async def _begun(
 
 
 def _events(hass: HomeAssistant) -> list[Event]:
-    events: list[Event] = async_capture_events(hass, EVENT_BREAKER_RATING_CHANGED)
+    events: list[Event] = async_capture_events(hass, EVENT_MONITORING_RATING_CHANGED)
     return events
 
 
@@ -121,7 +121,7 @@ async def test_the_coordinator_owns_a_manager_from_construction(hass: HomeAssist
     entry = _entry()
     entry.add_to_hass(hass)
     coordinator = _coordinator(hass, entry, _client(_DECLARED))
-    assert isinstance(coordinator.breaker_rating_manager, BreakerRatingManager)
+    assert isinstance(coordinator.monitoring_rating_manager, MonitoringRatingManager)
 
 
 # -- Before listeners see a snapshot -----------------------------------------
@@ -142,7 +142,7 @@ async def test_a_pushed_snapshot_is_reconciled_before_listeners_are_told(
     seen: list[float] = []
 
     def _listeners(_: SpanPanelSnapshot) -> None:
-        seen.append(manager._overrides["circuit-2"].panel_a_at_set)
+        seen.append(manager._ratings["circuit-2"].panel_a_at_set)
 
     with (
         patch.object(coordinator, "async_set_updated_data", side_effect=_listeners),
@@ -171,7 +171,7 @@ async def test_a_polled_snapshot_is_reconciled_before_it_is_returned(
     await hass.async_block_till_done()
 
     assert result is overtaken
-    assert manager._overrides["circuit-2"].panel_a_at_set == 30.0
+    assert manager._ratings["circuit-2"].panel_a_at_set == 30.0
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
 
 
@@ -185,7 +185,7 @@ async def test_a_snapshot_before_begin_judges_nothing(
     client = _client(_DECLARED)
     client.get_snapshot = AsyncMock(return_value=_snapshot({"circuit-9": 20.0}))
     coordinator = _coordinator(hass, entry, client)
-    await coordinator.breaker_rating_manager.async_load()
+    await coordinator.monitoring_rating_manager.async_load()
     events = _events(hass)
 
     with patch.object(coordinator, "_run_post_update_tasks", AsyncMock()):
@@ -194,9 +194,9 @@ async def test_a_snapshot_before_begin_judges_nothing(
 
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)
-    stored = hass_storage[f"span_panel_breaker_ratings.{entry.entry_id}"]
+    stored = hass_storage[f"span_panel_monitoring_ratings.{entry.entry_id}"]
     assert isinstance(stored, dict)
-    assert "circuit-2" in stored["data"]["overrides"]
+    assert "circuit-2" in stored["data"]["ratings"]
 
 
 async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing(
@@ -227,7 +227,7 @@ async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing
     client.field_metadata = _DECLARED
     manager.reconcile(rated_late, lambda: client.field_metadata)
     rating = manager.resolve("circuit-2", rated_late)
-    assert (rating.user_set, rating.effective_a) == (True, 40)
+    assert (rating.user_set, rating.judged_a) == (True, 40)
     assert events == []
 
 
@@ -269,7 +269,7 @@ async def test_snapshots_read_field_metadata_while_the_declaration_is_unknown(
     reads = PropertyMock(side_effect=[None, _DECLARED])
     type(client).field_metadata = reads
     coordinator = _coordinator(hass, entry, client)
-    manager = coordinator.breaker_rating_manager
+    manager = coordinator.monitoring_rating_manager
     await manager.async_load()
     manager.begin(snapshot, None)
 
@@ -282,7 +282,7 @@ async def test_snapshots_read_field_metadata_while_the_declaration_is_unknown(
 
     assert reads.call_count == 2
     rating = manager.resolve("circuit-2", snapshot)
-    assert (rating.user_set, rating.effective_a) == (True, 40)
+    assert (rating.user_set, rating.judged_a) == (True, 40)
 
 
 # -- Setup ---------------------------------------------------------------------
@@ -336,7 +336,7 @@ async def _set_up(
     return client, coordinators[0]
 
 
-async def test_an_override_stored_before_setup_is_in_force_after_it(
+async def test_a_monitoring_rating_stored_before_setup_is_in_force_after_it(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     entry = _entry()
@@ -346,11 +346,11 @@ async def test_an_override_stored_before_setup_is_in_force_after_it(
 
     _, coordinator = await _set_up(hass, entry, snapshot)
 
-    rating = coordinator.breaker_rating_manager.resolve("circuit-2", snapshot)
-    assert (rating.user_set, rating.effective_a) == (True, 40)
+    rating = coordinator.monitoring_rating_manager.resolve("circuit-2", snapshot)
+    assert (rating.user_set, rating.judged_a) == (True, 40)
 
 
-async def test_an_override_for_a_missing_circuit_survives_until_begin_and_is_then_judged(
+async def test_a_monitoring_rating_for_a_missing_circuit_survives_until_begin_and_is_then_judged(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     """Without a migration the first reconcile removes it; before then nothing is deleted or announced."""
@@ -363,24 +363,24 @@ async def test_an_override_for_a_missing_circuit_survives_until_begin_and_is_the
 
     def _look(*_: object) -> None:
         manager = coordinators_manager[0]
-        before.append((len(manager._overrides), len(events)))
+        before.append((len(manager._ratings), len(events)))
 
-    coordinators_manager: list[BreakerRatingManager] = []
-    orig_load = BreakerRatingManager.async_load
+    coordinators_manager: list[MonitoringRatingManager] = []
+    orig_load = MonitoringRatingManager.async_load
 
-    async def _capture(self: BreakerRatingManager) -> None:
+    async def _capture(self: MonitoringRatingManager) -> None:
         coordinators_manager.append(self)
         await orig_load(self)
 
-    with patch.object(BreakerRatingManager, "async_load", _capture):
+    with patch.object(MonitoringRatingManager, "async_load", _capture):
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_look)
 
     assert before == [(1, 0)]
-    assert coordinator.breaker_rating_manager._overrides == {}
+    assert coordinator.monitoring_rating_manager._ratings == {}
     assert [event.data["circuit_ids"] for event in events] == [["old-circuit"]]
 
 
-async def test_a_stand_in_rekey_before_begin_keeps_the_override_on_the_new_id(
+async def test_a_stand_in_rekey_before_begin_keeps_the_monitoring_rating_on_the_new_id(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     entry = _entry()
@@ -388,21 +388,21 @@ async def test_a_stand_in_rekey_before_begin_keeps_the_override_on_the_new_id(
     _seed(hass_storage, entry, "old-circuit")
     snapshot = _snapshot({"new-circuit": 20.0})
     events = _events(hass)
-    managers: list[BreakerRatingManager] = []
-    orig_load = BreakerRatingManager.async_load
+    managers: list[MonitoringRatingManager] = []
+    orig_load = MonitoringRatingManager.async_load
 
-    async def _capture(self: BreakerRatingManager) -> None:
+    async def _capture(self: MonitoringRatingManager) -> None:
         managers.append(self)
         await orig_load(self)
 
     def _migrate(*_: object) -> None:
-        overrides = managers[0]._overrides
-        overrides["new-circuit"] = overrides.pop("old-circuit")
+        ratings = managers[0]._ratings
+        ratings["new-circuit"] = ratings.pop("old-circuit")
 
-    with patch.object(BreakerRatingManager, "async_load", _capture):
+    with patch.object(MonitoringRatingManager, "async_load", _capture):
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_migrate)
 
-    rating = coordinator.breaker_rating_manager.resolve("new-circuit", snapshot)
-    assert (rating.user_set, rating.effective_a) == (True, 40)
+    rating = coordinator.monitoring_rating_manager.resolve("new-circuit", snapshot)
+    assert (rating.user_set, rating.judged_a) == (True, 40)
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)

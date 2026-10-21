@@ -91,7 +91,7 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
 
@@ -155,7 +155,7 @@ async def test_the_panel_client_is_given_home_assistants_shared_http_client(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
 
@@ -363,7 +363,7 @@ async def test_async_setup_entry_renames_to_unique_panel_title(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
 
@@ -399,7 +399,7 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.async_shutdown = AsyncMock()
     coordinator.data = snapshot
@@ -447,7 +447,7 @@ async def test_setup_syncs_schema_repairs_after_the_platforms(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
 
@@ -498,7 +498,7 @@ async def test_setup_announces_additions_after_the_platforms(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
 
@@ -566,7 +566,7 @@ async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forward
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
 
@@ -640,7 +640,7 @@ async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
     forwarded_overlay: list[CurationOverlay] = []
@@ -674,7 +674,7 @@ async def _forwarded_pv_binding(hass: HomeAssistant, entry: MockConfigEntry, sna
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
     forwarded: list[PvBinding] = []
@@ -805,7 +805,7 @@ def _panel_with_model(model: str | None) -> _PanelUnderSetup:
     client.close = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.breaker_rating_manager.async_load = AsyncMock()
+    coordinator.monitoring_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.async_shutdown = AsyncMock()
     coordinator.data = replace(SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001"), model=model)

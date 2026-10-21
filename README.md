@@ -432,10 +432,11 @@ In addition to the circuit power sensor attributes, the Breaker Rating sensor ca
 
 ### Correcting a Breaker Rating and Current Monitoring
 
-A circuit's breaker rating can be corrected where the panel's commissioned rating is wrong, as on a tandem breaker, which the panel publishes at the rating of
-one half. A correction is made in the dashboard, or with the `span_panel.set_circuit_breaker_rating` and `span_panel.clear_circuit_breaker_rating` services, and
-is bounded by the panel's service rating. Current monitoring judges a circuit against its corrected rating, so its thresholds, utilization and alert text all
-use it, and the Breaker Rating sensor and the panel view show it with the panel's rating beside it. Energy counter checks keep using the panel's rating.
+A circuit's breaker rating can be corrected where the panel's commissioned rating is wrong, as on a tandem breaker, which the panel publishes at the
+rating of one half. A correction is made in the dashboard, or with the `span_panel.set_circuit_monitoring_rating` and
+`span_panel.clear_circuit_monitoring_rating` services, and is bounded by the panel's service rating. Current monitoring judges a circuit against its
+corrected rating, so its thresholds, utilization and alert text all use it, and the Breaker Rating sensor and the panel view show it with the panel's
+rating beside it. Energy counter checks keep using the panel's rating.
 
 A notification tells you when the panel overtakes a correction:
 

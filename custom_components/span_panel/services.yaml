@@ -55,7 +55,7 @@ clear_circuit_threshold:
         config_entry:
           integration: span_panel
 
-set_circuit_breaker_rating:
+set_circuit_monitoring_rating:
   fields:
     circuit_id:
       required: true
@@ -64,7 +64,7 @@ set_circuit_breaker_rating:
           domain: sensor
           integration: span_panel
           device_class: current
-    breaker_rating_a:
+    monitoring_rating_a:
       required: true
       selector:
         number:
@@ -76,7 +76,7 @@ set_circuit_breaker_rating:
         config_entry:
           integration: span_panel
 
-clear_circuit_breaker_rating:
+clear_circuit_monitoring_rating:
   fields:
     circuit_id:
       required: true

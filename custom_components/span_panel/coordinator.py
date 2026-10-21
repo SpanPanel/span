@@ -30,7 +30,6 @@ from span_panel_api.exceptions import (
     SpanPanelStaleDataError,
 )
 
-from .breaker_rating_manager import BreakerRatingManager
 from .const import DOMAIN
 from .energy_orientation import EnergyCounter, EnergyMeter
 from .helpers import (
@@ -40,6 +39,7 @@ from .helpers import (
 )
 from .id_builder import build_circuit_unique_id
 from .leaf_repairs import async_clear_leaf_name_mismatch
+from .monitoring_rating_manager import MonitoringRatingManager
 from .notices import async_raise, read_translations
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
@@ -175,9 +175,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Graph horizon manager — set by async_setup_entry
         self.graph_horizon_manager: GraphHorizonManager | None = None
 
-        # Breaker rating overrides. Built here so every reader of a rating has one
+        # Monitoring ratings. Built here so every reader of a rating has one
         # to ask; `async_setup_entry` loads it and runs its first reconcile.
-        self.breaker_rating_manager = BreakerRatingManager(hass, config_entry)
+        self.monitoring_rating_manager = MonitoringRatingManager(hass, config_entry)
 
         update_interval = _STREAMING_FALLBACK_INTERVAL
 
@@ -509,7 +509,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._mark_panel_online()
         # Before the listeners: an entity reads its rating when it is told the
         # snapshot changed, and must not read one the panel has overtaken.
-        self._reconcile_breaker_ratings(snapshot)
+        self._reconcile_monitoring_ratings(snapshot)
         self._check_capability_change(snapshot)
         self._check_settability_change(snapshot)
         self.async_set_updated_data(snapshot)
@@ -882,14 +882,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._reload_requested = False
             self.hass.async_create_task(self._async_reload_task())
 
-    def _reconcile_breaker_ratings(self, snapshot: SpanPanelSnapshot) -> None:
-        """Judge the stored rating overrides against a snapshot, before anything reads it.
+    def _reconcile_monitoring_ratings(self, snapshot: SpanPanelSnapshot) -> None:
+        """Judge the stored monitoring ratings against a snapshot, before anything reads it.
 
         The manager reads the field metadata only while the service rating
         declaration is still unknown, so the read is handed over rather than
         made: once known, a snapshot costs no schema walk.
         """
-        self.breaker_rating_manager.reconcile(snapshot, self._field_metadata)
+        self.monitoring_rating_manager.reconcile(snapshot, self._field_metadata)
 
     def _field_metadata(self) -> Mapping[str, FieldMetadata] | None:
         """Return the client's field metadata, None while it rebuilds."""
@@ -925,7 +925,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             # path a panel with no live MQTT stream has.
             self._check_settability_change(snapshot)
 
-            self._reconcile_breaker_ratings(snapshot)
+            self._reconcile_monitoring_ratings(snapshot)
 
             await self._run_post_update_tasks(snapshot)
 

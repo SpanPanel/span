@@ -10,7 +10,6 @@ from typing import Any, ClassVar
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from .breaker_ratings import BreakerRating
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
 from .counter_plausibility import exceeds_lifetime_bound
@@ -25,6 +24,7 @@ from .helpers import (
     get_user_friendly_suffix,
     outside_meter_label,
 )
+from .monitoring_ratings import MonitoringRating
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
@@ -330,9 +330,9 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
 class SpanCircuitBreakerRatingSensor(SpanCircuitPowerSensor):
     """A circuit's breaker rating: the rating in force, with the panel's beside it.
 
-    A user may correct a rating the panel publishes wrongly, as on a tandem
-    breaker, so the value is the panel's `BreakerRatingManager` answer rather than
-    the snapshot's field. The panel's own figure and whether a correction applies
+    A user may set a monitoring rating for a circuit whose published rating is wrong, as on a
+    tandem breaker, so the value is the panel's `MonitoringRatingManager` answer rather than
+    the snapshot's field. The panel's own figure and whether a monitoring rating applies
     are attributes of this sensor alone; the power and current sensors, which share
     the parent class, carry neither.
     """
@@ -343,11 +343,11 @@ class SpanCircuitBreakerRatingSensor(SpanCircuitPowerSensor):
         data_source: SpanCircuitSnapshot,
     ) -> float | None:
         """Read the effective rating, not the field the description names."""
-        return self._rating().effective_a
+        return self._rating().judged_a
 
-    def _rating(self) -> BreakerRating:
+    def _rating(self) -> MonitoringRating:
         """Return this circuit's rating as the manager resolves it on the latest snapshot."""
-        return self.coordinator.breaker_rating_manager.resolve(
+        return self.coordinator.monitoring_rating_manager.resolve(
             self.circuit_id, self.coordinator.data
         )
 

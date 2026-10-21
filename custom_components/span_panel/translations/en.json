@@ -580,19 +580,19 @@
     "unvalidated_hardware_no_model": {
       "message": "Hardware version {version} with an unknown model has not been validated with this release."
     },
-    "breaker_rating_not_published": {
+    "monitoring_rating_not_published": {
       "message": "The panel does not publish a breaker rating for this circuit, so a correction cannot be set for it."
     },
-    "breaker_rating_no_service_rating": {
+    "monitoring_rating_no_service_rating": {
       "message": "The panel does not publish a service rating, so a breaker rating correction cannot be set on it."
     },
-    "breaker_rating_above_service_rating": {
+    "monitoring_rating_above_service_rating": {
       "message": "A breaker rating cannot be above the panel's service rating of {service_rating} A."
     },
-    "breaker_rating_circuit_unknown": {
+    "monitoring_rating_circuit_unknown": {
       "message": "This panel has no circuit with that id."
     },
-    "breaker_rating_panel_not_loaded": {
+    "monitoring_rating_panel_not_loaded": {
       "message": "No SPAN Panel is loaded, so no breaker rating can be set or cleared."
     }
   },
@@ -698,7 +698,7 @@
         }
       }
     },
-    "set_circuit_breaker_rating": {
+    "set_circuit_monitoring_rating": {
       "name": "Set circuit breaker rating",
       "description": "Correct the breaker rating the panel publishes for a circuit where it is wrong. Only a rating the panel publishes can be corrected, and the correction cannot exceed the panel's service rating.",
       "fields": {
@@ -706,7 +706,7 @@
           "name": "Circuit",
           "description": "The circuit power sensor entity."
         },
-        "breaker_rating_a": {
+        "monitoring_rating_a": {
           "name": "Breaker rating (A)",
           "description": "The breaker rating in amps, a whole number from 1 up to the panel's service rating."
         },
@@ -716,7 +716,7 @@
         }
       }
     },
-    "clear_circuit_breaker_rating": {
+    "clear_circuit_monitoring_rating": {
       "name": "Clear circuit breaker rating",
       "description": "Remove a circuit's breaker rating correction, returning to the rating the panel publishes.",
       "fields": {

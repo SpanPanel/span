@@ -454,19 +454,19 @@
     "adopted_control_not_delivered": {
       "message": "A escrita de {property} em {device} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto o valor permanece inalterado e não mudará mais tarde."
     },
-    "breaker_rating_above_service_rating": {
+    "monitoring_rating_above_service_rating": {
       "message": "A capacidade de um disjuntor não pode ser superior à capacidade de serviço do painel, de {service_rating} A."
     },
-    "breaker_rating_circuit_unknown": {
+    "monitoring_rating_circuit_unknown": {
       "message": "Este painel não tem nenhum circuito com esse identificador."
     },
-    "breaker_rating_panel_not_loaded": {
+    "monitoring_rating_panel_not_loaded": {
       "message": "Não há nenhum SPAN Panel carregado, por isso não é possível definir nem limpar uma capacidade de disjuntor."
     },
-    "breaker_rating_no_service_rating": {
+    "monitoring_rating_no_service_rating": {
       "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma correção da capacidade do disjuntor."
     },
-    "breaker_rating_not_published": {
+    "monitoring_rating_not_published": {
       "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível definir uma correção."
     },
     "circuit_priority_failed": {
@@ -698,7 +698,7 @@
         }
       }
     },
-    "set_circuit_breaker_rating": {
+    "set_circuit_monitoring_rating": {
       "name": "Definir capacidade do disjuntor do circuito",
       "description": "Corrigir a capacidade do disjuntor que o painel publica para um circuito quando está errada. Só é possível corrigir uma capacidade que o painel publica, e a correção não pode ser superior à capacidade de serviço do painel.",
       "fields": {
@@ -706,7 +706,7 @@
           "name": "Circuito",
           "description": "A entidade do sensor de potência do circuito."
         },
-        "breaker_rating_a": {
+        "monitoring_rating_a": {
           "name": "Capacidade do disjuntor (A)",
           "description": "A capacidade do disjuntor em amperes, um número inteiro de 1 até à capacidade de serviço do painel."
         },
@@ -716,7 +716,7 @@
         }
       }
     },
-    "clear_circuit_breaker_rating": {
+    "clear_circuit_monitoring_rating": {
       "name": "Limpar capacidade do disjuntor do circuito",
       "description": "Remover a correção da capacidade do disjuntor de um circuito, revertendo para a capacidade publicada pelo painel.",
       "fields": {
