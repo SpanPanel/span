@@ -18,12 +18,12 @@
   },
   "breaker_rating_changed": {
     "title": "SPAN Panel breaker ratings changed",
-    "intro": "The panel changed a breaker rating you had corrected. Review each circuit in the Span Panel dashboard, in the circuit's Breaker settings.",
+    "intro": "The panel changed a breaker rating you had corrected. Review each circuit in the Span Panel dashboard, in the circuit's Breaker section.",
     "panel_changed": "**{circuit}**: the panel now reports {after} A (was {before} A). Your {rating} A still applies.",
-    "panel_agrees": "**{circuit}**: the panel now reports {after} A, matching your correction, so the correction was removed.",
-    "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit, so your {rating} A correction was removed.",
-    "circuit_removed": "**{circuit}**: this circuit is no longer on the panel, so your {rating} A correction was removed.",
-    "above_service_rating": "**{circuit}**: your {rating} A is above the panel's service rating of {service} A, so it was removed.",
-    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so your {rating} A correction was removed."
+    "panel_agrees": "**{circuit}**: the panel now reports {after} A (was {before} A), matching your {rating} A correction, so the correction was removed.",
+    "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit (it reported {before} A), so your {rating} A correction was removed.",
+    "circuit_removed": "**{circuit}**: this circuit is no longer on the panel (it reported {before} A), so your {rating} A correction was removed.",
+    "above_service_rating": "**{circuit}**: your {rating} A correction is above the panel's service rating of {service} A, so it was removed. The panel reported {before} A and now reports {after} A.",
+    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so your {rating} A correction was removed. The panel reported {before} A for this circuit."
   }
 }

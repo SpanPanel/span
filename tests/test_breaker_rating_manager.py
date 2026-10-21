@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from string import Formatter
 import threading
 from typing import get_args
 from unittest.mock import patch
@@ -178,6 +179,60 @@ async def test_removing_the_config_entry_deletes_its_overrides(
     await reloaded.async_load()
     reloaded.begin(_snapshot(), _DECLARED)
     assert not reloaded.resolve("circuit-2", _snapshot()).user_set
+
+
+# -- Notice text ---------------------------------------------------------------
+
+_LANGUAGES = ("en", "es", "fr", "ja", "pt")
+
+_LINE_PLACEHOLDERS: dict[str, set[str]] = {
+    "panel_changed": {"circuit", "rating", "before", "after"},
+    "panel_agrees": {"circuit", "rating", "before", "after"},
+    "rating_undeclared": {"circuit", "rating", "before"},
+    "circuit_removed": {"circuit", "rating", "before"},
+    "above_service_rating": {"circuit", "rating", "before", "after", "service"},
+    "service_rating_undeclared": {"circuit", "rating", "before"},
+}
+"""What each line names: the user's rating and the panel's before, and after where there is one.
+
+A circuit that has left, or no longer declares a rating, has no rating after;
+neither may a circuit when the service rating goes, since that removes every
+override, present or not.
+"""
+
+_BREAKER_SECTION = {
+    "en": "Breaker section",
+    "es": "sección Interruptor",
+    "fr": "section Disjoncteur",
+    "ja": "「ブレーカー」セクション",
+    "pt": "secção Disjuntor",
+}
+"""The card's Breaker section by its title, `sidepanel.breaker` in the card's i18n."""
+
+
+def _placeholders(template: str) -> set[str]:
+    return {field for _, field, _, _ in Formatter().parse(template) if field}
+
+
+def test_the_line_placeholders_cover_every_reason() -> None:
+    assert set(_LINE_PLACEHOLDERS) == set(get_args(ChangeReason.__value__))
+
+
+@pytest.mark.parametrize("language", _LANGUAGES)
+def test_every_line_names_the_users_rating_and_the_panels_before_and_after(
+    language: str,
+) -> None:
+    text = read_translations(language, _NOTICE)
+    assert {reason: _placeholders(text[reason]) for reason in _LINE_PLACEHOLDERS} == (
+        _LINE_PLACEHOLDERS
+    )
+
+
+@pytest.mark.parametrize("language", _LANGUAGES)
+def test_the_notice_points_to_the_cards_breaker_section(language: str) -> None:
+    intro = read_translations(language, _NOTICE)["intro"]
+    assert _BREAKER_SECTION[language] in intro
+    assert _placeholders(intro) == set()
 
 
 # -- set_override and clear_override ------------------------------------------
@@ -525,7 +580,10 @@ async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last
     assert isinstance(change, dict)
     assert (change["reason"], change["removed"]) == ("panel_agrees", True)
     assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 50.0)
-    assert "**Name of circuit-2**: the panel now reports 50 A" in _message(hass, entry)
+    assert (
+        "**Name of circuit-2**: the panel now reports 50 A (was 20 A), matching your 50 A "
+        "correction, so the correction was removed."
+    ) in _message(hass, entry)
 
 
 async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
@@ -549,7 +607,10 @@ async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
     assert (change["reason"], change["removed"]) == ("above_service_rating", True)
     assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 20.0)
     assert is_standing(hass, entry, _NOTICE)
-    assert "**Name of circuit-2**: your 50 A is above" in _message(hass, entry)
+    assert (
+        "**Name of circuit-2**: your 50 A correction is above the panel's service rating of "
+        "40 A, so it was removed. The panel reported 20 A and now reports 20 A."
+    ) in _message(hass, entry)
 
 
 async def test_two_changes_before_the_notice_is_raised_are_both_kept(
@@ -673,7 +734,10 @@ async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
     await hass.async_block_till_done()
 
     message = _message(hass, entry)
-    assert "**Name of circuit-2**: this circuit is no longer on the panel" in message
+    assert (
+        "**Name of circuit-2**: this circuit is no longer on the panel (it reported 20 A), "
+        "so your 50 A correction was removed."
+    ) in message
     assert "**Name of circuit-3**: the panel now reports 25 A (was 15 A)" in message
 
 
