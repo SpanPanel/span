@@ -434,8 +434,9 @@ Turning monitoring off keeps the monitoring rating, and it applies again when mo
 
 Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
 show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
-changes: the Breaker Rating sensor, the panel view's breaker labels and the `breaker_rating_a` the integration reports always show the panel's rating, and
-energy counter checks keep using it.
+changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the panel's rating, and
+energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the
+rating judged against, and `monitoring_rating_user_set` beside it.
 
 For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel measures,
 and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit is the safer

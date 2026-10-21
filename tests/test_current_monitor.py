@@ -924,6 +924,8 @@ class TestNotificationDispatch:
         assert event_data["alert_name"] == "Kitchen"
         assert event_data["current_a"] == 20.0
         assert event_data["breaker_rating_a"] == 20.0
+        assert event_data["monitoring_rating_a"] == 20.0
+        assert event_data["monitoring_rating_user_set"] is False
         assert event_data["utilization_pct"] == 100.0
         assert event_data["panel_serial"] == "ABC123"
 
@@ -988,7 +990,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,
@@ -1007,7 +1009,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=18.4,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=80,
             utilization_pct=92.0,
             window_duration_s=900,
@@ -1030,7 +1032,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,
@@ -1047,7 +1049,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,

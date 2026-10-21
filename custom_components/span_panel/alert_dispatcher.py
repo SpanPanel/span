@@ -40,7 +40,7 @@ def format_notification(
     alert_name: str,
     alert_id: str,
     current_a: float,
-    breaker_rating_a: float,
+    monitoring_rating_a: float,
     threshold_pct: int,
     utilization_pct: float,
     window_duration_s: int | None,
@@ -49,6 +49,9 @@ def format_notification(
     local_time: str | None = None,
 ) -> tuple[str, str]:
     """Format notification title and message using templates.
+
+    `monitoring_rating_a` is the rating the point was judged against, which the
+    `{breaker_rating_a}` placeholder carries.
 
     Available placeholders:
         {name}            - Circuit/mains friendly name
@@ -70,7 +73,7 @@ def format_notification(
         "entity_id": alert_id,
         "alert_type": alert_type,
         "current_a": f"{current_a:.1f}",
-        "breaker_rating_a": f"{breaker_rating_a:.0f}",
+        "breaker_rating_a": f"{monitoring_rating_a:.0f}",
         "threshold_pct": str(threshold_pct),
         "utilization_pct": str(utilization_pct),
         "window_m": str(window_m),
@@ -85,7 +88,7 @@ def format_notification(
     except (KeyError, ValueError):
         message = (
             f"{alert_name} at {current_a:.1f}A "
-            f"({utilization_pct}% of {breaker_rating_a:.0f}A rating) at {local_time or ''}"
+            f"({utilization_pct}% of {monitoring_rating_a:.0f}A rating) at {local_time or ''}"
         )
     return title, message
 
@@ -159,14 +162,25 @@ def dispatch_alert(
     alert_id: str,
     alert_source: str,
     current_a: float,
-    breaker_rating_a: float,
+    breaker_rating_a: float | None,
+    monitoring_rating_a: float,
+    monitoring_rating_user_set: bool,
     threshold_pct: int,
     utilization_pct: float,
     panel_serial: str,
     window_duration_s: int | None = None,
     over_threshold_since: str | None = None,
 ) -> None:
-    """Dispatch alert through all enabled notification channels."""
+    """Dispatch alert through all enabled notification channels.
+
+    The event payload carries the ratings as `get_monitoring_status` does:
+    `breaker_rating_a` is the panel's rating (a shared meter's members' sum, None
+    if any is unknown), `monitoring_rating_a` the rating the alert judged against,
+    and `monitoring_rating_user_set` whether that is a user's monitoring rating. A
+    structured reader is never handed the user's judgement as the breaker rating.
+    The text's `{breaker_rating_a}` placeholder carries the judged value, so the
+    message and its threshold agree.
+    """
     # `%-I` is glibc-only; strip any leading zero ourselves for portability.
     local_time = dt_util.now().strftime("%I:%M %p").lstrip("0")
 
@@ -177,6 +191,8 @@ def dispatch_alert(
         "alert_type": alert_type,
         "current_a": round(current_a, 1),
         "breaker_rating_a": breaker_rating_a,
+        "monitoring_rating_a": monitoring_rating_a,
+        "monitoring_rating_user_set": monitoring_rating_user_set,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
@@ -201,7 +217,7 @@ def dispatch_alert(
         alert_name=alert_name,
         alert_id=alert_id,
         current_a=current_a,
-        breaker_rating_a=breaker_rating_a,
+        monitoring_rating_a=monitoring_rating_a,
         threshold_pct=threshold_pct,
         utilization_pct=utilization_pct,
         window_duration_s=window_duration_s,
@@ -234,7 +250,7 @@ def dispatch_alert(
         alert_type,
         current_a,
         utilization_pct,
-        breaker_rating_a,
+        monitoring_rating_a,
     )
 
 
@@ -249,6 +265,7 @@ def dispatch_test_alert(
     alert_source = "circuit"
     current_a = 18.3
     breaker_rating_a = 20.0
+    monitoring_rating_a = breaker_rating_a
     threshold_pct = 100
     utilization_pct = 91.5
     panel_serial = "TEST"
@@ -269,6 +286,8 @@ def dispatch_test_alert(
         "alert_type": alert_type,
         "current_a": current_a,
         "breaker_rating_a": breaker_rating_a,
+        "monitoring_rating_a": monitoring_rating_a,
+        "monitoring_rating_user_set": False,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
@@ -285,7 +304,7 @@ def dispatch_test_alert(
         alert_name=alert_name,
         alert_id=alert_id,
         current_a=current_a,
-        breaker_rating_a=breaker_rating_a,
+        monitoring_rating_a=monitoring_rating_a,
         threshold_pct=threshold_pct,
         utilization_pct=utilization_pct,
         window_duration_s=window_duration_s,

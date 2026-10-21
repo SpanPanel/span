@@ -9,6 +9,7 @@ resets the monitor's own state.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Final
@@ -20,6 +21,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
+from custom_components.span_panel.alert_dispatcher import dispatch_test_alert
 from custom_components.span_panel.const import DOMAIN, EVENT_CURRENT_ALERT
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor
@@ -120,7 +122,7 @@ class TestAlerts:
         await hass.async_block_till_done()
 
         assert [a.data["alert_type"] for a in alerts] == ["continuous_overload"]
-        assert alerts[0].data["breaker_rating_a"] == 20.0
+        assert _ratings_in(alerts[0].data) == (20.0, 20.0, False)
 
     async def test_the_same_circuit_does_not_alert_with_a_monitoring_rating_of_50a(
         self, hass: HomeAssistant
@@ -160,7 +162,12 @@ class TestAlerts:
         )
 
     async def test_the_alert_names_the_monitoring_rating(self, hass: HomeAssistant) -> None:
-        """At 45 A a 50 A breaker is over 80%; the event and the text say 50 A."""
+        """At 45 A a 50 A monitoring rating is over 80%; the text says 50 A, the payload both.
+
+        The payload's `breaker_rating_a` stays the panel's 20 A: a structured reader
+        must not be handed the user's judgement as panel data. The text placeholder
+        `{breaker_rating_a}` carries what the alert judged against, so the message and its threshold agree.
+        """
         snapshot = _panel(_circuit("circuit-2", 20.0, 45.0))
         monitor, manager = await _monitor(hass, snapshot, **{NOTIFY_TARGETS: "event_bus,notify.x"})
         manager.set_rating("circuit-2", snapshot, 50)
@@ -172,10 +179,85 @@ class TestAlerts:
             _run_past_the_window(monitor, snapshot, "circuit-2")
             await hass.async_block_till_done()
 
-        assert [a.data["breaker_rating_a"] for a in alerts] == [50.0]
+        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 50.0, True)]
         assert alerts[0].data["utilization_pct"] == 90.0
         message = dispatched.call_args.args[3]
         assert "90.0% of 50A rating" in message
+
+    async def test_a_shared_meter_alert_carries_the_panel_sum_and_the_judged_sum(
+        self, hass: HomeAssistant
+    ) -> None:
+        """15 + 15 A, one member set to 20 A: breaker 30 A, judged against 35 A, user set."""
+        snapshot = _panel(
+            _shared(_circuit("circuit-52", 15.0, 30.0), "circuit-53", 44),
+            _shared(_circuit("circuit-53", 15.0, 30.0), "circuit-52", 44),
+        )
+        monitor, manager = await _monitor(hass, snapshot)
+        manager.set_rating("circuit-53", snapshot, 20)
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+
+        _run_past_the_window(monitor, snapshot, "circuit-52")
+        await hass.async_block_till_done()
+
+        assert [_ratings_in(a.data) for a in alerts] == [(30.0, 35.0, True)]
+
+    async def test_a_mains_alert_carries_the_service_rating_twice_never_user_set(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The mains has no monitoring rating: both ratings are the service rating."""
+        snapshot = replace(_panel(_circuit("circuit-2", 20.0, 1.0)), upstream_l1_current_a=95.0)
+        monitor, _manager = await _monitor(hass, snapshot)
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+
+        monitor.process_snapshot(snapshot)
+        state = monitor.get_mains_state("upstream_l1")
+        assert state is not None
+        state.over_threshold_since = datetime.now(UTC) - timedelta(minutes=16)
+        monitor.process_snapshot(snapshot)
+        await hass.async_block_till_done()
+
+        mains = [a.data for a in alerts if a.data["alert_source"] == "mains"]
+        assert [_ratings_in(data) for data in mains] == [
+            (float(SERVICE_A), float(SERVICE_A), False)
+        ]
+
+    async def test_spike_alerts_carry_the_same_ratings(self, hass: HomeAssistant) -> None:
+        """A spike is dispatched apart from a continuous overload; its payload reads the same way."""
+        snapshot = replace(_panel(_circuit("circuit-2", 20.0, 45.0)), upstream_l1_current_a=95.0)
+        monitor, manager = await _monitor(hass, snapshot, **{SPIKE_THRESHOLD_PCT: 80})
+        manager.set_rating("circuit-2", snapshot, 50)
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+
+        monitor.process_snapshot(snapshot)
+        await hass.async_block_till_done()
+
+        assert len(alerts) == 2
+        assert {
+            a.data["alert_source"]: (a.data["alert_type"], *_ratings_in(a.data)) for a in alerts
+        } == {
+            "circuit": ("spike", 20.0, 50.0, True),
+            "mains": ("spike", float(SERVICE_A), float(SERVICE_A), False),
+        }
+
+    async def test_the_test_notification_has_the_same_payload_shape(
+        self, hass: HomeAssistant
+    ) -> None:
+        """An automation written against the test event reads the same three keys."""
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+
+        dispatch_test_alert(hass, {NOTIFY_TARGETS: "event_bus"})
+        await hass.async_block_till_done()
+
+        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 20.0, False)]
+
+
+def _ratings_in(payload: Mapping[str, object]) -> tuple[object, object, object]:
+    """Return an alert payload's panel rating, the rating it judged against, and whether the user set that."""
+    return (
+        payload["breaker_rating_a"],
+        payload["monitoring_rating_a"],
+        payload["monitoring_rating_user_set"],
+    )
 
 
 class TestStatus:
