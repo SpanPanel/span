@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
@@ -22,7 +22,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api import FieldMetadata, SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelCAChangedError,
@@ -885,10 +885,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def _reconcile_breaker_ratings(self, snapshot: SpanPanelSnapshot) -> None:
         """Judge the stored rating overrides against a snapshot, before anything reads it.
 
-        `field_metadata` is None while the client rebuilds; the rule reads that as
-        "unknown" and keeps every override.
+        The manager reads the field metadata only while the service rating
+        declaration is still unknown, so the read is handed over rather than
+        made: once known, a snapshot costs no schema walk.
         """
-        self.breaker_rating_manager.reconcile(snapshot, self._client.field_metadata)
+        self.breaker_rating_manager.reconcile(snapshot, self._field_metadata)
+
+    def _field_metadata(self) -> Mapping[str, FieldMetadata] | None:
+        """Return the client's field metadata, None while it rebuilds."""
+        return self._client.field_metadata
 
     # --- Data update ---
 

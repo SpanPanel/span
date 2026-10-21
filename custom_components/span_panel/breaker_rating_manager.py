@@ -12,7 +12,7 @@ Nothing here decides whether a rating applies. Every comparison is a call into
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
@@ -47,6 +47,9 @@ _STORAGE_VERSION: Final = 1
 _STORAGE_KEY_PREFIX: Final = "span_panel_breaker_ratings"
 
 _NOTICE_ID: Final = "breaker_rating_changed"
+
+type FieldMetadataSource = Callable[[], Mapping[str, FieldMetadata] | None]
+"""Reads the adapter's field metadata: the client's `field_metadata`, read on demand."""
 
 
 class _StoredOverrideRow(TypedDict):
@@ -200,19 +203,32 @@ class BreakerRatingManager:
 
         Until this is called `reconcile` does nothing: an override must not be
         judged against a snapshot that is not yet the panel's complete state.
+
+        The service rating declaration is taken from `field_metadata` here, and
+        once it is "declared" or "undeclared" it holds for the session. The
+        declaration is static within one: a schema change reloads the entry,
+        which starts a new session with a new manager. Taking it again on every
+        snapshot would cost a schema walk each time, and would read the None a
+        rebuild hands out as "unknown", leaving every correction unrated for
+        that snapshot.
         """
         self._begun = True
-        self.reconcile(snapshot, field_metadata)
+        self._service = service_rating_declaration(field_metadata)
+        self._reconcile(snapshot)
 
-    def reconcile(
-        self,
-        snapshot: SpanPanelSnapshot,
-        field_metadata: Mapping[str, FieldMetadata] | None,
-    ) -> None:
-        """Apply the rule to every stored override and announce what changed."""
+    def reconcile(self, snapshot: SpanPanelSnapshot, field_metadata: FieldMetadataSource) -> None:
+        """Apply the rule to every stored override and announce what changed.
+
+        `field_metadata` is read only while the service rating declaration is
+        still unknown, as when the metadata was not ready at `begin`.
+        """
         if not self._begun:
             return
-        self._service = service_rating_declaration(field_metadata)
+        if self._service == "unknown":
+            self._service = service_rating_declaration(field_metadata())
+        self._reconcile(snapshot)
+
+    def _reconcile(self, snapshot: SpanPanelSnapshot) -> None:
         result = reconcile_overrides(
             self._overrides, snapshot, self._service, construct_circuit_label
         )

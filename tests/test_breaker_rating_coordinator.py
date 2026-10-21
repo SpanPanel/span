@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST
@@ -225,10 +225,64 @@ async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)
     client.field_metadata = _DECLARED
-    manager.reconcile(rated_late, _DECLARED)
+    manager.reconcile(rated_late, lambda: client.field_metadata)
     rating = manager.resolve("circuit-2", rated_late)
     assert (rating.user_set, rating.effective_a) == (True, 40)
     assert events == []
+
+
+async def test_snapshots_do_not_read_field_metadata_once_the_declaration_is_known(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """Pushed and polled snapshots alike: the declaration made at `begin` holds for the session."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _seed(hass_storage, entry, "circuit-2")
+    snapshot = _snapshot({"circuit-2": 20.0})
+    client = _client(None)
+    reads = PropertyMock(return_value=_DECLARED)
+    type(client).field_metadata = reads
+    client.get_snapshot = AsyncMock(return_value=snapshot)
+    coordinator = _coordinator(hass, entry, client)
+    await _begun(coordinator, snapshot, hass)
+
+    with (
+        patch.object(coordinator, "async_set_updated_data"),
+        patch.object(coordinator, "_run_post_update_tasks", AsyncMock()),
+    ):
+        for _ in range(3):
+            await coordinator._on_snapshot_push(snapshot)
+            await coordinator._async_update_data()
+
+    assert reads.call_count == 0
+
+
+async def test_snapshots_read_field_metadata_while_the_declaration_is_unknown(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """Metadata absent at `begin`: each snapshot asks again until it is known, then stops."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _seed(hass_storage, entry, "circuit-2")
+    snapshot = _snapshot({"circuit-2": 20.0})
+    client = _client(None)
+    reads = PropertyMock(side_effect=[None, _DECLARED])
+    type(client).field_metadata = reads
+    coordinator = _coordinator(hass, entry, client)
+    manager = coordinator.breaker_rating_manager
+    await manager.async_load()
+    manager.begin(snapshot, None)
+
+    with (
+        patch.object(coordinator, "async_set_updated_data"),
+        patch.object(coordinator, "_run_post_update_tasks", AsyncMock()),
+    ):
+        for _ in range(4):
+            await coordinator._on_snapshot_push(snapshot)
+
+    assert reads.call_count == 2
+    rating = manager.resolve("circuit-2", snapshot)
+    assert (rating.user_set, rating.effective_a) == (True, 40)
 
 
 # -- Setup ---------------------------------------------------------------------

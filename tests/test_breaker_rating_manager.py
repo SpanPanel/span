@@ -59,6 +59,11 @@ _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="in
 _UNDECLARED: dict[str, FieldMetadata] = {}
 
 
+def _declared() -> Mapping[str, FieldMetadata]:
+    """Answer field metadata declaring a service rating, as the client does once ready."""
+    return _DECLARED
+
+
 @pytest.fixture
 def entry(hass: HomeAssistant) -> MockConfigEntry:
     """Return a config entry in hass."""
@@ -127,7 +132,7 @@ async def test_a_set_override_is_saved_and_loaded_by_the_next_manager(
 
     reloaded = BreakerRatingManager(hass, entry)
     await reloaded.async_load()
-    reloaded.reconcile(_snapshot(), _DECLARED)  # inert; resolve uses the loaded overrides
+    reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded overrides
     rating = reloaded.resolve("circuit-2", _snapshot())
     # The declaration is unknown until `begin`, so the correction is pending: unrated.
     assert (rating.effective_a, rating.panel_a, rating.user_set) == (None, 20.0, False)
@@ -271,11 +276,11 @@ async def test_a_reconcile_change_fires_the_event_and_a_no_op_does_not(
     await hass.async_block_till_done()
     events = _events(hass)
 
-    manager.reconcile(_snapshot(ratings), _DECLARED)
+    manager.reconcile(_snapshot(ratings), _declared)
     await hass.async_block_till_done()
     assert events == []
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 40.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 40.0}), _declared)
     await hass.async_block_till_done()
     assert [event.data for event in events] == [
         {"config_entry_id": entry.entry_id, "circuit_ids": ["circuit-2", "circuit-3"]}
@@ -301,7 +306,7 @@ async def test_reconcile_is_inert_until_begin(
     await manager.async_load()
     events = _events(hass)
 
-    manager.reconcile(_snapshot({}), _DECLARED)
+    manager.reconcile(_snapshot({}), _declared)
     await hass.async_block_till_done()
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)
@@ -309,11 +314,84 @@ async def test_reconcile_is_inert_until_begin(
     manager.begin(_snapshot({"circuit-2": 20.0}), _DECLARED)
     assert manager.resolve("circuit-2", _snapshot()).user_set
 
-    manager.reconcile(_snapshot({}), _DECLARED)
+    manager.reconcile(_snapshot({}), _declared)
     await hass.async_block_till_done()
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
     assert is_standing(hass, entry, _NOTICE)
     assert "**Name of circuit-2**" in _message(hass, entry)  # the label begin refreshed
+
+
+# -- The service rating declaration ----------------------------------------------
+
+
+class _Metadata:
+    """A field metadata source that counts its reads."""
+
+    def __init__(self, value: Mapping[str, FieldMetadata] | None) -> None:
+        self.value = value
+        self.reads = 0
+
+    def __call__(self) -> Mapping[str, FieldMetadata] | None:
+        self.reads += 1
+        return self.value
+
+
+async def test_missing_metadata_after_a_known_declaration_changes_nothing(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A rebuild hands out no metadata; the declaration made at `begin` stands for the session."""
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    await hass.async_block_till_done()
+    events = _events(hass)
+
+    manager.reconcile(_snapshot(), _Metadata(None))
+    await hass.async_block_till_done()
+
+    rating = manager.resolve("circuit-2", _snapshot())
+    assert (rating.effective_a, rating.user_set) == (50.0, True)
+    manager.set_override("circuit-2", _snapshot(), 60)  # still bounded, not refused
+    assert manager.resolve("circuit-2", _snapshot()).effective_a == 60.0
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
+
+
+@pytest.mark.parametrize("at_begin", [_DECLARED, _UNDECLARED])
+async def test_a_known_declaration_is_not_read_again_on_a_snapshot(
+    hass: HomeAssistant, entry: MockConfigEntry, at_begin: Mapping[str, FieldMetadata]
+) -> None:
+    """The library documents the metadata as a once-per-session read; it costs a schema walk."""
+    await async_restore(hass, entry)
+    manager = BreakerRatingManager(hass, entry)
+    await manager.async_load()
+    manager.begin(_snapshot(), at_begin)
+    source = _Metadata(_DECLARED)
+
+    for _ in range(3):
+        manager.reconcile(_snapshot(), source)
+
+    assert source.reads == 0
+
+
+async def test_an_unknown_declaration_is_read_on_each_snapshot_until_it_is_known(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    await async_restore(hass, entry)
+    manager = BreakerRatingManager(hass, entry)
+    await manager.async_load()
+    manager.begin(_snapshot(), None)
+    with pytest.raises(ServiceValidationError):  # refused until the declaration is known
+        manager.set_override("circuit-2", _snapshot(), 50)
+    source = _Metadata(None)
+
+    manager.reconcile(_snapshot(), source)
+    manager.reconcile(_snapshot(), source)
+    source.value = _DECLARED
+    manager.reconcile(_snapshot(), source)
+    manager.reconcile(_snapshot(), source)
+
+    assert source.reads == 3
+    manager.set_override("circuit-2", _snapshot(), 50)
+    assert manager.resolve("circuit-2", _snapshot()).user_set
 
 
 # -- Notices -------------------------------------------------------------------
@@ -325,7 +403,7 @@ async def test_a_change_raises_one_notice_naming_the_circuit(
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 30.0}), _declared)
     await hass.async_block_till_done()
 
     message = _message(hass, entry)
@@ -345,19 +423,19 @@ async def test_changes_accumulate_while_the_notice_stands_and_reset_after_dismis
     manager.set_override("circuit-2", _snapshot(ratings), 50)
     manager.set_override("circuit-3", _snapshot(ratings), 40)
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
     assert "circuit-3" not in _message(hass, entry)
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
     assert "circuit-3" in _message(hass, entry)
 
     async_dismiss(hass, _notification_id(entry))
     await hass.async_block_till_done()
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 35.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 35.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" not in _message(hass, entry)
     assert "circuit-3" in _message(hass, entry)
@@ -374,11 +452,11 @@ async def test_a_change_and_change_back_before_the_user_looks_is_not_reported(
     """
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
     await hass.async_block_till_done()
     assert "now reports 25 A (was 20 A)" in _message(hass, entry)
 
-    manager.reconcile(_snapshot({"circuit-2": 20.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 20.0}), _declared)
     await hass.async_block_till_done()
 
     assert not is_standing(hass, entry, _NOTICE)
@@ -400,10 +478,10 @@ async def test_a_change_and_change_back_leaves_the_other_circuits_lines(
     manager = await _begun(hass, entry, _snapshot(ratings))
     manager.set_override("circuit-2", _snapshot(ratings), 50)
     manager.set_override("circuit-3", _snapshot(ratings), 40)
-    manager.reconcile(_snapshot({"circuit-2": 25.0, "circuit-3": 30.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 25.0, "circuit-3": 30.0}), _declared)
     await hass.async_block_till_done()
 
-    manager.reconcile(_snapshot({"circuit-2": 20.0, "circuit-3": 30.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 20.0, "circuit-3": 30.0}), _declared)
     await hass.async_block_till_done()
 
     message = _message(hass, entry)
@@ -418,10 +496,10 @@ async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last
     """20 A, then 25 A, then 50 A, which matches the correction: removed, and "was 20 A"."""
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
     await hass.async_block_till_done()
 
-    manager.reconcile(_snapshot({"circuit-2": 50.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 50.0}), _declared)
     await hass.async_block_till_done()
 
     change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
@@ -441,10 +519,10 @@ async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
     """
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
     await hass.async_block_till_done()
 
-    manager.reconcile(_snapshot({"circuit-2": 20.0}, main=40), _DECLARED)
+    manager.reconcile(_snapshot({"circuit-2": 20.0}, main=40), _declared)
     await hass.async_block_till_done()
 
     change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
@@ -476,8 +554,8 @@ async def test_two_changes_before_the_notice_is_raised_are_both_kept(
     with patch(
         "custom_components.span_panel.breaker_rating_manager.notices.read_translations", held
     ):
-        manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _DECLARED)
-        manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _DECLARED)
+        manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _declared)
+        manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _declared)
         release.set()
         await hass.async_block_till_done()
 
@@ -500,8 +578,8 @@ async def test_a_change_and_change_back_before_the_notice_is_raised_raises_nothi
     with patch(
         "custom_components.span_panel.breaker_rating_manager.notices.read_translations", held
     ):
-        manager.reconcile(_snapshot({"circuit-2": 25.0}), _DECLARED)
-        manager.reconcile(_snapshot({"circuit-2": 20.0}), _DECLARED)
+        manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
+        manager.reconcile(_snapshot({"circuit-2": 20.0}), _declared)
         release.set()
         await hass.async_block_till_done()
 
@@ -514,7 +592,7 @@ async def test_unacknowledged_changes_are_stored_and_a_reloaded_manager_adds_to_
 ) -> None:
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({}), _DECLARED)  # the circuit leaves: removed, told
+    manager.reconcile(_snapshot({}), _declared)  # the circuit leaves: removed, told
     await hass.async_block_till_done()
 
     stored = await _stored(hass, entry)
@@ -567,7 +645,7 @@ async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
     manager = await _begun(hass, entry, _snapshot(ratings))
     manager.set_override("circuit-2", _snapshot(ratings), 50)
     manager.set_override("circuit-3", _snapshot(ratings), 40)
-    manager.reconcile(_snapshot({"circuit-3": 15.0}), _DECLARED)  # circuit-2 leaves
+    manager.reconcile(_snapshot({"circuit-3": 15.0}), _declared)  # circuit-2 leaves
     await hass.async_block_till_done()
 
     reloaded = BreakerRatingManager(hass, entry)
@@ -589,7 +667,7 @@ async def test_a_user_change_drops_that_circuit_from_the_standing_notice(
     manager.set_override("circuit-2", _snapshot(ratings), 50)
     manager.set_override("circuit-3", _snapshot(ratings), 40)
     changed = _snapshot({"circuit-2": 30.0, "circuit-3": 25.0})
-    manager.reconcile(changed, _DECLARED)
+    manager.reconcile(changed, _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
 
@@ -610,7 +688,7 @@ async def test_a_user_change_to_the_only_listed_circuit_leaves_the_notice_standi
     manager = await _begun(hass, entry)
     manager.set_override("circuit-2", _snapshot(), 50)
     changed = _snapshot({"circuit-2": 30.0})
-    manager.reconcile(changed, _DECLARED)
+    manager.reconcile(changed, _declared)
     await hass.async_block_till_done()
 
     manager.clear_override("circuit-2", changed)
@@ -634,7 +712,7 @@ async def test_two_panels_with_the_same_circuit_id_stay_independent(
     assert not second.resolve("circuit-2", _snapshot()).user_set
     assert [event.data["config_entry_id"] for event in events] == [entry.entry_id]
 
-    first.reconcile(_snapshot({}), _DECLARED)
+    first.reconcile(_snapshot({}), _declared)
     await hass.async_block_till_done()
     assert is_standing(hass, entry, _NOTICE)
     assert not is_standing(hass, other, _NOTICE)
