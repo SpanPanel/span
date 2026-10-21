@@ -77,6 +77,8 @@ class OverrideChange:
     """Something the user is to be told about an override: kept with a new panel rating, or removed."""
 
     circuit_id: str
+    label: str
+    """The circuit's label, carried so the notice reads the same after the override is gone."""
     reason: ChangeReason
     rating_a: int
     panel_before_a: float
@@ -156,6 +158,7 @@ def _change(
 ) -> OverrideChange:
     return OverrideChange(
         circuit_id,
+        override.label,
         reason,
         override.rating_a,
         override.panel_a_at_set,
@@ -185,6 +188,8 @@ def reconcile(
     for circuit_id, override in overrides.items():
         circuit = snapshot.circuits.get(circuit_id)
         panel = circuit.breaker_rating_a if circuit is not None else None
+        if circuit is not None:
+            override = replace(override, label=label_of(circuit, circuit_id))
 
         if service == "undeclared":
             changes.append(
@@ -203,7 +208,6 @@ def reconcile(
                 _change(circuit_id, override, "circuit_removed", panel, service_a, removed=True)
             )
             continue
-        override = replace(override, label=label_of(circuit, circuit_id))
         if circuit.breaker_rating_declared is False:
             changes.append(
                 _change(circuit_id, override, "rating_undeclared", panel, service_a, removed=True)

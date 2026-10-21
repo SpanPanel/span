@@ -21,6 +21,7 @@ PANEL_A = 20.0
 OVERRIDE_A = 50
 SERVICE_A = 100.0
 CIRCUIT_ID = "circuit-2"
+LIVE_LABEL = "label of Oven (circuit-2)"
 
 
 def _label(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
@@ -152,7 +153,9 @@ def test_reconcile_panel_agrees_removes() -> None:
     result = _reconcile(_snapshot(_circuit(rating=50.0)))
     assert result.overrides == {}
     assert result.changes == (
-        OverrideChange(CIRCUIT_ID, "panel_agrees", OVERRIDE_A, PANEL_A, 50.0, SERVICE_A, True),
+        OverrideChange(
+            CIRCUIT_ID, LIVE_LABEL, "panel_agrees", OVERRIDE_A, PANEL_A, 50.0, SERVICE_A, True
+        ),
     )
 
 
@@ -161,7 +164,9 @@ def test_reconcile_panel_changed_keeps_and_reconfirms() -> None:
     assert result.overrides[CIRCUIT_ID].panel_a_at_set == 30.0
     assert result.overrides[CIRCUIT_ID].rating_a == OVERRIDE_A
     assert result.changes == (
-        OverrideChange(CIRCUIT_ID, "panel_changed", OVERRIDE_A, PANEL_A, 30.0, SERVICE_A, False),
+        OverrideChange(
+            CIRCUIT_ID, LIVE_LABEL, "panel_changed", OVERRIDE_A, PANEL_A, 30.0, SERVICE_A, False
+        ),
     )
 
 
@@ -169,7 +174,9 @@ def test_reconcile_rating_undeclared_removes() -> None:
     result = _reconcile(_snapshot(_circuit(rating=None, declared=False)))
     assert result.overrides == {}
     assert result.changes == (
-        OverrideChange(CIRCUIT_ID, "rating_undeclared", OVERRIDE_A, PANEL_A, None, SERVICE_A, True),
+        OverrideChange(
+            CIRCUIT_ID, LIVE_LABEL, "rating_undeclared", OVERRIDE_A, PANEL_A, None, SERVICE_A, True
+        ),
     )
 
 
@@ -204,7 +211,7 @@ def test_reconcile_above_service_removes() -> None:
     assert result.overrides == {}
     assert result.changes == (
         OverrideChange(
-            CIRCUIT_ID, "above_service_rating", OVERRIDE_A, PANEL_A, PANEL_A, 40.0, True
+            CIRCUIT_ID, LIVE_LABEL, "above_service_rating", OVERRIDE_A, PANEL_A, PANEL_A, 40.0, True
         ),
     )
 
@@ -224,13 +231,24 @@ def test_reconcile_service_undeclared_removes_all() -> None:
     assert result.overrides == {}
     assert {c.circuit_id for c in result.changes} == set(overrides)
     assert all(c.reason == "service_rating_undeclared" and c.removed for c in result.changes)
+    labels = {c.circuit_id: c.label for c in result.changes}
+    assert labels == {CIRCUIT_ID: LIVE_LABEL, "circuit-9": "stored label"}
 
 
 def test_reconcile_absent_circuit_removes_with_last_label() -> None:
     result = _reconcile(_snapshot(None))
     assert result.overrides == {}
     assert result.changes == (
-        OverrideChange(CIRCUIT_ID, "circuit_removed", OVERRIDE_A, PANEL_A, None, SERVICE_A, True),
+        OverrideChange(
+            CIRCUIT_ID,
+            "stored label",
+            "circuit_removed",
+            OVERRIDE_A,
+            PANEL_A,
+            None,
+            SERVICE_A,
+            True,
+        ),
     )
 
 
