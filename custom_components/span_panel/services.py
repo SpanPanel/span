@@ -567,6 +567,9 @@ def _async_register_breaker_rating_services(hass: HomeAssistant) -> None:
         runtime_data.coordinator.breaker_rating_manager.set_override(
             circuit_id, snapshot, call.data["breaker_rating_a"]
         )
+        # The snapshot is unchanged, so entities would keep the old rating until
+        # the next one; tell them to recompute from it now.
+        runtime_data.coordinator.async_update_listeners()
 
     async def async_handle_clear_circuit_breaker_rating(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
@@ -574,6 +577,7 @@ def _async_register_breaker_rating_services(hass: HomeAssistant) -> None:
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
         runtime_data.coordinator.breaker_rating_manager.clear_override(circuit_id, snapshot)
+        runtime_data.coordinator.async_update_listeners()
 
     hass.services.async_register(
         DOMAIN,

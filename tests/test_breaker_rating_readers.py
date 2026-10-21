@@ -35,9 +35,11 @@ from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
 )
+from custom_components.span_panel.services import _async_register_breaker_rating_services
 
 from .captures_replay import CAPTURES, Capture, snapshot
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .test_breaker_rating_services import _loaded_panel
 from .test_expected_entities import _install, _topology
 
 SERVICE_A: Final = 100
@@ -196,6 +198,35 @@ async def test_only_the_rating_sensor_is_the_subclass(hass: HomeAssistant) -> No
     }
     assert len(subclassed) == 1
     assert all(unique_id.endswith("_breaker_rating") for unique_id in subclassed)
+
+
+async def test_the_sensor_follows_the_services_without_a_new_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    snap = _panel()
+    entry, manager = await _loaded_panel(hass, "sp3-readers-001", snap)
+    coordinator = entry.runtime_data.coordinator
+    sensor = SpanCircuitBreakerRatingSensor(
+        _coordinator(snap, manager), CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2"
+    )
+    sensor._update_native_value()
+    # The coordinator's listeners are the entities: updating them recomputes the sensor.
+    coordinator.async_update_listeners.side_effect = sensor._update_native_value
+    _async_register_breaker_rating_services(hass)
+    assert sensor.native_value == PANEL_A
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_circuit_breaker_rating",
+        {"circuit_id": "circuit-2", "breaker_rating_a": OVERRIDE_A},
+        blocking=True,
+    )
+    assert sensor.native_value == float(OVERRIDE_A)
+
+    await hass.services.async_call(
+        DOMAIN, "clear_circuit_breaker_rating", {"circuit_id": "circuit-2"}, blocking=True
+    )
+    assert sensor.native_value == PANEL_A
 
 
 # -- Counter plausibility keeps the panel rating ---------------------------------
