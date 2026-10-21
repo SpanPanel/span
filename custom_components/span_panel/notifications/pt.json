@@ -18,7 +18,7 @@
   },
   "breaker_rating_changed": {
     "title": "As capacidades de disjuntor do Painel SPAN mudaram",
-    "intro": "O painel alterou a capacidade de um disjuntor que tinha corrigido. Reveja cada circuito no painel de controlo do Span Panel, na secção Disjuntor do circuito.",
+    "intro": "O painel alterou a capacidade de um disjuntor que tinha corrigido. Reveja cada circuito no painel de controlo do Span Panel, na secção **Corrente Nominal do Disjuntor** do circuito.",
     "panel_changed": "**{circuit}**: o painel reporta agora {after} A (antes {before} A). A sua correção de {rating} A continua a aplicar-se.",
     "panel_agrees": "**{circuit}**: o painel reporta agora {after} A (antes {before} A), igual à sua correção de {rating} A, por isso a correção foi removida.",
     "rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade para este circuito (reportava {before} A), por isso a sua correção de {rating} A foi removida.",

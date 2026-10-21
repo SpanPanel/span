@@ -201,13 +201,13 @@ override, present or not.
 """
 
 _BREAKER_SECTION = {
-    "en": "Breaker section",
-    "es": "sección Interruptor",
-    "fr": "section Disjoncteur",
-    "ja": "「ブレーカー」セクション",
-    "pt": "secção Disjuntor",
+    "en": "**Breaker Rating** section",
+    "es": "sección **Calibre del Interruptor**",
+    "fr": "section **Calibre du Disjoncteur**",
+    "ja": "**ブレーカー定格** セクション",
+    "pt": "secção **Corrente Nominal do Disjuntor**",
 }
-"""The card's Breaker section by its title, `sidepanel.breaker` in the card's i18n."""
+"""The card's Breaker section by its title, `sidepanel.breaker_rating` in the card's i18n."""
 
 
 def _placeholders(template: str) -> set[str]:

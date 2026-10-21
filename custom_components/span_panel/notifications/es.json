@@ -18,7 +18,7 @@
   },
   "breaker_rating_changed": {
     "title": "Cambiaron las capacidades de interruptor del Panel SPAN",
-    "intro": "El panel cambió la capacidad de un interruptor que habías corregido. Revisa cada circuito en el panel de control de Span Panel, en la sección Interruptor del circuito.",
+    "intro": "El panel cambió la capacidad de un interruptor que habías corregido. Revisa cada circuito en el panel de control de Span Panel, en la sección **Calibre del Interruptor** del circuito.",
     "panel_changed": "**{circuit}**: el panel ahora informa {after} A (antes {before} A). Tu corrección de {rating} A sigue aplicándose.",
     "panel_agrees": "**{circuit}**: el panel ahora informa {after} A (antes {before} A), igual que tu corrección de {rating} A, por lo que la corrección se eliminó.",
     "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito (informaba {before} A), por lo que tu corrección de {rating} A se eliminó.",

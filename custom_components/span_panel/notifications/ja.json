@@ -18,7 +18,7 @@
   },
   "breaker_rating_changed": {
     "title": "SPAN パネルのブレーカー定格が変更されました",
-    "intro": "パネルが、補正済みのブレーカー定格を変更しました。Span Panel ダッシュボードで、各回路の「ブレーカー」セクションを確認してください。",
+    "intro": "パネルが、補正済みのブレーカー定格を変更しました。Span Panel ダッシュボードで、各回路の **ブレーカー定格** セクションを確認してください。",
     "panel_changed": "**{circuit}**: パネルは現在 {after} A を報告しています(以前は {before} A)。{rating} A の補正は引き続き適用されます。",
     "panel_agrees": "**{circuit}**: パネルは現在 {after} A を報告しており(以前は {before} A)、{rating} A の補正と一致するため、補正は削除されました。",
     "rating_undeclared": "**{circuit}**: パネルがこの回路の定格を報告しなくなったため(以前は {before} A)、{rating} A の補正は削除されました。",

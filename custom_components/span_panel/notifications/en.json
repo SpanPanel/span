@@ -18,7 +18,7 @@
   },
   "breaker_rating_changed": {
     "title": "SPAN Panel breaker ratings changed",
-    "intro": "The panel changed a breaker rating you had corrected. Review each circuit in the Span Panel dashboard, in the circuit's Breaker section.",
+    "intro": "The panel changed a breaker rating you had corrected. Review each circuit in the Span Panel dashboard, in the circuit's **Breaker Rating** section.",
     "panel_changed": "**{circuit}**: the panel now reports {after} A (was {before} A). Your {rating} A still applies.",
     "panel_agrees": "**{circuit}**: the panel now reports {after} A (was {before} A), matching your {rating} A correction, so the correction was removed.",
     "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit (it reported {before} A), so your {rating} A correction was removed.",
