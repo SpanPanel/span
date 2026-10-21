@@ -50,6 +50,7 @@ from .additions import (
     async_forget_announcements,
 )
 from .adoption import async_register_adopted_devices
+from .breaker_rating_manager import async_forget_breaker_ratings
 from .ca_repairs import (
     async_clear_ca_changed,
     async_clear_ca_unusable,
@@ -862,7 +863,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     The curation overlay goes for the same reason. Its keys are wire addresses
     rather than registry ids, so a store left behind is one the next entry for
     the same panel would load and apply, re-asserting metadata the user is no
-    longer here to have asked for.
+    longer here to have asked for. The breaker rating overrides go for that
+    reason too: they are keyed by wire circuit ids.
     """
     async_clear_schema_issues(hass, entry)
     # The CA family too, for the same reason — and the two persistent ones most
@@ -876,6 +878,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)
+    await async_forget_breaker_ratings(hass, entry)
     await async_forget(hass, entry)
 
 

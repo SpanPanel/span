@@ -15,6 +15,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
+from custom_components.span_panel import async_remove_entry
 from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
 from custom_components.span_panel.breaker_ratings import ChangeReason
 from custom_components.span_panel.const import DOMAIN, EVENT_BREAKER_RATING_CHANGED
@@ -159,6 +160,24 @@ async def test_a_malformed_store_loads_as_empty(
     manager.begin(_snapshot({"good": 15.0, "bad": 10.0}), _DECLARED)
     assert manager.resolve("good", _snapshot({"good": 15.0})).user_set
     assert not manager.resolve("bad", _snapshot({"bad": 10.0})).user_set
+
+
+async def test_removing_the_config_entry_deletes_its_overrides(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
+) -> None:
+    """Keyed by wire circuit ids, the store would be picked up by the next entry for the same panel."""
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    await hass.async_block_till_done()
+    assert _store_key(entry) in hass_storage
+
+    await async_remove_entry(hass, entry)
+
+    assert _store_key(entry) not in hass_storage
+    reloaded = BreakerRatingManager(hass, entry)
+    await reloaded.async_load()
+    reloaded.begin(_snapshot(), _DECLARED)
+    assert not reloaded.resolve("circuit-2", _snapshot()).user_set
 
 
 # -- set_override and clear_override ------------------------------------------

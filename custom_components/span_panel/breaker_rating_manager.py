@@ -168,11 +168,7 @@ class BreakerRatingManager:
         self._service: Declaration = "unknown"
         self._begun = False
         self._announce_pending = False
-        self._store: Store[StoredRatings] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
+        self._store = _store_for(hass, entry)
 
     async def async_load(self) -> None:
         """Load the overrides and the unacknowledged changes from HA Storage."""
@@ -405,6 +401,22 @@ class BreakerRatingManager:
                 },
             )
         )
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredRatings]:
+    """Return the store holding one panel's overrides and unacknowledged changes."""
+    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_forget_breaker_ratings(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the stored overrides when the entry is removed.
+
+    The keys are wire circuit ids, so a store left behind would be loaded by the
+    next entry added for the same panel, re-applying corrections the user
+    removed the panel to be rid of. The notice they raised goes with the
+    entry's other notices.
+    """
+    await _store_for(hass, entry).async_remove()
 
 
 def _change_row(change: OverrideChange) -> _StoredChangeRow:
