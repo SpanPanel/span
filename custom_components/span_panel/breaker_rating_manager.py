@@ -259,6 +259,7 @@ class BreakerRatingManager:
         if self._overrides.get(circuit_id) == override:
             return
         self._overrides[circuit_id] = override
+        self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
 
@@ -271,8 +272,23 @@ class BreakerRatingManager:
     def _remove(self, circuit_id: str) -> None:
         if self._overrides.pop(circuit_id, None) is None:
             return
+        self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
+
+    def _forget(self, circuit_id: str) -> None:
+        """Drop a circuit the user has just changed from what the notice says.
+
+        The notice reports the panel overtaking a correction, and the user has
+        since replaced it, so its line would be false. A notice left with no line
+        is not dismissed on the user's behalf; one with others is raised again
+        without it.
+        """
+        if self._unacknowledged.pop(circuit_id, None) is None or not self._unacknowledged:
+            return
+        if self._announce_pending or notices.is_standing(self._hass, self._entry, _NOTICE_ID):
+            self._announce_pending = True
+            self._hass.async_create_task(self._async_announce())
 
     def _record(self, changes: tuple[OverrideChange, ...]) -> None:
         """Merge changes into those the user has not seen, the latest per circuit winning.

@@ -391,7 +391,7 @@ async def test_two_changes_before_the_notice_is_raised_are_both_kept(
     assert "circuit-3" in _message(hass, entry)
 
 
-async def test_the_unacknowledged_changes_are_stored_so_a_restart_can_rebuild_the_notice(
+async def test_unacknowledged_changes_are_stored_and_a_reloaded_manager_adds_to_them(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     manager = await _begun(hass, entry)
@@ -414,11 +414,66 @@ async def test_the_unacknowledged_changes_are_stored_so_a_restart_can_rebuild_th
         }
     }
 
+
+async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The stored changes round trip, reason included; `notices.async_restore` re-raises the notice."""
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    manager.set_override("circuit-2", _snapshot(ratings), 50)
+    manager.set_override("circuit-3", _snapshot(ratings), 40)
+    manager.reconcile(_snapshot({"circuit-3": 15.0}), _DECLARED)  # circuit-2 leaves
+    await hass.async_block_till_done()
+
     reloaded = BreakerRatingManager(hass, entry)
     await reloaded.async_load()
-    reloaded.begin(_snapshot({"circuit-3": 15.0}), _DECLARED)
-    # Standing still, so the earlier change is kept and a later one adds to it.
+    reloaded.begin(_snapshot({"circuit-3": 25.0}), _DECLARED)  # circuit-3 changes
+    await hass.async_block_till_done()
+
+    message = _message(hass, entry)
+    assert "**Name of circuit-2**: this circuit is no longer on the panel" in message
+    assert "**Name of circuit-3**: the panel now reports 25 A (was 15 A)" in message
+
+
+@pytest.mark.parametrize("how", ["clear", "set"])
+async def test_a_user_change_drops_that_circuit_from_the_standing_notice(
+    hass: HomeAssistant, entry: MockConfigEntry, how: str
+) -> None:
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    manager.set_override("circuit-2", _snapshot(ratings), 50)
+    manager.set_override("circuit-3", _snapshot(ratings), 40)
+    changed = _snapshot({"circuit-2": 30.0, "circuit-3": 25.0})
+    manager.reconcile(changed, _DECLARED)
+    await hass.async_block_till_done()
+    assert "circuit-2" in _message(hass, entry)
+
+    if how == "clear":
+        manager.clear_override("circuit-2", changed)
+    else:
+        manager.set_override("circuit-2", changed, 60)
+    await hass.async_block_till_done()
+
+    assert "circuit-2" not in _message(hass, entry)
+    assert "circuit-3" in _message(hass, entry)
+    assert "circuit-2" not in (await _stored(hass, entry))["unacknowledged"]
+
+
+async def test_a_user_change_to_the_only_listed_circuit_leaves_the_notice_standing(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    manager = await _begun(hass, entry)
+    manager.set_override("circuit-2", _snapshot(), 50)
+    changed = _snapshot({"circuit-2": 30.0})
+    manager.reconcile(changed, _DECLARED)
+    await hass.async_block_till_done()
+
+    manager.clear_override("circuit-2", changed)
+    await hass.async_block_till_done()
+
     assert is_standing(hass, entry, _NOTICE)
+    assert (await _stored(hass, entry))["unacknowledged"] == {}
 
 
 async def test_two_panels_with_the_same_circuit_id_stay_independent(
