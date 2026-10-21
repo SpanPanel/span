@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import threading
+from typing import get_args
 from unittest.mock import patch
 
 from homeassistant.components.persistent_notification import async_dismiss
@@ -15,6 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
+from custom_components.span_panel.breaker_ratings import ChangeReason
 from custom_components.span_panel.const import DOMAIN, EVENT_BREAKER_RATING_CHANGED
 from custom_components.span_panel.notices import async_restore, is_standing, read_translations
 
@@ -413,6 +415,32 @@ async def test_unacknowledged_changes_are_stored_and_a_reloaded_manager_adds_to_
             "removed": True,
         }
     }
+
+
+@pytest.mark.parametrize("reason", get_args(ChangeReason.__value__))
+async def test_a_stored_change_of_every_reason_round_trips(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object], reason: str
+) -> None:
+    """A reason the loader does not accept would drop the line as malformed."""
+    row = {
+        "circuit_id": "circuit-2",
+        "label": "Oven",
+        "reason": reason,
+        "rating_a": 50,
+        "panel_before_a": 20.0,
+        "panel_after_a": 30.0,
+        "service_a": 100.0,
+        "removed": reason != "panel_changed",
+    }
+    hass_storage[_store_key(entry)] = {
+        "version": 1,
+        "data": {"overrides": {}, "unacknowledged": {"circuit-2": row}},
+    }
+    manager = BreakerRatingManager(hass, entry)
+    await manager.async_load()
+    await manager.async_save()
+
+    assert (await _stored(hass, entry))["unacknowledged"] == {"circuit-2": row}
 
 
 async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(

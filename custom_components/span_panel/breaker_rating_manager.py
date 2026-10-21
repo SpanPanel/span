@@ -27,6 +27,7 @@ from .breaker_ratings import (
     Declaration,
     OverrideChange,
     StoredOverride,
+    is_change_reason,
     reconcile as reconcile_overrides,
     resolve as resolve_rating,
     service_rating_a,
@@ -45,15 +46,6 @@ _STORAGE_VERSION: Final = 1
 _STORAGE_KEY_PREFIX: Final = "span_panel_breaker_ratings"
 
 _NOTICE_ID: Final = "breaker_rating_changed"
-
-_REASONS: Final[tuple[ChangeReason, ...]] = (
-    "panel_changed",
-    "panel_agrees",
-    "rating_undeclared",
-    "circuit_removed",
-    "above_service_rating",
-    "service_rating_undeclared",
-)
 
 
 class _StoredOverrideRow(TypedDict):
@@ -122,13 +114,14 @@ def _load_change(circuit_id: str, row: object) -> OverrideChange | None:
     """Read one change off disk, or None where the row is not what was written."""
     if not isinstance(row, dict):
         return None
-    reason = row.get("reason")
+    reason: object = row.get("reason")
     rating = _integer(row.get("rating_a"))
     before = _number(row.get("panel_before_a"))
     after = _number(row.get("panel_after_a"))
     service = _number(row.get("service_a"))
-    label, removed = row.get("label"), row.get("removed")
-    if reason not in _REASONS or rating is None or before is None:
+    label: object = row.get("label")
+    removed: object = row.get("removed")
+    if not is_change_reason(reason) or rating is None or before is None:
         return None
     if not isinstance(label, str) or not isinstance(removed, bool):
         return None

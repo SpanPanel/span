@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Final, Literal, TypeIs, get_args
 
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
@@ -51,8 +51,19 @@ type ChangeReason = Literal[
     "above_service_rating",
     "service_rating_undeclared",
 ]
+"""Why the user is told about an override: kept under a new panel rating, or removed."""
+
+_CHANGE_REASONS: Final = frozenset(
+    reason for reason in get_args(ChangeReason.__value__) if isinstance(reason, str)
+)
+"""Every `ChangeReason`, read off the alias so the two cannot drift apart."""
 
 _SERVICE_RATING_PATHS = ("panel.main_breaker_rating_a", "panel.upstream_protection_rating_a")
+
+
+def is_change_reason(value: object) -> TypeIs[ChangeReason]:
+    """Whether a value read back from storage is a `ChangeReason`."""
+    return value in _CHANGE_REASONS
 
 
 @dataclass(frozen=True, slots=True)
