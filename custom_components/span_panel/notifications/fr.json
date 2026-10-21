@@ -18,7 +18,7 @@
   },
   "monitoring_rating_changed": {
     "title": "Les calibres de surveillance du panneau SPAN ont changé",
-    "intro": "Le panneau a modifié le calibre d'un disjoncteur sur un circuit où vous aviez défini un calibre de surveillance. Examinez chaque circuit dans le tableau de bord Span Panel, dans la section **Surveillance** du circuit.",
+    "intro": "Le panneau a modifié un élément dont dépend un calibre de surveillance que vous avez défini. Pour examiner un circuit, ouvrez-le dans le tableau de bord Span Panel : son calibre de surveillance se trouve dans la section **Surveillance** du circuit, affichée tant que la surveillance est activée pour ce circuit.",
     "panel_changed": "**{circuit}** : le panneau indique maintenant {after} A (auparavant {before} A). Votre calibre de surveillance de {rating} A s'applique toujours.",
     "panel_agrees": "**{circuit}** : le panneau indique maintenant {after} A (auparavant {before} A), ce qui correspond à votre calibre de surveillance de {rating} A ; le calibre de surveillance a donc été supprimé.",
     "rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre pour ce circuit (il indiquait {before} A) ; votre calibre de surveillance de {rating} A a donc été supprimé.",

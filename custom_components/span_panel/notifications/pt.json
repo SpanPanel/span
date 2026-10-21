@@ -18,7 +18,7 @@
   },
   "monitoring_rating_changed": {
     "title": "As capacidades de monitorização do Painel SPAN mudaram",
-    "intro": "O painel alterou a capacidade de um disjuntor num circuito onde tinha definido uma capacidade de monitorização. Reveja cada circuito no painel de controlo do Span Panel, na secção **Monitoramento** do circuito.",
+    "intro": "O painel alterou algo de que depende uma capacidade de monitorização que definiu. Para rever um circuito, abra-o no painel de controlo do Span Panel: a sua capacidade de monitorização está na secção **Monitoramento** do circuito, apresentada enquanto a monitorização estiver ativada para esse circuito.",
     "panel_changed": "**{circuit}**: o painel reporta agora {after} A (antes {before} A). A sua capacidade de monitorização de {rating} A continua a aplicar-se.",
     "panel_agrees": "**{circuit}**: o painel reporta agora {after} A (antes {before} A), igual à sua capacidade de monitorização de {rating} A, por isso a capacidade de monitorização foi removida.",
     "rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade para este circuito (reportava {before} A), por isso a sua capacidade de monitorização de {rating} A foi removida.",

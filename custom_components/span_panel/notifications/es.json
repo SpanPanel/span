@@ -18,7 +18,7 @@
   },
   "monitoring_rating_changed": {
     "title": "Cambiaron las capacidades de monitoreo del Panel SPAN",
-    "intro": "El panel cambió la capacidad de un interruptor en un circuito donde habías establecido una capacidad de monitoreo. Revisa cada circuito en el panel de control de Span Panel, en la sección **Monitoreo** del circuito.",
+    "intro": "El panel cambió algo de lo que depende una capacidad de monitoreo que estableciste. Para revisar un circuito, ábrelo en el panel de control de Span Panel: su capacidad de monitoreo está en la sección **Monitoreo** del circuito, que se muestra mientras el monitoreo está activado para ese circuito.",
     "panel_changed": "**{circuit}**: el panel ahora informa {after} A (antes {before} A). Tu capacidad de monitoreo de {rating} A sigue aplicándose.",
     "panel_agrees": "**{circuit}**: el panel ahora informa {after} A (antes {before} A), igual que tu capacidad de monitoreo de {rating} A, por lo que la capacidad de monitoreo se eliminó.",
     "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito (informaba {before} A), por lo que tu capacidad de monitoreo de {rating} A se eliminó.",

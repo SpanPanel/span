@@ -218,6 +218,18 @@ _MONITORING_RATING = {
 }
 """What each language calls the user's value; every line that names it uses these words."""
 
+_BREAKER = {"en": "breaker", "es": "interruptor", "fr": "disjoncteur", "ja": "ブレーカー", "pt": "disjuntor"}
+"""What each language calls a breaker. The intro heads every reason, and most are no breaker change."""
+
+_SHOWN_WHILE_ON = {
+    "en": "while monitoring is on for that circuit",
+    "es": "mientras el monitoreo está activado para ese circuito",
+    "fr": "tant que la surveillance est activée pour ce circuit",
+    "ja": "その回路のモニタリングがオンの間",
+    "pt": "enquanto a monitorização estiver ativada para esse circuito",
+}
+"""The card shows the editor only while the circuit's monitoring is on."""
+
 
 def _placeholders(template: str) -> set[str]:
     return {field for _, field, _, _ in Formatter().parse(template) if field}
@@ -242,6 +254,19 @@ def test_the_notice_points_to_the_cards_monitoring_section(language: str) -> Non
     intro = read_translations(language, _NOTICE)["intro"]
     assert _MONITORING_SECTION[language] in intro
     assert _placeholders(intro) == set()
+
+
+@pytest.mark.parametrize("language", _LANGUAGES)
+def test_the_intro_fits_every_reason_the_notice_reports(language: str) -> None:
+    """A circuit removed, or a service rating gone or exceeded, is no breaker rating changing on a circuit."""
+    intro = read_translations(language, _NOTICE)["intro"]
+    assert _BREAKER[language] not in intro.lower()
+
+
+@pytest.mark.parametrize("language", _LANGUAGES)
+def test_the_intro_says_the_section_shows_while_monitoring_is_on(language: str) -> None:
+    """With the circuit's monitoring off the editor is hidden, so the user must turn it on to find it."""
+    assert _SHOWN_WHILE_ON[language] in read_translations(language, _NOTICE)["intro"]
 
 
 @pytest.mark.parametrize("language", _LANGUAGES)
