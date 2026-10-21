@@ -19,6 +19,7 @@ from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot, shared_meter_groups
 
 from .alert_dispatcher import dispatch_alert, format_notification
+from .breaker_ratings import service_rating_a
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
@@ -160,20 +161,6 @@ def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircui
                 basis="circuit",
             )
     return points
-
-
-def panel_limit_a(snapshot: SpanPanelSnapshot) -> float | None:
-    """Return the rating the mains legs are judged against.
-
-    The main breaker where the panel has one; otherwise the rating of the
-    protection ahead of its upstream lugs, which is what limits a panel with no
-    main breaker of its own. None where the panel reports neither.
-    """
-    if snapshot.main_breaker_rating_a:
-        return float(snapshot.main_breaker_rating_a)
-    if snapshot.upstream_protection_rating_a:
-        return float(snapshot.upstream_protection_rating_a)
-    return None
 
 
 class CurrentMonitor:
@@ -446,7 +433,7 @@ class CurrentMonitor:
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
-        main_rating = panel_limit_a(snapshot) if snapshot else None
+        main_rating = service_rating_a(snapshot) if snapshot else None
 
         circuits: dict[str, dict[str, Any]] = {}
         # Include all circuits from the snapshot, not just those with active state.
@@ -677,7 +664,7 @@ class CurrentMonitor:
 
     def _evaluate_mains(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for all mains legs."""
-        rating = panel_limit_a(snapshot)
+        rating = service_rating_a(snapshot)
         if rating is None:
             return
 

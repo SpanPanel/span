@@ -21,9 +21,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.breaker_ratings import service_rating_a
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
-from custom_components.span_panel.current_monitor import panel_limit_a
 from custom_components.span_panel.helpers import construct_voltage_attribute
 from custom_components.span_panel.sensor import create_evse_sensors, create_panel_sensors
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
@@ -164,7 +164,7 @@ def test_the_mains_limit_is_the_main_breaker_else_the_upstream_protection(
         upstream_protection_rating_a=upstream,
     )
 
-    assert panel_limit_a(snapshot) == expected
+    assert service_rating_a(snapshot) == expected
 
 
 def test_the_monitor_judges_the_mains_against_the_upstream_protection() -> None:
