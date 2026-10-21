@@ -17,13 +17,13 @@
     "body": "パネル上のあるデバイスが、この統合が 1 台あたりに追加する上限（{limit}）を超える数のベンダー測定値を宣言しています。残りは追加されませんでした: {devices}。\n\n既存のものには影響はなく、故障でもありません。追加されなかった測定値は、この統合の診断ダウンロードには引き続き記載されています。表示を希望する場合は、それを添付してください。"
   },
   "monitoring_rating_changed": {
-    "title": "SPAN パネルのブレーカー定格が変更されました",
-    "intro": "パネルが、補正済みのブレーカー定格を変更しました。Span Panel ダッシュボードで、各回路の **ブレーカー定格** セクションを確認してください。",
-    "panel_changed": "**{circuit}**: パネルは現在 {after} A を報告しています(以前は {before} A)。{rating} A の補正は引き続き適用されます。",
-    "panel_agrees": "**{circuit}**: パネルは現在 {after} A を報告しており(以前は {before} A)、{rating} A の補正と一致するため、補正は削除されました。",
-    "rating_undeclared": "**{circuit}**: パネルがこの回路の定格を報告しなくなったため(以前は {before} A)、{rating} A の補正は削除されました。",
-    "circuit_removed": "**{circuit}**: この回路はパネルにもうないため(以前は {before} A)、{rating} A の補正は削除されました。",
-    "above_service_rating": "**{circuit}**: {rating} A の補正はパネルのサービス定格 {service} A を超えているため、削除されました。パネルは以前 {before} A、現在 {after} A を報告しています。",
-    "service_rating_undeclared": "**{circuit}**: パネルがサービス定格を報告しなくなったため、{rating} A の補正は削除されました。パネルはこの回路について以前 {before} A を報告していました。"
+    "title": "SPAN パネルのモニタリング定格が変更されました",
+    "intro": "パネルが、モニタリング定格を設定していた回路のブレーカー定格を変更しました。Span Panel ダッシュボードで、各回路の **モニタリング** セクションを確認してください。",
+    "panel_changed": "**{circuit}**: パネルは現在 {after} A を報告しています(以前は {before} A)。{rating} A のモニタリング定格は引き続き適用されます。",
+    "panel_agrees": "**{circuit}**: パネルは現在 {after} A を報告しており(以前は {before} A)、{rating} A のモニタリング定格と一致するため、モニタリング定格は削除されました。",
+    "rating_undeclared": "**{circuit}**: パネルがこの回路の定格を報告しなくなったため(以前は {before} A)、{rating} A のモニタリング定格は削除されました。",
+    "circuit_removed": "**{circuit}**: この回路はパネルにもうないため(以前は {before} A)、{rating} A のモニタリング定格は削除されました。",
+    "above_service_rating": "**{circuit}**: {rating} A のモニタリング定格はパネルのサービス定格 {service} A を超えているため、削除されました。パネルは以前 {before} A、現在 {after} A を報告しています。",
+    "service_rating_undeclared": "**{circuit}**: パネルがサービス定格を報告しなくなったため、{rating} A のモニタリング定格は削除されました。パネルはこの回路について以前 {before} A を報告していました。"
   }
 }

@@ -202,12 +202,11 @@ async def handle_panel_topology(
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
-            # The rating in force: the user's monitoring rating where one applies, else
-            # the panel's. The panel's own rides beside it for a consumer that
-            # needs the wire value.
-            "breaker_rating_a": rating.judged_a,
-            "panel_breaker_rating_a": rating.panel_a,
-            "breaker_rating_user_set": rating.user_set,
+            # The breaker's rating is the panel's fact. What current monitoring judges
+            # the circuit against, which a user may set, rides beside it.
+            "breaker_rating_a": circuit.breaker_rating_a,
+            "monitoring_rating_a": rating.judged_a,
+            "monitoring_rating_user_set": rating.user_set,
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
@@ -294,10 +293,9 @@ async def handle_panel_topology(
 class MeterGroupRecord(TypedDict):
     """One shared meter in the topology: its members, and the capacity it is judged against.
 
-    `breaker_rating_a` is the group's capacity over its members' ratings in
-    force, each a user's override where one applies, by
-    `current_monitor.meter_capacity_a`, and null where unknown. A member's own
-    `breaker_rating_a` stays that circuit's rating in force.
+    `breaker_rating_a` is the group's capacity over the ratings the panel
+    publishes, by `current_monitor.meter_capacity_a`, and null where unknown. A
+    member's own `breaker_rating_a` stays that circuit's rating.
     """
 
     members: list[str]
@@ -305,7 +303,7 @@ class MeterGroupRecord(TypedDict):
 
 
 def _meter_group_record(point: MonitoredCircuit) -> MeterGroupRecord:
-    return MeterGroupRecord(members=list(point.members), breaker_rating_a=point.rating_a)
+    return MeterGroupRecord(members=list(point.members), breaker_rating_a=point.panel_rating_a)
 
 
 def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:

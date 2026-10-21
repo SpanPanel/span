@@ -56,7 +56,7 @@ def _make_coordinator(snapshot):
     """Create a mock coordinator wrapping a snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    # No circuit is corrected: each reports the rating its panel published.
+    # No circuit has a monitoring rating: each reports the rating its panel published.
     coordinator.monitoring_rating_manager.resolve.side_effect = _panel_rating
     return coordinator
 
@@ -826,8 +826,8 @@ class TestHandlePanelTopology:
             "relay_state_target",
             "is_user_controllable",
             "breaker_rating_a",
-            "panel_breaker_rating_a",
-            "breaker_rating_user_set",
+            "monitoring_rating_a",
+            "monitoring_rating_user_set",
             "always_on",
             "priority",
             "priority_target",
@@ -836,8 +836,10 @@ class TestHandlePanelTopology:
         }
 
     @pytest.mark.asyncio
-    async def test_topology_reports_the_effective_breaker_rating(self, hass: HomeAssistant):
-        """`breaker_rating_a` is the rating in force; the panel's rides beside it."""
+    async def test_topology_keeps_the_panel_breaker_rating_beside_the_monitoring_rating(
+        self, hass: HomeAssistant
+    ):
+        """`breaker_rating_a` is the panel's; the monitoring rating rides beside it."""
         kitchen = SpanCircuitSnapshotFactory.create(
             circuit_id="uuid_kitchen", name="Kitchen", tabs=[5, 6], breaker_rating_a=20
         )
@@ -876,13 +878,16 @@ class TestHandlePanelTopology:
 
         circuits = connection.send_result.call_args[0][1]["circuits"]
         kitchen_data = circuits["uuid_kitchen"]
-        assert kitchen_data["breaker_rating_a"] == 50.0
-        assert kitchen_data["panel_breaker_rating_a"] == 20
-        assert kitchen_data["breaker_rating_user_set"] is True
+        assert kitchen_data["breaker_rating_a"] == 20
+        assert kitchen_data["monitoring_rating_a"] == 50.0
+        assert kitchen_data["monitoring_rating_user_set"] is True
         bedroom_data = circuits["uuid_bedroom"]
         assert bedroom_data["breaker_rating_a"] == 15
-        assert bedroom_data["panel_breaker_rating_a"] == 15
-        assert bedroom_data["breaker_rating_user_set"] is False
+        assert bedroom_data["monitoring_rating_a"] == 15
+        assert bedroom_data["monitoring_rating_user_set"] is False
+        for row in (kitchen_data, bedroom_data):
+            assert "panel_breaker_rating_a" not in row
+            assert "breaker_rating_user_set" not in row
 
     @pytest.mark.asyncio
     async def test_topology_reports_priority_settability_apart_from_the_relay(

@@ -1,9 +1,9 @@
 """Current monitoring for SPAN Panel circuits and mains legs.
 
 Detects spike (instantaneous) and continuous overload conditions by comparing
-current readings against effective ratings with configurable thresholds. A
-circuit's effective rating is its panel rating, or the monitoring rating a user set
-for it; the monitor asks the `MonitoringRatingManager` for it and stores none.
+current readings against the rating each point is judged against, with configurable
+thresholds. A circuit is judged against its panel rating, or the monitoring rating a
+user set for it; the monitor asks the `MonitoringRatingManager` for it and stores none.
 Dispatches notifications via event bus, notify services, and persistent
 notifications.
 """
@@ -89,7 +89,7 @@ class MonitoredPointState:
 
 
 type MonitoringBasis = Literal["circuit", "group"]
-"""What a monitored point's rating is: one circuit's effective rating, or a shared meter's capacity."""
+"""What a monitored point's rating is: one circuit's judged-against rating, or a shared meter's capacity."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,12 +102,12 @@ class MonitoredCircuit:
     its first member: that key is stable while the membership is, which is
     enough for alerts and overrides, neither of which is an entity.
 
-    `rating_a` is the effective rating and `panel_rating_a` the rating the panel
-    published, each None where a circuit, or the capacity of a group, is unknown.
-    For a group, both are capacities by the same rule: `rating_a` over its
-    members' effective ratings, `panel_rating_a` over the ratings the panel
-    published. `rating_user_set` is whether any member's effective rating is a
-    user's monitoring rating, whether or not the capacity is known.
+    `rating_a` is the rating judged against and `panel_rating_a` the breaker rating the
+    panel published, each None where a circuit, or the capacity of a group, is unknown.
+    For a group, both are capacities by the same rule: `rating_a` over the ratings its
+    members are judged against, `panel_rating_a` over the ratings the panel published.
+    `rating_user_set` is whether any member's judged-against rating is a user's
+    monitoring rating, whether or not the capacity is known.
     """
 
     point_id: str
@@ -150,7 +150,7 @@ def monitored_circuits(
 ) -> dict[str, MonitoredCircuit]:
     """Every point the monitor judges, by the id of each circuit it covers.
 
-    `ratings` answers each circuit's effective rating, which is what a point is
+    `ratings` answers the rating each circuit is judged against, which is what a point is
     judged against; the snapshot's own `breaker_rating_a` is the panel's.
     """
     points: dict[str, MonitoredCircuit] = {}
@@ -188,7 +188,7 @@ def monitored_circuits(
 
 
 class CurrentMonitor:
-    """Monitors current draw against effective breaker ratings for overload detection.
+    """Monitors current draw against each circuit's rating for overload detection.
 
     The ratings come from the panel's `MonitoringRatingManager`, which the
     coordinator reconciles before any listener sees a snapshot. The monitor only
@@ -482,7 +482,7 @@ class CurrentMonitor:
             point_id = point.point_id if point else cid
             state = self._circuit_states.get(point_id)
             rating = float(point.rating_a) if point and point.rating_a else None
-            panel_rating = float(point.panel_rating_a) if point and point.panel_rating_a else None
+            breaker_rating = float(point.panel_rating_a) if point and point.panel_rating_a else None
             override = self._circuit_overrides.get(point_id, {})
             # A point nobody is monitoring has no judgement to report, whatever it last
             # sampled; its alert times stay, being history.
@@ -507,9 +507,9 @@ class CurrentMonitor:
                 # carry its key, so a consumer counts each point once.
                 "point_id": point_id,
                 "last_current_a": last_current,
-                "breaker_rating_a": rating,
-                "panel_breaker_rating_a": panel_rating,
-                "breaker_rating_user_set": point.rating_user_set if point else False,
+                "breaker_rating_a": breaker_rating,
+                "monitoring_rating_a": rating,
+                "monitoring_rating_user_set": point.rating_user_set if point else False,
                 "utilization_pct": utilization,
                 "continuous_threshold_pct": cont_pct,
                 "spike_threshold_pct": spike_pct,
@@ -561,9 +561,9 @@ class CurrentMonitor:
             "name": "Mains Breaker",
             "last_current_a": peak_current,
             "breaker_rating_a": main_rating,
-            # The mains has no override, so every entry reads the same way.
-            "panel_breaker_rating_a": main_rating,
-            "breaker_rating_user_set": False,
+            # The mains has no monitoring rating, so every entry reads the same way.
+            "monitoring_rating_a": main_rating,
+            "monitoring_rating_user_set": False,
             "utilization_pct": utilization,
             "continuous_threshold_pct": cont_pct,
             "spike_threshold_pct": spike_pct,

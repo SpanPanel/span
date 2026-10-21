@@ -36,11 +36,7 @@ from .helpers import (
 )
 from .runtime import SpanPanelConfigEntry
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
-from .sensor_circuit import (
-    SpanCircuitBreakerRatingSensor,
-    SpanCircuitEnergySensor,
-    SpanCircuitPowerSensor,
-)
+from .sensor_circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor
 from .sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
@@ -96,7 +92,6 @@ from .util import (
 __all__ = [
     "SpanBessMetadataSensor",
     "SpanMidSensor",
-    "SpanCircuitBreakerRatingSensor",
     "SpanCircuitEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanEnergySensorBase",
@@ -338,7 +333,7 @@ def create_circuit_sensors(
         # Per-circuit breaker rating sensor (v2 only)
         if circuit_data and circuit_data.breaker_rating_a is not None:
             entities.append(
-                SpanCircuitBreakerRatingSensor(
+                SpanCircuitPowerSensor(
                     coordinator,
                     CIRCUIT_BREAKER_RATING_SENSOR,
                     snapshot,

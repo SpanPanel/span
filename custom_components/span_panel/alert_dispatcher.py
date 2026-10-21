@@ -55,8 +55,10 @@ def format_notification(
         {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
         {alert_type}      - "spike" or "continuous_overload"
         {current_a}       - Current draw in amps (e.g. 18.3)
-        {breaker_rating_a}- Effective breaker rating in amps (e.g. 20): the corrected
-                            rating where the user set one, else the panel's
+        {breaker_rating_a}- The rating in amps the circuit is judged against (e.g. 20):
+                            the user's monitoring rating where one is set, else the
+                            panel's breaker rating. The name is kept so existing
+                            templates still work.
         {threshold_pct}   - Configured threshold percentage
         {utilization_pct} - Actual utilization percentage
         {window_m}        - Window duration in minutes (continuous only)

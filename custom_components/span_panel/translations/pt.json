@@ -455,19 +455,19 @@
       "message": "A escrita de {property} em {device} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto o valor permanece inalterado e não mudará mais tarde."
     },
     "monitoring_rating_above_service_rating": {
-      "message": "A capacidade de um disjuntor não pode ser superior à capacidade de serviço do painel, de {service_rating} A."
+      "message": "A capacidade de monitorização não pode ser superior à capacidade de serviço do painel, de {service_rating} A."
     },
     "monitoring_rating_circuit_unknown": {
       "message": "Este painel não tem nenhum circuito com esse identificador."
     },
     "monitoring_rating_panel_not_loaded": {
-      "message": "Não há nenhum SPAN Panel carregado, por isso não é possível definir nem limpar uma capacidade de disjuntor."
+      "message": "Não há nenhum SPAN Panel carregado, por isso não é possível definir nem limpar uma capacidade de monitorização."
     },
     "monitoring_rating_no_service_rating": {
-      "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma correção da capacidade do disjuntor."
+      "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma capacidade de monitorização."
     },
     "monitoring_rating_not_published": {
-      "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível definir uma correção."
+      "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível definir uma capacidade de monitorização."
     },
     "circuit_priority_failed": {
       "message": "A alteração de prioridade para {circuit} foi recusada: {reason}. Nada foi enviado ao painel, portanto a prioridade permanece inalterada."
@@ -699,16 +699,16 @@
       }
     },
     "set_circuit_monitoring_rating": {
-      "name": "Definir capacidade do disjuntor do circuito",
-      "description": "Corrigir a capacidade do disjuntor que o painel publica para um circuito quando está errada. Só é possível corrigir uma capacidade que o painel publica, e a correção não pode ser superior à capacidade de serviço do painel.",
+      "name": "Definir capacidade de monitorização do circuito",
+      "description": "Definir a capacidade segundo a qual a monitorização de corrente avalia um circuito. É a maior corrente que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só se pode definir para um circuito cuja capacidade de disjuntor o painel publica, e não pode ser superior à capacidade de serviço do painel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
           "description": "A entidade do sensor de potência do circuito."
         },
         "monitoring_rating_a": {
-          "name": "Capacidade do disjuntor (A)",
-          "description": "A capacidade do disjuntor em amperes, um número inteiro de 1 até à capacidade de serviço do painel."
+          "name": "Capacidade de monitorização (A)",
+          "description": "A maior corrente, em amperes, que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. Um número inteiro de 1 até à capacidade de serviço do painel."
         },
         "config_entry_id": {
           "name": "Entrada de configuração",
@@ -717,8 +717,8 @@
       }
     },
     "clear_circuit_monitoring_rating": {
-      "name": "Limpar capacidade do disjuntor do circuito",
-      "description": "Remover a correção da capacidade do disjuntor de um circuito, revertendo para a capacidade publicada pelo painel.",
+      "name": "Limpar capacidade de monitorização do circuito",
+      "description": "Remover a capacidade de monitorização de um circuito, para que a monitorização de corrente o avalie pela capacidade de disjuntor publicada pelo painel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

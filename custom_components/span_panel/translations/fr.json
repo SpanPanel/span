@@ -455,19 +455,19 @@
       "message": "L'écriture de {property} sur {device} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la valeur est donc inchangée et ne changera pas plus tard."
     },
     "monitoring_rating_above_service_rating": {
-      "message": "Le calibre d'un disjoncteur ne peut pas dépasser le calibre de service du panneau, soit {service_rating} A."
+      "message": "Un calibre de surveillance ne peut pas dépasser le calibre de service du panneau, soit {service_rating} A."
     },
     "monitoring_rating_circuit_unknown": {
       "message": "Ce panneau n'a aucun circuit avec cet identifiant."
     },
     "monitoring_rating_panel_not_loaded": {
-      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre de disjoncteur ne peut donc être défini ni effacé."
+      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre de surveillance ne peut donc être défini ni effacé."
     },
     "monitoring_rating_no_service_rating": {
-      "message": "Le panneau ne publie pas de calibre de service ; une correction du calibre du disjoncteur ne peut donc pas être définie."
+      "message": "Le panneau ne publie pas de calibre de service ; un calibre de surveillance ne peut donc pas être défini."
     },
     "monitoring_rating_not_published": {
-      "message": "Le panneau ne publie pas de calibre de disjoncteur pour ce circuit ; une correction ne peut donc pas être définie."
+      "message": "Le panneau ne publie pas de calibre de disjoncteur pour ce circuit ; un calibre de surveillance ne peut donc pas être défini."
     },
     "circuit_priority_failed": {
       "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
@@ -699,16 +699,16 @@
       }
     },
     "set_circuit_monitoring_rating": {
-      "name": "Définir le calibre du disjoncteur du circuit",
-      "description": "Corriger le calibre du disjoncteur que le panneau publie pour un circuit lorsqu'il est erroné. Seul un calibre publié par le panneau peut être corrigé, et la correction ne peut pas dépasser le calibre de service du panneau.",
+      "name": "Définir le calibre de surveillance du circuit",
+      "description": "Définir le calibre par rapport auquel la surveillance du courant juge un circuit. C'est le courant maximal que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Seul un circuit dont le panneau publie le calibre de disjoncteur peut en recevoir un, et il ne peut pas dépasser le calibre de service du panneau.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
           "description": "L'entité capteur de puissance du circuit."
         },
         "monitoring_rating_a": {
-          "name": "Calibre du disjoncteur (A)",
-          "description": "Le calibre du disjoncteur en ampères, un nombre entier de 1 jusqu'au calibre de service du panneau."
+          "name": "Calibre de surveillance (A)",
+          "description": "Le courant maximal, en ampères, que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Un nombre entier de 1 jusqu'au calibre de service du panneau."
         },
         "config_entry_id": {
           "name": "Entrée de configuration",
@@ -717,8 +717,8 @@
       }
     },
     "clear_circuit_monitoring_rating": {
-      "name": "Effacer le calibre du disjoncteur du circuit",
-      "description": "Supprimer la correction du calibre du disjoncteur d'un circuit, revenant au calibre publié par le panneau.",
+      "name": "Effacer le calibre de surveillance du circuit",
+      "description": "Supprimer le calibre de surveillance d'un circuit, de sorte que la surveillance du courant le juge selon le calibre de disjoncteur publié par le panneau.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

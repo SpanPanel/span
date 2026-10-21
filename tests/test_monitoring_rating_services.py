@@ -147,7 +147,7 @@ class TestSchemas:
 
 
 class TestSet:
-    """set_circuit_monitoring_rating corrects a circuit's rating."""
+    """set_circuit_monitoring_rating sets the rating a circuit is judged against."""
 
     async def test_by_entity_id(self, hass: HomeAssistant) -> None:
         """By entity id."""
@@ -219,7 +219,7 @@ class TestSet:
 
 
 class TestClear:
-    """clear_circuit_monitoring_rating removes a correction."""
+    """clear_circuit_monitoring_rating removes a monitoring rating."""
 
     async def test_by_entity_id(self, hass: HomeAssistant) -> None:
         """By entity id."""
@@ -250,7 +250,7 @@ class TestClear:
         assert manager.resolve("circuit-2", _snapshot()).judged_a == 20
 
     async def test_an_entity_whose_circuit_has_left_is_refused(self, hass: HomeAssistant) -> None:
-        """A circuit the panel no longer publishes has no correction to clear."""
+        """A circuit the panel no longer publishes has no monitoring rating to clear."""
         entry, _manager = await _loaded_panel(hass, "sp3-001", _snapshot())
         entity_id = _entity(hass, entry, "circuit-gone")
 

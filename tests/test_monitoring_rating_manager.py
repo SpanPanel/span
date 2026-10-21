@@ -136,7 +136,7 @@ async def test_a_set_rating_is_saved_and_loaded_by_the_next_manager(
     await reloaded.async_load()
     reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded ratings
     rating = reloaded.resolve("circuit-2", _snapshot())
-    # The declaration is unknown until `begin`, so the correction is pending: unrated.
+    # The declaration is unknown until `begin`, so the monitoring rating is pending: unrated.
     assert (rating.judged_a, rating.panel_a, rating.user_set) == (None, 20.0, False)
     reloaded.begin(_snapshot(), _DECLARED)
     rating = reloaded.resolve("circuit-2", _snapshot())
@@ -200,14 +200,23 @@ neither may a circuit when the service rating goes, since that removes every
 stored, present or not.
 """
 
-_BREAKER_SECTION = {
-    "en": "**Breaker Rating** section",
-    "es": "sección **Calibre del Interruptor**",
-    "fr": "section **Calibre du Disjoncteur**",
-    "ja": "**ブレーカー定格** セクション",
-    "pt": "secção **Corrente Nominal do Disjuntor**",
+_MONITORING_SECTION = {
+    "en": "**Monitoring** section",
+    "es": "sección **Monitoreo**",
+    "fr": "section **Surveillance**",
+    "ja": "**モニタリング** セクション",
+    "pt": "secção **Monitoramento**",
 }
-"""The card's Breaker section by its title, `sidepanel.breaker_rating` in the card's i18n."""
+"""The card's Monitoring section by its title, `sidepanel.monitoring` in the card's i18n."""
+
+_MONITORING_RATING = {
+    "en": "monitoring rating",
+    "es": "capacidad de monitoreo",
+    "fr": "calibre de surveillance",
+    "ja": "モニタリング定格",
+    "pt": "capacidade de monitorização",
+}
+"""What each language calls the user's value; every line that names it uses these words."""
 
 
 def _placeholders(template: str) -> set[str]:
@@ -229,10 +238,18 @@ def test_every_line_names_the_users_rating_and_the_panels_before_and_after(
 
 
 @pytest.mark.parametrize("language", _LANGUAGES)
-def test_the_notice_points_to_the_cards_breaker_section(language: str) -> None:
+def test_the_notice_points_to_the_cards_monitoring_section(language: str) -> None:
     intro = read_translations(language, _NOTICE)["intro"]
-    assert _BREAKER_SECTION[language] in intro
+    assert _MONITORING_SECTION[language] in intro
     assert _placeholders(intro) == set()
+
+
+@pytest.mark.parametrize("language", _LANGUAGES)
+def test_the_notice_calls_the_users_value_a_monitoring_rating(language: str) -> None:
+    text = read_translations(language, _NOTICE)
+    assert _MONITORING_RATING[language] in text["intro"]
+    for reason in _LINE_PLACEHOLDERS:
+        assert _MONITORING_RATING[language] in text[reason], reason
 
 
 # -- set_rating and clear_rating ------------------------------------------
@@ -482,11 +499,11 @@ async def test_a_change_raises_one_notice_naming_the_circuit(
 
     message = _message(hass, entry)
     assert (
-        "**Name of circuit-2**: the panel now reports 30 A (was 20 A). Your 50 A still applies."
+        "**Name of circuit-2**: the panel now reports 30 A (was 20 A). Your 50 A monitoring rating still applies."
         in message
     )
     notification = hass.data["persistent_notification"][_notification_id(entry)]
-    assert notification["title"] == "SPAN Panel breaker ratings changed"
+    assert notification["title"] == "SPAN Panel monitoring ratings changed"
 
 
 async def test_changes_accumulate_while_the_notice_stands_and_reset_after_dismissal(
@@ -567,7 +584,7 @@ async def test_a_change_and_change_back_leaves_the_other_circuits_lines(
 async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last_saw(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """20 A, then 25 A, then 50 A, which matches the correction: removed, and "was 20 A"."""
+    """20 A, then 25 A, then 50 A, which matches the monitoring rating: removed, and "was 20 A"."""
     manager = await _begun(hass, entry)
     manager.set_rating("circuit-2", _snapshot(), 50)
     manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
@@ -582,7 +599,7 @@ async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last
     assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 50.0)
     assert (
         "**Name of circuit-2**: the panel now reports 50 A (was 20 A), matching your 50 A "
-        "correction, so the correction was removed."
+        "monitoring rating, so the monitoring rating was removed."
     ) in _message(hass, entry)
 
 
@@ -592,7 +609,7 @@ async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
     """20 A, then 25 A, then 20 A with the service rating cut to 40 A: removed, so the user is told.
 
     The panel's rating is back where the user last saw it, which would drop a
-    line for a correction still in force; this one is gone.
+    line for a monitoring rating still in force; this one is gone.
     """
     manager = await _begun(hass, entry)
     manager.set_rating("circuit-2", _snapshot(), 50)
@@ -608,7 +625,7 @@ async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
     assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 20.0)
     assert is_standing(hass, entry, _NOTICE)
     assert (
-        "**Name of circuit-2**: your 50 A correction is above the panel's service rating of "
+        "**Name of circuit-2**: your 50 A monitoring rating is above the panel's service rating of "
         "40 A, so it was removed. The panel reported 20 A and now reports 20 A."
     ) in _message(hass, entry)
 
@@ -736,7 +753,7 @@ async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
     message = _message(hass, entry)
     assert (
         "**Name of circuit-2**: this circuit is no longer on the panel (it reported 20 A), "
-        "so your 50 A correction was removed."
+        "so your 50 A monitoring rating was removed."
     ) in message
     assert "**Name of circuit-3**: the panel now reports 25 A (was 15 A)" in message
 

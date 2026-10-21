@@ -1,9 +1,9 @@
-"""Current monitoring judges circuits against their effective breaker rating.
+"""Current monitoring judges circuits against their monitoring rating.
 
-A user may correct a circuit's published rating (a tandem breaker is published at
-the rating of one half). The monitor never stores that correction: it asks the
-panel's `MonitoringRatingManager` for each circuit's rating on every snapshot, so the
-correction applies to alerts and to the status, and survives anything that
+A user may set the rating a circuit is judged against (a tandem breaker is published
+at the rating of one half). The monitor never stores it: it asks the panel's
+`MonitoringRatingManager` for each circuit's rating on every snapshot, so the
+monitoring rating applies to alerts and to the status, and survives anything that
 resets the monitor's own state.
 """
 
@@ -106,12 +106,12 @@ def _run_past_the_window(monitor: CurrentMonitor, snapshot: SpanPanelSnapshot, c
 
 
 class TestAlerts:
-    """A circuit is judged against the rating the user corrected it to."""
+    """A circuit is judged against the monitoring rating the user set for it."""
 
     async def test_a_20a_circuit_at_30a_alerts_continuously_without_a_monitoring_rating(
         self, hass: HomeAssistant
     ) -> None:
-        """Without a correction the panel's rating applies, 30 A on 20 A."""
+        """Without a monitoring rating the panel's rating applies, 30 A on 20 A."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, _manager = await _monitor(hass, snapshot)
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
@@ -122,7 +122,7 @@ class TestAlerts:
         assert [a.data["alert_type"] for a in alerts] == ["continuous_overload"]
         assert alerts[0].data["breaker_rating_a"] == 20.0
 
-    async def test_the_same_circuit_does_not_alert_when_corrected_to_50a(
+    async def test_the_same_circuit_does_not_alert_with_a_monitoring_rating_of_50a(
         self, hass: HomeAssistant
     ) -> None:
         """30 A is 60% of a 50 A breaker, under the 80% continuous threshold."""
@@ -138,10 +138,10 @@ class TestAlerts:
         status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
         assert status["utilization_pct"] == 60.0
 
-    async def test_a_corrected_circuit_is_skipped_while_the_service_rating_is_pending(
+    async def test_a_circuit_with_a_monitoring_rating_is_skipped_while_the_service_rating_is_pending(
         self, hass: HomeAssistant
     ) -> None:
-        """Declared with no value yet: not judged against the 20 A the user corrected."""
+        """Declared with no value yet: not judged against the 20 A the panel published."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await _monitor(hass, snapshot)
         manager.set_rating("circuit-2", snapshot, 50)
@@ -153,9 +153,13 @@ class TestAlerts:
         assert monitor.get_circuit_state("circuit-2") is None
         assert manager.resolve("circuit-2", pending).judged_a is None
         status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
-        assert (status["breaker_rating_a"], status["breaker_rating_user_set"]) == (None, False)
+        assert status["breaker_rating_a"] == 20.0
+        assert (status["monitoring_rating_a"], status["monitoring_rating_user_set"]) == (
+            None,
+            False,
+        )
 
-    async def test_the_alert_names_the_corrected_rating(self, hass: HomeAssistant) -> None:
+    async def test_the_alert_names_the_monitoring_rating(self, hass: HomeAssistant) -> None:
         """At 45 A a 50 A breaker is over 80%; the event and the text say 50 A."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 45.0))
         monitor, manager = await _monitor(hass, snapshot, **{NOTIFY_TARGETS: "event_bus,notify.x"})
@@ -175,9 +179,9 @@ class TestAlerts:
 
 
 class TestStatus:
-    """Status entries carry the effective rating, the panel's, and whether the user set it."""
+    """Status entries carry the panel's rating, the one judged against, and whether the user set it."""
 
-    async def test_an_uncorrected_circuit_reports_the_panels_rating(
+    async def test_a_circuit_without_a_monitoring_rating_reports_the_panels_rating(
         self, hass: HomeAssistant
     ) -> None:
         """Effective equals the panel's and the user did not set it."""
@@ -188,11 +192,15 @@ class TestStatus:
         entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
 
         assert entry["breaker_rating_a"] == 20.0
-        assert entry["panel_breaker_rating_a"] == 20.0
-        assert entry["breaker_rating_user_set"] is False
+        assert entry["monitoring_rating_a"] == 20.0
+        assert entry["monitoring_rating_user_set"] is False
+        assert "panel_breaker_rating_a" not in entry
+        assert "breaker_rating_user_set" not in entry
 
-    async def test_a_corrected_circuit_reports_both_ratings(self, hass: HomeAssistant) -> None:
-        """Effective is the correction; the panel's rating stays beside it."""
+    async def test_a_circuit_with_a_monitoring_rating_reports_both_ratings(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Judged against is the monitoring rating; the breaker rating stays the panel's."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, manager = await _monitor(hass, snapshot)
         manager.set_rating("circuit-2", snapshot, 50)
@@ -200,9 +208,9 @@ class TestStatus:
 
         entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
 
-        assert entry["breaker_rating_a"] == 50.0
-        assert entry["panel_breaker_rating_a"] == 20.0
-        assert entry["breaker_rating_user_set"] is True
+        assert entry["breaker_rating_a"] == 20.0
+        assert entry["monitoring_rating_a"] == 50.0
+        assert entry["monitoring_rating_user_set"] is True
         assert entry["utilization_pct"] == 20.0
 
     async def test_the_mains_entry_has_the_same_shape(self, hass: HomeAssistant) -> None:
@@ -214,17 +222,19 @@ class TestStatus:
         (entry,) = monitor.get_monitoring_status()["mains"].values()
 
         assert entry["breaker_rating_a"] == float(SERVICE_A)
-        assert entry["panel_breaker_rating_a"] == float(SERVICE_A)
-        assert entry["breaker_rating_user_set"] is False
+        assert entry["monitoring_rating_a"] == float(SERVICE_A)
+        assert entry["monitoring_rating_user_set"] is False
+        assert "panel_breaker_rating_a" not in entry
+        assert "breaker_rating_user_set" not in entry
 
 
 class TestSharedMeters:
     """A shared meter is judged against its members' summed ratings."""
 
-    async def test_one_corrected_member_changes_the_sum_and_marks_the_group(
+    async def test_one_member_with_a_monitoring_rating_changes_the_sum_and_marks_the_group(
         self, hass: HomeAssistant
     ) -> None:
-        """15 + 15 A with one member corrected to 20 A is 35 A, panel 30 A, user set."""
+        """15 + 15 A with one member given a 20 A monitoring rating is judged against 35 A, breaker 30 A, user set."""
         snapshot = _panel(
             _shared(_circuit("circuit-52", 15.0, 12.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 12.0), "circuit-52", 44),
@@ -236,14 +246,14 @@ class TestSharedMeters:
         status = monitor.get_monitoring_status()["circuits"]
 
         for member in ("circuit-52", "circuit-53"):
-            assert status[member]["breaker_rating_a"] == 35.0
-            assert status[member]["panel_breaker_rating_a"] == 30.0
-            assert status[member]["breaker_rating_user_set"] is True
+            assert status[member]["breaker_rating_a"] == 30.0
+            assert status[member]["monitoring_rating_a"] == 35.0
+            assert status[member]["monitoring_rating_user_set"] is True
 
     async def test_a_group_with_an_unrated_member_is_unratable_yet_still_user_set(
         self, hass: HomeAssistant
     ) -> None:
-        """One member corrected, another with no panel rating: no sum, but the flag is true."""
+        """One member with a monitoring rating, another with no panel rating: no sum, but the flag is true."""
         rated = _shared(_circuit("circuit-52", 15.0, 12.0), "circuit-53", 44)
         unrated = _shared(_circuit("circuit-53", None, 12.0), "circuit-52", 44)
         snapshot = _panel(rated, unrated)
@@ -255,12 +265,12 @@ class TestSharedMeters:
 
         for member in ("circuit-52", "circuit-53"):
             assert status[member]["breaker_rating_a"] is None
-            assert status[member]["panel_breaker_rating_a"] is None
-            assert status[member]["breaker_rating_user_set"] is True
+            assert status[member]["monitoring_rating_a"] is None
+            assert status[member]["monitoring_rating_user_set"] is True
 
 
 class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
-    """The correction is the manager's, so the monitor's resets cannot lose it."""
+    """The monitoring rating is the manager's, so the monitor's resets cannot lose it."""
 
     async def _panel_with_services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
@@ -292,7 +302,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
         assert isinstance(circuits, dict)
         entry = circuits["circuit-2"]
         assert isinstance(entry, dict)
-        return entry["breaker_rating_a"], entry["breaker_rating_user_set"]
+        return entry["monitoring_rating_a"], entry["monitoring_rating_user_set"]
 
     async def test_clear_circuit_threshold_leaves_the_rating_alone(
         self, hass: HomeAssistant
@@ -347,4 +357,5 @@ async def test_a_monitor_is_judged_by_the_manager_it_was_given(
 
     entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
 
-    assert entry["breaker_rating_a"] == float(stored or 20)
+    assert entry["breaker_rating_a"] == 20.0
+    assert entry["monitoring_rating_a"] == float(stored or 20)

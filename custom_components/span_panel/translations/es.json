@@ -455,19 +455,19 @@
       "message": "La escritura de {property} en {device} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el valor no ha cambiado ni cambiará más tarde."
     },
     "monitoring_rating_above_service_rating": {
-      "message": "La capacidad de un interruptor no puede superar la capacidad de servicio del panel, de {service_rating} A."
+      "message": "La capacidad de monitoreo no puede superar la capacidad de servicio del panel, de {service_rating} A."
     },
     "monitoring_rating_circuit_unknown": {
       "message": "Este panel no tiene ningún circuito con ese identificador."
     },
     "monitoring_rating_panel_not_loaded": {
-      "message": "No hay ningún SPAN Panel cargado, por lo que no se puede establecer ni borrar una capacidad de interruptor."
+      "message": "No hay ningún SPAN Panel cargado, por lo que no se puede establecer ni borrar una capacidad de monitoreo."
     },
     "monitoring_rating_no_service_rating": {
-      "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una corrección de la capacidad del interruptor."
+      "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una capacidad de monitoreo."
     },
     "monitoring_rating_not_published": {
-      "message": "El panel no publica una capacidad de interruptor para este circuito, por lo que no se puede establecer una corrección."
+      "message": "El panel no publica una capacidad de interruptor para este circuito, por lo que no se puede establecer una capacidad de monitoreo."
     },
     "circuit_priority_failed": {
       "message": "Se rechazó el cambio de prioridad para {circuit}: {reason}. No se envió nada al panel, por lo que la prioridad no ha cambiado."
@@ -699,16 +699,16 @@
       }
     },
     "set_circuit_monitoring_rating": {
-      "name": "Establecer capacidad del interruptor del circuito",
-      "description": "Corregir la capacidad del interruptor que el panel publica para un circuito cuando es errónea. Solo se puede corregir una capacidad que el panel publica, y la corrección no puede superar la capacidad de servicio del panel.",
+      "name": "Establecer capacidad de monitoreo del circuito",
+      "description": "Establecer la capacidad con la que el monitoreo de corriente juzga un circuito. Es la mayor corriente que puede soportar el cable medido del circuito; para un tándem en un solo espacio, la suma de sus interruptores. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se puede establecer para un circuito cuya capacidad de interruptor publica el panel, y no puede superar la capacidad de servicio del panel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
           "description": "La entidad del sensor de potencia del circuito."
         },
         "monitoring_rating_a": {
-          "name": "Capacidad del interruptor (A)",
-          "description": "La capacidad del interruptor en amperios, un número entero desde 1 hasta la capacidad de servicio del panel."
+          "name": "Capacidad de monitoreo (A)",
+          "description": "La mayor corriente, en amperios, que puede soportar el cable medido del circuito; para un tándem en un solo espacio, la suma de sus interruptores. Un número entero desde 1 hasta la capacidad de servicio del panel."
         },
         "config_entry_id": {
           "name": "Entrada de configuración",
@@ -717,8 +717,8 @@
       }
     },
     "clear_circuit_monitoring_rating": {
-      "name": "Borrar capacidad del interruptor del circuito",
-      "description": "Eliminar la corrección de la capacidad del interruptor de un circuito, volviendo a la capacidad que publica el panel.",
+      "name": "Borrar capacidad de monitoreo del circuito",
+      "description": "Eliminar la capacidad de monitoreo de un circuito, de modo que el monitoreo de corriente lo juzgue según la capacidad de interruptor que publica el panel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

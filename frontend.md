@@ -54,8 +54,8 @@ top of the panel header) → **List View Columns**.
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
-circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit's rating has been corrected, thresholds and utilization use
-the corrected rating.
+circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit has a monitoring rating, set in its Monitoring section,
+thresholds and utilization use the monitoring rating instead of the panel's breaker rating.
 
 ### Global Settings
 
@@ -81,11 +81,14 @@ the corrected rating.
   | `{entity_id}`        | HA entity ID                                                         | sensor.kitchen_oven_current |
   | `{alert_type}`       | Alert category                                                       | spike, continuous_overload  |
   | `{current_a}`        | Current draw in amps                                                 | 18.3                        |
-  | `{breaker_rating_a}` | Breaker rating in amps (the corrected rating where the user set one) | 20                          |
+  | `{breaker_rating_a}` | Rating in amps the circuit is judged against                         | 20                          |
   | `{threshold_pct}`    | Configured threshold percentage                                      | 80                          |
   | `{utilization_pct}`  | Actual utilization percentage                                        | 91.5                        |
   | `{window_m}`         | Window duration in minutes                                           | 5                           |
   | `{local_time}`       | Local time of the alert                                              | 2:15 PM                     |
+
+  `{breaker_rating_a}` keeps its name so existing templates still work, but it carries the rating the circuit is judged against: the circuit's monitoring rating
+  where one is set, else the breaker rating the panel publishes.
 
 ### Monitored Points
 

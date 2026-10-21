@@ -114,7 +114,7 @@ def test_resolve_pending_panel_rating_is_unrated() -> None:
 
 
 def test_resolve_pending_service_rating_is_unrated() -> None:
-    """A corrected circuit is not judged against the rating the user corrected, even for a moment.
+    """A circuit with a monitoring rating is not judged against the panel rating, even for a moment.
 
     The panel's own rating is still reported beside it: it is the wire value, and
     known.
@@ -132,7 +132,7 @@ def test_resolve_pending_service_rating_without_a_monitoring_rating_shows_panel(
 
 
 def test_resolve_undeclared_service_rating_shows_panel() -> None:
-    """No service rating published: the stored is being deleted, and the panel's rating applies."""
+    """No service rating published: the monitoring rating is being deleted, and the panel's rating applies."""
     expected = MonitoringRating(PANEL_A, PANEL_A, False)
     assert resolve(_circuit(), _stored(), None, "undeclared") == expected
     assert resolve(_circuit(), _stored(), SERVICE_A, "undeclared") == expected

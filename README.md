@@ -379,14 +379,14 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit-Level Sensors (per circuit)
 
-| Sensor          | Device Class | Unit | Notes                                                                                                                      |
-| --------------- | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| Power           | Power        | W    | Instantaneous circuit power (+producing for PV and solar-role circuits, +consuming otherwise)                              |
-| Produced Energy | Energy       | Wh   | Cumulative energy produced                                                                                                 |
-| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                                                                                 |
-| Net Energy      | Energy       | Wh   | Net energy (sign depends on what the circuit feeds — PV and solar-role circuits invert)                                    |
-| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`                                                               |
-| Breaker Rating  | —            | A    | Breaker rating in force (diagnostic, off by default): a correction where one applies, else the panel's. Only when reported |
+| Sensor          | Device Class | Unit | Notes                                                                                         |
+| --------------- | ------------ | ---- | --------------------------------------------------------------------------------------------- |
+| Power           | Power        | W    | Instantaneous circuit power (+producing for PV and solar-role circuits, +consuming otherwise) |
+| Produced Energy | Energy       | Wh   | Cumulative energy produced                                                                    |
+| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                                                    |
+| Net Energy      | Energy       | Wh   | Net energy (sign depends on what the circuit feeds — PV and solar-role circuits invert)       |
+| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`                                  |
+| Breaker Rating  | —            | A    | Circuit breaker amperage (diagnostic, off by default). Only when reported                     |
 
 ### Circuit Power Sensor Attributes
 
@@ -421,33 +421,36 @@ A remote current transformer (CT) the panel reads appears as **Remote CT** follo
 sensors, and Current where the panel reports it. Its Power is positive for power flowing into the panel. It has no breaker, so it gets no Breaker switch, no
 Circuit Priority select and no current monitoring, its Power sensor carries no relay or shed attributes, and the panel view draws it outside the breaker grid.
 
-### Breaker Rating Sensor Attributes
+### Setting a Monitoring Rating
 
-In addition to the circuit power sensor attributes, the Breaker Rating sensor carries:
+Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as one
+circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to
+judge the circuit against instead.
 
-| Attribute                 | Type       | Notes                                                                  |
-| ------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `panel_breaker_rating_a`  | float/null | The rating the panel publishes, null where it publishes none           |
-| `breaker_rating_user_set` | bool       | Whether a correction applies, so the sensor's value is not the panel's |
+Set it in the dashboard, in the circuit's **Monitoring** section while monitoring is on for that circuit, or with the `span_panel.set_circuit_monitoring_rating`
+and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's service rating, and only a circuit the panel
+publishes a breaker rating for can be given one. Enter the most current the measured wire can carry; for a tandem in one space, that is the sum of its breakers.
+Turning monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
 
-### Correcting a Breaker Rating and Current Monitoring
+Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
+show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
+changes: the Breaker Rating sensor, the panel view's breaker labels and the `breaker_rating_a` the integration reports always show the panel's rating, and
+energy counter checks keep using it.
 
-A circuit's breaker rating can be corrected where the panel's commissioned rating is wrong, as on a tandem breaker, which the panel publishes at the
-rating of one half. A correction is made in the dashboard, or with the `span_panel.set_circuit_monitoring_rating` and
-`span_panel.clear_circuit_monitoring_rating` services, and is bounded by the panel's service rating. Current monitoring judges a circuit against its
-corrected rating, so its thresholds, utilization and alert text all use it, and the Breaker Rating sensor and the panel view show it with the panel's
-rating beside it. Energy counter checks keep using the panel's rating.
+For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel measures,
+and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit is the safer
+choice than guessing.
 
-A notification tells you when the panel overtakes a correction:
+A notification tells you when the panel overtakes a monitoring rating:
 
-- the panel's rating for the circuit changed, and the correction still applies;
-- the panel's rating now matches the correction, which was removed;
-- the panel no longer reports a rating for the circuit, and the correction was removed;
-- the circuit is no longer on the panel, and the correction was removed;
-- the panel's service rating dropped below the correction, or the panel no longer publishes one, and the correction was removed.
+- the panel's rating for the circuit changed, and the monitoring rating still applies;
+- the panel's rating now matches the monitoring rating, which was removed;
+- the panel no longer reports a rating for the circuit, and the monitoring rating was removed;
+- the circuit is no longer on the panel, and the monitoring rating was removed;
+- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed.
 
-Each line names the circuit, your rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed back before
-you looked is not reported.
+Each line names the circuit, your monitoring rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed
+back before you looked is not reported.
 
 ### Circuit Energy Sensor Attributes
 
@@ -838,6 +841,22 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **"SPAN Panel hardware not validated with this release" repair**             | Setup has stopped with a repair naming the panel's hardware version and model, and no entities are created for that panel.                                                                                                                                                                                                                                                                                                          | This release has not been validated with that panel hardware, so it does not set the panel up; a MAIN 32 always proceeds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **The Adopted tab is missing from the dashboard**                            | The dashboard offers By Activity, By Area and Monitoring, but neither**Adopted** nor **By Panel**.                                                                                                                                                                                                                                                                                                                                  | The panel dropdown at the top of the dashboard is on**Favorites**, which merges every configured panel into one workspace rather than being a panel itself, so the tabs that only mean something for a single panel are not offered there. Switch the dropdown to a panel and both come back; the selection is remembered per browser. Adopted is also administrator-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **A control reports `unconfirmed`**                                          | The logbook or the`span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                      | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+### Constant high-current alerts on a tandem or multi-load breaker
+
+**Symptom:** a circuit raises current alerts again and again. In the SPAN app its rating reads as two values, such as "20-20A" or "20-30A", while the
+integration shows one, such as "20A".
+
+**Cause:** the panel publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
+both loads against one breaker.
+
+**A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and set its monitoring rating to the sum of the two breakers (20-20A is
+40 A). The Breaker Rating sensor keeps showing the panel's rating. See [Setting a Monitoring Rating](#setting-a-monitoring-rating).
+
+**A package across several spaces**, such as a 240 V breaker sharing a leg with a 120 V one: the right value depends on which leg the panel measures, and the
+panel does not publish that. Turn monitoring off for that circuit rather than guess, since a value set too high hides a real overload.
+
+If the panel's rating for the circuit later changes, a notification says so.
 
 ### Debug logging
 

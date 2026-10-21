@@ -6,12 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **A circuit's breaker rating can be corrected in the dashboard** where the panel's commissioned rating is wrong, as on a tandem breaker; the Breaker Rating
-  sensor, the panel view and current monitoring use the corrected rating and show the panel's beside it.
-
-### Changed
-
-- **The panel topology's `breaker_rating_a` is the rating in force**, the user's correction where one applies; `panel_breaker_rating_a` carries the panel's.
+- **A circuit's monitoring rating can be set in the dashboard**, so current monitoring judges a tandem or other multi-load breaker against the capacity the user
+  gives instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
 
 ### Fixed
 

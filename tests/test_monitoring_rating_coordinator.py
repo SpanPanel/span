@@ -130,7 +130,7 @@ async def test_the_coordinator_owns_a_manager_from_construction(hass: HomeAssist
 async def test_a_pushed_snapshot_is_reconciled_before_listeners_are_told(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
-    """The panel overtakes a correction; the entity update must already see the panel's rating."""
+    """The panel overtakes a monitoring rating; the entity update must already see the panel's rating."""
     entry = _entry()
     entry.add_to_hass(hass)
     _seed(hass_storage, entry, "circuit-2")

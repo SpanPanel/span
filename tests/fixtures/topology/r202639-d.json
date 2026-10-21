@@ -3,7 +3,6 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_kitchen_lights_breaker_rating",
@@ -18,9 +17,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Bedroom, Kitchen / Lights",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -35,7 +35,6 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_office_outlets_breaker_rating",
@@ -50,9 +49,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Office / Outlets",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -67,7 +67,6 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_lights_outlets_breaker_rating",
@@ -82,9 +81,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Utility room / Lights & Outlets",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -99,7 +99,6 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 60.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_oven_breaker_rating",
@@ -114,9 +113,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 60.0,
+      "monitoring_rating_user_set": false,
       "name": "Electric oven",
       "outside_panel": false,
-      "panel_breaker_rating_a": 60.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -132,7 +132,6 @@
     "circuit-5": {
       "always_on": false,
       "breaker_rating_a": 60.0,
-      "breaker_rating_user_set": false,
       "device_type": "evse",
       "entities": {
         "breaker_rating": "sensor.span_panel_ev_charger_flex_breaker_rating",
@@ -145,9 +144,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 60.0,
+      "monitoring_rating_user_set": false,
       "name": "FLEX⁺",
       "outside_panel": false,
-      "panel_breaker_rating_a": 60.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -163,7 +163,6 @@
     "circuit-8": {
       "always_on": true,
       "breaker_rating_a": 40.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_lucid_charger_breaker_rating",
@@ -176,9 +175,10 @@
       "is_generation": false,
       "is_never_backup": true,
       "is_user_controllable": false,
+      "monitoring_rating_a": 40.0,
+      "monitoring_rating_user_set": false,
       "name": "Lucid charger",
       "outside_panel": false,
-      "panel_breaker_rating_a": 40.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "OPEN",
@@ -194,7 +194,6 @@
     "circuit-9": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_neutral_forming_transformer_nft_breaker_rating",
@@ -209,9 +208,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Neutral forming transformer (NFT)",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",

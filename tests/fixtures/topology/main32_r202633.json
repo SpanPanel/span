@@ -3,7 +3,6 @@
     "15adf6fa36ada1dba2184e9bcaa7fa44": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_12_breaker_rating",
@@ -18,9 +17,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 12",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -35,7 +35,6 @@
     "1ac7fbc901ecb9d0c785dd3234b21a3c": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_10_breaker_rating",
@@ -50,9 +49,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 10",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -67,7 +67,6 @@
     "1bc992eaeb96482b1d019edecfcc18c2": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_5_breaker_rating",
@@ -82,9 +81,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 5",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -99,7 +99,6 @@
     "26ae0676844ed69346cccae68c2d516a": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_19_breaker_rating",
@@ -114,9 +113,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 19",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -131,7 +131,6 @@
     "2835afc8a591cc382c4972a3538b824f": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_6_breaker_rating",
@@ -146,9 +145,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 6",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -163,7 +163,6 @@
     "2e591e0d0cdc0e8bdbfdccbfc86d14ca": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_18_breaker_rating",
@@ -178,9 +177,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 18",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -195,7 +195,6 @@
     "367c30fcffa7ac59fe428d7c426bd19d": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_1_breaker_rating",
@@ -210,9 +209,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 1",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -227,7 +227,6 @@
     "36afaccafd19b2bfbcb6fcb5d6089399": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_2_breaker_rating",
@@ -242,9 +241,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 2",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -259,7 +259,6 @@
     "420ee28ea3d7362dad8d341cc93e50b3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_9_breaker_rating",
@@ -274,9 +273,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 9",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -291,7 +291,6 @@
     "45ac025e77f416de0113e7ec0514925d": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_11_breaker_rating",
@@ -306,9 +305,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 11",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -323,7 +323,6 @@
     "76321a44f69235b4702f74baf0d10aea": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_4_breaker_rating",
@@ -338,9 +337,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 4",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -355,7 +355,6 @@
     "88416e5306e0a2d1e528908967f1f9fa": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_14_breaker_rating",
@@ -370,9 +369,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 14",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -387,7 +387,6 @@
     "9af59a336ebe2cd5c5ae5ff3d8424821": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_3_breaker_rating",
@@ -402,9 +401,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 3",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -419,7 +419,6 @@
     "afd57a42ebec7cf6a5083315127698ec": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_15_breaker_rating",
@@ -434,9 +433,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 15",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -451,7 +451,6 @@
     "d1cad9b5b2be373605cc179c30a74dc3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_7_breaker_rating",
@@ -466,9 +465,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 7",
       "outside_panel": false,
-      "panel_breaker_rating_a": 15.0,
       "priority": "OFF_GRID",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -483,7 +483,6 @@
     "e437d9b59344dd03bc2775fb238a5692": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_13_breaker_rating",
@@ -498,9 +497,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 13",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -516,7 +516,6 @@
     "e4f6668d42f85d5a0f3300c2a6747290": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_17_breaker_rating",
@@ -531,9 +530,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 17",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -548,7 +548,6 @@
     "f45b824f00dc3829dd2ed6609d6cf17b": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_16_breaker_rating",
@@ -563,9 +562,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 16",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "NEVER",
       "priority_target": null,
       "relay_state": "CLOSED",
@@ -580,7 +580,6 @@
     "fbaae45daa7c145806eb9c5692fec660": {
       "always_on": false,
       "breaker_rating_a": 20.0,
-      "breaker_rating_user_set": false,
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_circuit_8_breaker_rating",
@@ -595,9 +594,10 @@
       "is_generation": false,
       "is_never_backup": false,
       "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
       "name": "Circuit 8",
       "outside_panel": false,
-      "panel_breaker_rating_a": 20.0,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
       "relay_state": "CLOSED",

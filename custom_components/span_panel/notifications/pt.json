@@ -17,13 +17,13 @@
     "body": "Um dispositivo do seu painel declara mais leituras do fabricante do que esta integração adiciona para um único dispositivo ({limit}). As restantes ficaram de fora: {devices}.\n\nNada do que já tem é afetado e nada está avariado. As leituras que ficaram de fora continuam listadas na transferência de diagnósticos desta integração, que é o que deve anexar se quiser que sejam apresentadas."
   },
   "monitoring_rating_changed": {
-    "title": "As capacidades de disjuntor do Painel SPAN mudaram",
-    "intro": "O painel alterou a capacidade de um disjuntor que tinha corrigido. Reveja cada circuito no painel de controlo do Span Panel, na secção **Corrente Nominal do Disjuntor** do circuito.",
-    "panel_changed": "**{circuit}**: o painel reporta agora {after} A (antes {before} A). A sua correção de {rating} A continua a aplicar-se.",
-    "panel_agrees": "**{circuit}**: o painel reporta agora {after} A (antes {before} A), igual à sua correção de {rating} A, por isso a correção foi removida.",
-    "rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade para este circuito (reportava {before} A), por isso a sua correção de {rating} A foi removida.",
-    "circuit_removed": "**{circuit}**: este circuito já não está no painel (reportava {before} A), por isso a sua correção de {rating} A foi removida.",
-    "above_service_rating": "**{circuit}**: a sua correção de {rating} A é superior à capacidade de serviço do painel, de {service} A, por isso foi removida. O painel reportava {before} A e reporta agora {after} A.",
-    "service_rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade de serviço, por isso a sua correção de {rating} A foi removida. O painel reportava {before} A para este circuito."
+    "title": "As capacidades de monitorização do Painel SPAN mudaram",
+    "intro": "O painel alterou a capacidade de um disjuntor num circuito onde tinha definido uma capacidade de monitorização. Reveja cada circuito no painel de controlo do Span Panel, na secção **Monitoramento** do circuito.",
+    "panel_changed": "**{circuit}**: o painel reporta agora {after} A (antes {before} A). A sua capacidade de monitorização de {rating} A continua a aplicar-se.",
+    "panel_agrees": "**{circuit}**: o painel reporta agora {after} A (antes {before} A), igual à sua capacidade de monitorização de {rating} A, por isso a capacidade de monitorização foi removida.",
+    "rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade para este circuito (reportava {before} A), por isso a sua capacidade de monitorização de {rating} A foi removida.",
+    "circuit_removed": "**{circuit}**: este circuito já não está no painel (reportava {before} A), por isso a sua capacidade de monitorização de {rating} A foi removida.",
+    "above_service_rating": "**{circuit}**: a sua capacidade de monitorização de {rating} A é superior à capacidade de serviço do painel, de {service} A, por isso foi removida. O painel reportava {before} A e reporta agora {after} A.",
+    "service_rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade de serviço, por isso a sua capacidade de monitorização de {rating} A foi removida. O painel reportava {before} A para este circuito."
   }
 }

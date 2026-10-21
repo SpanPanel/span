@@ -581,19 +581,19 @@
       "message": "Hardware version {version} with an unknown model has not been validated with this release."
     },
     "monitoring_rating_not_published": {
-      "message": "The panel does not publish a breaker rating for this circuit, so a correction cannot be set for it."
+      "message": "The panel does not publish a breaker rating for this circuit, so a monitoring rating cannot be set for it."
     },
     "monitoring_rating_no_service_rating": {
-      "message": "The panel does not publish a service rating, so a breaker rating correction cannot be set on it."
+      "message": "The panel does not publish a service rating, so a monitoring rating cannot be set on it."
     },
     "monitoring_rating_above_service_rating": {
-      "message": "A breaker rating cannot be above the panel's service rating of {service_rating} A."
+      "message": "A monitoring rating cannot be above the panel's service rating of {service_rating} A."
     },
     "monitoring_rating_circuit_unknown": {
       "message": "This panel has no circuit with that id."
     },
     "monitoring_rating_panel_not_loaded": {
-      "message": "No SPAN Panel is loaded, so no breaker rating can be set or cleared."
+      "message": "No SPAN Panel is loaded, so no monitoring rating can be set or cleared."
     }
   },
   "options": {
@@ -699,16 +699,16 @@
       }
     },
     "set_circuit_monitoring_rating": {
-      "name": "Set circuit breaker rating",
-      "description": "Correct the breaker rating the panel publishes for a circuit where it is wrong. Only a rating the panel publishes can be corrected, and the correction cannot exceed the panel's service rating.",
+      "name": "Set circuit monitoring rating",
+      "description": "Set the rating current monitoring judges a circuit against. This is the most current the circuit's measured wire can carry; for a tandem breaker in one space, the sum of its breakers. The Breaker Rating sensor keeps showing the panel's rating. Only a circuit whose breaker rating the panel publishes can be given one, and it cannot exceed the panel's service rating.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
           "description": "The circuit power sensor entity."
         },
         "monitoring_rating_a": {
-          "name": "Breaker rating (A)",
-          "description": "The breaker rating in amps, a whole number from 1 up to the panel's service rating."
+          "name": "Monitoring rating (A)",
+          "description": "The most current, in amps, the circuit's measured wire can carry; for a tandem breaker in one space, the sum of its breakers. A whole number from 1 up to the panel's service rating."
         },
         "config_entry_id": {
           "name": "Config entry",
@@ -717,8 +717,8 @@
       }
     },
     "clear_circuit_monitoring_rating": {
-      "name": "Clear circuit breaker rating",
-      "description": "Remove a circuit's breaker rating correction, returning to the rating the panel publishes.",
+      "name": "Clear circuit monitoring rating",
+      "description": "Remove a circuit's monitoring rating, so current monitoring judges it against the breaker rating the panel publishes.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
