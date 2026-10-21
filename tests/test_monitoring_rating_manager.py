@@ -197,7 +197,7 @@ _LINE_PLACEHOLDERS: dict[str, set[str]] = {
 
 A circuit that has left, or no longer declares a rating, has no rating after;
 neither may a circuit when the service rating goes, since that removes every
-stored, present or not.
+monitoring rating, present or not.
 """
 
 _MONITORING_SECTION = {
@@ -409,7 +409,7 @@ async def test_a_reconcile_change_fires_the_event_and_a_no_op_does_not(
 async def test_reconcile_is_inert_until_begin(
     hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
 ) -> None:
-    """A snapshot that lacks the circuit must not delete its stored before the first one is judged."""
+    """A snapshot that lacks the circuit must not delete its monitoring rating before the first one is judged."""
     hass_storage[_store_key(entry)] = {
         "version": 1,
         "data": {

@@ -266,7 +266,7 @@ class TestStatus:
     async def test_a_circuit_without_a_monitoring_rating_reports_the_panels_rating(
         self, hass: HomeAssistant
     ) -> None:
-        """Effective equals the panel's and the user did not set it."""
+        """Judged against is the panel's rating, and the user did not set it."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, _manager = await _monitor(hass, snapshot)
         monitor.process_snapshot(snapshot)
@@ -296,7 +296,7 @@ class TestStatus:
         assert entry["utilization_pct"] == 20.0
 
     async def test_the_mains_entry_has_the_same_shape(self, hass: HomeAssistant) -> None:
-        """The mains has no stored: its panel rating is its rating and the user did not set it."""
+        """The mains has no monitoring rating: it is judged against its panel rating, never user set."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, _manager = await _monitor(hass, snapshot)
         monitor.process_snapshot(snapshot)
@@ -389,7 +389,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
     async def test_clear_circuit_threshold_leaves_the_rating_alone(
         self, hass: HomeAssistant
     ) -> None:
-        """Clearing a circuit's thresholds resets its monitor state, not its breaker rating."""
+        """Clearing a circuit's thresholds resets its monitor state, not its monitoring rating."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
         manager.set_rating("circuit-2", snapshot, 50)
@@ -408,7 +408,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
         assert await self._rating_in_status(hass) == (50.0, True)
 
     async def test_monitoring_off_and_on_leaves_the_rating_alone(self, hass: HomeAssistant) -> None:
-        """A new monitor, built when monitoring is turned back on, reads the same stored."""
+        """A new monitor, built when monitoring is turned back on, reads the same monitoring rating."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
         manager.set_rating("circuit-2", snapshot, 50)

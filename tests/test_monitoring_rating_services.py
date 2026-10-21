@@ -1,4 +1,4 @@
-"""Tests for the services that set and clear a circuit's breaker rating."""
+"""Tests for the services that set and clear a circuit's monitoring rating."""
 
 from __future__ import annotations
 

@@ -62,7 +62,7 @@ def _make_coordinator(snapshot):
 
 
 def _panel_rating(circuit_id, snapshot):
-    """Resolve a circuit to the rating its panel published, as a manager holding no override does."""
+    """Resolve a circuit to the rating its panel published, as a manager holding no monitoring rating does."""
     circuit = snapshot.circuits.get(circuit_id)
     rating = circuit.breaker_rating_a if circuit else None
     return MonitoringRating(rating, rating, False)
