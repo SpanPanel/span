@@ -507,8 +507,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
         self._mark_panel_online()
-        # Before the listeners: an entity reads its rating when it is told the
-        # snapshot changed, and must not read one the panel has overtaken.
+        # Before the snapshot is published: the current monitor and the panel
+        # topology judge circuits by the monitoring ratings resolved against it,
+        # and neither may judge by one the panel has overtaken.
         self._reconcile_monitoring_ratings(snapshot)
         self._check_capability_change(snapshot)
         self._check_settability_change(snapshot)

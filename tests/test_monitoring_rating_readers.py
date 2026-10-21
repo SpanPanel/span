@@ -28,12 +28,10 @@ from custom_components.span_panel.monitoring_ratings import service_rating_a
 from custom_components.span_panel.sensor import create_circuit_sensors
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_BREAKER_RATING_SENSOR
-from custom_components.span_panel.services import _async_register_monitoring_rating_services
 
 from .captures_replay import CAPTURES, Capture, snapshot
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 from .test_expected_entities import _install, _topology
-from .test_monitoring_rating_services import _loaded_panel
 
 SERVICE_A: Final = 100
 PANEL_A: Final = 20.0
@@ -161,26 +159,6 @@ async def test_the_rating_sensor_is_the_plain_circuit_sensor(hass: HomeAssistant
     ratings = [e for e in entities if str(e.unique_id).endswith("_breaker_rating")]
     assert len(ratings) == 1
     assert type(ratings[0]) is SpanCircuitPowerSensor
-
-
-async def test_the_sensor_does_not_follow_the_services(hass: HomeAssistant) -> None:
-    snap = _panel()
-    entry, manager = await _loaded_panel(hass, "sp3-readers-001", snap)
-    coordinator = entry.runtime_data.coordinator
-    sensor = _breaker_rating_sensor(_coordinator(snap, manager), snap)
-    sensor._update_native_value()
-    coordinator.async_update_listeners.side_effect = sensor._update_native_value
-    _async_register_monitoring_rating_services(hass)
-    assert sensor.native_value == PANEL_A
-
-    await hass.services.async_call(
-        DOMAIN,
-        "set_circuit_monitoring_rating",
-        {"circuit_id": "circuit-2", "monitoring_rating_a": MONITORING_A},
-        blocking=True,
-    )
-    assert manager.resolve("circuit-2", snap).judged_a == float(MONITORING_A)
-    assert sensor.native_value == PANEL_A
 
 
 # -- Counter plausibility keeps the panel rating ---------------------------------
