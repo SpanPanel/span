@@ -30,6 +30,7 @@ from span_panel_api.exceptions import (
     SpanPanelStaleDataError,
 )
 
+from .breaker_rating_manager import BreakerRatingManager
 from .const import DOMAIN
 from .energy_orientation import EnergyCounter, EnergyMeter
 from .helpers import (
@@ -173,6 +174,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Graph horizon manager — set by async_setup_entry
         self.graph_horizon_manager: GraphHorizonManager | None = None
+
+        # Breaker rating overrides. Built here so every reader of a rating has one
+        # to ask; `async_setup_entry` loads it and runs its first reconcile.
+        self.breaker_rating_manager = BreakerRatingManager(hass, config_entry)
 
         update_interval = _STREAMING_FALLBACK_INTERVAL
 
@@ -502,6 +507,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
         self._mark_panel_online()
+        # Before the listeners: an entity reads its rating when it is told the
+        # snapshot changed, and must not read one the panel has overtaken.
+        self._reconcile_breaker_ratings(snapshot)
         self._check_capability_change(snapshot)
         self._check_settability_change(snapshot)
         self.async_set_updated_data(snapshot)
@@ -874,6 +882,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._reload_requested = False
             self.hass.async_create_task(self._async_reload_task())
 
+    def _reconcile_breaker_ratings(self, snapshot: SpanPanelSnapshot) -> None:
+        """Judge the stored rating overrides against a snapshot, before anything reads it.
+
+        `field_metadata` is None while the client rebuilds; the rule reads that as
+        "unknown" and keeps every override.
+        """
+        self.breaker_rating_manager.reconcile(snapshot, self._client.field_metadata)
+
     # --- Data update ---
 
     async def _async_update_data(self) -> SpanPanelSnapshot:
@@ -903,6 +919,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             # operate. Both transports run it: the fallback poll is the only
             # path a panel with no live MQTT stream has.
             self._check_settability_change(snapshot)
+
+            self._reconcile_breaker_ratings(snapshot)
 
             await self._run_post_update_tasks(snapshot)
 

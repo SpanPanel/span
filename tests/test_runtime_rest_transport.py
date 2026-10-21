@@ -90,6 +90,7 @@ def _happy_client() -> MagicMock:
 def _happy_coordinator() -> MagicMock:
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.breaker_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number=SERIAL)
     return coordinator

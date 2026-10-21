@@ -697,6 +697,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             entry.async_on_unload(lambda: client.set_control_interceptor(None))
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
+            # Before the first refresh, so the overrides are in memory when the
+            # first snapshot is judged.
+            await coordinator.breaker_rating_manager.async_load()
             await coordinator.async_config_entry_first_refresh()
 
             # Before streaming starts and before any platform is forwarded, so a
@@ -704,6 +707,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # this `try`, whose handler shuts the coordinator down -- which stops
             # dispatch and closes the client -- before the error leaves setup.
             _async_enforce_hardware_verdict(hass, entry, hardware_version, coordinator.data.model)
+
+            # The first reconcile deletes every override whose circuit id the
+            # snapshot lacks, so a device-id migration, when one exists, must run
+            # immediately before this. It also needs the notices restored above.
+            coordinator.breaker_rating_manager.begin(coordinator.data, client.field_metadata)
 
             await coordinator.async_setup_streaming()
 
