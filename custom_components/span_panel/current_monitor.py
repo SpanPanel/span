@@ -30,8 +30,8 @@ from .const import (
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
 )
+from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
-from .id_builder import match_circuit_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -386,18 +386,9 @@ class CurrentMonitor:
 
         The ids this monitor holds overrides for are searched too, so a circuit
         that has left the panel can still have its override cleared through its
-        orphaned entity. Only this integration's entities are read: another
-        integration's unique_id could hold a segment equal to a short opaque id.
+        orphaned entity.
         """
-        entity_reg = er.async_get(self._hass)
-        entry = entity_reg.async_get(entity_id)
-        if entry is not None and entry.platform == DOMAIN and entry.unique_id:
-            known = {*circuit_ids, *self._circuit_overrides}
-            circuit_id = match_circuit_id(entry.unique_id, known)
-            if circuit_id is not None:
-                return circuit_id
-        # Fall through: assume it's already a circuit_id
-        return entity_id
+        return resolve_circuit_id(self._hass, entity_id, {*circuit_ids, *self._circuit_overrides})
 
     def resolve_entity_to_mains_leg(self, entity_id: str) -> str:
         """Resolve a current sensor entity_id to its internal mains leg name.

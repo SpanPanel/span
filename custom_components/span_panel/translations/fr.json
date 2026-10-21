@@ -460,6 +460,9 @@
     "breaker_rating_circuit_unknown": {
       "message": "Ce panneau n'a aucun circuit avec cet identifiant."
     },
+    "breaker_rating_panel_not_loaded": {
+      "message": "Aucun SPAN Panel n'est chargé pour y définir un calibre de disjoncteur."
+    },
     "breaker_rating_no_service_rating": {
       "message": "Le panneau ne publie pas de calibre de service ; une correction du calibre du disjoncteur ne peut donc pas être définie."
     },
@@ -684,6 +687,38 @@
     "clear_circuit_threshold": {
       "name": "Effacer le seuil du circuit",
       "description": "Supprimer les seuils personnalisés du circuit, revenant aux valeurs par défaut globales.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "L'entité capteur de puissance du circuit."
+        },
+        "config_entry_id": {
+          "name": "Entrée de configuration",
+          "description": "Id d'entrée de configuration optionnel. Nécessaire uniquement si plusieurs panneaux SPAN sont configurés."
+        }
+      }
+    },
+    "set_circuit_breaker_rating": {
+      "name": "Définir le calibre du disjoncteur du circuit",
+      "description": "Corriger le calibre du disjoncteur d'un circuit dont le panneau publie un calibre erroné ou absent. Il ne peut pas dépasser le calibre de service du panneau.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "L'entité capteur de puissance du circuit."
+        },
+        "breaker_rating_a": {
+          "name": "Calibre du disjoncteur (A)",
+          "description": "Le calibre du disjoncteur en ampères, un nombre entier de 1 jusqu'au calibre de service du panneau."
+        },
+        "config_entry_id": {
+          "name": "Entrée de configuration",
+          "description": "Id d'entrée de configuration optionnel. Nécessaire uniquement si plusieurs panneaux SPAN sont configurés."
+        }
+      }
+    },
+    "clear_circuit_breaker_rating": {
+      "name": "Effacer le calibre du disjoncteur du circuit",
+      "description": "Supprimer la correction du calibre du disjoncteur d'un circuit, revenant au calibre publié par le panneau.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

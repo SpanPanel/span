@@ -460,6 +460,9 @@
     "breaker_rating_circuit_unknown": {
       "message": "このパネルには、その ID の回路がありません。"
     },
+    "breaker_rating_panel_not_loaded": {
+      "message": "ブレーカー定格を設定できる SPAN Panel が読み込まれていません。"
+    },
     "breaker_rating_no_service_rating": {
       "message": "パネルがサービス定格を公開していないため、ブレーカー定格の補正を設定できません。"
     },
@@ -684,6 +687,38 @@
     "clear_circuit_threshold": {
       "name": "回路しきい値のクリア",
       "description": "回路ごとのしきい値オーバーライドを削除し、グローバルデフォルトに戻します。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路",
+          "description": "回路電力センサーエンティティ。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
+        }
+      }
+    },
+    "set_circuit_breaker_rating": {
+      "name": "回路のブレーカー定格の設定",
+      "description": "パネルが誤った、または欠けたブレーカー定格を公開している回路の定格を補正します。パネルのサービス定格を超えることはできません。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路",
+          "description": "回路電力センサーエンティティ。"
+        },
+        "breaker_rating_a": {
+          "name": "ブレーカー定格 (A)",
+          "description": "アンペア単位のブレーカー定格。1 からパネルのサービス定格までの整数です。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
+        }
+      }
+    },
+    "clear_circuit_breaker_rating": {
+      "name": "回路のブレーカー定格のクリア",
+      "description": "回路のブレーカー定格の補正を削除し、パネルが公開している定格に戻します。",
       "fields": {
         "circuit_id": {
           "name": "回路",

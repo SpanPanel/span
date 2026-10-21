@@ -460,6 +460,9 @@
     "breaker_rating_circuit_unknown": {
       "message": "Este painel não tem nenhum circuito com esse identificador."
     },
+    "breaker_rating_panel_not_loaded": {
+      "message": "Não há nenhum SPAN Panel carregado onde definir uma capacidade de disjuntor."
+    },
     "breaker_rating_no_service_rating": {
       "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma correção da capacidade do disjuntor."
     },
@@ -684,6 +687,38 @@
     "clear_circuit_threshold": {
       "name": "Limpar limiar do circuito",
       "description": "Remover substituições de limiar por circuito, revertendo para os valores globais predefinidos.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "A entidade do sensor de potência do circuito."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuração",
+          "description": "Id de entrada de configuração opcional. Necessário apenas quando há mais de um painel SPAN configurado."
+        }
+      }
+    },
+    "set_circuit_breaker_rating": {
+      "name": "Definir capacidade do disjuntor do circuito",
+      "description": "Corrigir a capacidade do disjuntor de um circuito cujo painel publica uma capacidade errada ou em falta. Não pode ser superior à capacidade de serviço do painel.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "A entidade do sensor de potência do circuito."
+        },
+        "breaker_rating_a": {
+          "name": "Capacidade do disjuntor (A)",
+          "description": "A capacidade do disjuntor em amperes, um número inteiro de 1 até à capacidade de serviço do painel."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuração",
+          "description": "Id de entrada de configuração opcional. Necessário apenas quando há mais de um painel SPAN configurado."
+        }
+      }
+    },
+    "clear_circuit_breaker_rating": {
+      "name": "Limpar capacidade do disjuntor do circuito",
+      "description": "Remover a correção da capacidade do disjuntor de um circuito, revertendo para a capacidade publicada pelo painel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

@@ -591,6 +591,9 @@
     },
     "breaker_rating_circuit_unknown": {
       "message": "This panel has no circuit with that id."
+    },
+    "breaker_rating_panel_not_loaded": {
+      "message": "No SPAN Panel is loaded to set a breaker rating on."
     }
   },
   "options": {
@@ -684,6 +687,38 @@
     "clear_circuit_threshold": {
       "name": "Clear circuit threshold",
       "description": "Remove per-circuit threshold overrides, reverting to global defaults.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "The circuit power sensor entity."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
+    },
+    "set_circuit_breaker_rating": {
+      "name": "Set circuit breaker rating",
+      "description": "Correct the breaker rating of a circuit whose panel publishes a wrong or missing rating. It cannot exceed the panel's service rating.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "The circuit power sensor entity."
+        },
+        "breaker_rating_a": {
+          "name": "Breaker rating (A)",
+          "description": "The breaker rating in amps, a whole number from 1 up to the panel's service rating."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
+    },
+    "clear_circuit_breaker_rating": {
+      "name": "Clear circuit breaker rating",
+      "description": "Remove a circuit's breaker rating correction, returning to the rating the panel publishes.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

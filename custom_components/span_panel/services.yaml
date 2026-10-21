@@ -55,6 +55,41 @@ clear_circuit_threshold:
         config_entry:
           integration: span_panel
 
+set_circuit_breaker_rating:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+    breaker_rating_a:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+          unit_of_measurement: "A"
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
+
+clear_circuit_breaker_rating:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
+
 set_mains_threshold:
   fields:
     leg:

@@ -460,6 +460,9 @@
     "breaker_rating_circuit_unknown": {
       "message": "Este panel no tiene ningún circuito con ese identificador."
     },
+    "breaker_rating_panel_not_loaded": {
+      "message": "No hay ningún SPAN Panel cargado en el que establecer una capacidad de interruptor."
+    },
     "breaker_rating_no_service_rating": {
       "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una corrección de la capacidad del disyuntor."
     },
@@ -684,6 +687,38 @@
     "clear_circuit_threshold": {
       "name": "Borrar umbral de circuito",
       "description": "Eliminar las anulaciones de umbral por circuito, volviendo a los valores predeterminados globales.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "La entidad del sensor de potencia del circuito."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
+    },
+    "set_circuit_breaker_rating": {
+      "name": "Establecer capacidad del interruptor del circuito",
+      "description": "Corregir la capacidad del interruptor de un circuito cuyo panel publica una capacidad errónea o ausente. No puede superar la capacidad de servicio del panel.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "La entidad del sensor de potencia del circuito."
+        },
+        "breaker_rating_a": {
+          "name": "Capacidad del interruptor (A)",
+          "description": "La capacidad del interruptor en amperios, un número entero desde 1 hasta la capacidad de servicio del panel."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
+    },
+    "clear_circuit_breaker_rating": {
+      "name": "Borrar capacidad del interruptor del circuito",
+      "description": "Eliminar la corrección de la capacidad del interruptor de un circuito, volviendo a la capacidad que publica el panel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
