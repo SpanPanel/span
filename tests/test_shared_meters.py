@@ -11,6 +11,7 @@ is ever added up: every member already reports the one meter's values.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Final
 from unittest.mock import MagicMock, patch
@@ -22,6 +23,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.breaker_ratings import BreakerRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor, monitored_circuits
@@ -130,8 +132,18 @@ def test_each_members_power_sensor_and_switch_carry_its_peers() -> None:
     assert "relay_shared_with" not in lone
 
 
+def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], BreakerRating]:
+    """Resolve every circuit to the rating its panel published: no user has corrected any."""
+
+    def resolve(circuit_id: str) -> BreakerRating:
+        rating = snapshot.circuits[circuit_id].breaker_rating_a
+        return BreakerRating(rating, rating, False)
+
+    return resolve
+
+
 def test_a_shared_meter_is_one_monitored_point_rated_by_its_members_sum() -> None:
-    points = monitored_circuits(SNAPSHOT)
+    points = monitored_circuits(SNAPSHOT, panel_ratings(SNAPSHOT))
 
     assert points["circuit-52"] is points["circuit-53"]
     assert (points["circuit-52"].point_id, points["circuit-52"].rating_a) == ("circuit-52", 30.0)
@@ -144,7 +156,7 @@ def test_a_group_with_an_unrated_member_has_no_rating() -> None:
     """A partial sum would understate the group, so it is not judged at all."""
     unrated = _panel(PAIR_A[0], replace(PAIR_A[1], breaker_rating_a=None))
 
-    assert monitored_circuits(unrated)["circuit-52"].rating_a is None
+    assert monitored_circuits(unrated, panel_ratings(unrated))["circuit-52"].rating_a is None
 
 
 def _breaker(*members: tuple[str, list[int], float | None]) -> SpanPanelSnapshot:
@@ -180,20 +192,20 @@ def test_a_shared_meter_is_rated_by_its_heaviest_space(
     """The panel reports a two-pole meter's larger leg, so the group can carry what its heaviest space can."""
     snapshot = _breaker(*members)
 
-    assert monitored_circuits(snapshot)[members[0][0]].rating_a == capacity
+    assert monitored_circuits(snapshot, panel_ratings(snapshot))[members[0][0]].rating_a == capacity
 
 
 def test_a_tandem_quad_with_an_unrated_member_has_no_rating() -> None:
     snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], None), ("tq-3", [34, 36], 30.0))
 
-    assert monitored_circuits(snapshot)["tq-1"].rating_a is None
+    assert monitored_circuits(snapshot, panel_ratings(snapshot))["tq-1"].rating_a is None
 
 
 def test_a_member_listing_no_space_leaves_the_group_unrated() -> None:
     """Its load cannot be placed on a leg, so no capacity is claimed for the group."""
     snapshot = _breaker(("t-1", [44], 15.0), ("t-2", [], 10.0))
 
-    assert monitored_circuits(snapshot)["t-1"].rating_a is None
+    assert monitored_circuits(snapshot, panel_ratings(snapshot))["t-1"].rating_a is None
 
 
 def test_the_monitor_alerts_on_the_group_under_its_first_member() -> None:

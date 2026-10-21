@@ -722,7 +722,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             if entry.options.get(
                 ENABLE_CURRENT_MONITORING, False
             ) or await CurrentMonitor.async_is_enabled(hass, entry):
-                monitor = CurrentMonitor(hass, entry)
+                monitor = CurrentMonitor(hass, entry, coordinator.breaker_rating_manager)
                 await monitor.async_start()
                 coordinator.current_monitor = monitor
 

@@ -1,14 +1,16 @@
 """Current monitoring for SPAN Panel circuits and mains legs.
 
 Detects spike (instantaneous) and continuous overload conditions by comparing
-current readings against breaker ratings with configurable thresholds.
+current readings against effective ratings with configurable thresholds. A
+circuit's effective rating is its panel rating, or the rating a user corrected
+it to; the monitor asks the `BreakerRatingManager` for it and stores none.
 Dispatches notifications via event bus, notify services, and persistent
 notifications.
 """
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -54,6 +56,9 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .breaker_rating_manager import BreakerRatingManager
+    from .breaker_ratings import BreakerRating
+
 _LOGGER = logging.getLogger(__name__)
 
 # Maps mains leg identifiers to SpanPanelSnapshot attribute names
@@ -84,7 +89,7 @@ class MonitoredPointState:
 
 
 type MonitoringBasis = Literal["circuit", "group"]
-"""What a monitored point's rating is: one circuit's breaker, or a shared meter's capacity."""
+"""What a monitored point's rating is: one circuit's effective rating, or a shared meter's capacity."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +101,13 @@ class MonitoredCircuit:
     is judged once, against its capacity (`meter_capacity_a`), under the id of
     its first member: that key is stable while the membership is, which is
     enough for alerts and overrides, neither of which is an entity.
+
+    `rating_a` is the effective rating and `panel_rating_a` the rating the panel
+    published, each None where a circuit, or the capacity of a group, is unknown.
+    For a group, both are capacities by the same rule: `rating_a` over its
+    members' effective ratings, `panel_rating_a` over the ratings the panel
+    published. `rating_user_set` is whether any member's effective rating is a
+    user's correction, whether or not the capacity is known.
     """
 
     point_id: str
@@ -103,6 +115,8 @@ class MonitoredCircuit:
     name: str
     current_a: float | None
     rating_a: float | None
+    panel_rating_a: float | None
+    rating_user_set: bool
     basis: MonitoringBasis
 
 
@@ -131,10 +145,18 @@ def meter_capacity_a(members: Iterable[tuple[Collection[int], float | None]]) ->
     return max(totals.values()) if totals else None
 
 
-def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircuit]:
-    """Every point the monitor judges, by the id of each circuit it covers."""
+def monitored_circuits(
+    snapshot: SpanPanelSnapshot, ratings: Callable[[str], BreakerRating]
+) -> dict[str, MonitoredCircuit]:
+    """Every point the monitor judges, by the id of each circuit it covers.
+
+    `ratings` answers each circuit's effective rating, which is what a point is
+    judged against; the snapshot's own `breaker_rating_a` is the panel's.
+    """
     points: dict[str, MonitoredCircuit] = {}
     for key, members in shared_meter_groups(snapshot.circuits).items():
+        resolved = {member: ratings(member) for member in members}
+        spaces = {member: snapshot.circuits[member].tabs for member in members}
         point = MonitoredCircuit(
             point_id=key,
             members=members,
@@ -142,34 +164,44 @@ def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircui
                 construct_circuit_label(snapshot.circuits[member], member) for member in members
             ),
             current_a=snapshot.circuits[key].current_a,
-            rating_a=meter_capacity_a(
-                (snapshot.circuits[member].tabs, snapshot.circuits[member].breaker_rating_a)
-                for member in members
-            ),
+            rating_a=meter_capacity_a((spaces[m], r.effective_a) for m, r in resolved.items()),
+            panel_rating_a=meter_capacity_a((spaces[m], r.panel_a) for m, r in resolved.items()),
+            rating_user_set=any(r.user_set for r in resolved.values()),
             basis="group",
         )
         points.update(dict.fromkeys(members, point))
     for circuit_id, circuit in snapshot.circuits.items():
         # A meter outside the panel has no breaker to judge it against.
         if circuit_id not in points and not circuit.measures_outside_panel:
+            rating = ratings(circuit_id)
             points[circuit_id] = MonitoredCircuit(
                 point_id=circuit_id,
                 members=(circuit_id,),
                 name=circuit.name or circuit_id,
                 current_a=circuit.current_a,
-                rating_a=circuit.breaker_rating_a,
+                rating_a=rating.effective_a,
+                panel_rating_a=rating.panel_a,
+                rating_user_set=rating.user_set,
                 basis="circuit",
             )
     return points
 
 
 class CurrentMonitor:
-    """Monitors current draw against breaker ratings for overload detection."""
+    """Monitors current draw against effective breaker ratings for overload detection.
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    The ratings come from the panel's `BreakerRatingManager`, which the
+    coordinator reconciles before any listener sees a snapshot. The monitor only
+    resolves them; it holds none, so nothing here can lose a user's correction.
+    """
+
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, ratings: BreakerRatingManager
+    ) -> None:
         """Initialize the CurrentMonitor."""
         self._hass = hass
         self._entry = entry
+        self._ratings = ratings
         self._circuit_states: dict[str, MonitoredPointState] = {}
         self._mains_states: dict[str, MonitoredPointState] = {}
         self._circuit_overrides: dict[str, MonitoringSettings] = {}
@@ -233,6 +265,10 @@ class CurrentMonitor:
             state.last_current_a = None
             state.over_threshold_since = None
 
+    def _points(self, snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircuit]:
+        """Every point judged in this snapshot, rated as the manager resolves each circuit."""
+        return monitored_circuits(snapshot, lambda cid: self._ratings.resolve(cid, snapshot))
+
     def _override_key(self, circuit_id: str) -> str:
         """Return the key a circuit's override and state are held under.
 
@@ -241,7 +277,7 @@ class CurrentMonitor:
         circuit's own id while no snapshot has said which group it is in.
         """
         snapshot = self._last_snapshot
-        point = monitored_circuits(snapshot).get(circuit_id) if snapshot else None
+        point = self._points(snapshot).get(circuit_id) if snapshot else None
         return point.point_id if point is not None else circuit_id
 
     def _fold_member_overrides(self, snapshot: SpanPanelSnapshot) -> bool:
@@ -436,7 +472,7 @@ class CurrentMonitor:
             all_circuit_ids -= {
                 cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
             }
-        points = monitored_circuits(snapshot) if snapshot else {}
+        points = self._points(snapshot) if snapshot else {}
 
         for cid in all_circuit_ids:
             circuit = snapshot.circuits.get(cid) if snapshot else None
@@ -446,6 +482,7 @@ class CurrentMonitor:
             point_id = point.point_id if point else cid
             state = self._circuit_states.get(point_id)
             rating = float(point.rating_a) if point and point.rating_a else None
+            panel_rating = float(point.panel_rating_a) if point and point.panel_rating_a else None
             override = self._circuit_overrides.get(point_id, {})
             # A point nobody is monitoring has no judgement to report, whatever it last
             # sampled; its alert times stay, being history.
@@ -471,6 +508,8 @@ class CurrentMonitor:
                 "point_id": point_id,
                 "last_current_a": last_current,
                 "breaker_rating_a": rating,
+                "panel_breaker_rating_a": panel_rating,
+                "breaker_rating_user_set": point.rating_user_set if point else False,
                 "utilization_pct": utilization,
                 "continuous_threshold_pct": cont_pct,
                 "spike_threshold_pct": spike_pct,
@@ -522,6 +561,9 @@ class CurrentMonitor:
             "name": "Mains Breaker",
             "last_current_a": peak_current,
             "breaker_rating_a": main_rating,
+            # The mains has no override, so every entry reads the same way.
+            "panel_breaker_rating_a": main_rating,
+            "breaker_rating_user_set": False,
             "utilization_pct": utilization,
             "continuous_threshold_pct": cont_pct,
             "spike_threshold_pct": spike_pct,
@@ -601,7 +643,7 @@ class CurrentMonitor:
 
     def _evaluate_circuits(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for every monitored point: each circuit, and each shared meter once."""
-        points = {point.point_id: point for point in monitored_circuits(snapshot).values()}
+        points = {point.point_id: point for point in self._points(snapshot).values()}
         for circuit_id, point in points.items():
             if point.current_a is None or point.rating_a is None:
                 continue

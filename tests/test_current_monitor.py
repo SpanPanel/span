@@ -22,6 +22,7 @@ from custom_components.span_panel.const import (
 from homeassistant.core import CoreState
 from homeassistant.exceptions import ServiceValidationError
 
+from custom_components.span_panel.breaker_rating_manager import BreakerRatingManager
 from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.options import (
@@ -58,7 +59,7 @@ def _make_monitor(hass, options=None, entry_id="test_entry"):
     entry = MagicMock()
     entry.entry_id = entry_id
     entry.options = options
-    return CurrentMonitor(hass, entry)
+    return CurrentMonitor(hass, entry, BreakerRatingManager(hass, entry))
 
 
 def _run_coro(coro):
@@ -606,9 +607,11 @@ def _panel_with_a_fresh_monitor(
     entry = MagicMock()
     entry.entry_id = entry_id
     entry.options = _make_options(**{SPIKE_THRESHOLD_PCT: 100})
-    monitor = CurrentMonitor(hass, entry)
+    ratings = BreakerRatingManager(hass, entry)
+    monitor = CurrentMonitor(hass, entry, ratings)
     coordinator = MagicMock()
     coordinator.data = snapshot
+    coordinator.breaker_rating_manager = ratings
     coordinator.current_monitor = monitor
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,

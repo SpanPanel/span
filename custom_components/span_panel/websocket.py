@@ -160,9 +160,12 @@ async def handle_panel_topology(
 
     # What each shared meter is judged against, from the monitor's own points so
     # the capacity rule runs in one place; the card reads it and adds nothing up.
+    points = monitored_circuits(
+        snapshot, lambda cid: coordinator.breaker_rating_manager.resolve(cid, snapshot)
+    )
     meter_groups = {
         point.point_id: _meter_group_record(point)
-        for point in monitored_circuits(snapshot).values()
+        for point in points.values()
         if point.basis == "group"
     }
 

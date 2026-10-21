@@ -391,7 +391,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         runtime_data, entry = result
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
-        monitor = CurrentMonitor(hass, entry)
+        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.breaker_rating_manager)
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
         # Seed the monitor with the coordinator's latest snapshot so that
