@@ -33,6 +33,8 @@ All notable changes to this project will be documented in this file.
 
 - **An energy counter reading beyond what its breaker could ever carry is never used as the dip-compensation baseline**, so it cannot skew energy totals.
 - **The current-monitoring summary is hidden while monitoring is off**, instead of reading "0 circuits".
+- **A circuit or main breaker whose current monitoring is turned off no longer shows a frozen utilization or alert window** in the panel view or Get
+  monitoring status, and turning monitoring back on starts a fresh window rather than alerting on one opened before.
 - **DSM State, DSM Grid State and Current Run Config stay on-grid on a panel with no Microgrid Interconnect Device**, instead of dropping to unknown for a
   moment whenever Grid Power read near zero.
 - **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,
