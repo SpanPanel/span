@@ -225,7 +225,10 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 `get_monitoring_status` reports the same three fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` is the group's capacity over
 its members' panel ratings and `monitoring_rating_a` its capacity over the ratings they are judged against, each null while unknown (see the Shared Meter Group
 Object), and `monitoring_rating_user_set` is true when any member's monitoring rating applies. The mains entry carries the three keys too: `breaker_rating_a`
-and `monitoring_rating_a` are both its rating, and `monitoring_rating_user_set` is false. `utilization_pct` is measured against `monitoring_rating_a`.
+and `monitoring_rating_a` are both its rating, and `monitoring_rating_user_set` is false. `utilization_pct` is measured against `monitoring_rating_a`. While a
+point's monitoring is off (`monitoring_enabled` false), its entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no
+judgement; `last_spike_alert` and `last_continuous_alert` stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window
+carried over from before.
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys

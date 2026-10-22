@@ -441,3 +441,199 @@ async def test_a_monitor_is_judged_by_the_manager_it_was_given(
 
     assert entry["breaker_rating_a"] == 20.0
     assert entry["monitoring_rating_a"] == float(stored or 20)
+
+
+class TestStatusWhileMonitoringIsOff:
+    """A point whose monitoring is off reports no judgement; turning it back on resumes it."""
+
+    async def _services(
+        self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
+    ) -> tuple[CurrentMonitor, MonitoringRatingManager]:
+        helper = TestMonitoringRatingSurvivesTheMonitorsOwnReset()
+        entry, manager = await helper._panel_with_services(hass, snapshot)
+        return entry.runtime_data.coordinator.current_monitor, manager
+
+    async def _set(
+        self, hass: HomeAssistant, service: str, target: dict[str, str], **fields: object
+    ) -> None:
+        await hass.services.async_call(DOMAIN, service, {**target, **fields}, blocking=True)
+
+    async def test_a_circuit_turned_off_reports_no_utilization_current_or_window(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Over threshold, then off: the frozen figures are gone, the alert history is kept."""
+        snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
+        monitor, manager = await self._services(hass, snapshot)
+        manager.set_rating("circuit-2", snapshot, 35)
+        _run_past_the_window(monitor, snapshot, "circuit-2")
+        before = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert before["utilization_pct"] == 85.7
+        assert before["over_threshold_since"] is not None
+
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-2"}, monitoring_enabled=False
+        )
+        monitor.process_snapshot(snapshot)
+
+        entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert entry["monitoring_enabled"] is False
+        assert entry["utilization_pct"] is None
+        assert entry["last_current_a"] is None
+        assert entry["over_threshold_since"] is None
+        assert entry["monitoring_rating_a"] == 35.0
+
+    async def test_turning_it_back_on_resumes_with_no_stale_window(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A window opened before it was turned off does not make the first sample after an alert."""
+        snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
+        monitor, manager = await self._services(hass, snapshot)
+        manager.set_rating("circuit-2", snapshot, 20)
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+        monitor.process_snapshot(snapshot)
+        state = monitor.get_circuit_state("circuit-2")
+        assert state is not None
+        state.over_threshold_since = datetime.now(UTC) - timedelta(minutes=16)
+
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-2"}, monitoring_enabled=False
+        )
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-2"}, monitoring_enabled=True
+        )
+        monitor.process_snapshot(snapshot)
+        await hass.async_block_till_done()
+
+        entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert entry["last_current_a"] == 30.0
+        assert entry["utilization_pct"] == 150.0
+        assert entry["over_threshold_since"] is not None
+        assert datetime.fromisoformat(entry["over_threshold_since"]) > datetime.now(
+            UTC
+        ) - timedelta(minutes=1)
+        assert [a.data["alert_type"] for a in alerts] == []
+
+    async def test_a_disabled_circuit_keeps_its_alert_history(self, hass: HomeAssistant) -> None:
+        """Last alerts are history, not a judgement: turning monitoring off leaves them."""
+        snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
+        monitor, _manager = await self._services(hass, snapshot)
+        _run_past_the_window(monitor, snapshot, "circuit-2")
+        await hass.async_block_till_done()
+        shown = monitor.get_monitoring_status()["circuits"]["circuit-2"]["last_continuous_alert"]
+        assert shown is not None
+
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-2"}, monitoring_enabled=False
+        )
+
+        entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert entry["last_continuous_alert"] == shown
+
+    async def test_a_shared_group_turned_off_reports_no_judgement(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Turning off either member turns off the group, and both rows read null."""
+        snapshot = _panel(
+            _shared(_circuit("circuit-52", 15.0, 40.0), "circuit-53", 44),
+            _shared(_circuit("circuit-53", 15.0, 40.0), "circuit-52", 44),
+        )
+        monitor, _manager = await self._services(hass, snapshot)
+        _run_past_the_window(monitor, snapshot, "circuit-52")
+
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-53"}, monitoring_enabled=False
+        )
+        monitor.process_snapshot(snapshot)
+
+        status = monitor.get_monitoring_status()["circuits"]
+        for member in ("circuit-52", "circuit-53"):
+            assert status[member]["monitoring_enabled"] is False
+            assert status[member]["utilization_pct"] is None
+            assert status[member]["last_current_a"] is None
+            assert status[member]["over_threshold_since"] is None
+
+        await self._set(
+            hass, "set_circuit_threshold", {"circuit_id": "circuit-53"}, monitoring_enabled=True
+        )
+        monitor.process_snapshot(snapshot)
+        status = monitor.get_monitoring_status()["circuits"]
+        for member in ("circuit-52", "circuit-53"):
+            assert status[member]["last_current_a"] == 40.0
+            assert status[member]["utilization_pct"] is not None
+
+    async def test_the_mains_turned_off_reports_no_utilization_or_current(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The mains entry nulls its figures while off and resumes when back on."""
+        snapshot = replace(_panel(_circuit("circuit-2", 20.0, 10.0)), upstream_l1_current_a=60.0)
+        monitor, _manager = await self._services(hass, snapshot)
+        monitor.process_snapshot(snapshot)
+        (before,) = monitor.get_monitoring_status()["mains"].values()
+        assert before["utilization_pct"] == 60.0
+
+        await self._set(
+            hass, "set_mains_threshold", {"leg": "upstream_l1"}, monitoring_enabled=False
+        )
+        monitor.process_snapshot(snapshot)
+
+        (entry,) = monitor.get_monitoring_status()["mains"].values()
+        assert entry["monitoring_enabled"] is False
+        assert entry["utilization_pct"] is None
+        assert entry["last_current_a"] is None
+        assert entry["over_threshold_since"] is None
+
+        await self._set(
+            hass, "set_mains_threshold", {"leg": "upstream_l1"}, monitoring_enabled=True
+        )
+        monitor.process_snapshot(snapshot)
+        (entry,) = monitor.get_monitoring_status()["mains"].values()
+        assert entry["last_current_a"] == 60.0
+        assert entry["utilization_pct"] == 60.0
+
+    async def test_the_report_does_not_depend_on_the_state_having_been_reset(
+        self, hass: HomeAssistant
+    ) -> None:
+        """An override that arrives without passing the set service, with a figure already held, still reports null."""
+        snapshot = replace(_panel(_circuit("circuit-2", 20.0, 30.0)), upstream_l2_current_a=60.0)
+        monitor, _manager = await self._services(hass, snapshot)
+        _run_past_the_window(monitor, snapshot, "circuit-2")
+        await monitor._store.async_save(
+            {
+                "enabled": True,
+                "circuit_overrides": {"circuit-2": {"monitoring_enabled": False}},
+                "mains_overrides": {"upstream_l1": {"monitoring_enabled": False}},
+            }
+        )
+
+        await monitor.async_load_overrides()
+
+        entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
+        assert entry["utilization_pct"] is None
+        assert entry["last_current_a"] is None
+        assert entry["over_threshold_since"] is None
+        (mains,) = monitor.get_monitoring_status()["mains"].values()
+        assert mains["utilization_pct"] is None
+        assert mains["last_current_a"] is None
+
+    async def test_the_mains_back_on_resumes_with_no_stale_window(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A mains window opened before monitoring was turned off does not alert on the first sample after."""
+        snapshot = replace(_panel(_circuit("circuit-2", 20.0, 10.0)), upstream_l1_current_a=90.0)
+        monitor, _manager = await self._services(hass, snapshot)
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+        monitor.process_snapshot(snapshot)
+        leg = monitor.get_mains_state("upstream_l1")
+        assert leg is not None and leg.over_threshold_since is not None
+        leg.over_threshold_since = datetime.now(UTC) - timedelta(minutes=16)
+
+        await self._set(
+            hass, "set_mains_threshold", {"leg": "upstream_l1"}, monitoring_enabled=False
+        )
+        await self._set(
+            hass, "set_mains_threshold", {"leg": "upstream_l1"}, monitoring_enabled=True
+        )
+        monitor.process_snapshot(snapshot)
+        await hass.async_block_till_done()
+
+        assert [a.data["alert_type"] for a in alerts] == []
