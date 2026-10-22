@@ -197,6 +197,8 @@ class CurrentMonitor:
             self._circuit_overrides.pop(key, None)
         else:
             self._circuit_overrides[key] = existing
+        if is_monitoring_disabled(existing):
+            self._forget_judgement(self._circuit_states.get(key))
         self._hass.async_create_task(self.async_save_overrides())
 
     def clear_circuit_override(self, circuit_id: str) -> None:
@@ -205,6 +207,19 @@ class CurrentMonitor:
         self._circuit_overrides.pop(key, None)
         self._circuit_states.pop(key, None)
         self._hass.async_create_task(self.async_save_overrides())
+
+    @staticmethod
+    def _forget_judgement(state: MonitoredPointState | None) -> None:
+        """Drop what monitoring last saw of a point whose monitoring was just turned off.
+
+        The sample and the window it opened belong to monitoring that has stopped:
+        kept, a window opened long ago would make the first sample after
+        monitoring resumes alert at once. The alert times stay, since they are
+        history and hold the cooldown.
+        """
+        if state is not None:
+            state.last_current_a = None
+            state.over_threshold_since = None
 
     def _override_key(self, circuit_id: str) -> str:
         """Return the key a circuit's override and state are held under.
@@ -246,6 +261,8 @@ class CurrentMonitor:
             self._mains_overrides.pop(leg, None)
         else:
             self._mains_overrides[leg] = existing
+        if is_monitoring_disabled(existing):
+            self._forget_judgement(self._mains_states.get(leg))
         self._hass.async_create_task(self.async_save_overrides())
 
     def _is_redundant_override(self, override: MonitoringSettings) -> bool:
@@ -426,17 +443,20 @@ class CurrentMonitor:
             point_id = point.point_id if point else cid
             state = self._circuit_states.get(point_id)
             rating = float(point.rating_a) if point and point.rating_a else None
-            last_current = state.last_current_a if state else None
+            override = self._circuit_overrides.get(point_id, {})
+            # A point nobody is monitoring has no judgement to report, whatever it last
+            # sampled; its alert times stay, being history.
+            judged = not is_monitoring_disabled(override)
+            last_current = state.last_current_a if state and judged else None
             utilization = (
                 round(last_current / rating * 100, 1)
                 if rating and last_current is not None
                 else None
             )
             cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
-                self._circuit_overrides.get(point_id, {}), self.get_global_settings()
+                override, self.get_global_settings()
             )
             entity_id = self._resolve_circuit_entity_id(cid)
-            override = self._circuit_overrides.get(point_id, {})
             has_override = bool(override)
             monitoring_enabled = override.get("monitoring_enabled", True)
 
@@ -453,7 +473,7 @@ class CurrentMonitor:
                 "has_override": has_override,
                 "monitoring_enabled": monitoring_enabled,
                 "over_threshold_since": state.over_threshold_since.isoformat()
-                if state and state.over_threshold_since
+                if state and judged and state.over_threshold_since
                 else None,
                 "last_spike_alert": state.last_spike_alert.isoformat()
                 if state and state.last_spike_alert
@@ -474,7 +494,9 @@ class CurrentMonitor:
             for leg in upstream
             if leg is not None and leg.last_current_a is not None
         ]
-        peak_current = max(sampled) if sampled else None
+        override = self._mains_overrides.get("upstream_l1", {})
+        # As for a circuit: the mains' figures are a judgement, and none is made while it is off.
+        peak_current = max(sampled) if sampled and not is_monitoring_disabled(override) else None
         utilization = (
             round(peak_current / main_rating * 100, 1)
             if main_rating and peak_current is not None
@@ -483,9 +505,8 @@ class CurrentMonitor:
 
         # Use upstream_l1 thresholds as the representative (they're the same unless overridden)
         cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
-            self._mains_overrides.get("upstream_l1", {}), self.get_global_settings()
+            override, self.get_global_settings()
         )
-        override = self._mains_overrides.get("upstream_l1", {})
         has_override = bool(override)
         monitoring_enabled = override.get("monitoring_enabled", True)
 
