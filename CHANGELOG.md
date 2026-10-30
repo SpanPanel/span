@@ -44,6 +44,8 @@ All notable changes to this project will be documented in this file.
 - **With more than one panel, a current-monitoring threshold set through an entity applies to that entity's panel**, and a call naming a different panel is
   refused.
 - **Diagnostics redact the Wi-Fi network name.**
+- **Each update from a panel on firmware r202633 or later costs Home Assistant's event loop the same small amount however many circuits and devices it
+  has**, instead of growing with each one ([span-panel-api#223](https://github.com/SpanPanel/span-panel-api/issues/223)).
 
 ## [2.1.2] - 10/2026
 
