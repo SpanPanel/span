@@ -36,7 +36,7 @@ SITE_VALUES: Final = {
     "address-lines": "1 Example Street",
     "locality": "Exampleville",
     "region": "EX",
-    "country-code": "ZZ",
+    "country-code": "XE",
     "latitude": "12.3456",
     "longitude": "-65.4321",
     "utility-meter-serial-number": "UMS-EXAMPLE-0001",
@@ -87,7 +87,10 @@ EXPORT_MASKS: Final = {
     "wifi-ssid": "masked-ssid",
     "name": "Masked Panel",
 }
-"""What the masked device tree writes for each site property, by the property's id on any node."""
+"""What the masked device tree writes for each site property, by the property's id on any node.
+
+`name` is the exception: only the panel's own `info/name` is masked, never another device's.
+"""
 
 
 def _without_the_tree(diagnostics: dict[str, object]) -> str:
