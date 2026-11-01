@@ -1045,7 +1045,7 @@ PV_METADATA_SENSORS: tuple[
         entity_registry_enabled_default=False,
         # The array's DC size as recorded at installation: informational, and
         # never a limit on what `pv_power` can read. The name stays
-        # "Nameplate Capacity" because renaming it would change the entity id
+        # "PV Nameplate Capacity" because renaming it would change the entity id
         # every new installation derives.
         value_fn=lambda pv: pv.nameplate_capacity_w,
     ),
