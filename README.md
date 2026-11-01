@@ -182,18 +182,18 @@ On **Import Limit**, and present only when the panel publishes them. These are t
 
 From 2.1.x these live on a **Solar** device of their own rather than on the panel's card, alongside PV Power and PV Panel Link.
 
-| Sensor             | Device Class | Unit | Notes                                                                                |
-| ------------------ | ------------ | ---- | ------------------------------------------------------------------------------------ |
-| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other")                                        |
-| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
-| Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
+| Sensor                | Device Class | Unit | Notes                                                                                |
+| --------------------- | ------------ | ---- | ------------------------------------------------------------------------------------ |
+| PV Vendor             | —            | —    | PV inverter vendor (e.g., "Enphase", "Other")                                        |
+| PV Product            | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
+| PV Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
 
 If you upgraded, these keep their entity ids, unique ids and history — but not the panel's area, since an entity takes its area from its device and the Solar
 device starts without one. Assign it an area, or anything area-scoped (dashboards, automations, voice targeting a room) stops matching them. New installations
 get ids from the new device name — `sensor.span_panel_solar_pv_vendor` rather than `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
 
 Each additional solar inverter (published from firmware r202639) gets a **Solar Inverter** device of its own, named after the circuit that feeds it where one
-does, with its own PV Vendor, PV Product and Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
+does, with its own PV Vendor, PV Product and PV Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
 never move: they keep describing the inverter they always did, beside PV Power, the panel's total. Where the panel cannot say which inverter they described — an
 inverter no circuit feeds, for example behind a Tesla Gateway, or several already reported when you upgraded — they describe all of your inverters together. An
 inverter device the panel no longer reports stays, unavailable, until you delete it. Each inverter's power is the power of the circuit that feeds it, which the
@@ -438,16 +438,17 @@ Three things worth knowing before you build on one:
   own.
 - **What the delete button does**, since it is not quite what you would expect:
 
-  - Delete a reading while your panel is still publishing that property and it comes back — switched off — at the next reload, carrying whatever you curated for
-    it. Curation is keyed on the wire address rather than on the entity, so deleting the entity does not discard it. There is no setting to suppress the entity,
-    because leaving it switched off is already that.
-  - Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
+  - Delete a reading that is still adopted — your panel still publishes it and it has not been modeled since — and it comes back, switched off, at the next
+    reload, carrying whatever you curated for it. Curation is keyed on the wire address rather than on the entity, so deleting the entity does not discard it.
+    There is no setting to suppress the entity, because leaving it switched off is already that.
+  - Delete one after your panel has stopped publishing it, or after it has been modeled properly, and it stays gone, because nothing exists to recreate it from.
 
-So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which.
+So deletion means "hide it until next time" for a reading that is still adopted and "clear it out" for one that no longer is.
 
 **These entities are permanent in id, not in identity.** If one of these readings is later modeled properly (delivered as an official part of the integration),
-that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is why a vendor reading you have come to depend
-on is worth raising in an issue: being modeled is what turns it into something with a real name, a proper category and statistics out of the box.
+that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. The adopted one stops updating and is left behind
+until you delete it. That is why a vendor reading you have come to depend on is worth raising in an issue: being modeled is what turns it into something with a
+real name, a proper category and statistics out of the box.
 
 ### The Adopted Tab
 
