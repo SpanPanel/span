@@ -25,7 +25,14 @@ import json
 from typing import Final
 
 from ebus_panel_sim import Tree, load_reference_capture
-from span_panel_api import ControlInterceptor, LeafNameMismatch, SpanPanelSnapshot
+from ebus_sdk import encode_empty_string
+from span_panel_api import (
+    ControlInterceptor,
+    LeafNameMismatch,
+    MaskedTree,
+    SpanPanelSnapshot,
+    TreeExportingAdapter,
+)
 from span_panel_api.adapters import resolve_adapter
 from span_panel_api.dispatch import select_adapter_key
 from span_panel_api.exceptions import SpanPanelError
@@ -177,12 +184,27 @@ def without_topics(tree: RetainedTree, device_id: str, *topics: str) -> Retained
     }
 
 
+def retained_payload(value: str) -> str:
+    """The payload a tree's value is replayed as: `""` as `0x00`, anything else as itself.
+
+    A tree holds each value as the device published it, decoded, so `""` is an
+    empty value. On the wire a zero-length payload is not one: it deletes the
+    retained message, and the library reads it as a clear, the property
+    unpublished. Homie 5 spells an empty value as a single `0x00`, which the
+    library reads back as `""`, so that is what the broker would replay.
+    """
+    return encode_empty_string(value)
+
+
 def replay(tree: RetainedTree) -> SchemaAdapter:
     """Deliver the tree to the adapter the library dispatches to, panel first.
 
     The schema the adapter is built with stands in for `GET /api/v2/homie/schema`
     and carries only what dispatch reads from it, the data-model version and the
     firmware; neither parent/child adapter reads its `types`.
+
+    Every value goes through `retained_payload`, so a tree holding an empty value
+    replays it as one rather than as a clear.
     """
     panel = panel_device_id(tree)
     data_model_version = tree[panel].get("info/data-model-version")
@@ -203,7 +225,7 @@ def replay(tree: RetainedTree) -> SchemaAdapter:
         adapter.handle_message(f"{prefix}/$state", topics["$state"])
         for topic, payload in topics.items():
             if not topic.startswith("$"):
-                adapter.handle_message(f"{prefix}/{topic}", payload)
+                adapter.handle_message(f"{prefix}/{topic}", retained_payload(payload))
     assert adapter.is_ready(), f"the replay of {panel} never became ready"
     return adapter
 
@@ -248,6 +270,13 @@ class ReplayClient:
     @property
     def field_metadata(self) -> dict[str, FieldMetadata]:
         return self._adapter.build_field_metadata()
+
+    def masked_tree(self) -> MaskedTree | None:
+        """The library's masked export of the replayed tree, as `SpanMqttClient` offers it."""
+        adapter = self._adapter
+        if isinstance(adapter, TreeExportingAdapter):
+            return adapter.export_masked_tree()
+        return None
 
     async def connect(self) -> None:
         """Connected already: the replay is the retained tree a connect receives."""

@@ -36,7 +36,7 @@ SITE_VALUES: Final = {
     "address-lines": "1 Example Street",
     "locality": "Exampleville",
     "region": "EX",
-    "country-code": "ZZ",
+    "country-code": "XE",
     "latitude": "12.3456",
     "longitude": "-65.4321",
     "utility-meter-serial-number": "UMS-EXAMPLE-0001",
@@ -74,6 +74,53 @@ def _with_site() -> RetainedTree:
     return tree
 
 
+EXPORT_MASKS: Final = {
+    "address-lines": "Masked Address",
+    "locality": "Masked City",
+    "region": "Masked Region",
+    "country-code": "ZZ",
+    "latitude": "0.0",
+    "longitude": "0.0",
+    "utility-meter-serial-number": "MASKED-METER",
+    "postal-code": "00000",
+    "time-zone": "UTC",
+    "wifi-ssid": "masked-ssid",
+    "name": "Masked Panel",
+}
+"""What the masked device tree writes for each site property, by the property's id on any node.
+
+`name` is the exception: only the panel's own `info/name` is masked, never another device's.
+"""
+
+
+def _without_the_tree(diagnostics: dict[str, object]) -> str:
+    """The dump with `device_tree` taken out, which is where no site value may appear at all."""
+    return json.dumps({k: v for k, v in diagnostics.items() if k != "device_tree"}, default=str)
+
+
+def _tree_text(diagnostics: dict[str, object]) -> str:
+    return json.dumps(diagnostics["device_tree"], default=str)
+
+
+def _unmasked_in_the_tree(tree: RetainedTree, values: list[str]) -> list[str]:
+    """The site values the tree must not hold: all but one that is the export's own mask for the property it came from.
+
+    A capture already masked upstream publishes a value equal to the library's
+    mask, and the tree cannot be told to hold it or not; keyed by property, so a
+    value the mask of a different property would explain is still searched for.
+    """
+    panel = tree[panel_device_id(tree)]
+    leaves = {
+        value: {topic.rsplit("/", 1)[-1] for topic, v in panel.items() if v == value}
+        for value in values
+    }
+    return [
+        value
+        for value in values
+        if not leaves[value] or any(EXPORT_MASKS.get(leaf) != value for leaf in leaves[value])
+    ]
+
+
 def _site_reading_values(tree: RetainedTree) -> list[str]:
     panel = tree[panel_device_id(tree)]
     values = [panel[path] for path in SITE_READINGS]
@@ -105,7 +152,9 @@ async def test_no_site_value_reaches_an_entity_diagnostics_or_the_log(
     caplog.set_level(logging.DEBUG)
 
     entry = await _install(hass, tree, "site")
-    diagnostics = json.dumps(await async_get_config_entry_diagnostics(hass, entry), default=str)
+    payload = await async_get_config_entry_diagnostics(hass, entry)
+    diagnostics = _without_the_tree(payload)
+    tree_text = _tree_text(payload)
     states = json.dumps(
         [(state.state, dict(state.attributes)) for state in hass.states.async_all()], default=str
     )
@@ -116,8 +165,11 @@ async def test_no_site_value_reaches_an_entity_diagnostics_or_the_log(
 
     for value in (*SITE_VALUES.values(), *_site_reading_values(tree)):
         assert value not in states, value
-        assert value not in diagnostics, value
         assert value not in logged, value
+    for value in (*SITE_VALUES.values(), *_site_reading_values(tree)):
+        assert value not in diagnostics, value
+    for value in _unmasked_in_the_tree(tree, [*SITE_VALUES.values(), *_site_reading_values(tree)]):
+        assert value not in tree_text, value
 
 
 async def test_a_new_install_creates_neither_site_reading(hass: HomeAssistant) -> None:
@@ -189,7 +241,9 @@ async def test_no_captured_site_value_reaches_an_entity_diagnostics_or_the_log(
     caplog.set_level(logging.DEBUG)
 
     entry = await _install(hass, tree, captured.name)
-    diagnostics = json.dumps(await async_get_config_entry_diagnostics(hass, entry), default=str)
+    payload = await async_get_config_entry_diagnostics(hass, entry)
+    diagnostics = _without_the_tree(payload)
+    tree_text = _tree_text(payload)
     states = json.dumps(
         [(state.state, dict(state.attributes)) for state in hass.states.async_all()], default=str
     )
@@ -200,5 +254,8 @@ async def test_no_captured_site_value_reaches_an_entity_diagnostics_or_the_log(
 
     for value in searchable:
         assert value not in states, value
-        assert value not in diagnostics, value
         assert value not in logged, value
+    for value in searchable:
+        assert value not in diagnostics, value
+    for value in _unmasked_in_the_tree(tree, searchable):
+        assert value not in tree_text, value

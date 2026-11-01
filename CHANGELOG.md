@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
   panel publishes them.
 - **A battery the panel declares gets its device before its first reading**, reading unknown until then, and a battery fed by a circuit reports its connection.
 - **Registration says when to retry** if the panel limits attempts, and setup asks only for the passphrase where the panel does not support proximity.
+- **Diagnostics include the panel's device tree**, with identifiers and site details masked, so a report needs no separate capture.
 
 ### Changed
 
@@ -46,6 +47,7 @@ All notable changes to this project will be documented in this file.
 - **Diagnostics redact the Wi-Fi network name.**
 - **Each update from a panel on firmware r202633 or later costs Home Assistant's event loop the same small amount however many circuits and devices it
   has**, instead of growing with each one ([span-panel-api#223](https://github.com/SpanPanel/span-panel-api/issues/223)).
+- **The EV charger charge-limit number offers only the range the charger accepts**, where it offered values the charger refuses.
 
 ## [2.1.2] - 10/2026
 

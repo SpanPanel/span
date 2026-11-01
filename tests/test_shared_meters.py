@@ -209,6 +209,8 @@ async def test_diagnostics_list_one_row_per_group(hass: HomeAssistant) -> None:
     coordinator.panel_offline = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=SERIAL)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
