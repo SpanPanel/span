@@ -691,25 +691,29 @@ async def test_a_ceiling_below_the_declared_maximum_still_bounds_the_maximum(
 
 
 @pytest.mark.parametrize(
-    ("range_format", "minimum", "maximum"),
-    [("6:", 6, None), (":24", 0, 24)],
+    ("range_format", "declared_minimum", "declared_maximum", "minimum"),
+    [("6:", 6, None, 6), (":24", None, 24, 0)],
     ids=["open-maximum", "open-minimum"],
 )
 async def test_an_open_side_falls_back_for_that_side_only(
-    hass: HomeAssistant, range_format: str, minimum: int, maximum: int | None
+    hass: HomeAssistant,
+    range_format: str,
+    declared_minimum: int | None,
+    declared_maximum: int | None,
+    minimum: int,
 ) -> None:
     tree = _declared_range(EVSE, range_format)
     snapshot = schema_one_snapshot(tree)
     declared = snapshot.evse[_serial(tree, EVSE)]
     assert (declared.charge_current_limit_minimum_a, declared.charge_current_limit_maximum_a) == (
-        (minimum or None),
-        maximum,
+        declared_minimum,
+        declared_maximum,
     )
     ceiling = _published(tree, EVSE, CEILING_TOPIC)
     entity = _for(await _created(hass, snapshot), tree, EVSE)
 
     assert entity.native_min_value == minimum
-    assert entity.native_max_value == (ceiling if maximum is None else maximum)
+    assert entity.native_max_value == (ceiling if declared_maximum is None else declared_maximum)
 
 
 async def test_the_range_follows_the_charger_when_it_is_recommissioned(hass: HomeAssistant) -> None:
@@ -725,22 +729,47 @@ async def test_the_range_follows_the_charger_when_it_is_recommissioned(hass: Hom
     assert (entity.native_min_value, entity.native_max_value) == (0, _published(tree, EVSE, CEILING_TOPIC))
 
 
-def test_the_range_is_applied_only_where_the_limit_is_settable() -> None:
-    """Where the limit is not settable the entity keeps its old bounds.
+async def test_the_range_is_dropped_when_the_limit_stops_being_settable(
+    hass: HomeAssistant,
+) -> None:
+    """An entity created while settable then receives a snapshot where it is not.
 
-    Such a charger gets no entity from the platform; the description is asked
-    directly, since an entity that must not exist cannot be asked for its range.
+    The platform gates creation on `$settable` only at setup; the entity lives
+    on and `_apply` runs on every later snapshot. The declared range is applied
+    only where the limit is settable, so the bounds go back to the fallback.
     """
     tree = schema_one_tree()
-    settable = schema_one_snapshot(tree).evse[_serial(tree, EVSE)]
-    refused = _not_settable(EVSE).evse[_serial(tree, EVSE)]
-    assert settable.charge_current_limit_settable is True
-    assert refused.charge_current_limit_settable is False
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+    assert (entity.native_min_value, entity.native_max_value) == (6, 32)
 
-    assert EVSE_CHARGE_CURRENT_LIMIT.minimum_fn(settable) == 6
-    assert EVSE_CHARGE_CURRENT_LIMIT.declared_maximum_fn(settable) == 32
-    assert EVSE_CHARGE_CURRENT_LIMIT.minimum_fn(refused) is None
-    assert EVSE_CHARGE_CURRENT_LIMIT.declared_maximum_fn(refused) is None
+    refused = _not_settable(EVSE)
+    assert refused.evse[_serial(tree, EVSE)].charge_current_limit_settable is False
+    _refreshed(entity, refused)
+
+    assert (entity.native_min_value, entity.native_max_value) == (0, ceiling)
+
+
+async def test_a_declared_maximum_bounds_the_control_while_the_ceiling_is_unpublished(
+    hass: HomeAssistant,
+) -> None:
+    """The lower of each bound present: with no ceiling, the declared maximum alone."""
+    tree = _declared_range(EVSE, "6:24")
+    del tree[EVSE][CEILING_TOPIC]
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_max_value == 24
+    assert entity.available is False
+
+
+async def test_a_declared_minimum_above_the_maximum_is_clamped_to_it(hass: HomeAssistant) -> None:
+    """A charger commissioned below its declared minimum must not report min > max."""
+    tree = _declared_range(EVSE, "20:32")
+    tree[EVSE][CEILING_TOPIC] = "16"
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_max_value == 16
+    assert entity.native_min_value == 16
 
 
 # ---------------------------------------------------------------------------

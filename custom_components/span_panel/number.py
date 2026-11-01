@@ -215,15 +215,17 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         The maximum moves with the panel because it can: an installer
         recommissioning a charger republishes `installer-max`, and a control
         still offering the old range would let a user ask for a current the
-        hardware is no longer rated for. Left at whatever was last published
-        when the value goes away, so the entity reports unavailable with its
-        last known bound rather than briefly widening.
+        hardware is no longer rated for. When neither the ceiling nor a declared
+        maximum is published the maximum is left at whatever it last was, and
+        the entity is unavailable rather than briefly widening.
 
         The range the charger declares for its limit bounds the control too,
         because the library refuses a value outside it: the minimum is the
         declared one, else the description's fallback; the maximum is the lower
-        of the declared maximum and the ceiling, each where present. An open
-        side falls back for that side only.
+        of the declared maximum and the ceiling, each where present, so a
+        declared maximum alone bounds it while the ceiling is unpublished (the
+        entity is unavailable then). An open side falls back for that side only,
+        and the range is applied only where the limit is settable.
         """
         self._attr_native_value = self._description.value_fn(evse)
         declared_minimum = self._description.minimum_fn(evse)
@@ -240,6 +242,10 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         ]
         if ceilings:
             self._attr_native_max_value = min(ceilings)
+        # A charger commissioned below its declared minimum (ceiling 16 A, range
+        # 20:32) would otherwise report a minimum above its maximum, which Home
+        # Assistant cannot render; the ceiling is the hardware bound, so it wins.
+        self._attr_native_min_value = min(self._attr_native_min_value, self._attr_native_max_value)
 
     @property
     def available(self) -> bool:
