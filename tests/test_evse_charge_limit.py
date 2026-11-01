@@ -5,9 +5,17 @@ in the catch-up where being wrong reaches the panel rather than the dashboard.
 The tests are shaped around that.
 
 **Nothing here names an amperage.** Every expectation is computed from the
-capture, and where the capture publishes the same value on both chargers — it
-publishes 32 on each — the test republishes differing values first, because an
+capture, and where the capture publishes the same value on both chargers — the
+same ceiling on each — the test republishes differing values first, because an
 assertion satisfied by reading one charger twice proves nothing about two.
+
+**The capture sets no user limit.** From firmware r202639 a charger publishes
+its user limit only once a user sets one, and `ebus-panel-sim` 0.9.0, which the
+reference tree was captured with, publishes that behaviour: each charger
+declares the limit settable and publishes no value for it. The control then
+shows the commissioned ceiling, the limit the charger is enforcing. A test about
+a valued limit publishes one (`_user_limit`) the way a charger would after a
+user set it.
 
 **The write is proved to the wire, not to a mock.** `test_the_write_reaches_the
 _wire_as_one_publish` drives the entity through the real client and the real
@@ -36,6 +44,7 @@ from homeassistant.helpers.entity import EntityCategory
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
+from span_panel_api.protocol import SchemaAdapter
 
 from custom_components.span_panel import PLATFORMS, SpanPanelRuntimeData
 from custom_components.span_panel.const import DOMAIN
@@ -58,6 +67,7 @@ from .adapter_fixtures import (
     schema_one_snapshot,
     schema_one_tree,
 )
+from .captures_replay import HOMIE_PREFIX, replay
 from .factories import pv_binding_for
 
 EVSE = "evse"
@@ -84,6 +94,15 @@ def _published(tree: dict[str, dict[str, str]], device_id: str, topic: str) -> i
     value = tree[device_id].get(topic)
     assert value is not None, f"{device_id} publishes no {topic} in the capture"
     return int(value)
+
+
+def _user_limit(tree: dict[str, dict[str, str]], device_id: str) -> int:
+    """A limit a user would set on this charger: inside its ceiling, and not equal to it.
+
+    Below the ceiling so it cannot be mistaken for the ceiling standing in for
+    an absent limit, which is what the control shows when none is set.
+    """
+    return _published(tree, device_id, CEILING_TOPIC) - 8
 
 
 def _declaration(tree: dict[str, dict[str, str]], device_id: str, property_id: str) -> dict[str, object]:
@@ -126,14 +145,16 @@ def _not_settable(device_id: str) -> SpanPanelSnapshot:
     return schema_one_snapshot(_mutated_description(schema_one_tree(), device_id, drop))
 
 
-def _renamed_to_catalog(device_id: str) -> dict[str, dict[str, str]]:
-    """The capture with one charger publishing the eBus `charge-limit` spelling.
+def _renamed_to_catalog(tree: dict[str, dict[str, str]], device_id: str) -> dict[str, dict[str, str]]:
+    """`tree` with one charger publishing the eBus `charge-limit` spelling, in place.
 
     The naming the catalog specifies and no producer we have publishes. The
     entity must not be able to tell: the library resolves the node from the
-    `$description`, so the rename is a rename and nothing else.
+    `$description`, so the rename is a rename and nothing else. The limit's
+    value moves only where the charger publishes one: unset, it is unpublished
+    under either spelling. The ceiling is always published, so its absence is a
+    fixture fault and fails here.
     """
-    tree = schema_one_tree()
     description = json.loads(tree[device_id]["$description"])
     properties = description["nodes"].pop(CONFIG_NODE)["properties"]
     description["nodes"]["charge-limit"] = {
@@ -146,41 +167,33 @@ def _renamed_to_catalog(device_id: str) -> dict[str, dict[str, str]]:
     }
     tree[device_id]["$description"] = json.dumps(description)
     tree[device_id]["charge-limit/installer-max"] = tree[device_id].pop(CEILING_TOPIC)
-    tree[device_id]["charge-limit/owner-limit"] = tree[device_id].pop(LIMIT_TOPIC)
+    if LIMIT_TOPIC in tree[device_id]:
+        tree[device_id]["charge-limit/owner-limit"] = tree[device_id].pop(LIMIT_TOPIC)
     return tree
 
 
-def _fed_adapter(*extra: tuple[str, str]) -> object:
+def _fed_adapter(*extra: tuple[str, str]) -> SchemaAdapter:
     """A real schema_1 adapter fed the capture the way the broker replays it.
 
-    `extra` appends messages the retained-topic fixture cannot express — a
-    Homie `$target` is published on `<node>/<property>/$target`, which the
-    fixture's flat `{topic: value}` shape has no room for.
-    """
-    from span_panel_api.models import V2HomieSchema
-    from span_panel_api_schema_1 import SchemaOneAdapter
+    Through `captures_replay.replay`, the suite's one replay of a tree, so the
+    capture reaches the adapter the library dispatches to and under the rule
+    that replay applies to every value.
 
-    tree = schema_one_tree()
-    adapter = SchemaOneAdapter(
-        SCHEMA_ONE_PANEL,
-        V2HomieSchema(
-            firmware_version="spanos2/r202633/01",
-            types_schema_hash="sha256:test",
-            types={},
-            data_model_version="1.0",
-        ),
-    )
-    for device_id in [SCHEMA_ONE_PANEL, *[d for d in tree if d != SCHEMA_ONE_PANEL]]:
-        topics = tree[device_id]
-        prefix = f"ebus/5/{device_id}"
-        adapter.handle_message(f"{prefix}/$description", topics["$description"])
-        adapter.handle_message(f"{prefix}/$state", topics["$state"])
-        for topic, value in topics.items():
-            if not topic.startswith("$"):
-                adapter.handle_message(f"{prefix}/{topic}", value)
+    `extra` then delivers messages as the broker would, each payload exactly as
+    given: a value a charger publishes after the capture was taken, a Homie
+    `$target`, published on `<node>/<property>/$target`, which the fixture's
+    flat `{topic: value}` shape has no room for, or a zero-length payload,
+    which is a clear.
+    """
+    adapter = replay(schema_one_tree())
     for topic, value in extra:
         adapter.handle_message(topic, value)
     return adapter
+
+
+def _wire(device_id: str, topic: str) -> str:
+    """The broker topic a charger publishes one of its properties on."""
+    return f"{HOMIE_PREFIX}/{device_id}/{topic}"
 
 
 # ---------------------------------------------------------------------------
@@ -298,8 +311,11 @@ async def test_no_number_where_the_charger_declares_no_limit_at_all(hass: HomeAs
         description["nodes"].pop(CONFIG_NODE)
 
     _mutated_description(tree, EVSE, drop)
-    del tree[EVSE][CEILING_TOPIC]
-    del tree[EVSE][LIMIT_TOPIC]
+    # Whatever the charger published under the node goes with its declaration:
+    # the ceiling, and a user limit wherever one had been set.
+    for topic in [topic for topic in tree[EVSE] if topic.startswith(f"{CONFIG_NODE}/")]:
+        del tree[EVSE][topic]
+    assert CEILING_TOPIC not in tree[EVSE] and LIMIT_TOPIC not in tree[EVSE]
 
     created = await _created(hass, schema_one_snapshot(tree))
 
@@ -312,14 +328,15 @@ async def test_no_number_where_the_charger_declares_no_limit_at_all(hass: HomeAs
 
 
 async def test_each_number_reads_its_own_charger(hass: HomeAssistant) -> None:
-    """Read each charger's own limit, from values made to differ first.
+    """Read each charger's own limit, from values published and made to differ first.
 
-    The capture publishes 32 on both, so an assertion against it as-published is
-    satisfied by a platform that reads one charger twice.
+    The capture sets no limit on either charger and publishes the same ceiling
+    on both, so the state each shows as captured is satisfied by a platform that
+    reads one charger twice.
     """
     tree = schema_one_tree()
-    first = _published(tree, EVSE, LIMIT_TOPIC) - 8
-    second = _published(tree, EVSE_2, LIMIT_TOPIC) - 16
+    first = _user_limit(tree, EVSE)
+    second = _user_limit(tree, EVSE_2) - 8
     assert first != second
 
     created = await _created(hass, _snapshot(evse={LIMIT_TOPIC: first}, **{"evse-2": {LIMIT_TOPIC: second}}))
@@ -342,17 +359,74 @@ async def test_each_number_is_bounded_by_its_own_ceiling(hass: HomeAssistant) ->
 
 
 async def test_republishing_moves_the_state_and_the_bound(hass: HomeAssistant) -> None:
-    tree = schema_one_tree()
-    created = await _created(hass, schema_one_snapshot(tree))
-    entity = _for(created, tree, EVSE)
-    assert entity.native_value == _published(tree, EVSE, LIMIT_TOPIC)
+    """A limit a user lowers and a ceiling an installer recommissions, on one entity.
 
-    lowered = _published(tree, EVSE, LIMIT_TOPIC) - 16
+    Starts from a limit the charger publishes, since the capture sets none.
+    """
+    tree = schema_one_tree()
+    first = _user_limit(tree, EVSE)
+    created = await _created(hass, _snapshot(evse={LIMIT_TOPIC: first}))
+    entity = _for(created, tree, EVSE)
+    assert entity.native_value == first
+
+    lowered = first - 8
     recommissioned = _published(tree, EVSE, CEILING_TOPIC) - 8
     _refreshed(entity, _snapshot(evse={LIMIT_TOPIC: lowered, CEILING_TOPIC: recommissioned}))
 
     assert entity.native_value == lowered
     assert entity.native_max_value == recommissioned
+
+
+async def test_the_capture_sets_no_user_limit_and_each_number_shows_its_ceiling(
+    hass: HomeAssistant,
+) -> None:
+    """The capture's own state, end to end, on both chargers.
+
+    Each charger declares the limit settable and publishes no value for it, which
+    is r202639 with no user limit set. The control is still offered, shows the
+    ceiling as the limit in force, is bounded by it, and has nothing pending.
+    """
+    tree = schema_one_tree()
+    created = await _created(hass, schema_one_snapshot(tree))
+
+    for device_id in (EVSE, EVSE_2):
+        assert _declaration(tree, device_id, "user-max-charge-current")["settable"] is True
+        assert LIMIT_TOPIC not in tree[device_id]
+        ceiling = _published(tree, device_id, CEILING_TOPIC)
+
+        entity = _for(created, tree, device_id)
+
+        assert entity.native_value == ceiling
+        assert entity.native_max_value == ceiling
+        assert entity.available is True
+        assert entity.extra_state_attributes is None
+
+
+async def test_a_limit_set_and_cleared_moves_the_state_off_the_ceiling_and_back(
+    hass: HomeAssistant,
+) -> None:
+    """The user limit appearing and going away on a live entity, through the transport.
+
+    A user setting a limit makes the charger publish one; removing it clears the
+    retained value with a zero-length payload, which the library reads as
+    unpublished. The control follows both, back to the ceiling rather than
+    holding the last limit it saw.
+    """
+    tree = schema_one_tree()
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    limit = _user_limit(tree, EVSE)
+    adapter = _fed_adapter()
+    entity = _for(await _created(hass, adapter.build_snapshot()), tree, EVSE)
+    assert entity.native_value == ceiling
+
+    adapter.handle_message(_wire(EVSE, LIMIT_TOPIC), str(limit))
+    _refreshed(entity, adapter.build_snapshot())
+    assert entity.native_value == limit
+
+    adapter.handle_message(_wire(EVSE, LIMIT_TOPIC), "")
+    _refreshed(entity, adapter.build_snapshot())
+    assert entity.native_value == ceiling
+    assert entity.available is True
 
 
 async def test_an_unpublished_limit_shows_the_ceiling(hass: HomeAssistant) -> None:
@@ -442,22 +516,29 @@ async def test_the_control_is_unavailable_while_the_panel_is_offline(hass: HomeA
 # ---------------------------------------------------------------------------
 
 
-async def test_a_pending_write_is_an_attribute_and_not_the_state(hass: HomeAssistant) -> None:
+@pytest.mark.parametrize("limit_set", [False, True], ids=["no-user-limit", "user-limit-set"])
+async def test_a_pending_write_is_an_attribute_and_not_the_state(
+    hass: HomeAssistant, limit_set: bool
+) -> None:
     """The `$target` echo, rendered the way the priority select renders its own.
 
     Reporting the requested value as the state would show a limit the charger
-    may never have accepted.
+    may never have accepted. Asserted with no user limit set, as captured, where
+    the state is the ceiling, and with one set, where it is that limit: a write
+    in flight replaces neither.
     """
     tree = schema_one_tree()
-    pending = _published(tree, EVSE, LIMIT_TOPIC) - 8
-    adapter = _fed_adapter((f"ebus/5/{EVSE}/{LIMIT_TOPIC}/$target", str(pending)))
+    enforced = _user_limit(tree, EVSE) if limit_set else _published(tree, EVSE, CEILING_TOPIC)
+    pending = enforced - 8
+    published = [(_wire(EVSE, LIMIT_TOPIC), str(enforced))] if limit_set else []
+    adapter = _fed_adapter(*published, (_wire(EVSE, f"{LIMIT_TOPIC}/$target"), str(pending)))
     snapshot = adapter.build_snapshot()
 
     created = await _created(hass, snapshot)
     entity = _for(created, tree, EVSE)
 
     assert entity.extra_state_attributes == {"charge_current_limit_target": pending}
-    assert entity.native_value == _published(tree, EVSE, LIMIT_TOPIC)
+    assert entity.native_value == enforced
     assert _for(created, tree, EVSE_2).extra_state_attributes is None
 
 
@@ -466,17 +547,36 @@ async def test_a_pending_write_is_an_attribute_and_not_the_state(hass: HomeAssis
 # ---------------------------------------------------------------------------
 
 
-async def test_the_catalogued_spelling_produces_the_same_control(hass: HomeAssistant) -> None:
+@pytest.mark.parametrize("limit_set", [False, True], ids=["no-user-limit", "user-limit-set"])
+async def test_the_catalogued_spelling_produces_the_same_control(
+    hass: HomeAssistant, limit_set: bool
+) -> None:
     """`charge-limit/{installer-max,owner-limit}` — the eBus 0.1 naming.
 
     Nothing in this integration names either spelling, so a charger publishing
     the specified one has to produce an identical entity. Asserted against the
     unrenamed capture rather than against literals, so the two are held to each
-    other.
+    other: as captured, where the state comes from the ceiling, and with a user
+    limit published, where it comes from the limit, so both renamed properties
+    are read.
     """
-    tree = schema_one_tree()
+
+    def tree_as_published() -> dict[str, dict[str, str]]:
+        tree = schema_one_tree()
+        if limit_set:
+            tree[EVSE][LIMIT_TOPIC] = str(_user_limit(tree, EVSE))
+        return tree
+
+    tree = tree_as_published()
     published = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
-    catalogued = _for(await _created(hass, schema_one_snapshot(_renamed_to_catalog(EVSE))), tree, EVSE)
+    catalogued = _for(
+        await _created(hass, schema_one_snapshot(_renamed_to_catalog(tree_as_published(), EVSE))),
+        tree,
+        EVSE,
+    )
+
+    expected = _user_limit(tree, EVSE) if limit_set else _published(tree, EVSE, CEILING_TOPIC)
+    assert published.native_value == expected
 
     assert catalogued.unique_id == published.unique_id
     assert catalogued.native_value == published.native_value

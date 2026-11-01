@@ -73,6 +73,7 @@ from custom_components.span_panel.sensor_panel import (
 )
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree, schema_zero_snapshot
+from .captures_replay import snapshot as replayed_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
@@ -265,6 +266,28 @@ def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None
     tree = schema_one_tree()
     tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = schema_one_snapshot(tree)
+    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
+
+    sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
+    sensor._update_native_value()
+
+    assert sensor.extra_state_attributes["at_service_entrance"] is True
+
+
+def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it() -> None:
+    """The same empty value, delivered message by message as the broker replays it.
+
+    On that path a zero-length payload is a clear, which the library reads as
+    unpublished and the attribute would then omit. A tree holds the decoded
+    value, so `captures_replay` replays `""` as Homie 5's empty value, one
+    `0x00`, and the panel reads as at the service entrance exactly as it does
+    built straight from the mapper above.
+    """
+    tree = schema_one_tree()
+    tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
+    snapshot = replayed_snapshot(tree)
+    assert snapshot.lugs_at_service_entrance is True
     coordinator = _make_coordinator(snapshot, schema_major="schema_1")
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
