@@ -26,7 +26,13 @@ from typing import Final
 
 from ebus_panel_sim import Tree, load_reference_capture
 from ebus_sdk import encode_empty_string
-from span_panel_api import ControlInterceptor, LeafNameMismatch, SpanPanelSnapshot
+from span_panel_api import (
+    ControlInterceptor,
+    LeafNameMismatch,
+    MaskedTree,
+    SpanPanelSnapshot,
+    TreeExportingAdapter,
+)
 from span_panel_api.adapters import resolve_adapter
 from span_panel_api.dispatch import select_adapter_key
 from span_panel_api.exceptions import SpanPanelError
@@ -264,6 +270,13 @@ class ReplayClient:
     @property
     def field_metadata(self) -> dict[str, FieldMetadata]:
         return self._adapter.build_field_metadata()
+
+    def masked_tree(self) -> MaskedTree | None:
+        """The library's masked export of the replayed tree, as `SpanMqttClient` offers it."""
+        adapter = self._adapter
+        if isinstance(adapter, TreeExportingAdapter):
+            return adapter.export_masked_tree()
+        return None
 
     async def connect(self) -> None:
         """Connected already: the replay is the retained tree a connect receives."""

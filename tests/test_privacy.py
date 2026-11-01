@@ -74,6 +74,22 @@ def _with_site() -> RetainedTree:
     return tree
 
 
+EXPORT_KEEPS: Final = ("info/country-code", "status/time-zone")
+"""Site properties the masked device tree keeps as published, because they can matter to a firmware question."""
+
+EXPORT_MASKS: Final = frozenset(
+    {"Masked Address", "Masked City", "Masked Region", "Masked Panel", "masked-ssid", "MASKED-METER"}
+)
+"""What the masked device tree writes where it hides a site value; a capture already carrying one cannot tell the two apart."""
+
+
+def _in_diagnostics(tree: RetainedTree, values: list[str]) -> list[str]:
+    """The site values a dump must not hold: those the masked device tree does not keep or write itself."""
+    panel = tree[panel_device_id(tree)]
+    kept = {panel[path] for path in EXPORT_KEEPS if path in panel}
+    return [value for value in values if value not in kept and value not in EXPORT_MASKS]
+
+
 def _site_reading_values(tree: RetainedTree) -> list[str]:
     panel = tree[panel_device_id(tree)]
     values = [panel[path] for path in SITE_READINGS]
@@ -116,8 +132,9 @@ async def test_no_site_value_reaches_an_entity_diagnostics_or_the_log(
 
     for value in (*SITE_VALUES.values(), *_site_reading_values(tree)):
         assert value not in states, value
-        assert value not in diagnostics, value
         assert value not in logged, value
+    for value in _in_diagnostics(tree, [*SITE_VALUES.values(), *_site_reading_values(tree)]):
+        assert value not in diagnostics, value
 
 
 async def test_a_new_install_creates_neither_site_reading(hass: HomeAssistant) -> None:
@@ -200,5 +217,6 @@ async def test_no_captured_site_value_reaches_an_entity_diagnostics_or_the_log(
 
     for value in searchable:
         assert value not in states, value
-        assert value not in diagnostics, value
         assert value not in logged, value
+    for value in _in_diagnostics(tree, searchable):
+        assert value not in diagnostics, value

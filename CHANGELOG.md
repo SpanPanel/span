@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
   panel publishes them.
 - **A battery the panel declares gets its device before its first reading**, reading unknown until then, and a battery fed by a circuit reports its connection.
 - **Registration says when to retry** if the panel limits attempts, and setup asks only for the passphrase where the panel does not support proximity.
+- **Diagnostics include the panel's device tree**: every device and property the panel publishes, with serial numbers, device ids and site details replaced, so a
+  report can be looked into without a separate capture.
 
 ### Changed
 

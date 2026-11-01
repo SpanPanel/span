@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from span_panel_api import SpanPanelSnapshot, ca_fingerprint, shared_meter_groups
+from span_panel_api import (
+    MaskedTree,
+    SpanMqttClient,
+    SpanPanelSnapshot,
+    ca_fingerprint,
+    shared_meter_groups,
+)
 from span_panel_api.exceptions import SpanPanelValidationError
 
 from .adoption import adopted_control_count, classify
@@ -159,6 +165,40 @@ def _discovery(findings: SchemaFindings | None) -> DiscoveryBlock:
             for entry in findings.discovered
         ],
     }
+
+
+class DeviceTreeBlock(TypedDict):
+    """The `device_tree` section and, when there is no tree, why.
+
+    `device_tree_unavailable` is absent when the tree is present, so a reader
+    tells "this panel has no tree to give" from "the export was dropped from the
+    report" by the key rather than by guessing at a bare `None`.
+    """
+
+    device_tree: MaskedTree | None
+    device_tree_unavailable: NotRequired[Literal["flat_data_model", "not_described"]]
+
+
+def _device_tree(client: SpanMqttClient) -> DeviceTreeBlock:
+    """Return the panel's device tree as the library masks it, or the reason there is none.
+
+    **Masked by the library, not here.** Serials, device ids and site details are
+    replaced where the tree is exported, so this function adds nothing to the
+    payload that the library has not already made safe: it forwards the export
+    whole and never reads a wire value itself.
+
+    The tree is the adapter's last view, so a panel that has gone offline still
+    reports it -- that is the report a maintainer most needs. `flat_data_model`
+    is a schema 0 panel, which publishes no device tree; `not_described` is a
+    parent/child panel whose root device has not described itself yet.
+    """
+    tree = client.masked_tree()
+    if tree is not None:
+        return {"device_tree": tree}
+    reason: Literal["flat_data_model", "not_described"] = (
+        "flat_data_model" if client.schema_major == "schema_0" else "not_described"
+    )
+    return {"device_tree": None, "device_tree_unavailable": reason}
 
 
 class AdoptedDeviceRow(TypedDict):
@@ -444,6 +484,9 @@ async def async_get_config_entry_diagnostics(
             "last_update_success": coordinator.last_update_success,
         },
         "schema_discovery": _discovery(coordinator.schema_findings),
+        # Masked by the library and safe by construction, the rule `TO_REDACT`'s
+        # docstring states: nothing here is redacted again.
+        **_device_tree(coordinator.client),
         "adopted_devices": _adoption(snapshot),
         # Keys and enum values only -- no wire values, no user free text (names
         # and icons live in Core's registry, not here). Same withholding rules
