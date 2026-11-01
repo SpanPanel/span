@@ -145,6 +145,24 @@ def _not_settable(device_id: str) -> SpanPanelSnapshot:
     return schema_one_snapshot(_mutated_description(schema_one_tree(), device_id, drop))
 
 
+def _declared_range(device_id: str, range_format: str | None) -> dict[str, dict[str, str]]:
+    """The capture with one charger's user limit declaring `range_format`, or none.
+
+    `None` removes the `$format`, the charger that declares no range; anything
+    else replaces it, as a charger commissioned with another range would.
+    """
+    tree = schema_one_tree()
+
+    def declare(description: dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]) -> None:
+        declared = description["nodes"][CONFIG_NODE]["properties"]["user-max-charge-current"]
+        if range_format is None:
+            declared.pop("format")
+        else:
+            declared["format"] = range_format
+
+    return _mutated_description(tree, device_id, declare)
+
+
 def _renamed_to_catalog(tree: dict[str, dict[str, str]], device_id: str) -> dict[str, dict[str, str]]:
     """`tree` with one charger publishing the eBus `charge-limit` spelling, in place.
 
@@ -615,7 +633,114 @@ def test_the_control_is_configuration_rather_than_measurement() -> None:
     assert EVSE_CHARGE_CURRENT_LIMIT.entity_category is EntityCategory.CONFIG
     assert EVSE_CHARGE_CURRENT_LIMIT.device_class is NumberDeviceClass.CURRENT
     assert EVSE_CHARGE_CURRENT_LIMIT.mode is NumberMode.BOX
+
+
+def test_the_description_minimum_is_only_the_fallback_for_an_undeclared_range() -> None:
+    """Zero is what a charger that declares no minimum is offered, not the rule.
+
+    The entity's minimum is the one the charger declares; see the range tests
+    below, which read it off the entity rather than the description.
+    """
     assert EVSE_CHARGE_CURRENT_LIMIT.native_min_value == 0
+
+
+# ---------------------------------------------------------------------------
+# The range the charger declares
+# ---------------------------------------------------------------------------
+
+
+async def test_the_declared_range_bounds_the_control(hass: HomeAssistant) -> None:
+    """The capture declares `6:32`: the library refuses 0-5 A, so the control does not offer it."""
+    tree = schema_one_tree()
+    assert _declaration(tree, EVSE, "user-max-charge-current")["format"] == "6:32"
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_min_value == 6
+    assert entity.native_max_value == min(32, ceiling)
+
+
+async def test_a_charger_declaring_no_range_keeps_the_old_bounds(hass: HomeAssistant) -> None:
+    tree = _declared_range(EVSE, None)
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_min_value == 0
+    assert entity.native_max_value == ceiling
+
+
+async def test_a_declared_maximum_below_the_ceiling_bounds_the_maximum(hass: HomeAssistant) -> None:
+    tree = _declared_range(EVSE, "6:24")
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    assert ceiling > 24
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_min_value == 6
+    assert entity.native_max_value == 24
+
+
+async def test_a_ceiling_below_the_declared_maximum_still_bounds_the_maximum(
+    hass: HomeAssistant,
+) -> None:
+    tree = _declared_range(EVSE, "6:40")
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    assert ceiling < 40
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+
+    assert entity.native_max_value == ceiling
+
+
+@pytest.mark.parametrize(
+    ("range_format", "minimum", "maximum"),
+    [("6:", 6, None), (":24", 0, 24)],
+    ids=["open-maximum", "open-minimum"],
+)
+async def test_an_open_side_falls_back_for_that_side_only(
+    hass: HomeAssistant, range_format: str, minimum: int, maximum: int | None
+) -> None:
+    tree = _declared_range(EVSE, range_format)
+    snapshot = schema_one_snapshot(tree)
+    declared = snapshot.evse[_serial(tree, EVSE)]
+    assert (declared.charge_current_limit_minimum_a, declared.charge_current_limit_maximum_a) == (
+        (minimum or None),
+        maximum,
+    )
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    entity = _for(await _created(hass, snapshot), tree, EVSE)
+
+    assert entity.native_min_value == minimum
+    assert entity.native_max_value == (ceiling if maximum is None else maximum)
+
+
+async def test_the_range_follows_the_charger_when_it_is_recommissioned(hass: HomeAssistant) -> None:
+    """The declared bounds are read on every update, as the ceiling is."""
+    tree = schema_one_tree()
+    entity = _for(await _created(hass, schema_one_snapshot(tree)), tree, EVSE)
+    assert (entity.native_min_value, entity.native_max_value) == (6, 32)
+
+    _refreshed(entity, schema_one_snapshot(_declared_range(EVSE, "10:20")))
+    assert (entity.native_min_value, entity.native_max_value) == (10, 20)
+
+    _refreshed(entity, schema_one_snapshot(_declared_range(EVSE, None)))
+    assert (entity.native_min_value, entity.native_max_value) == (0, _published(tree, EVSE, CEILING_TOPIC))
+
+
+def test_the_range_is_applied_only_where_the_limit_is_settable() -> None:
+    """Where the limit is not settable the entity keeps its old bounds.
+
+    Such a charger gets no entity from the platform; the description is asked
+    directly, since an entity that must not exist cannot be asked for its range.
+    """
+    tree = schema_one_tree()
+    settable = schema_one_snapshot(tree).evse[_serial(tree, EVSE)]
+    refused = _not_settable(EVSE).evse[_serial(tree, EVSE)]
+    assert settable.charge_current_limit_settable is True
+    assert refused.charge_current_limit_settable is False
+
+    assert EVSE_CHARGE_CURRENT_LIMIT.minimum_fn(settable) == 6
+    assert EVSE_CHARGE_CURRENT_LIMIT.declared_maximum_fn(settable) == 32
+    assert EVSE_CHARGE_CURRENT_LIMIT.minimum_fn(refused) is None
+    assert EVSE_CHARGE_CURRENT_LIMIT.declared_maximum_fn(refused) is None
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +912,7 @@ async def test_the_range_home_assistant_checks_is_the_commissioned_one(hass: Hom
     entity = _for(created, tree, EVSE)
 
     assert entity.native_max_value == _published(tree, EVSE, CEILING_TOPIC)
-    assert entity.native_min_value == 0
+    assert entity.native_min_value == 6
 
 
 # ---------------------------------------------------------------------------
