@@ -6,48 +6,57 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **A meter the panel reports without a breaker space** gets power, energy and current sensors, no switch, and its own place outside the breaker grid.
-- **Circuits that share a meter or relay name each other**, the panel view draws them as one slot, and current monitoring uses their combined rating.
-- **An EV charger lock** where the panel lets the charger be locked, and **busbar current, line frequency and upstream protection rating** sensors where the
-  panel publishes them.
-- **A battery the panel declares gets its device before its first reading**, reading unknown until then, and a battery fed by a circuit reports its connection.
-- **Registration says when to retry** if the panel limits attempts, and setup asks only for the passphrase where the panel does not support proximity.
-- **Diagnostics include the panel's device tree**, with identifiers and site details masked, so a report needs no separate capture.
+- **Remote current transformer (CT) support**: a remote CT the panel reads gets power, energy and current sensors and its own place outside the breaker grid,
+  with no switch and no current monitoring, since it has no breaker.
+- **Support for circuits that share a meter or relay**: each keeps its own entities and names the circuits it shares with in its attributes. The panel view
+  draws the group as one slot, and current monitoring judges it once against the members' combined rating, with an override on any member applying to the group.
+- **Support for an EV charger lock** where the panel lets the charger be locked, and for **busbar current, line frequency and upstream protection rating**
+  sensors where the panel publishes them. On a panel with no main breaker, current monitoring judges the mains against the upstream protection rating.
+- **On panels other than MAIN 32, a circuit with a solar role reads its power** and Net Energy as generation and displays as generation, and solar fed through
+  one gets a Solar device even where the panel publishes no inverter. A panel with no solar circuit or inverter gets no Solar device.
+- **On panels other than MAIN 32, the panel view draws the breaker positions the panel reports.**
+- **A battery the panel declares gets its device and entities as soon as the panel declares it**, reading unknown until its first values arrive. 2.1.x created
+  them only once its state of charge arrived, reloading the integration to do so.
+- **Support for a battery wired to a breaker in the panel**: its BESS Connected sensor shows whether the panel can communicate with it, as it already did for a
+  battery connected ahead of the panel.
+- **Registration honors the panel's retry limits**, saying how long to wait instead of showing an unknown error, and setup asks only for the passphrase on
+  panels that register by passphrase only.
+- **Improved diagnostics that include the panel's device tree**, every device and property it publishes, with serial numbers, device ids and site details
+  masked, so reporting a problem no longer needs a separate MQTT capture.
 
 ### Changed
 
-- **Circuits with a solar role read and display as generation**, and solar fed through such a circuit gets a Solar device without a separate inverter device.
-- **A panel that publishes no solar source no longer gets a Solar device or PV Power sensor**; on an upgraded install those entities stay unavailable until
-  removed.
 - **New installs no longer create the Status Postal Code and Status Time Zone sensors, which say where the panel is installed**; existing ones stay and keep
   updating, and diagnostics redact both values.
-- **The panel view draws only the breaker positions the panel has**, and shows a battery charge the panel has not reported as unknown rather than 0%.
-- **Setup stops with a repair issue when the panel reports a hardware version this release has not been validated with.**
-- **New installs let only administrators operate the panel**, and an existing install keeps the Who may operate the panel setting it had.
+- **Setup stops with a repair issue on a panel whose hardware version this release has not been validated with**; a MAIN 32 always proceeds.
+- **The Who may operate the panel option now defaults to Administrators only on new installs**, where it defaulted to Any Home Assistant user; an existing
+  install keeps the setting it had.
 
 ### Removed
 
-- **The Unmapped Circuit Sensors option is removed**, because the panel publishes nothing for an empty breaker position, and the hidden Unmapped Tab sensors it
-  created are deleted.
+- **The Unmapped Circuit Sensors option is removed, and the hidden Unmapped Tab sensors it created are deleted.** The panel publishes nothing for an empty
+  breaker position, so those sensors always read 0 W and 0 Wh.
 
 ### Fixed
 
-- **An energy counter reading beyond what its breaker could ever carry is never used as the dip-compensation baseline**, so it cannot skew energy totals.
-- **The current-monitoring summary is hidden while monitoring is off**, instead of reading "0 circuits".
-- **A circuit or main breaker whose current monitoring is turned off no longer shows a frozen utilization or alert window** in the panel view or Get
-  monitoring status, and turning monitoring back on starts a fresh window rather than alerting on one opened before.
-- **DSM State, DSM Grid State and Current Run Config stay on-grid on a panel with no Microgrid Interconnect Device**, instead of dropping to unknown for a
-  moment whenever Grid Power read near zero.
-- **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown whenever the panel has not published them**,
-  instead of a false 0 W that history and statistics could not tell from a real reading.
-- **Get monitoring status reports no current or utilization for a circuit or main breaker that has not been measured yet**, instead of 0 A and 0%.
-- **Favorites, current-monitoring overrides and the dashboard find circuits whatever their ids look like.**
-- **With more than one panel, a current-monitoring threshold set through an entity applies to that entity's panel**, and a call naming a different panel is
-  refused.
+- **With Auto-Compensate Energy Dips on, an energy counter reading more than its breaker could ever have carried is never taken as the baseline**, so a later
+  correction by the panel is no longer booked as a permanent offset that inflates that circuit's energy totals.
+- **The panel view hides its current-monitoring summary while monitoring is off**, where it read "Monitoring · 0 circuits · 0 mains".
+- **A circuit or main breaker with current monitoring turned off no longer shows the utilization and open alert window it had when monitoring stopped.**
+- **DSM State, DSM Grid State and Current Run Config stay on-grid on a panel with no Microgrid Interconnect Device**, where they dropped to unknown for one
+  update whenever Grid Power read within 1 W of zero, and an automation saw each return as the grid coming back
+  ([span-panel-api#215](https://github.com/SpanPanel/span-panel-api/issues/215)).
+- **Power sensors show unknown while the panel is offline, and Battery, PV, Grid and Site Power show unknown until the panel publishes them**, where they read 0
+  W, which history and statistics could not tell from a real reading. The panel view shows any power, current or battery reading the panel has not reported as
+  "--" and leaves it out of totals. An automation or template that relied on 0 needs to handle unknown.
+- **The Get monitoring status action reports no current or utilization for a circuit or main breaker that has not been measured yet**, where it reported 0 A and
+  0%.
+- **Resolved an issue where, with more than one panel, a current-monitoring threshold set through an entity could apply to the wrong panel.**
 - **Diagnostics redact the Wi-Fi network name.**
-- **Each update from a panel on firmware r202633 or later costs Home Assistant's event loop the same small amount however many circuits and devices it
-  has**, instead of growing with each one ([span-panel-api#223](https://github.com/SpanPanel/span-panel-api/issues/223)).
-- **The EV charger charge-limit number offers only the range the charger accepts**, where it offered values the charger refuses.
+- **Resolved a performance issue where the integration used more of Home Assistant's processing time the more circuits and devices the panel had**, which on
+  low-powered hardware used excessive CPU ([span-panel-api#223](https://github.com/SpanPanel/span-panel-api/issues/223)).
+- **Resolved an issue where the EV charger charge-limit number offered values below the charger's minimum**, which the charger refuses; it now offers only the
+  range the charger declares.
 
 ## [2.1.2] - 10/2026
 
