@@ -21,9 +21,9 @@ dependencies = [
 dev = [
     "types-requests",
     "types-PyYAML",
-    "mypy==2.4.0",
+    "mypy==2.4.1",
     "pyright==1.1.414",
-    "ruff==0.17.2",
+    "ruff==0.17.3",
     "bandit[toml]==1.9.4",
     "prek>=0.5.7",
     "voluptuous-stubs",
