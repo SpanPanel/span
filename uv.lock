@@ -871,15 +871,15 @@ wheels = [
 
 [[package]]
 name = "ebus-panel-sim"
-version = "0.10.0b2"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ebus-sdk" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/95/a547725c86f7bbf86aaf69e25eaacbb79c95a4de8f6ae9d579b0bc266b51/ebus_panel_sim-0.10.0b2.tar.gz", hash = "sha256:8de940613c6de17f0db896e8721bbb7e1acaa300a9db8672068198cdbcce428a", size = 332231, upload-time = "2026-10-09T18:25:11.778Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/e1/5d2c79bea81269ca6a4785031790b71c105065011c64202fdd2da780ba21/ebus_panel_sim-0.10.0.tar.gz", hash = "sha256:1c109d5318a4850f25235343574ce9460d92c8cd20328e11cd35ad37fe1dfcc7", size = 344928, upload-time = "2026-11-10T18:03:44.678Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/1b/5ca36546226d8d3ab4cff29a6eca6eb6adad38b2f06562992a5919a63391/ebus_panel_sim-0.10.0b2-py3-none-any.whl", hash = "sha256:fde9462a548dba0f95b5eccc10786ed5d48990c470a3a3ec90fe7a7bf58b1b68", size = 206814, upload-time = "2026-10-09T18:25:10.351Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/ee/2964ad5073b96908903fc5ebb33ce0f7ebfa4fb6a7fb1139c84fea9b6151/ebus_panel_sim-0.10.0-py3-none-any.whl", hash = "sha256:c294e0a0d54a2b0a89e8718d70ffa00460a52ce4ee8e1817cbe5c17d08ce528b", size = 220938, upload-time = "2026-11-10T18:03:43.139Z" },
 ]
 
 [[package]]
@@ -2600,7 +2600,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", extras = ["toml"], specifier = "==1.9.4" },
-    { name = "ebus-panel-sim", specifier = "==0.10.0b2" },
+    { name = "ebus-panel-sim", specifier = "==0.10.0" },
     { name = "isort" },
     { name = "mypy", specifier = "==2.4.1" },
     { name = "prek", specifier = ">=0.5.10" },
