@@ -28,9 +28,10 @@ in-panel, identity-only when upstream, like span#269's inverters.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 from .helpers import has_pv
+from .solar_sources import solar_sources
 from .util import EMPTY_PV
 
 if TYPE_CHECKING:
@@ -53,6 +54,11 @@ class SolarTopology(TypedDict):
     """The inverter's own power reading: its feeding circuit's power entity, or `None` where no circuit feeds it."""
     site_power_entity_id: str | None
     """PV Power, the site's total, on the Solar device's block only."""
+    identity: NotRequired[Literal["role"]]
+    """`role` where the source is a circuit whose role is solar and no inverter is published behind it.
+
+    Absent for an inverter, so a block that describes one is exactly what it was.
+    """
 
 
 def solar_topology(
@@ -98,7 +104,7 @@ def _site(
         return None
     source = binding.source(live)
     feed = _site_feed_circuit(binding, setup)
-    return SolarTopology(
+    block = SolarTopology(
         role="site",
         vendor=source.vendor_name,
         model=source.model,
@@ -106,6 +112,11 @@ def _site(
         power_entity_id=_power(feed, circuit_power),
         site_power_entity_id=site_power_entity_id,
     )
+    described = solar_sources(setup).get(binding.legacy_key) if binding.legacy_key else None
+    if described is not None and described.inverter is None:
+        # eBus connection/feeds-role SOLAR: no vendor or model to show.
+        block["identity"] = "role"
+    return block
 
 
 def _site_feed_circuit(binding: PvBinding, snapshot: SpanPanelSnapshot) -> str | None:

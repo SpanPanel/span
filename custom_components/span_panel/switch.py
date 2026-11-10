@@ -31,6 +31,7 @@ from .helpers import (
     circuit_has_a_breaker_switch,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
+    construct_shared_with_attributes,
     construct_tabs_attribute,
     construct_voltage_attribute,
     remove_withdrawn_controls,
@@ -239,6 +240,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         if circuit.relay_state_target is not None:
             attributes["relay_state_target"] = circuit.relay_state_target
 
+        attributes.update(construct_shared_with_attributes(self.coordinator.data, circuit))
         return attributes or None
 
     def _update_is_on(self) -> None:

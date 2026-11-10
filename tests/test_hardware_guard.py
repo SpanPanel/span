@@ -23,6 +23,7 @@ P, C, R = HardwareVerdict.PROCEED, HardwareVerdict.CHECK_MODEL, HardwareVerdict.
     [
         ("1.2", P),
         ("2.0", P),
+        ("3.0", P),
         (" 2.0 ", P),
         (None, P),
         ("", P),

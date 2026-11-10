@@ -19,7 +19,7 @@ The following operations are benign and should be executed without confirmation.
 - Compile or syntax-check Python (`python -c`, `python -m py_compile`)
 - Activate or use the virtual environment (`.venv/bin/python`, `source .venv/bin/activate`)
 - Run pre-commit hooks (`git commit` triggers hooks automatically)
-- Run project scripts (`./scripts/fix-markdown.sh`)
+- Run project scripts (`./scripts/fix-markdown.sh`, `./scripts/new-worktree.sh`)
 - Standard git operations (`git status`, `git diff`, `git log`, `git add`, `git commit`)
 - Package management (`poetry`, `uv`, `pip install`)
 - File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`, `cat`)
@@ -63,6 +63,22 @@ those files in the `SpanPanel_Docs/span/docs/` folder in the workspace — not i
 - Do NOT create documents in the `span/docs` folders or subfolders
 
 Do not commit documentation artifacts to the `span` integration repo itself.
+
+## Worktrees
+
+Create worktrees with `scripts/new-worktree.sh`, never with `git worktree add` or an agent's built-in worktree tool:
+
+```bash
+./scripts/new-worktree.sh <name> [<branch>]    # <branch> defaults to feat/<name>
+```
+
+It creates `../span-<name>` beside the primary checkout from a freshly fetched `origin/main`, prepares it with `setup-hooks.sh`, and links `.env`. From there
+`../../span/span-panel-api` still resolves to the library checkout, so no bridge is needed.
+
+- **Never share a virtual environment between checkouts.** Editable installs record one checkout's source path, so a shared `.venv` imports whichever checkout
+  synced last and tests pass against the wrong code without an error.
+- **To test against a library worktree, install it explicitly.** When a library worktree of the same name exists, the script prints the `uv pip install -e`
+  command rather than running it, because the next `uv sync` silently undoes it. See `developer.md`, "Working against unreleased library code".
 
 ## Service Registration Requirements
 

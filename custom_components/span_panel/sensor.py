@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Final
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -44,6 +45,7 @@ from .sensor_definitions import (
     CIRCUIT_BREAKER_RATING_SENSOR,
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
+    DECLARED_PANEL_READINGS,
     DOWNSTREAM_L1_CURRENT_SENSOR,
     DOWNSTREAM_L2_CURRENT_SENSOR,
     EVSE_SENSORS,
@@ -211,8 +213,30 @@ def create_panel_sensors(
         entities.append(SpanPanelPanelStatus(coordinator, DOWNSTREAM_L2_CURRENT_SENSOR, snapshot))
     if snapshot.main_breaker_rating_a is not None:
         entities.append(SpanPanelPanelStatus(coordinator, MAIN_BREAKER_RATING_SENSOR, snapshot))
+    entities.extend(
+        SpanPanelPanelStatus(coordinator, reading.description, snapshot)
+        for reading in DECLARED_PANEL_READINGS
+        if _declared(coordinator, reading.field_path) is True
+    )
 
     return entities
+
+
+def _declared(coordinator: SpanPanelCoordinator, field_path: str) -> bool | None:
+    """Whether the panel declares the property behind `field_path`; None while that is not known.
+
+    Read from the adapter's field metadata, which holds a resolved row for a
+    property exactly where some device declares it, whether or not a value has
+    arrived. The value cannot answer this: a declared property may not have
+    published yet, and an undeclared one never will. None where the client has
+    no metadata to read, so each caller chooses what an unknown answer means
+    for its own entity.
+    """
+    metadata = coordinator.client.field_metadata
+    if metadata is None:
+        return None
+    row = metadata.get(field_path)
+    return row is not None and row.resolved
 
 
 def _build_evse_device_info_map(
@@ -583,16 +607,28 @@ def create_power_flow_sensors(
     return entities
 
 
+EVSE_ADVERTISED_CURRENT_PATH: Final = "evse.advertised_current_a"
+"""The one EVSE reading a charger may not declare: a charger with no meter offers none."""
+
+
 def create_evse_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> list[SpanEvseSensor]:
-    """Create EVSE sensors for each commissioned charger."""
+    """Create EVSE sensors for each commissioned charger.
+
+    The advertised current only where a charger declares it: a charger with no
+    meter has nothing to offer the reading from. Unknown metadata keeps it, as
+    every release before this one did.
+    """
     if not has_evse(snapshot):
         return []
+    advertised_declared = _declared(coordinator, EVSE_ADVERTISED_CURRENT_PATH) is not False
     entities: list[SpanEvseSensor] = []
     for evse_id in snapshot.evse:
         entities.extend(
-            SpanEvseSensor(coordinator, desc, snapshot, evse_id) for desc in EVSE_SENSORS
+            SpanEvseSensor(coordinator, desc, snapshot, evse_id)
+            for desc in EVSE_SENSORS
+            if desc.field_path != EVSE_ADVERTISED_CURRENT_PATH or advertised_declared
         )
     return entities
 

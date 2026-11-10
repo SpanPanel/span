@@ -1,0 +1,266 @@
+{
+  "circuits": {
+    "circuit-1": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_lights_consumed_energy",
+        "current": "sensor.span_panel_bedroom_lights_current",
+        "net_energy": "sensor.span_panel_bedroom_lights_net_energy",
+        "power": "sensor.span_panel_bedroom_lights_power",
+        "produced_energy": "sensor.span_panel_bedroom_lights_produced_energy",
+        "select": "select.span_panel_bedroom_lights_circuit_priority",
+        "switch": "switch.span_panel_bedroom_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bedroom / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9
+      ],
+      "voltage": 120.0
+    },
+    "circuit-2": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bathroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_bathroom_outlets_current",
+        "net_energy": "sensor.span_panel_bathroom_outlets_net_energy",
+        "power": "sensor.span_panel_bathroom_outlets_power",
+        "produced_energy": "sensor.span_panel_bathroom_outlets_produced_energy",
+        "select": "select.span_panel_bathroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_bathroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bathroom / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17
+      ],
+      "voltage": 120.0
+    },
+    "circuit-3": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_living_room_lights_consumed_energy",
+        "current": "sensor.span_panel_living_room_lights_current",
+        "net_energy": "sensor.span_panel_living_room_lights_net_energy",
+        "power": "sensor.span_panel_living_room_lights_power",
+        "produced_energy": "sensor.span_panel_living_room_lights_produced_energy",
+        "select": "select.span_panel_living_room_lights_circuit_priority",
+        "switch": "switch.span_panel_living_room_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Living room / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        19
+      ],
+      "voltage": 120.0
+    },
+    "circuit-4": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_other_breaker_rating",
+        "consumed_energy": "sensor.span_panel_other_consumed_energy",
+        "current": "sensor.span_panel_other_current",
+        "net_energy": "sensor.span_panel_other_net_energy",
+        "power": "sensor.span_panel_other_power",
+        "produced_energy": "sensor.span_panel_other_produced_energy",
+        "switch": "switch.span_panel_other_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": true,
+      "name": "Other",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10,
+        12
+      ],
+      "voltage": 240.0
+    },
+    "circuit-5": {
+      "always_on": true,
+      "breaker_rating_a": 60.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_tesla_breaker_rating",
+        "consumed_energy": "sensor.span_panel_tesla_consumed_energy",
+        "current": "sensor.span_panel_tesla_current",
+        "net_energy": "sensor.span_panel_tesla_net_energy",
+        "power": "sensor.span_panel_tesla_power",
+        "produced_energy": "sensor.span_panel_tesla_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": false,
+      "name": "Tesla",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        43,
+        45
+      ],
+      "voltage": 240.0
+    }
+  },
+  "config_entry_id": "entry-r202639-c",
+  "device_id": "xg-7814-15i6h",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 9,
+  "last_position": 48,
+  "panel_device_id": "xg-7814-15i6h",
+  "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 40,
+  "serial": "xg-7814-15i6h",
+  "sub_devices": {
+    "xg-7814-15i6h_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_xg-7814-15i6h_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_xg-7814-15i6h_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_xg-7814-15i6h_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_xg-7814-15i6h_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_xg-7814-15i6h_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_xg-7814-15i6h_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_xg-7814-15i6h_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_xg-7814-15i6h_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-7814-15i6h_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_xg-7814-15i6h_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_xg-7814-15i6h_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_xg-7814-15i6h_bess_vendor"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Powerwall 3",
+      "name": "Span Panel Battery",
+      "serial_number": "tg099828190yv6",
+      "sw_version": null,
+      "type": "bess"
+    },
+    "xg-7814-15i6h_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_xg-7814-15i6h_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "tg607533669hu1-esz",
+      "sw_version": null,
+      "type": "mid"
+    }
+  }
+}

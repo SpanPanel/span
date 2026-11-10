@@ -747,7 +747,7 @@ async def test_overlapping_rotations_of_one_entry_run_one_after_the_other(
 
 
 def test_the_outcome_unknown_fallback_matches_strings_json() -> None:
-    """The English default message is the one in strings.json."""
+    """Both English defaults are the ones in strings.json, so neither can drift from its translation."""
     strings = json.loads(
         (Path(__file__).parent.parent / "custom_components/span_panel/strings.json").read_text(
             encoding="utf-8"
@@ -755,3 +755,7 @@ def test_the_outcome_unknown_fallback_matches_strings_json() -> None:
     )
     expected = strings["exceptions"]["rotate_credentials_outcome_unknown"]["message"]
     assert str(_rotation_outcome_unknown("panel.local")) == expected.format(host="panel.local")
+    passphrase_only = strings["exceptions"]["rotate_credentials_outcome_unknown_passphrase_only"]
+    assert str(_rotation_outcome_unknown("panel.local", True)) == passphrase_only["message"].format(
+        host="panel.local"
+    )

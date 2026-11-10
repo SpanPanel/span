@@ -44,6 +44,8 @@ class TestSpanEnergyExtraStoredData:
             "confirmed_dip_baseline": None,
             "confirmed_dip_delta": None,
             "confirmed_dip_ticks_left": None,
+            "implausible_reading": None,
+            "implausible_since": None,
         }
 
     def test_as_dict_with_none_values(self):
@@ -70,6 +72,8 @@ class TestSpanEnergyExtraStoredData:
             "confirmed_dip_baseline": None,
             "confirmed_dip_delta": None,
             "confirmed_dip_ticks_left": None,
+            "implausible_reading": None,
+            "implausible_since": None,
         }
 
     def test_from_dict_with_all_values(self):

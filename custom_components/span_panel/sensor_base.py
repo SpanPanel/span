@@ -21,6 +21,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
 from span_panel_api import SpanPanelSnapshot
 
 from .const import DEFAULT_ENERGY_DIP_COMPENSATION, DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
@@ -49,6 +50,18 @@ from .options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+
+def _parse_utc(value: str | None) -> datetime | None:
+    """Read a stored ISO timestamp back as UTC-aware, or None if absent or unreadable."""
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
 
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
@@ -573,6 +586,11 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         # the window in which that evidence could still be an artefact.
         self._pending_dip: PendingDip | None = None
         self._recently_confirmed_dip: PendingDip | None = None
+        # The reading this counter last published beyond what its breaker could
+        # ever have passed, and when that first happened; both None while it
+        # reads plausibly. Such a reading is never the dip baseline.
+        self._implausible_reading: float | None = None
+        self._implausible_since: datetime | None = None
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
@@ -644,14 +662,34 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         offset_of = partial(self.coordinator.dip_offset, meter)
         return raw_value + net.orientation_of(data_source).adjustment(offset_of)
 
+    def _reading_is_implausible(self, reading: float) -> bool:
+        """Whether a reading is beyond anything this counter's meter could have passed.
+
+        False here: only a counter with a breaker rating behind it has a bound,
+        and the circuit energy sensors override this to apply it.
+        """
+        return False
+
     def _process_raw_value(self, raw_value: float | str | None) -> None:
-        """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
+        """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors.
+
+        An implausible reading is reported as published, with the offset already
+        held, and is never the baseline: it neither books a dip nor becomes
+        `_last_panel_reading`, so the panel correcting it later is measured
+        against the last plausible reading instead.
+        """
         if (
             self._dip_compensation_enabled
             and self._is_total_increasing
             and isinstance(raw_value, float | int)
         ):
             raw_float = float(raw_value)
+            if self._reading_is_implausible(raw_float):
+                self._flag_implausible(raw_float)
+                super()._process_raw_value(raw_float + self._energy_offset)
+                return
+            self._implausible_reading = None
+            self._implausible_since = None
             outcome = process_energy_dip(
                 raw_float,
                 self._last_panel_reading,
@@ -667,6 +705,18 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             super()._process_raw_value(outcome.compensated)
         else:
             super()._process_raw_value(raw_value)
+
+    def _flag_implausible(self, reading: float) -> None:
+        """Record an implausible reading; warn once, when the counter first reads it."""
+        if self._implausible_since is None:
+            self._implausible_since = dt_util.utcnow()
+            _LOGGER.warning(
+                "%s reads %s Wh, more than its breaker could pass in a lifetime; the "
+                "reading is shown as published and never used as the dip-compensation baseline",
+                self.entity_id or self._attr_unique_id,
+                reading,
+            )
+        self._implausible_reading = reading
 
     def _apply_dip_event(self, outcome: DipOutcome) -> None:
         """Record the diagnostic, and tell the coordinator once a dip is final.
@@ -712,6 +762,47 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 outcome.offset,
             )
 
+    def _restore_dip_state(self, restored: SpanEnergyExtraStoredData) -> None:
+        """Take back the dip compensation state a previous run stored.
+
+        A stored baseline that is itself an implausible reading -- one an
+        earlier release kept -- is dropped rather than restored, so it can never
+        anchor a dip; the flag and when it was first seen come back as stored.
+        """
+        if restored.energy_offset is not None:
+            self._energy_offset = restored.energy_offset
+        if restored.last_panel_reading is not None and not self._reading_is_implausible(
+            restored.last_panel_reading
+        ):
+            self._last_panel_reading = restored.last_panel_reading
+        if restored.implausible_reading is not None:
+            self._implausible_reading = restored.implausible_reading
+            self._implausible_since = _parse_utc(restored.implausible_since)
+        if restored.last_dip_delta is not None:
+            self._last_dip_delta = restored.last_dip_delta
+        if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
+            self._pending_dip = PendingDip(
+                baseline=restored.pending_dip_baseline,
+                delta=restored.pending_dip_delta,
+            )
+        if (
+            restored.confirmed_dip_baseline is not None
+            and restored.confirmed_dip_delta is not None
+            and restored.confirmed_dip_ticks_left is not None
+        ):
+            self._recently_confirmed_dip = PendingDip(
+                baseline=restored.confirmed_dip_baseline,
+                delta=restored.confirmed_dip_delta,
+                confirmed_ticks_left=restored.confirmed_dip_ticks_left,
+            )
+        _LOGGER.debug(
+            "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
+            self.entity_id or self._attr_unique_id,
+            self._energy_offset,
+            self._last_panel_reading,
+            self._last_dip_delta,
+        )
+
     async def async_added_to_hass(self) -> None:
         """Restore grace period state when entity is added to Home Assistant.
 
@@ -738,34 +829,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
         # Restore dip compensation state before super() registers the listener.
         if restored and self._dip_compensation_enabled and self._is_total_increasing:
-            if restored.energy_offset is not None:
-                self._energy_offset = restored.energy_offset
-            if restored.last_panel_reading is not None:
-                self._last_panel_reading = restored.last_panel_reading
-            if restored.last_dip_delta is not None:
-                self._last_dip_delta = restored.last_dip_delta
-            if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
-                self._pending_dip = PendingDip(
-                    baseline=restored.pending_dip_baseline,
-                    delta=restored.pending_dip_delta,
-                )
-            if (
-                restored.confirmed_dip_baseline is not None
-                and restored.confirmed_dip_delta is not None
-                and restored.confirmed_dip_ticks_left is not None
-            ):
-                self._recently_confirmed_dip = PendingDip(
-                    baseline=restored.confirmed_dip_baseline,
-                    delta=restored.confirmed_dip_delta,
-                    confirmed_ticks_left=restored.confirmed_dip_ticks_left,
-                )
-            _LOGGER.debug(
-                "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
-                self.entity_id or self._attr_unique_id,
-                self._energy_offset,
-                self._last_panel_reading,
-                self._last_dip_delta,
-            )
+            self._restore_dip_state(restored)
 
         # Offer this counter's offset to its meter's Net before the coordinator
         # listener exists, so a Net added after it reads it from the first update.
@@ -869,6 +933,10 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._recently_confirmed_dip.confirmed_ticks_left
                 if self._recently_confirmed_dip
                 else None
+            ),
+            implausible_reading=self._implausible_reading,
+            implausible_since=(
+                self._implausible_since.isoformat() if self._implausible_since else None
             ),
         )
 

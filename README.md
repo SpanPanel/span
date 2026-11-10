@@ -8,7 +8,7 @@ monitoring and control of your home's electrical system.
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/commits)
 [![License](https://img.shields.io/github/license/SpanPanel/span.svg?style=flat-square)](LICENSE)
 
-[![Python](https://img.shields.io/badge/python-3.14.2-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.14.3%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/)
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
@@ -49,7 +49,7 @@ real-time state updates without polling.
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- Panel passphrase (found via the SPAN app) **or** physical access to the panel door
+- Panel passphrase (found via the SPAN app) **or** physical access to the panel door; a panel that registers by passphrase only needs the passphrase
 
 ## Installation
 
@@ -64,6 +64,10 @@ real-time state updates without polling.
 9. The integration detects the panel as v2 and presents an authentication choice:
    - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
    - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
+
+   A panel that registers by passphrase only skips the choice and asks for the passphrase. If the panel is limiting registration attempts, setup says how long
+   to wait before trying again.
+
 10. Choose your entity ID naming pattern (see naming patterns below)
 11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
@@ -88,36 +92,41 @@ The following terms appear throughout this document and in the integration's sen
 
 ### Panel-Level Sensors
 
-| Sensor                       | Device Class | Unit | Notes                                                                                                                  |
-| ---------------------------- | ------------ | ---- | ---------------------------------------------------------------------------------------------------------------------- |
-| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                 |
-| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                        |
-| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                   |
-| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                   |
-| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                |
-| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                            |
-| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                            |
-| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
-| DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals                     |
-| Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown |
-| Grid Forming Entity          | —            | —    | GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See[Grid Forming Entity](#grid-forming-entity)                            |
-| Main Relay State             | —            | —    | closed (power flowing), open (disconnected), unknown                                                                   |
-| Vendor Cloud                 | —            | —    | CONNECTED, UNCONNECTED, UNKNOWN                                                                                        |
-| Software Version             | —            | —    | Firmware version string                                                                                                |
+| Sensor                       | Device Class | Unit | Notes                                                                                                                          |
+| ---------------------------- | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                         |
+| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                |
+| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                           |
+| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                           |
+| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                        |
+| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                    |
+| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                    |
+| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                         |
+| DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals. Diagnostic, off by default |
+| Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown         |
+| Grid Forming Entity          | —            | —    | GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See[Grid Forming Entity](#grid-forming-entity)                                    |
+| Main Relay State             | —            | —    | closed (power flowing), open (disconnected), unknown                                                                           |
+| Vendor Cloud                 | —            | —    | CONNECTED, UNCONNECTED, UNKNOWN. Diagnostic, off by default                                                                    |
+| Software Version             | —            | —    | Firmware version string                                                                                                        |
+| Frequency                    | Frequency    | Hz   | Line frequency. Only where the panel publishes it                                                                              |
 
 ### Panel Diagnostic Sensors
 
-| Sensor                | Device Class | Unit | Notes                                                             |
-| --------------------- | ------------ | ---- | ----------------------------------------------------------------- |
-| L1 Voltage            | Voltage      | V    | L1 leg actual voltage                                             |
-| L2 Voltage            | Voltage      | V    | L2 leg actual voltage                                             |
-| Upstream L1 Current   | Current      | A    | Upstream lugs L1 current                                          |
-| Upstream L2 Current   | Current      | A    | Upstream lugs L2 current                                          |
-| Downstream L1 Current | Current      | A    | Downstream lugs L1 current. Off by default from 2.1.x — see below |
-| Downstream L2 Current | Current      | A    | Downstream lugs L2 current. Off by default from 2.1.x — see below |
-| Main Breaker Rating   | Current      | A    | Main breaker amperage. Off by default                             |
+| Sensor                     | Device Class | Unit | Notes                                                                                                  |
+| -------------------------- | ------------ | ---- | ------------------------------------------------------------------------------------------------------ |
+| L1 Voltage                 | Voltage      | V    | L1 leg actual voltage                                                                                  |
+| L2 Voltage                 | Voltage      | V    | L2 leg actual voltage                                                                                  |
+| Upstream L1 Current        | Current      | A    | Upstream lugs L1 current                                                                               |
+| Upstream L2 Current        | Current      | A    | Upstream lugs L2 current                                                                               |
+| Downstream L1 Current      | Current      | A    | Downstream lugs L1 current. Off by default from 2.1.x — see below                                      |
+| Downstream L2 Current      | Current      | A    | Downstream lugs L2 current. Off by default from 2.1.x — see below                                      |
+| Main Breaker Rating        | —            | A    | Main breaker amperage. Off by default                                                                  |
+| Busbar Current             | Current      | A    | Busbar current. Only where the panel publishes it                                                      |
+| Upstream Protection Rating | —            | A    | Rating of the protection ahead of the upstream lugs. Off by default. Only where the panel publishes it |
 
 L1/L2 Voltage and Main Breaker Rating have always been off by default; enable them from the panel's device page if you want them.
+
+On a panel with no main breaker, current monitoring judges the mains against the Upstream Protection Rating.
 
 **The three Feedthrough sensors and the two Downstream current sensors are off by default from 2.1.x.** The eBus specification's maintainer has documented that
 the panel's feedthrough (downstream lugs) figures cannot be relied on: the energy registers can decrease or go negative, the power reading is inverted relative
@@ -171,35 +180,42 @@ On **Import Limit**, and present only when the panel publishes them. These are t
 
 ### Power Flow Sensors
 
-| Sensor        | Device Class | Unit | Notes                                                                               |
-| ------------- | ------------ | ---- | ----------------------------------------------------------------------------------- |
-| Grid Power    | Power        | W    | Grid power flow                                                                     |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                              |
-| Battery Power | Power        | W    | Battery charge/discharge (**+discharging, −charging**). Only when BESS commissioned |
-| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                               |
+| Sensor        | Device Class | Unit | Notes                                                                                  |
+| ------------- | ------------ | ---- | -------------------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                                        |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                                 |
+| Battery Power | Power        | W    | Battery charge/discharge (**+discharging, −charging**). Only when the panel has a BESS |
+| PV Power      | Power        | W    | PV generation (+producing). Only when the panel has solar                              |
+
+Grid Power, Site Power, Battery Power and PV Power read unknown until the panel publishes them, and every power sensor reads unknown while the panel is offline.
+None of them reads 0 W for a value the panel has not reported, so an automation or template that relied on 0 needs to handle unknown.
 
 ### PV Metadata Sensors (on the Solar sub-device)
 
 From 2.1.x these live on a **Solar** device of their own rather than on the panel's card, alongside PV Power and PV Panel Link.
 
-| Sensor             | Device Class | Unit | Notes                                                                                |
-| ------------------ | ------------ | ---- | ------------------------------------------------------------------------------------ |
-| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other")                                        |
-| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
-| Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
+| Sensor                | Device Class | Unit | Notes                                                                                |
+| --------------------- | ------------ | ---- | ------------------------------------------------------------------------------------ |
+| PV Vendor             | —            | —    | PV inverter vendor (e.g., "Enphase", "Other")                                        |
+| PV Product            | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
+| PV Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
 
 If you upgraded, these keep their entity ids, unique ids and history — but not the panel's area, since an entity takes its area from its device and the Solar
 device starts without one. Assign it an area, or anything area-scoped (dashboards, automations, voice targeting a room) stops matching them. New installations
 get ids from the new device name — `sensor.span_panel_solar_pv_vendor` rather than `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
 
 Each additional solar inverter (published from firmware r202639) gets a **Solar Inverter** device of its own, named after the circuit that feeds it where one
-does, with its own PV Vendor, PV Product and Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
+does, with its own PV Vendor, PV Product and PV Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device
 never move: they keep describing the inverter they always did, beside PV Power, the panel's total. Where the panel cannot say which inverter they described — an
 inverter no circuit feeds, for example behind a Tesla Gateway, or several already reported when you upgraded — they describe all of your inverters together. An
 inverter device the panel no longer reports stays, unavailable, until you delete it. Each inverter's power is the power of the circuit that feeds it, which the
 SPAN Panel card shows on that inverter's tile. An inverter no circuit feeds, such as one upstream of the panel, has no individual reading; its output is
 included in PV Power, the panel's total. The card's Solar tile shows its inverter's circuit and the site total together; on a single-inverter site the two are
 usually close.
+
+On panels other than MAIN 32, a circuit can declare that it feeds solar. Such a circuit reads its Power and Net Energy as generation and displays as generation,
+and solar fed through one gets the **Solar** device even where the panel publishes no inverter. A panel with no solar circuit and no inverter gets no Solar
+device.
 
 **Deprecated:**
 
@@ -287,7 +303,7 @@ The circuit that feeds a charger has its sensors shown on the charger's device. 
 | Sensor             | Device Class | Unit | Notes                                                                            |
 | ------------------ | ------------ | ---- | -------------------------------------------------------------------------------- |
 | Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
-| Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
+| Advertised Current | Current      | A    | Amps offered to the vehicle. Not created where the charger does not declare it   |
 | Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
 | Part Number        | —            | —    | Charger part number (diagnostic,**off by default**)                              |
 
@@ -308,11 +324,12 @@ EVSE Panel Link is a diagnostic and appears only where the circuit feeding that 
 | Control                   | Platform | Unit | Notes                                                                                   |
 | ------------------------- | -------- | ---- | --------------------------------------------------------------------------------------- |
 | EVSE Charge Current Limit | Number   | A    | The charge-current ceiling you can lower. Bounded by the installer-commissioned maximum |
+| EVSE Lock                 | Lock     | —    | Locks and unlocks the charger. Only where the panel lets the charger be locked          |
 
-The maximum is read from the panel, never assumed: it is the current the charger was commissioned for, and a value above it is refused rather than clamped. The
-control is created only where the panel declares the limit settable, and reports unavailable while the panel has not published the commissioned maximum that
-bounds it. A change the panel has acknowledged but not yet applied appears as a `charge_current_limit_target` attribute while the state stays the limit the
-charger is still enforcing.
+The maximum is read from the panel: it is the current the charger was commissioned for, and a value above it is refused rather than clamped. Where the charger
+declares the range its limit accepts, the control offers only that range, so it offers nothing below the charger's minimum. The control is created only where
+the panel declares the limit settable, and reports unavailable while the panel has not published the commissioned maximum that bounds it. A change the panel has
+acknowledged but not yet applied appears as a `charge_current_limit_target` attribute while the state stays the limit the charger is still enforcing.
 
 #### EVSE Device Info Attributes
 
@@ -346,9 +363,9 @@ device uses manufacturer, model, serial number, and software version from batter
 
 #### BESS Binary Sensors
 
-| Sensor         | Device Class | Notes                                        |
-| -------------- | ------------ | -------------------------------------------- |
-| BESS Connected | Connectivity | Whether the BESS is communicating with panel |
+| Sensor         | Device Class | Notes                                                                                                                   |
+| -------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| BESS Connected | Connectivity | Whether the panel can communicate with the BESS, whether it is connected ahead of the panel or wired to a breaker in it |
 
 ### Panel Energy Sensor Attributes
 
@@ -360,35 +377,51 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit-Level Sensors (per circuit)
 
-| Sensor          | Device Class | Unit | Notes                                                                 |
-| --------------- | ------------ | ---- | --------------------------------------------------------------------- |
-| Power           | Power        | W    | Instantaneous circuit power (+producing for PV, +consuming otherwise) |
-| Produced Energy | Energy       | Wh   | Cumulative energy produced                                            |
-| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                            |
-| Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert)         |
-| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`          |
-| Breaker Rating  | Current      | A    | Circuit breaker amperage (diagnostic). Only when reported             |
+| Sensor          | Device Class | Unit | Notes                                                                                         |
+| --------------- | ------------ | ---- | --------------------------------------------------------------------------------------------- |
+| Power           | Power        | W    | Instantaneous circuit power (+producing for PV and solar-role circuits, +consuming otherwise) |
+| Produced Energy | Energy       | Wh   | Cumulative energy produced                                                                    |
+| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                                                    |
+| Net Energy      | Energy       | Wh   | Net energy (sign depends on what the circuit feeds — PV and solar-role circuits invert)       |
+| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`                                  |
+| Breaker Rating  | —            | A    | Circuit breaker amperage (diagnostic, off by default). Only when reported                     |
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                                                                                           |
-| ----------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `tabs`            | string | Breaker slot position(s)                                                                                        |
-| `voltage`         | string | 120 or 240 (derived from tab count)                                                                             |
-| `always_on`       | bool   | Whether circuit is always-on                                                                                    |
-| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                                                                                         |
-| `relay_requester` | string | Who requested relay state                                                                                       |
-| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                           |
-| `is_sheddable`    | bool   | Whether circuit can be shed                                                                                     |
-| `pcs_managed`     | bool   | Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it         |
-| `pcs_priority`    | int    | This circuit's shed order under an active import limit — distinct from`shed_priority`, which is the backup tier |
+| Attribute              | Type   | Notes                                                                                                                                          |
+| ---------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabs`                 | string | Breaker slot position(s)                                                                                                                       |
+| `voltage`              | number | The nominal voltage the circuit declares, otherwise 120 for a one-pole circuit or 240 for a two-pole one. Absent where neither is known        |
+| `always_on`            | bool   | Whether circuit is always-on                                                                                                                   |
+| `relay_state`          | string | OPEN / CLOSED / UNKNOWN                                                                                                                        |
+| `relay_requester`      | string | Who requested relay state                                                                                                                      |
+| `shed_priority`        | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                                                          |
+| `is_sheddable`         | bool   | Whether circuit can be shed                                                                                                                    |
+| `pcs_managed`          | bool   | Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it                                        |
+| `pcs_priority`         | int    | This circuit's shed order under an active import limit — distinct from`shed_priority`, which is the backup tier                                |
+| `protection_functions` | list   | The protections the circuit's breaker provides: OVERCURRENT, SHORT_CIRCUIT, GROUND_FAULT, ARC_FAULT. Present only where the breaker lists them |
+| `meter_shared_with`    | list   | Names of the other circuits measured by this circuit's meter. Present only where the circuit declares the list                                 |
+| `relay_shared_with`    | list   | Names of the other circuits switched by this circuit's relay. Present only where the circuit declares the list                                 |
+
+### Circuits That Share a Meter or Relay
+
+Some circuits share one meter or one relay. Each keeps its own entities and names the circuits it shares with in `meter_shared_with` and `relay_shared_with`,
+which also appear on its Breaker switch. Circuits that share a meter report that one meter's readings, so their power and energy should not be added together.
+The panel view draws the group as one slot, and current monitoring judges it once against the members' combined rating, with an override on any member applying
+to the group.
+
+### Remote Current Transformers
+
+A remote current transformer (CT) the panel reads appears as **Remote CT** followed by its number, with Power, Produced Energy, Consumed Energy and Net Energy
+sensors, and Current where the panel reports it. Its Power is positive for power flowing into the panel. It has no breaker, so it gets no Breaker switch, no
+Circuit Priority select and no current monitoring, its Power sensor carries no relay or shed attributes, and the panel view draws it outside the breaker grid.
 
 ### Circuit Energy Sensor Attributes
 
-| Attribute | Type   | Notes                               |
-| --------- | ------ | ----------------------------------- |
-| `tabs`    | string | Breaker slot position(s)            |
-| `voltage` | string | 120 or 240 (derived from tab count) |
+| Attribute | Type   | Notes                                                                                                                                   |
+| --------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabs`    | string | Breaker slot position(s)                                                                                                                |
+| `voltage` | number | The nominal voltage the circuit declares, otherwise 120 for a one-pole circuit or 240 for a two-pole one. Absent where neither is known |
 
 ### Binary Sensors
 
@@ -438,16 +471,20 @@ Three things worth knowing before you build on one:
   own.
 - **What the delete button does**, since it is not quite what you would expect:
 
-  - Delete a reading while your panel is still publishing that property and it comes back — switched off — at the next reload, carrying whatever you curated for
-    it. Curation is keyed on the wire address rather than on the entity, so deleting the entity does not discard it. There is no setting to suppress the entity,
-    because leaving it switched off is already that.
-  - Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
+  - Delete a reading that is still adopted — your panel still publishes it and it has not been modeled since — and it comes back, switched off, at the next
+    reload, carrying whatever you curated for it. Curation is keyed on the wire address rather than on the entity, so deleting the entity does not discard it.
+    There is no setting to suppress the entity, because leaving it switched off is already that.
+  - Delete one after your panel has stopped publishing it, or after it has been modeled properly, and it stays gone, because nothing exists to recreate it from.
 
-So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which.
+So deletion means "hide it until next time" for a reading that is still adopted and "clear it out" for one that no longer is.
+
+**Two readings that say where the panel is installed are not created on a new install**: Status Postal Code and Status Time Zone. An install that already has
+them keeps them, and they keep updating.
 
 **These entities are permanent in id, not in identity.** If one of these readings is later modeled properly (delivered as an official part of the integration),
-that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is why a vendor reading you have come to depend
-on is worth raising in an issue: being modeled is what turns it into something with a real name, a proper category and statistics out of the box.
+that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. The adopted one stops updating and is left behind
+until you delete it. That is why a vendor reading you have come to depend on is worth raising in an issue: being modeled is what turns it into something with a
+real name, a proper category and statistics out of the box.
 
 ### The Adopted Tab
 
@@ -657,12 +694,12 @@ Troubleshooting.
 Four options in **Settings → Devices & Services → Span Panel → Configure**. Each is enforced where commands are published rather than only at the entity, so a
 refusal holds however the command arrived.
 
-| Option                                     | Default                                                                                                                  | What it refuses                                                                                                                                                                                                                                 | What it does not do                                                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Who may operate the panel**              | Any Home Assistant user — Home Assistant's own policy, which grants every non-admin control of every entity              | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and adopted controls from non-admin users. `Nobody` also stops those entities being created.                                                    | Neither touches sensors. Neither reaches an automation, which runs with no user at all — pair it with the next option.     |
-| **Allow control without a logged-in user** | Off for a new install. An install set up before this default changed keeps its setting: on, unless you had turned it off | While off, refuses every command with no user attached: all automations, and any script or integration an automation calls. A script a person runs keeps that person's user and is unaffected. Turn it on if your automations operate circuits. | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
-| **Control lock auto-relock**               | Off, and no switch exists                                                                                                | A switch that, while armed, refuses every control command. Anyone can arm it; only a logged-in administrator can disarm it. `0` holds the disarm until someone re-arms; any other value re-arms after that many minutes.                        | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
-| **Relay debounce**                         | 2 seconds — **the one default that is not what your panel did before this release**; set `0` to restore that             | A second command to the same circuit's relay inside the window. Refused, never queued.                                                                                                                                                          | It is per circuit, so an automation cycling many circuits still gets through.                                              |
+| Option                                     | Default                                                                                                                                                                                              | What it refuses                                                                                                                                                                                                                                 | What it does not do                                                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Who may operate the panel**              | Administrators only for a new install. An install set up before this default changed keeps its setting: any Home Assistant user, which is Home Assistant's own policy, unless you had chosen another | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and locks, and adopted controls from non-admin users. `Nobody` also stops those entities being created.                                         | Neither touches sensors. Neither reaches an automation, which runs with no user at all — pair it with the next option.     |
+| **Allow control without a logged-in user** | Off for a new install. An install set up before this default changed keeps its setting: on, unless you had turned it off                                                                             | While off, refuses every command with no user attached: all automations, and any script or integration an automation calls. A script a person runs keeps that person's user and is unaffected. Turn it on if your automations operate circuits. | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
+| **Control lock auto-relock**               | Off, and no switch exists                                                                                                                                                                            | A switch that, while armed, refuses every control command. Anyone can arm it; only a logged-in administrator can disarm it. `0` holds the disarm until someone re-arms; any other value re-arms after that many minutes.                        | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
+| **Relay debounce**                         | 2 seconds — **the one default that is not what your panel did before this release**; set `0` to restore that                                                                                         | A second command to the same circuit's relay inside the window. Refused, never queued.                                                                                                                                                          | It is per circuit, so an automation cycling many circuits still gets through.                                              |
 
 **What none of this defends against.** These options constrain callers arriving through Home Assistant, and nothing else. Anything already holding the broker
 credential — a second Home Assistant instance, a script you wrote, a malicious custom integration reading it out of this process's memory — publishes to the
@@ -714,7 +751,8 @@ sent over a connection that cannot be verified.
 
 **If the panel does not report the outcome, assume the passphrase may have changed.** Run the action again: its response gives you a passphrase you know. It
 works whether or not the integration is loaded, because the panel does not revoke the integration's access token. If the panel refuses that rotation,
-reauthenticate the integration, using proof of proximity if the old passphrase is no longer accepted.
+reauthenticate the integration, using proof of proximity if the old passphrase is no longer accepted, or the passphrase shown in the SPAN app on a panel that
+registers by passphrase only.
 
 **If the response says `reconnected: false`, save the passphrase, then rotate again.** The integration has stored the new password, but the broker was still
 refusing it after about a minute. Run the action again, even though the integration is not loaded: the integration uses the newly returned password, and the
@@ -722,16 +760,17 @@ passphrase in that response is the one to keep. As a last resort, restart the pa
 
 ### Recommended deployment
 
-The panel credential is a single all-or-nothing secret, and anyone standing at the panel can mint a fresh one with three presses of the door switch. Network
-topology and physical control of the panel are the real boundary; everything above is defense in depth behind it.
+The panel credential is a single all-or-nothing secret, and anyone standing at the panel can mint a fresh one with three presses of the door switch, except on a
+panel that registers by passphrase only. Network topology and physical control of the panel are the real boundary; everything above is defense in depth behind
+it.
 
 - **Put the panel on a trusted VLAN**, with default-deny between VLANs, and allow only the Home Assistant host to reach it. Open `tcp/443` (REST), `tcp/8883`
   (MQTTS) and `tcp/80` (the plaintext certificate-authority fetch, and REST too until the entry pins), and deny `tcp/9001` and `tcp/9002` unless you are
   actively using the SPAN Home on-premise UI.
 - **Use the IP address or an FQDN, and the `.local` name only** if you have an mDNS repeater like Avahi. The panel's IP is already in its certificate SAN, and
   for an FQDN the integration registers it so the panel adds it.
-- **Secure the panel enclosure**, because the three-press proximity bypass hands full credentials to anyone who can open the door — the equivalent of a printed
-  root password. This outranks every software control on this page.
+- **Secure the panel enclosure**, because, on a panel that offers proof of proximity, the three-press bypass hands full credentials to anyone who can open the
+  door — the equivalent of a printed root password. This outranks every software control on this page.
 - **Put dashboard-only household members in Home Assistant's read-only group.** Home Assistant's default user policy grants every non-admin user control of
   every entity, which includes this integration's circuit switches and priority selects.
 - **Encrypt your Home Assistant backups.** An unencrypted backup contains `.storage/core.config_entries`, and the panel credentials in it are in plaintext.
@@ -758,11 +797,12 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **High CPU usage**                                                           | Elevated CPU on low-power hardware (e.g. Raspberry Pi). The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default 1 s).                                                                                                                                                                                                                                                                 | Increase**Snapshot Update Interval** in **General Options**. 10–15 s is recommended for resource-constrained systems. Setting it to 0 disables debouncing and rebuilds on every MQTT message — not recommended.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **Replaced sub-device shows the old serial number**                          | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In**Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **Door sensor unavailable**                                                  | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **No switch on a circuit**                                                   | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The panel does not let you control the circuit, so no switch is created. That is the case for circuits set in the SPAN App as "Always on Circuits"; for solar and EV charger circuits; and, from panel firmware r202639, for the Commissioned PV System and Commissioned Backup System circuits, whose switch and priority select from earlier firmware are removed. A circuit set to never back up keeps its switch but has no priority select.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **No switch on a circuit**                                                   | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The panel does not let you control the circuit, so no switch is created. That is the case for circuits set in the SPAN App as "Always on Circuits"; for solar and EV charger circuits; for a remote CT, which has no breaker; and, from panel firmware r202639, for the Commissioned PV System and Commissioned Backup System circuits, whose switch and priority select from earlier firmware are removed. A circuit set to never back up keeps its switch but has no priority select.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before.                                                                                                                                                                                                                                       | Home Assistant remembers a removed entity for**30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned.                                                                                                                                                                                                                                                                             |
 | **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | The release that stopped storing the panel passphrase migrated the config entry to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel.**If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                                                                                                                                                                                                                                                                                                          |
 | **A circuit re-commissioned in the SPAN App has the wrong controls**         | A circuit whose configuration changed in the SPAN App — made controllable, locked, or set to never back up — seems to have the wrong controls.                                                                                                                                                                                                                                                                                      | Nothing needs doing. When the panel changes which controls a circuit allows, the integration reloads on its own and creates or removes that circuit's Breaker switch and priority select to match. A removed control returns with its entity ID, name and area when the panel offers it again. If a control still looks wrong, reload the integration (**Settings → Devices & Services → Span Panel → ⋮ → Reload**).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **"SPAN Panel hardware not validated with this release" repair**             | Setup has stopped with a repair naming the panel's hardware version and model, and no entities are created for that panel.                                                                                                                                                                                                                                                                                                          | This release has not been validated with that panel hardware, so it does not set the panel up; a MAIN 32 always proceeds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **The Adopted tab is missing from the dashboard**                            | The dashboard offers By Activity, By Area and Monitoring, but neither**Adopted** nor **By Panel**.                                                                                                                                                                                                                                                                                                                                  | The panel dropdown at the top of the dashboard is on**Favorites**, which merges every configured panel into one workspace rather than being a panel itself, so the tabs that only mean something for a single panel are not offered there. Switch the dropdown to a panel and both come back; the selection is remembered per browser. Adopted is also administrator-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **A control reports `unconfirmed`**                                          | The logbook or the`span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                      | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                                                                                                      |
 
@@ -771,6 +811,11 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 To collect debug logs, use **Enable debug logging** on the integration's page (**Settings → Devices & Services → Span Panel**), which covers this integration
 and `span_panel_api`. Do not enable debug logging for the `homie` logger: it logs every value the panel publishes, including its postal code and Wi-Fi network
 name, and a log attached to an issue would publish them.
+
+### Diagnostics
+
+**Download diagnostics** on the integration's page includes the panel's device tree, every device and property it publishes, with serial numbers, device ids and
+site details masked.
 
 ## Development
 

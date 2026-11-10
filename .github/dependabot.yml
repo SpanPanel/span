@@ -10,6 +10,10 @@ updates:
     open-pull-requests-limit: 1
     allow:
       - dependency-type: "all"
+    # `ebus-panel-sim` is deliberately in none of these groups. Its data is the
+    # reference captures the replay tests read, so its bump can move the expected
+    # entity and topology files, and that diff deserves a PR of its own rather
+    # than a line in a tooling bump.
     groups:
       # Group development dependencies together
       dev-dependencies:

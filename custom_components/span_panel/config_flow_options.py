@@ -26,6 +26,7 @@ from .const import (
 )
 from .control_gate import (
     DEFAULT_ALLOW_CONTEXTLESS_CONTROL,
+    DEFAULT_CONTROL_MODE,
     DEFAULT_RELAY_DEBOUNCE_SECONDS,
     ControlMode,
 )
@@ -103,9 +104,10 @@ def get_general_options_defaults(
         # Every default below reproduces what an entry already does. A silent
         # tightening on upgrade would break a household's automations with an
         # error the user cannot diagnose from the entity. Contextless control
-        # can default to off only because migration 7.2 stored the old `True`
-        # in every entry that predates it.
-        CONTROL_MODE: config_entry.options.get(CONTROL_MODE, ControlMode.ALL_USERS.value),
+        # can default to off, and the mode to administrators, only because
+        # migrations 7.2 and 7.4 stored the old values in every entry that
+        # predates them.
+        CONTROL_MODE: config_entry.options.get(CONTROL_MODE, DEFAULT_CONTROL_MODE.value),
         ALLOW_CONTEXTLESS_CONTROL: config_entry.options.get(
             ALLOW_CONTEXTLESS_CONTROL, DEFAULT_ALLOW_CONTEXTLESS_CONTROL
         ),

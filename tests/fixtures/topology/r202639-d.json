@@ -1,0 +1,406 @@
+{
+  "circuits": {
+    "circuit-1": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_kitchen_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_kitchen_lights_consumed_energy",
+        "current": "sensor.span_panel_bedroom_kitchen_lights_current",
+        "net_energy": "sensor.span_panel_bedroom_kitchen_lights_net_energy",
+        "power": "sensor.span_panel_bedroom_kitchen_lights_power",
+        "produced_energy": "sensor.span_panel_bedroom_kitchen_lights_produced_energy",
+        "select": "select.span_panel_bedroom_kitchen_lights_circuit_priority",
+        "switch": "switch.span_panel_bedroom_kitchen_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Bedroom, Kitchen / Lights",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        3
+      ],
+      "voltage": 120.0
+    },
+    "circuit-2": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_office_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_office_outlets_consumed_energy",
+        "current": "sensor.span_panel_office_outlets_current",
+        "net_energy": "sensor.span_panel_office_outlets_net_energy",
+        "power": "sensor.span_panel_office_outlets_power",
+        "produced_energy": "sensor.span_panel_office_outlets_produced_energy",
+        "select": "select.span_panel_office_outlets_circuit_priority",
+        "switch": "switch.span_panel_office_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Office / Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        11
+      ],
+      "voltage": 120.0
+    },
+    "circuit-3": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_utility_room_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_utility_room_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_utility_room_lights_outlets_current",
+        "net_energy": "sensor.span_panel_utility_room_lights_outlets_net_energy",
+        "power": "sensor.span_panel_utility_room_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_utility_room_lights_outlets_produced_energy",
+        "select": "select.span_panel_utility_room_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_utility_room_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Utility room / Lights & Outlets",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        19
+      ],
+      "voltage": 120.0
+    },
+    "circuit-4": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_electric_oven_breaker_rating",
+        "consumed_energy": "sensor.span_panel_electric_oven_consumed_energy",
+        "current": "sensor.span_panel_electric_oven_current",
+        "net_energy": "sensor.span_panel_electric_oven_net_energy",
+        "power": "sensor.span_panel_electric_oven_power",
+        "produced_energy": "sensor.span_panel_electric_oven_produced_energy",
+        "select": "select.span_panel_electric_oven_circuit_priority",
+        "switch": "switch.span_panel_electric_oven_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Electric oven",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14,
+        16
+      ],
+      "voltage": 240.0
+    },
+    "circuit-5": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_type": "evse",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ev_charger_flex_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ev_charger_flex_consumed_energy",
+        "current": "sensor.span_panel_ev_charger_flex_current",
+        "net_energy": "sensor.span_panel_ev_charger_flex_net_energy",
+        "power": "sensor.span_panel_ev_charger_flex_power",
+        "produced_energy": "sensor.span_panel_ev_charger_flex_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "FLEX⁺",
+      "outside_panel": false,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22,
+        24
+      ],
+      "voltage": 240.0
+    },
+    "circuit-8": {
+      "always_on": true,
+      "breaker_rating_a": 40.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_lucid_charger_breaker_rating",
+        "consumed_energy": "sensor.span_panel_lucid_charger_consumed_energy",
+        "current": "sensor.span_panel_lucid_charger_current",
+        "net_energy": "sensor.span_panel_lucid_charger_net_energy",
+        "power": "sensor.span_panel_lucid_charger_power",
+        "produced_energy": "sensor.span_panel_lucid_charger_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": false,
+      "name": "Lucid charger",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "OPEN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13,
+        15
+      ],
+      "voltage": 240.0
+    },
+    "circuit-9": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_neutral_forming_transformer_nft_breaker_rating",
+        "consumed_energy": "sensor.span_panel_neutral_forming_transformer_nft_consumed_energy",
+        "current": "sensor.span_panel_neutral_forming_transformer_nft_current",
+        "net_energy": "sensor.span_panel_neutral_forming_transformer_nft_net_energy",
+        "power": "sensor.span_panel_neutral_forming_transformer_nft_power",
+        "produced_energy": "sensor.span_panel_neutral_forming_transformer_nft_produced_energy",
+        "select": "select.span_panel_neutral_forming_transformer_nft_circuit_priority",
+        "switch": "switch.span_panel_neutral_forming_transformer_nft_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "name": "Neutral forming transformer (NFT)",
+      "outside_panel": false,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        6,
+        8
+      ],
+      "voltage": 240.0
+    }
+  },
+  "config_entry_id": "entry-r202639-d",
+  "device_id": "xg-1334-066e8",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 24,
+  "panel_device_id": "xg-1334-066e8",
+  "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 24,
+  "serial": "xg-1334-066e8",
+  "sub_devices": {
+    "xg-1334-066e8_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_xg-1334-066e8_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_xg-1334-066e8_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_xg-1334-066e8_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_xg-1334-066e8_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_xg-1334-066e8_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_xg-1334-066e8_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_xg-1334-066e8_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_xg-1334-066e8_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-1334-066e8_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_xg-1334-066e8_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_xg-1334-066e8_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_xg-1334-066e8_bess_vendor"
+        }
+      },
+      "manufacturer": "Lucid",
+      "model": "Battery Storage",
+      "name": "Span Panel Battery",
+      "serial_number": "6689454643",
+      "sw_version": null,
+      "type": "bess"
+    },
+    "xg-1334-066e8_evse_dt-5599-00321": {
+      "entities": {
+        "binary_sensor.span_panel_ev_charger_flex_charging": {
+          "domain": "binary_sensor",
+          "original_name": "Charging",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_charging"
+        },
+        "binary_sensor.span_panel_ev_charger_flex_ev_connected": {
+          "domain": "binary_sensor",
+          "original_name": "EV Connected",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_ev_connected"
+        },
+        "binary_sensor.span_panel_ev_charger_flex_evse_panel_link": {
+          "domain": "binary_sensor",
+          "original_name": "EVSE Panel Link",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_panel_link"
+        },
+        "lock.span_panel_ev_charger_flex_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_lock"
+        },
+        "number.span_panel_ev_charger_flex_evse_charge_current_limit": {
+          "domain": "number",
+          "original_name": "EVSE Charge Current Limit",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_charge_current_limit"
+        },
+        "sensor.span_panel_ev_charger_flex_breaker_rating": {
+          "domain": "sensor",
+          "original_name": "Breaker Rating",
+          "unique_id": "span_xg-1334-066e8_circuit-5_breaker_rating"
+        },
+        "sensor.span_panel_ev_charger_flex_charger_status": {
+          "domain": "sensor",
+          "original_name": "Charger Status",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_status"
+        },
+        "sensor.span_panel_ev_charger_flex_consumed_energy": {
+          "domain": "sensor",
+          "original_name": "Consumed Energy",
+          "unique_id": "span_xg-1334-066e8_circuit-5_energy_consumed"
+        },
+        "sensor.span_panel_ev_charger_flex_current": {
+          "domain": "sensor",
+          "original_name": "Current",
+          "unique_id": "span_xg-1334-066e8_circuit-5_current"
+        },
+        "sensor.span_panel_ev_charger_flex_lock_state": {
+          "domain": "sensor",
+          "original_name": "Lock State",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_lock_state"
+        },
+        "sensor.span_panel_ev_charger_flex_net_energy": {
+          "domain": "sensor",
+          "original_name": "Net Energy",
+          "unique_id": "span_xg-1334-066e8_circuit-5_energy_net"
+        },
+        "sensor.span_panel_ev_charger_flex_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-1334-066e8_evse_dt-5599-00321_evse_part_number"
+        },
+        "sensor.span_panel_ev_charger_flex_power": {
+          "domain": "sensor",
+          "original_name": "Power",
+          "unique_id": "span_xg-1334-066e8_circuit-5_power"
+        },
+        "sensor.span_panel_ev_charger_flex_produced_energy": {
+          "domain": "sensor",
+          "original_name": "Produced Energy",
+          "unique_id": "span_xg-1334-066e8_circuit-5_energy_produced"
+        }
+      },
+      "manufacturer": "SPAN",
+      "model": "SPAN Drive",
+      "name": "Span Panel EV Charger (FLEX⁺)",
+      "serial_number": "dt-5599-00321",
+      "sw_version": "001.001.011.980bd33.8a49f9f1.b1c7ea7d.A",
+      "type": "evse"
+    },
+    "xg-1334-066e8_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_xg-1334-066e8_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Lucid",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "0751202395-uex",
+      "sw_version": null,
+      "type": "mid"
+    }
+  }
+}

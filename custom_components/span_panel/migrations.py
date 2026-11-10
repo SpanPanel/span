@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_API_VERSION, CONF_HOP_PASSPHRASE, PANEL_CA_PENDING
-from .options import ALLOW_CONTEXTLESS_CONTROL
+from .control_gate import ControlMode
+from .options import ALLOW_CONTEXTLESS_CONTROL, CONTROL_MODE
 
 if TYPE_CHECKING:
     from .runtime import SpanPanelConfigEntry
@@ -19,17 +20,19 @@ _LOGGER = logging.getLogger(__name__)
 
 # Must match the storage version produced by the latest supported entry format.
 CURRENT_CONFIG_VERSION = 7
-CURRENT_CONFIG_MINOR_VERSION = 3
+CURRENT_CONFIG_MINOR_VERSION = 4
 
 _UNMAPPED_TAB_SENSORS_OPTION = "enable_unmapped_circuit_sensors"
 """The retired option's key, spelled out because nothing else reads it any more."""
+
+_CONTROL_MODE_VALUES = frozenset(mode.value for mode in ControlMode)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> bool:
     """Migrate config entry through successive versions.
 
     Supports upgrades from v1.3.1+ (config version 2) through to the
-    current version 7.3. Each step mutates only the fields relevant to
+    current version 7.4. Each step mutates only the fields relevant to
     that version boundary.
 
     Core also calls this for an entry a newer release has already moved past
@@ -202,6 +205,26 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
             minor_version=3,
         )
         _LOGGER.debug("Migrated config entry %s to version 7.3", config_entry.entry_id)
+
+    # --- v7.3 → v7.4: pin who may operate the panel to what it was ---
+    if config_entry.version == 7 and config_entry.minor_version < 4:
+        updated_options = dict(config_entry.options)
+        # The default for an entry that never stored this became administrators
+        # only. Every entry reaching this step was created before that, when
+        # anything but a known mode resolved to any user, so that is written
+        # down here rather than letting an upgrade take the panel's controls
+        # away from a household's non-admin users. A known mode is the user's
+        # own choice and is kept.
+        stored_mode = updated_options.get(CONTROL_MODE)
+        if not (isinstance(stored_mode, str) and stored_mode in _CONTROL_MODE_VALUES):
+            updated_options[CONTROL_MODE] = ControlMode.ALL_USERS.value
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=updated_options,
+            minor_version=4,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 7.4", config_entry.entry_id)
 
     return True
 
