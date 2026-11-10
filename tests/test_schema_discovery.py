@@ -187,6 +187,8 @@ def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = findings
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="example-40t-001")
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,

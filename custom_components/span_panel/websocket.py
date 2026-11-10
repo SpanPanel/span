@@ -9,16 +9,20 @@ from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from span_panel_api import shared_meter_groups
 import voluptuous as vol
 
 from .const import DOMAIN
 from .control_gate import ControlMode
+from .energy_orientation import circuit_is_generation
 from .entity_resolver import entity_id_in_entry
 from .helpers import (
     build_panel_unique_id,
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
     construct_voltage_attribute,
+    outside_meter_label,
+    shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -147,6 +151,12 @@ async def handle_panel_topology(
     # The `power` role of every circuit, for the `solar` blocks below.
     circuit_power = {cid: roles["power"] for cid, roles in entity_map.items() if "power" in roles}
 
+    # The group each circuit's meter and relay belong to, by the group's key;
+    # a circuit that shares neither is in no group. Membership only: every
+    # member reports the one meter's readings, so the card counts a group once.
+    meter_group = _group_of(shared_meter_groups(snapshot.circuits))
+    relay_group = _group_of(shared_relay_groups(snapshot.circuits))
+
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
@@ -156,7 +166,20 @@ async def handle_panel_topology(
         tabs = sorted(circuit.tabs) if circuit.tabs else []
         circuits[circuit_id] = {
             "tabs": tabs,
-            "name": circuit.name or None,
+            # A meter without a breaker space publishes no name; it carries the
+            # label its entities are named by, so the card never shows it nameless.
+            "name": (
+                outside_meter_label(circuit_id)
+                if circuit.measures_outside_panel
+                else circuit.name or None
+            ),
+            # Outside the panel: no breaker space, so no slot in the breaker grid.
+            "outside_panel": circuit.measures_outside_panel,
+            # The predicate this circuit's power and energy are oriented by, so
+            # the card never re-derives generation from the device type.
+            "is_generation": circuit_is_generation(circuit),
+            "shared_meter_group": meter_group.get(circuit_id),
+            "shared_relay_group": relay_group.get(circuit_id),
             # Same inference as the entity attribute, from the same helper: a
             # pole count answers this for one and two poles and not beyond, and
             # null says so rather than the previous 120, which this branch
@@ -167,7 +190,8 @@ async def handle_panel_topology(
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
             "breaker_rating_a": circuit.breaker_rating_a,
-            "always_on": circuit.always_on,
+            # Backup facts belong to a breaker; a meter outside the panel has none.
+            "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
             "priority_target": circuit.priority_target,
             # Whether `priority` above can be written, which is a different
@@ -178,7 +202,7 @@ async def handle_panel_topology(
             # directions. Carried even though no entity is created for such a
             # circuit, because a consumer rendering from this record has no
             # other way to tell a pinned priority from an absent one.
-            "is_never_backup": circuit.is_never_backup,
+            "is_never_backup": None if circuit.measures_outside_panel else circuit.is_never_backup,
             "entities": _offered_roles(
                 entity_map.get(circuit_id, {}), circuit, runtime_data.control_policy.mode
             ),
@@ -228,6 +252,10 @@ async def handle_panel_topology(
             "serial": snapshot.serial_number,
             "firmware": snapshot.firmware_version,
             "panel_size": snapshot.panel_size,
+            # The panel's first and last breaker positions, occupied or not, as
+            # the snapshot reports them; null where the panel does not say.
+            "first_position": snapshot.first_position,
+            "last_position": snapshot.last_position,
             "device_id": msg["device_id"],
             # The panel's current device and the entry that owns it. They differ
             # from what the request carried only when that was an id saved before
@@ -241,6 +269,11 @@ async def handle_panel_topology(
             "sub_devices": sub_devices,
         },
     )
+
+
+def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:
+    """Map every member of every group to its group's key."""
+    return {member: key for key, members in groups.items() for member in members}
 
 
 def _classify_sub_device(device_entry: dr.DeviceEntry) -> str:

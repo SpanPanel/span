@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from hashlib import sha256
 import logging
+import re
+from typing import Final
 
 from homeassistant.helpers import entity_registry as er
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot, SpanPVSnapshot
+from span_panel_api import (
+    SpanCircuitSnapshot,
+    SpanPanelSnapshot,
+    SpanPVSnapshot,
+    shared_meter_groups,
+)
 
 from .entity_resolver import (  # noqa: F401
     build_bess_unique_id_for_entry,
@@ -50,6 +58,7 @@ from .id_builder import (  # noqa: F401
     get_user_friendly_suffix,
     match_circuit_id,
 )
+from .solar_sources import solar_sources
 
 __all__ = [
     "ALL_SUFFIX_MAPPINGS",
@@ -78,6 +87,8 @@ __all__ = [
     "construct_binary_sensor_unique_id",
     "construct_circuit_identifier_from_tabs",
     "construct_circuit_label",
+    "construct_shared_with_attribute",
+    "construct_shared_with_attributes",
     "construct_circuit_unique_id",
     "construct_circuit_unique_id_for_entry",
     "construct_panel_unique_id",
@@ -103,10 +114,12 @@ __all__ = [
     "identity_digest",
     "pv_inverter_capability_tokens",
     "match_circuit_id",
+    "outside_meter_label",
     "remove_withdrawn_controls",
     "resolve_evse_display_suffix",
     "resolve_pv_display_suffix",
     "resolve_pv_display_suffixes",
+    "shared_relay_groups",
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -217,6 +230,26 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
     return f"Circuit {circuit_id}"
 
 
+OUTSIDE_METER_LABEL_FORMAT: Final = "Remote CT {}"
+"""How a meter without a breaker space is named, filled by `outside_meter_label`."""
+
+_TRAILING_DIGITS: Final = re.compile(r"(\d+)$")
+
+
+def outside_meter_label(circuit_id: str) -> str:
+    """Name a meter that has no breaker space, from its own id alone.
+
+    Such a meter publishes no name and occupies no position, so neither the
+    panel's name nor the breaker-position fallback can name it. The id's
+    trailing number names it where there is one, and the whole id otherwise.
+    Nothing else feeds the label: another meter appearing or leaving never
+    renames this one, and the entity names and the topology rows both call
+    here, so they always agree.
+    """
+    match = _TRAILING_DIGITS.search(circuit_id)
+    return OUTSIDE_METER_LABEL_FORMAT.format(match.group(1) if match else circuit_id)
+
+
 def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str) -> str:
     """Name a circuit the way its owner knows it, for a message addressed to them.
 
@@ -230,6 +263,55 @@ def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str
         return circuit.name
     tabs = circuit.tabs if circuit is not None else []
     return construct_circuit_identifier_from_tabs(tabs, circuit_id)
+
+
+def construct_shared_with_attribute(
+    snapshot: SpanPanelSnapshot, peer_ids: tuple[str, ...] | None
+) -> list[str] | None:
+    """Name the circuits a meter or relay is shared with, as their owner knows them.
+
+    Each peer by its panel name, or by its breaker positions where it has none
+    (`construct_circuit_label`), never by its id. None where the circuit does not
+    say whom it shares with, so a circuit that shares nothing carries no
+    attribute; an empty list where it says so and names no circuit the panel has.
+    """
+    if peer_ids is None:
+        return None
+    return [construct_circuit_label(snapshot.circuits.get(peer), peer) for peer in peer_ids]
+
+
+def construct_shared_with_attributes(
+    snapshot: SpanPanelSnapshot, circuit: SpanCircuitSnapshot
+) -> dict[str, list[str]]:
+    """Return the `meter_shared_with` and `relay_shared_with` attributes of a circuit's entities.
+
+    Each only where the circuit says whom it shares that hardware with. The
+    peers' readings are the same meter's, so nothing here or anywhere else
+    adds them up.
+    """
+    attributes: dict[str, list[str]] = {}
+    meter = construct_shared_with_attribute(snapshot, circuit.meter_shared_with)
+    if meter is not None:
+        attributes["meter_shared_with"] = meter
+    relay = construct_shared_with_attribute(snapshot, circuit.relay_shared_with)
+    if relay is not None:
+        attributes["relay_shared_with"] = relay
+    return attributes
+
+
+def shared_relay_groups(circuits: Mapping[str, SpanCircuitSnapshot]) -> dict[str, tuple[str, ...]]:
+    """Group the circuits one relay switches, keyed by their first member.
+
+    The library groups by meter; a relay's peers form groups by the same rule,
+    so its one implementation is reused over each circuit's relay peers rather
+    than copied here.
+    """
+    return shared_meter_groups(
+        {
+            circuit_id: replace(circuit, meter_shared_with=circuit.relay_shared_with)
+            for circuit_id, circuit in circuits.items()
+        }
+    )
 
 
 def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
@@ -270,14 +352,17 @@ def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
     return f"tabs [{':'.join(str(tab) for tab in sorted(circuit.tabs))}]"
 
 
-def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
-    """Return the nominal voltage for a circuit, inferred from its pole count.
+def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> float | None:
+    """Return the nominal voltage for a circuit: the one it declares, else one inferred from its pole count.
 
-    **Nominal, not measured, and there is nothing better to read.** The eBus
-    circuit ``meter`` capability publishes current, active power and energy
-    only; voltage is a panel-level quantity, published as the enclosure's
-    ``meter/voltage-a`` / ``voltage-b``. No per-circuit voltage exists on the
-    wire.
+    **The declared rating comes first.** A circuit that publishes
+    ``info/nominal-voltage`` has said what it is rated for, and that answer
+    needs no inference; everything below is the fallback for one that has not.
+
+    **Nominal, not measured.** The eBus circuit ``meter`` capability publishes
+    current, active power and energy only; measured voltage is a panel-level
+    quantity, published as the enclosure's ``meter/voltage-a`` /
+    ``voltage-b``.
 
     **It is derived from the pole count, not from the positions.** Those are
     different claims and only the second would be unsound: the specification
@@ -303,10 +388,13 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
         circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
-        120 for a single-pole circuit, 240 for a two-pole one, or None when
-        there is no tab information or the pole count does not determine it
+        The declared nominal voltage where there is one; otherwise 120 for a
+        single-pole circuit, 240 for a two-pole one, or None when there is no
+        tab information or the pole count does not determine it
 
     """
+    if circuit.nominal_voltage_v is not None:
+        return circuit.nominal_voltage_v
     if not circuit.tabs:
         return None
 
@@ -320,14 +408,28 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
 def has_bess(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether a BESS (battery energy storage system) is commissioned.
 
-    Only soe_percentage is a reliable signal — the power-flows node publishes
+    Where the panel declares its devices, the declaration decides: a battery
+    the tree describes is one, before any of its values arrive, so its sensors
+    exist and read unknown rather than appearing only once it reports. Where
+    it does not (`battery.present` is None, as on the flat schema), only
+    soe_percentage is a reliable signal — the power-flows node publishes
     battery=0.0 even on panels without a commissioned BESS.
     """
+    if snapshot.battery.present is not None:
+        return snapshot.battery.present
     return snapshot.battery.soe_percentage is not None
 
 
 def has_pv(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether PV (solar) is commissioned."""
+    """Detect whether PV (solar) is commissioned.
+
+    Where the panel says where its solar is (`publishes_solar_roles`), only a
+    solar source is evidence: a published inverter, or a circuit whose role is
+    solar. Its power-flows PV figure alone is not, since a panel with a battery
+    and no solar publishes it as 0.0. Elsewhere the rule is unchanged.
+    """
+    if snapshot.publishes_solar_roles:
+        return bool(solar_sources(snapshot))
     return snapshot.power_flow_pv is not None or any(
         c.device_type == "pv" for c in snapshot.circuits.values()
     )
@@ -600,11 +702,13 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
 
 
 def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-    """One token per inverter key, one inverter or several, so a key the panel starts publishing reloads.
+    """One token per solar source key, one source or several, so a key the panel starts publishing reloads.
 
-    Digested because a key can be a device id, which carries the panel serial; see `identity_digest`.
+    Every source, a solar-role circuit as well as a published inverter, so a
+    source appearing re-resolves the binding. Digested because a key can be a
+    device id, which carries the panel serial; see `identity_digest`.
     """
-    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in snapshot.pv_inverters)
+    return frozenset(f"pv_inverter:{identity_digest(key)}" for key in solar_sources(snapshot))
 
 
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:

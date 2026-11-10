@@ -250,7 +250,7 @@ class SpanPanelSnapshotFactory:
         # service entrance is the ordinary case, and flat firmware cannot be
         # anything else. A fixture opts out to model a chained panel or one behind
         # an upstream DER.
-        lugs_at_service_entrance: bool = True,
+        lugs_at_service_entrance: bool | None = True,
     ) -> SpanPanelSnapshot:
         """Create a SpanPanelSnapshot with reasonable defaults."""
         if circuits is None:

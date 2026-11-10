@@ -13,7 +13,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
+from span_panel_api import MaskedTree, SpanPanelSnapshot, SpanPVSnapshot, TreeExportingAdapter
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -35,7 +35,8 @@ from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
-from .adapter_fixtures import schema_one_snapshot
+from .adapter_fixtures import schema_one_snapshot, schema_one_tree
+from .captures_replay import replay
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
@@ -85,6 +86,8 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     # this unset would let the discovery block render as an empty report rather
     # than as the "no metadata yet" state it actually is.
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
 
     # Version 6 deliberately: an entry that has not yet been through the v7
     # migration still carries the passphrase, and redaction must still cover it.
@@ -187,6 +190,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         },
         evse={},
         pv_inverters={},
+        publishes_solar_roles=False,
+        power_flow_pv=None,
         battery=None,
         adopted_devices=(),
         lugs_at_service_entrance=True,
@@ -198,6 +203,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.panel_offline = True
     coordinator.last_update_success = False
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
     entry.runtime_data = SpanPanelRuntimeData(
@@ -270,6 +277,8 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     # The real runtime data, not a namespace, for the reason the circuit double
     # above is the real model: a hand-rolled stand-in carrying only the fields
     # the dump happened to read when it was written goes stale silently, and
@@ -319,6 +328,8 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
@@ -354,6 +365,8 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     identity = pv_binding_for(snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -402,6 +415,8 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
@@ -429,6 +444,8 @@ async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnaps
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id="panel-device-id",
@@ -506,14 +523,35 @@ async def test_a_withheld_inverters_device_id_key_is_digested(hass: HomeAssistan
 # -- site data never leaves the house in a dump ------------------------------
 
 
-def _reference_entry(snapshot: SpanPanelSnapshot) -> MockConfigEntry:
-    """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it."""
+def _export(tree: dict[str, dict[str, str]]) -> MaskedTree:
+    """The masked export the library produces for `tree`, replayed as the broker delivers it."""
+    adapter = replay(tree)
+    assert isinstance(adapter, TreeExportingAdapter)
+    export = adapter.export_masked_tree()
+    assert export is not None
+    return export
+
+
+def _reference_entry(
+    snapshot: SpanPanelSnapshot,
+    tree: dict[str, dict[str, str]] | None = None,
+    *,
+    schema_major: str = "schema_1",
+    panel_offline: bool = False,
+) -> MockConfigEntry:
+    """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it.
+
+    Given `tree`, the client exports the library's real masked tree for it, so a
+    test of what reaches the dump is a test of what the library masks.
+    """
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.panel_offline = False
+    coordinator.panel_offline = panel_offline
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
+    coordinator.client.schema_major = schema_major
+    coordinator.client.masked_tree.return_value = None if tree is None else _export(tree)
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -534,7 +572,7 @@ async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> 
     snapshot = schema_one_snapshot()
     assert snapshot.wifi_ssid
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot))
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot, schema_one_tree()))
 
     assert result["panel"]["wifi_ssid"] == REDACTED
     assert snapshot.wifi_ssid not in json.dumps(result, default=str)
@@ -543,8 +581,9 @@ async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> 
 async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
     """The postal code the panel publishes reaches no dump, and its entity is not taken away.
 
-    The entity is disabled by default and stays: removing it would remove one a
-    user may have enabled.
+    The entity is disabled by default and stays where an install already holds
+    it: removing it would remove one a user may have enabled. A new install
+    creates none (`test_privacy.py`).
     """
     snapshot = schema_one_snapshot()
     (postal_code,) = (
@@ -552,7 +591,7 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
     )
     assert postal_code.value
 
-    entry = _reference_entry(snapshot)
+    entry = _reference_entry(snapshot, schema_one_tree())
     result = await async_get_config_entry_diagnostics(hass, entry)
 
     assert postal_code.value not in json.dumps(result, default=str)
@@ -562,6 +601,12 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, snapshot.serial_number)},
         name="Span Panel",
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"span_{snapshot.serial_number}_adopted_panel/{postal_code.path}",
+        config_entry=entry,
     )
     sensors = create_extension_sensors(
         entry.runtime_data.coordinator,
@@ -578,3 +623,46 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
         if (sensor.extra_state_attributes or {}).get("wire_path") == postal_code.path
     )
     assert postal_code_sensor.entity_registry_enabled_default is False
+
+
+# -- the masked device tree --------------------------------------------------
+
+
+async def test_diagnostics_carry_the_masked_device_tree(hass: HomeAssistant) -> None:
+    """The report carries the library's masked export as it is, so a case needs no separate capture."""
+    snapshot = schema_one_snapshot()
+    export = _export(schema_one_tree())
+
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot, schema_one_tree()))
+
+    assert result["device_tree"] == export
+    assert "device_tree_unavailable" not in result
+
+
+async def test_diagnostics_say_a_flat_panel_has_no_tree(hass: HomeAssistant) -> None:
+    """A flat data model has no device tree to export, and the report says that is why."""
+    entry = _reference_entry(schema_one_snapshot(), schema_major="schema_0")
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["device_tree"] is None
+    assert result["device_tree_unavailable"] == "flat_data_model"
+
+
+async def test_diagnostics_say_an_undescribed_panel_has_no_tree(hass: HomeAssistant) -> None:
+    """A parent/child panel that has not described its root yet has nothing to export."""
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(schema_one_snapshot()))
+
+    assert result["device_tree"] is None
+    assert result["device_tree_unavailable"] == "not_described"
+
+
+async def test_an_offline_panel_still_reports_its_last_tree(hass: HomeAssistant) -> None:
+    """A panel that dropped off is the case a report is written about, so its last tree stays."""
+    export = _export(schema_one_tree())
+    entry = _reference_entry(schema_one_snapshot(), schema_one_tree(), panel_offline=True)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["coordinator"]["panel_offline"] is True
+    assert result["device_tree"] == export

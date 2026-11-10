@@ -1,6 +1,6 @@
 """Each captured panel produces exactly the devices, entities and topology on file for it.
 
-Every capture in `tests/fixtures/captures/` is replayed through the pinned
+Every capture `captures_replay.CAPTURES` names is replayed through the pinned
 library and set up through the integration's real `async_setup_entry`: the real
 coordinator, every platform the integration forwards, the real registries and
 the real translations. The MQTT client is the one thing replaced, by a static
@@ -31,8 +31,8 @@ until the file is regenerated in the same diff, where a reviewer reads it:
 
     pytest tests/test_expected_entities.py --update-capture-fixtures -k "<stem>]"
 
-The closing bracket matches the end of a test id, so `-k "main32]"` selects that
-one stem and not every stem that begins with it.
+The closing bracket matches the end of a test id, so `-k "main32_r202639]"`
+selects that one stem and not every variant that begins with it.
 
 The recorded `state` is the point of "a value the panel did not publish reads
 unknown, never 0": unknown, a measured 0 and a value are three different rows.
@@ -44,7 +44,7 @@ registry already holds, whatever these say. A changed `entity_id` here is a
 changed name a new user sees, and a changed `unique_id` is an entity every
 existing user loses.
 
-**Three variants of the r202639 capture are derived here rather than vendored**,
+**Three variants of the r202639 capture are derived here rather than shipped**,
 so they cannot drift from it:
 
 - one without a battery, the shape of a panel that has none: the battery and
@@ -64,7 +64,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-import hashlib
 import json
 from pathlib import Path
 from typing import Final
@@ -107,10 +106,6 @@ from custom_components.span_panel.util import SUB_DEVICE_BESS, classify_sub_devi
 
 from .captures_replay import (
     CAPTURES,
-    CAPTURES_DIR,
-    DIGESTS,
-    OWN_FILES,
-    UPSTREAM_LICENSE,
     ReplayClient,
     RetainedTree,
     capture,
@@ -218,7 +213,7 @@ def _unpublished_readings() -> RetainedTree:
 
 
 REPLAYS: Final = (
-    *(Replay(captured.stem, captured.tree) for captured in CAPTURES),
+    *(Replay(captured.name, captured.tree) for captured in CAPTURES),
     Replay(f"{R202639_CAPTURE}-no-battery", _no_battery),
     Replay(f"{R202639_CAPTURE}-battery-unvalued", _battery_unvalued),
     Replay(f"{R202639_CAPTURE}-unpublished-readings", _unpublished_readings),
@@ -419,36 +414,6 @@ def _row_diff(expected: Mapping[str, object], actual: Mapping[str, object]) -> s
 # ---------------------------------------------------------------------------
 
 
-def _recorded_digests() -> dict[str, str]:
-    recorded: dict[str, str] = {}
-    for line in DIGESTS.read_text(encoding="utf-8").splitlines():
-        digest, name = line.split(maxsplit=1)
-        recorded[name] = digest
-    return recorded
-
-
-def test_every_vendored_file_is_the_published_copy() -> None:
-    """Byte for byte what the emitter published, its license included; the README names the commit.
-
-    Exact both ways: a capture without a recorded digest has no provenance, and a
-    digest without its file describes one that went away. The license is pinned
-    with the captures because it is what lets them be copied at all.
-    """
-    vendored = (*(captured.path for captured in CAPTURES), UPSTREAM_LICENSE)
-    actual = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in vendored}
-    assert actual == _recorded_digests()
-
-
-def test_the_captures_directory_holds_only_vendored_files_and_our_own() -> None:
-    """A file that is neither vendored and pinned nor one of ours has no stated origin."""
-    present = {
-        path.name
-        for path in CAPTURES_DIR.iterdir()
-        if path.is_file() and not path.name.startswith(".")
-    }
-    assert present == set(_recorded_digests()) | OWN_FILES
-
-
 def test_no_fixture_outlives_its_replay() -> None:
     """A fixture whose replay is gone would sit on file asserting nothing."""
     stems = set(_ids(REPLAYS))
@@ -463,7 +428,7 @@ def test_the_battery_less_variant_declares_no_battery_and_forecasts_no_backup() 
     nodes = description(tree, panel).get("nodes")
 
     assert devices_of_type(tree, BATTERY_TYPE) == []
-    assert snapshot(tree).battery == SpanBatterySnapshot()
+    assert snapshot(tree).battery == SpanBatterySnapshot(present=False)
     assert _published_on(tree, panel, BACKUP_FORECAST_NODE) == []
     assert isinstance(nodes, dict) and BACKUP_FORECAST_NODE in nodes, "the declarations stay"
 

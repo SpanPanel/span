@@ -37,9 +37,6 @@ Thumbs.db
 # Poetry
 poetry.lock
 
-# Captured panels, held byte for byte to the copies they were vendored from
-tests/fixtures/captures/*-tree-v1.json
-
 # Test files (optional - remove if you want to format test files)
 # tests/
 

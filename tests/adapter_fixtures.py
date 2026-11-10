@@ -175,10 +175,10 @@ def schema_zero_snapshot() -> SpanPanelSnapshot:
     the adapter does not reference at all keeps whatever value the snapshot
     dataclass gives it, and no message can move it.
 
-    `lugs_at_service_entrance` is such a field. It is a plain `bool` defaulting
-    to True, and `span_panel_api_schema_0` contains no reference to the name, so
-    on flat firmware the value a consumer reads is the library's default rather
-    than anything the panel said. Driving the adapter rather than the snapshot
+    `lugs_at_service_entrance` is such a field. It defaults to True, and
+    `span_panel_api_schema_0` contains no reference to the name, so on flat
+    firmware the value a consumer reads is the library's default rather than
+    anything the panel said. Driving the adapter rather than the snapshot
     factory is what makes that a fact about the adapter instead of a fact the
     test wrote down itself.
     """

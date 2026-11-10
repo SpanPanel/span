@@ -64,6 +64,9 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
+_FALLBACK_MINIMUM_A: Final = 0
+"""The minimum for a charger that declares none, in amps."""
+
 
 @dataclass(frozen=True)
 class SpanEvseNumberRequiredKeysMixin(FieldPathDeclarationMixin):
@@ -71,6 +74,8 @@ class SpanEvseNumberRequiredKeysMixin(FieldPathDeclarationMixin):
 
     value_fn: Callable[[SpanEvseSnapshot], int | None]
     maximum_fn: Callable[[SpanEvseSnapshot], int | None]
+    minimum_fn: Callable[[SpanEvseSnapshot], int | None]
+    declared_maximum_fn: Callable[[SpanEvseSnapshot], int | None]
     target_fn: Callable[[SpanEvseSnapshot], int | None]
     settable_fn: Callable[[SpanEvseSnapshot], bool]
     set_fn: Callable[[EvseControlProtocol, str, int], Awaitable[PublishOutcome]]
@@ -94,13 +99,14 @@ EVSE_CHARGE_CURRENT_LIMIT: Final = SpanEvseNumberEntityDescription(
     translation_key="evse_charge_current_limit",
     device_class=NumberDeviceClass.CURRENT,
     native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-    # Zero, because a charge-current ceiling has no meaning below it: this is a
-    # charge-only EVSE, so lowering the ceiling can stop charging and can never
-    # reverse it. Not read from the wire because there is nothing on the wire to
-    # read — Homie expresses a bounded numeric as a `min:max` `$format`, and
-    # neither the capture nor the `charge-limit` catalog declares one for this
-    # property. See `native_max_value`, which *is* published and is read.
-    native_min_value=0,
+    # Zero is the fallback, used only for a charger that declares no minimum for
+    # the limit: a charge-current ceiling has no meaning below it, since this is
+    # a charge-only EVSE. A charger that declares one (the capture's `6:32`
+    # `$format`) is bounded by it instead, because the library refuses a limit
+    # outside the declared range; `SpanEvseNumber._apply` reads it each update
+    # through `minimum_fn`, and the maximum through `maximum_fn` and
+    # `declared_maximum_fn`.
+    native_min_value=_FALLBACK_MINIMUM_A,
     # The declared datatype is `integer`, and a step is the granularity of the
     # quantity rather than a policy: a charger that accepts 16 A and 17 A does
     # not accept 16.5. Asserted against the declaration in
@@ -113,6 +119,14 @@ EVSE_CHARGE_CURRENT_LIMIT: Final = SpanEvseNumberEntityDescription(
     # what it enforces. Showing unknown there would hide a real setting.
     value_fn=lambda evse: evse.effective_charge_current_limit_a,
     maximum_fn=lambda evse: evse.charge_current_ceiling_a,
+    # The declared range applies only where the limit is settable; where it is
+    # not, the control keeps its fallback bounds.
+    minimum_fn=lambda evse: (
+        evse.charge_current_limit_minimum_a if evse.charge_current_limit_settable else None
+    ),
+    declared_maximum_fn=lambda evse: (
+        evse.charge_current_limit_maximum_a if evse.charge_current_limit_settable else None
+    ),
     target_fn=lambda evse: evse.charge_current_limit_target_a,
     settable_fn=lambda evse: evse.charge_current_limit_settable,
     set_fn=lambda client, node_id, amps: client.set_evse_charge_limit(node_id, amps),
@@ -201,14 +215,37 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         The maximum moves with the panel because it can: an installer
         recommissioning a charger republishes `installer-max`, and a control
         still offering the old range would let a user ask for a current the
-        hardware is no longer rated for. Left at whatever was last published
-        when the value goes away, so the entity reports unavailable with its
-        last known bound rather than briefly widening.
+        hardware is no longer rated for. When neither the ceiling nor a declared
+        maximum is published the maximum is left at whatever it last was, and
+        the entity is unavailable rather than briefly widening.
+
+        The range the charger declares for its limit bounds the control too,
+        because the library refuses a value outside it: the minimum is the
+        declared one, else the description's fallback; the maximum is the lower
+        of the declared maximum and the ceiling, each where present, so a
+        declared maximum alone bounds it while the ceiling is unpublished (the
+        entity is unavailable then). An open side falls back for that side only,
+        and the range is applied only where the limit is settable.
         """
         self._attr_native_value = self._description.value_fn(evse)
-        maximum = self._description.maximum_fn(evse)
-        if maximum is not None:
-            self._attr_native_max_value = maximum
+        declared_minimum = self._description.minimum_fn(evse)
+        self._attr_native_min_value = (
+            _FALLBACK_MINIMUM_A if declared_minimum is None else declared_minimum
+        )
+        ceilings = [
+            bound
+            for bound in (
+                self._description.maximum_fn(evse),
+                self._description.declared_maximum_fn(evse),
+            )
+            if bound is not None
+        ]
+        if ceilings:
+            self._attr_native_max_value = min(ceilings)
+        # A charger commissioned below its declared minimum (ceiling 16 A, range
+        # 20:32) would otherwise report a minimum above its maximum, which Home
+        # Assistant cannot render; the ceiling is the hardware bound, so it wins.
+        self._attr_native_min_value = min(self._attr_native_min_value, self._attr_native_max_value)
 
     @property
     def available(self) -> bool:

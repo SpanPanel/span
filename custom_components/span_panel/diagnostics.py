@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypedDict
+from dataclasses import asdict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from span_panel_api import SpanPanelSnapshot, ca_fingerprint
+from span_panel_api import (
+    MaskedTree,
+    SpanMqttClient,
+    SpanPanelSnapshot,
+    ca_fingerprint,
+    shared_meter_groups,
+)
 from span_panel_api.exceptions import SpanPanelValidationError
 
 from .adoption import adopted_control_count, classify
@@ -19,7 +26,8 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
-from .helpers import identity_digest
+from .counter_plausibility import implausible_counters
+from .helpers import has_pv, identity_digest, outside_meter_label, shared_relay_groups
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
@@ -159,6 +167,40 @@ def _discovery(findings: SchemaFindings | None) -> DiscoveryBlock:
     }
 
 
+class DeviceTreeBlock(TypedDict):
+    """The `device_tree` section and, when there is no tree, why.
+
+    `device_tree_unavailable` is absent when the tree is present, so a reader
+    tells "this panel has no tree to give" from "the export was dropped from the
+    report" by the key rather than by guessing at a bare `None`.
+    """
+
+    device_tree: MaskedTree | None
+    device_tree_unavailable: NotRequired[Literal["flat_data_model", "not_described"]]
+
+
+def _device_tree(client: SpanMqttClient) -> DeviceTreeBlock:
+    """Return the panel's device tree as the library masks it, or the reason there is none.
+
+    **Masked by the library, not here.** Serials, device ids and site details are
+    replaced where the tree is exported, so this function adds nothing to the
+    payload that the library has not already made safe: it forwards the export
+    whole and never reads a wire value itself.
+
+    The tree is the adapter's last view, so a panel that has gone offline still
+    reports it -- that is the report a maintainer most needs. `flat_data_model`
+    is a schema 0 panel, which publishes no device tree; `not_described` is a
+    parent/child panel whose root device has not described itself yet.
+    """
+    tree = client.masked_tree()
+    if tree is not None:
+        return {"device_tree": tree}
+    reason: Literal["flat_data_model", "not_described"] = (
+        "flat_data_model" if client.schema_major == "schema_0" else "not_described"
+    )
+    return {"device_tree": None, "device_tree_unavailable": reason}
+
+
 class AdoptedDeviceRow(TypedDict):
     """One adopted device, as it appears in the payload.
 
@@ -271,6 +313,18 @@ class PvBlock(TypedDict):
     inverters: dict[str, PvInverterRow]
 
 
+def _pv_power_without_source(snapshot: SpanPanelSnapshot) -> float | None:
+    """Return PV power the panel reports while it has no solar source, or None.
+
+    A valued, non-zero figure is the evidence: 0.0 is what a panel with a battery
+    and no solar publishes, and an unpublished figure says nothing.
+    """
+    power = snapshot.power_flow_pv
+    if power is None or power == 0 or has_pv(snapshot):
+        return None
+    return power
+
+
 def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
     """Which inverter the Solar card reads, and each inverter's place.
 
@@ -371,7 +425,9 @@ async def async_get_config_entry_diagnostics(
     circuit_data: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
         circuit_data[circuit_id] = {
-            "name": circuit.name,
+            "name": outside_meter_label(circuit_id)
+            if circuit.measures_outside_panel
+            else circuit.name,
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "priority": circuit.priority,
@@ -409,6 +465,17 @@ async def async_get_config_entry_diagnostics(
         "entities": _entity_registry_rows(hass, entry),
         "panel": panel_data,
         "circuits": circuit_data,
+        # One row per group of circuits that share one meter or one relay: each
+        # member reports the same readings, so a support case can see a double
+        # count in the Energy dashboard for what it is.
+        "shared_meter_groups": shared_meter_groups(snapshot.circuits),
+        "shared_relay_groups": shared_relay_groups(snapshot.circuits),
+        # Counter readings beyond what the circuit's breaker could ever have
+        # passed: shown as published, never used as the dip baseline.
+        "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],
+        # Solar power the panel reports with no solar source to attribute it to:
+        # the earliest sign that where this firmware says its solar is has moved.
+        "pv_power_without_source_w": _pv_power_without_source(snapshot),
         "evse": evse_data,
         "battery": battery_data,
         "pv": _pv(snapshot, entry.runtime_data.pv_binding),
@@ -417,6 +484,9 @@ async def async_get_config_entry_diagnostics(
             "last_update_success": coordinator.last_update_success,
         },
         "schema_discovery": _discovery(coordinator.schema_findings),
+        # Masked by the library and safe by construction, the rule `TO_REDACT`'s
+        # docstring states: nothing here is redacted again.
+        **_device_tree(coordinator.client),
         "adopted_devices": _adoption(snapshot),
         # Keys and enum values only -- no wire values, no user free text (names
         # and icons live in Core's registry, not here). Same withholding rules

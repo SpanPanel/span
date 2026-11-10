@@ -86,7 +86,7 @@ def _tree(*, second: bool = True, unfed: bool = False) -> dict[str, dict[str, st
             **tree[SOLAR_CIRCUIT],
             "connection/feeds-device-id": SECOND_PV,
             "info/name": "Garage Solar",
-            "info/spaces": "5,7",
+            "info/spaces": "12,14",
         }
     if unfed:
         tree[UNFED_PV] = dict(pv_topics)
@@ -390,7 +390,7 @@ async def test_circuits_sharing_a_name_fall_back_to_their_breaker_positions(
 
     assert _names(hass, entry, snapshot.serial_number, [SOLAR_CIRCUIT, SECOND_SOLAR_CIRCUIT]) == [
         f"{PANEL_NAME} Solar Inverter (Circuit 36 38)",
-        f"{PANEL_NAME} Solar Inverter (Circuit 5 7)",
+        f"{PANEL_NAME} Solar Inverter (Circuit 12 14)",
     ]
 
 

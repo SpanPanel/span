@@ -24,6 +24,8 @@
       "invalid_auth": "Invalid authentication",
       "panel_not_ready": "The panel is not ready to register Home Assistant yet, usually because it is still starting up. Wait a moment, then try again.",
       "passphrase_unavailable": "The panel cannot issue credentials because its passphrase is not available yet. This does not mean a passphrase was entered incorrectly. Wait a few minutes, then try again.",
+      "rate_limited": "The panel is limiting registration attempts. Try again in {retry_after} seconds.",
+      "rate_limited_no_retry_after": "The panel is limiting registration attempts. Wait a minute, then try again.",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
       "unknown": "Unexpected error"
     },
@@ -187,6 +189,11 @@
         "name": "GFE Override: Grid Connected"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "EVSE Lock"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "EVSE Charge Current Limit"
@@ -337,6 +344,15 @@
       "main_breaker_rating": {
         "name": "Main Breaker Rating"
       },
+      "upstream_protection_rating": {
+        "name": "Upstream Protection Rating"
+      },
+      "busbar_current": {
+        "name": "Busbar Current"
+      },
+      "frequency": {
+        "name": "Frequency"
+      },
       "main_meter_consumed_energy": {
         "name": "Main Meter Consumed Energy"
       },
@@ -470,6 +486,12 @@
     "evse_charge_limit_not_delivered": {
       "message": "The charge-current limit for charger {charger} could not be delivered to the panel: {reason}. It was refused rather than queued, so the limit is unchanged."
     },
+    "evse_lock_failed": {
+      "message": "Failed to set the lock for charger {charger}: {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "The lock command for charger {charger} could not be delivered to the panel: {reason}. It was refused rather than queued, so the lock is unchanged."
+    },
     "export_manifest_no_entries": {
       "message": "No SPAN panel configuration entries are loaded. Add and configure a SPAN panel before calling this service."
     },
@@ -541,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "The SPAN Panel at {host} did not report the outcome of the credential rotation. The panel passphrase and broker password may have changed. Run the rotation again to get a passphrase you know. If the panel refuses that rotation, reauthenticate the integration, using proof of proximity if the old passphrase is no longer accepted."
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "The SPAN Panel at {host} did not report the outcome of the credential rotation. The panel passphrase and broker password may have changed. Run the rotation again to get a passphrase you know. If the panel refuses that rotation, reauthenticate the integration with the passphrase shown in the SPAN app."
     },
     "rotate_credentials_requires_admin": {
       "message": "Only a Home Assistant administrator can rotate SPAN Panel credentials."

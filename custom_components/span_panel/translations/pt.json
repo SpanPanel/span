@@ -24,6 +24,8 @@
       "invalid_auth": "Autenticação inválida",
       "panel_not_ready": "O painel ainda não está pronto para registar o Home Assistant, normalmente porque ainda está a arrancar. Aguarde um momento e tente novamente.",
       "passphrase_unavailable": "O painel não consegue emitir credenciais porque a sua frase-passe ainda não está disponível. Isto não significa que tenha sido introduzida uma frase-passe incorreta. Aguarde alguns minutos e tente novamente.",
+      "rate_limited": "O painel está a limitar as tentativas de registo. Tente novamente dentro de {retry_after} segundos.",
+      "rate_limited_no_retry_after": "O painel está a limitar as tentativas de registo. Aguarde um minuto e tente novamente.",
       "proximity_failed": "Proximidade não comprovada. Por favor, abra e feche a porta do painel 3 vezes e tente novamente.",
       "unknown": "Erro inesperado"
     },
@@ -187,6 +189,11 @@
         "name": "Substituição GFE: Conectado à Rede"
       }
     },
+    "lock": {
+      "evse_lock": {
+        "name": "Trava EVSE"
+      }
+    },
     "number": {
       "evse_charge_current_limit": {
         "name": "Limite de Corrente de Carga EVSE"
@@ -337,6 +344,15 @@
       "main_breaker_rating": {
         "name": "Classificação do Disjuntor Principal"
       },
+      "upstream_protection_rating": {
+        "name": "Classificação da Proteção a Montante"
+      },
+      "busbar_current": {
+        "name": "Corrente do Barramento"
+      },
+      "frequency": {
+        "name": "Frequência"
+      },
       "main_meter_consumed_energy": {
         "name": "Energia Consumida pelo Medidor Principal"
       },
@@ -470,6 +486,12 @@
     "evse_charge_limit_not_delivered": {
       "message": "O limite de corrente de carga do carregador {charger} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto o limite permanece inalterado."
     },
+    "evse_lock_failed": {
+      "message": "Falha ao definir a trava do carregador {charger}: {reason}"
+    },
+    "evse_lock_not_delivered": {
+      "message": "O comando de trava do carregador {charger} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto a trava permanece inalterada."
+    },
     "export_manifest_no_entries": {
       "message": "Nenhuma entrada de configuração do painel SPAN está carregada. Adicione e configure um painel SPAN antes de chamar este serviço."
     },
@@ -541,6 +563,9 @@
     },
     "rotate_credentials_outcome_unknown": {
       "message": "O SPAN Panel em {host} não comunicou o resultado da rotação de credenciais. A frase-passe do painel e a palavra-passe do broker podem ter mudado. Execute a rotação novamente para obter uma frase-passe conhecida. Se o painel recusar essa rotação, volte a autenticar a integração; se a frase-passe antiga já não for aceite, use a prova de proximidade."
+    },
+    "rotate_credentials_outcome_unknown_passphrase_only": {
+      "message": "O SPAN Panel em {host} não comunicou o resultado da rotação de credenciais. A frase-passe do painel e a palavra-passe do broker podem ter mudado. Execute a rotação novamente para obter uma frase-passe conhecida. Se o painel recusar essa rotação, volte a autenticar a integração com a frase-passe apresentada na aplicação SPAN."
     },
     "rotate_credentials_requires_admin": {
       "message": "Apenas um administrador do Home Assistant pode rodar as credenciais do SPAN Panel."

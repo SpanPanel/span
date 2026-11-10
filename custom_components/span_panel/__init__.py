@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from enum import Enum, auto
 import logging
-from typing import Final, Literal
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
@@ -26,13 +24,11 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.hass_dict import HassKey
-import httpx
 from span_panel_api import (
     LeafNameMismatch,
     SpanMqttClient,
     SpanPanelSnapshot,
     ca_fingerprint,
-    get_v2_status,
 )
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -65,7 +61,6 @@ from .ca_repairs import (
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
-    PanelRestTransport,
     as_port,
     async_ca_signs_panel_leaf,
     async_fetch_panel_ca,
@@ -100,7 +95,13 @@ from .frontend import (
     async_save_panel_settings as async_save_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
-from .hardware_guard import hardware_verdict, refuses_entities
+from .hardware_guard import (
+    HARDWARE_UNREAD,
+    HardwareRead,
+    async_read_hardware_version,
+    hardware_verdict,
+    refuses_entities,
+)
 from .hardware_repairs import (
     RefusedHardware,
     async_clear_unvalidated_hardware,
@@ -148,6 +149,9 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    # A charger's connector lock, created only where the charger declares it
+    # settable; nothing on a panel without one.
+    Platform.LOCK,
     # Added with the EVSE charge-current control -- the first number this
     # integration has ever had, and forwarded unconditionally like every other
     # platform: `number.async_setup_entry` creates nothing on a panel with no
@@ -171,19 +175,6 @@ class _DeferredReload:
 
 _DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_deferred_reloads")
 """Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
-
-HARDWARE_READ_TIMEOUT_S: Final = 5.0
-"""How long setup waits for the panel's status before going on without it."""
-
-
-class _HardwareRead(Enum):
-    """The status read failed, so nothing is known about the hardware."""
-
-    UNREAD = auto()
-
-
-HARDWARE_UNREAD: Final = _HardwareRead.UNREAD
-"""What `_async_read_hardware_version` answers when the status cannot be read."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -316,43 +307,11 @@ async def _async_pinned_ca(
     return ca_pem
 
 
-async def _async_read_hardware_version(
-    hass: HomeAssistant, host: str, transport: PanelRestTransport
-) -> str | None | Literal[_HardwareRead.UNREAD]:
-    """Read the panel's REST `hardwareVersion`, or `HARDWARE_UNREAD` when it cannot be had.
-
-    Fail-open by design: a timeout, a refused or reset connection, a certificate
-    the pin rejects and a body that cannot be read all answer `HARDWARE_UNREAD`,
-    which proceeds like firmware that does not publish the field but, unlike it,
-    leaves a standing refusal's Repair up: an unread status is no evidence the
-    hardware changed. This
-    read exists only to refuse unvalidated hardware, so it must never be the
-    reason a panel the connect path accepts is locked out; that path still owns
-    readiness, and reports every one of these failures in its own terms.
-
-    Over the entry's own transport -- the pinned anchor on the HTTPS port when
-    it holds one -- and Home Assistant's shared client otherwise, as the panel
-    client below is given.
-    """
-    try:
-        async with asyncio.timeout(HARDWARE_READ_TIMEOUT_S):
-            status = await get_v2_status(
-                host,
-                port=transport.port,
-                httpx_client=get_async_client(hass),
-                ssl_context=transport.ssl_context,
-            )
-    except (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL) as err:
-        _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %s", host, err)
-        return HARDWARE_UNREAD
-    return status.hardware_version
-
-
 @callback
 def _async_enforce_hardware_verdict(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
-    hardware_version: str | None | Literal[_HardwareRead.UNREAD],
+    hardware_version: HardwareRead,
     model: str | None,
 ) -> None:
     """Refuse a panel this release has not been validated with, or clear a standing refusal.
@@ -555,7 +514,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # Read before the broker is dialled. What the version alone cannot
             # settle waits for the first refresh, the only thing that says
             # which model the panel is.
-            hardware_version = await _async_read_hardware_version(hass, host, transport)
+            hardware_version = await async_read_hardware_version(hass, host, transport)
 
             broker_config = MqttClientConfig(
                 broker_host=host,

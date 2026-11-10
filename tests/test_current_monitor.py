@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1330,3 +1331,182 @@ class TestMonitoringStatusReportsOnlyMeasuredCurrent:
         assert monitor.get_circuit_state("1") is None
         assert monitor.get_mains_state("upstream_l1") is None
         hass.bus.async_fire.assert_not_called()
+
+
+def _over_threshold(current_a: float = 17.0) -> SpanPanelSnapshot:
+    """One 20 A circuit over an 80 % continuous threshold, on a 100 A panel."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", current_a=current_a, breaker_rating_a=20.0
+    )
+    return SpanPanelSnapshotFactory.create(
+        circuits={"1": circuit},
+        main_breaker_rating_a=100,
+        upstream_l1_current_a=90.0,
+        upstream_l2_current_a=None,
+    )
+
+
+def _windowed_monitor(hass: MagicMock) -> CurrentMonitor:
+    """Return a monitor that alerts on a 15 minute window over 80 %, and never on a spike."""
+    return _make_monitor(
+        hass,
+        _make_options(
+            **{CONTINUOUS_THRESHOLD_PCT: 80, WINDOW_DURATION_M: 15, SPIKE_THRESHOLD_PCT: 500}
+        ),
+    )
+
+
+def _continuous_alerts(hass: MagicMock) -> list[str]:
+    """Return the alert types fired on the event bus for continuous overloads."""
+    return [
+        call.args[1]["alert_type"]
+        for call in hass.bus.async_fire.call_args_list
+        if call.args[0] == EVENT_CURRENT_ALERT and call.args[1]["alert_type"] != "spike"
+    ]
+
+
+@pytest.mark.usefixtures("_no_registered_entities")
+class TestStatusWhileMonitoringIsOff:
+    """A point whose monitoring is off reports no judgement; turning it back on resumes it."""
+
+    def test_a_circuit_turned_off_reports_no_utilization_current_or_window(self):
+        """Over threshold, then off: the frozen figures are gone, the alert history is kept."""
+        hass = _make_hass()
+        monitor = _windowed_monitor(hass)
+        snapshot = _over_threshold()
+        monitor.process_snapshot(snapshot)
+        monitor.get_circuit_state("1").over_threshold_since = datetime.now(UTC) - timedelta(
+            minutes=16
+        )
+        monitor.process_snapshot(snapshot)
+        before = monitor.get_monitoring_status()["circuits"]["1"]
+        assert before["utilization_pct"] == 85.0
+        assert before["over_threshold_since"] is not None
+        assert before["last_continuous_alert"] is not None
+
+        monitor.set_circuit_override("1", {"monitoring_enabled": False})
+        monitor.process_snapshot(snapshot)
+
+        entry = monitor.get_monitoring_status()["circuits"]["1"]
+        assert entry["monitoring_enabled"] is False
+        assert entry["utilization_pct"] is None
+        assert entry["last_current_a"] is None
+        assert entry["over_threshold_since"] is None
+        assert entry["last_continuous_alert"] == before["last_continuous_alert"]
+
+    def test_turning_it_back_on_resumes_with_no_stale_window(self):
+        """A window opened before it was turned off does not make the first sample after alert."""
+        hass = _make_hass()
+        monitor = _windowed_monitor(hass)
+        snapshot = _over_threshold()
+        monitor.process_snapshot(snapshot)
+        monitor.get_circuit_state("1").over_threshold_since = datetime.now(UTC) - timedelta(
+            minutes=16
+        )
+
+        monitor.set_circuit_override("1", {"monitoring_enabled": False})
+        monitor.set_circuit_override("1", {"monitoring_enabled": True})
+        monitor.process_snapshot(snapshot)
+
+        entry = monitor.get_monitoring_status()["circuits"]["1"]
+        assert entry["last_current_a"] == 17.0
+        assert entry["utilization_pct"] == 85.0
+        assert datetime.fromisoformat(entry["over_threshold_since"]) > datetime.now(
+            UTC
+        ) - timedelta(minutes=1)
+        assert _continuous_alerts(hass) == []
+
+    def test_a_shared_group_turned_off_reports_no_judgement(self):
+        """Turning off either member turns off the group, and both rows read null."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        members = {
+            cid: replace(
+                SpanCircuitSnapshotFactory.create(
+                    circuit_id=cid, tabs=[44], current_a=12.0, breaker_rating_a=15.0
+                ),
+                meter_shared_with=(peer,),
+            )
+            for cid, peer in (("circuit-52", "circuit-53"), ("circuit-53", "circuit-52"))
+        }
+        snapshot = SpanPanelSnapshotFactory.create(circuits=members, main_breaker_rating_a=100)
+        monitor.process_snapshot(snapshot)
+
+        monitor.set_circuit_override("circuit-53", {"monitoring_enabled": False})
+        monitor.process_snapshot(snapshot)
+
+        status = monitor.get_monitoring_status()["circuits"]
+        for member in members:
+            assert status[member]["monitoring_enabled"] is False
+            assert status[member]["utilization_pct"] is None
+            assert status[member]["last_current_a"] is None
+            assert status[member]["over_threshold_since"] is None
+
+        monitor.set_circuit_override("circuit-53", {"monitoring_enabled": True})
+        monitor.process_snapshot(snapshot)
+
+        status = monitor.get_monitoring_status()["circuits"]
+        for member in members:
+            assert status[member]["last_current_a"] == 12.0
+            assert status[member]["utilization_pct"] == 40.0
+
+    def test_the_mains_turned_off_reports_no_utilization_or_current(self):
+        """The mains entry nulls its figures while off and resumes when back on."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        snapshot = _over_threshold(current_a=10.0)
+        monitor.process_snapshot(snapshot)
+        assert monitor.get_monitoring_status()["mains"]["upstream_l1"]["utilization_pct"] == 90.0
+
+        monitor.set_mains_override("upstream_l1", {"monitoring_enabled": False})
+        monitor.process_snapshot(snapshot)
+
+        entry = monitor.get_monitoring_status()["mains"]["upstream_l1"]
+        assert entry["monitoring_enabled"] is False
+        assert entry["utilization_pct"] is None
+        assert entry["last_current_a"] is None
+
+        monitor.set_mains_override("upstream_l1", {"monitoring_enabled": True})
+        monitor.process_snapshot(snapshot)
+
+        entry = monitor.get_monitoring_status()["mains"]["upstream_l1"]
+        assert entry["last_current_a"] == 90.0
+        assert entry["utilization_pct"] == 90.0
+
+    def test_the_mains_back_on_resumes_with_no_stale_window(self):
+        """A mains window opened before monitoring was turned off does not alert on the first sample after."""
+        hass = _make_hass()
+        monitor = _windowed_monitor(hass)
+        snapshot = _over_threshold(current_a=10.0)
+        monitor.process_snapshot(snapshot)
+        leg = monitor.get_mains_state("upstream_l1")
+        assert leg is not None and leg.over_threshold_since is not None
+        leg.over_threshold_since = datetime.now(UTC) - timedelta(minutes=16)
+
+        monitor.set_mains_override("upstream_l1", {"monitoring_enabled": False})
+        monitor.set_mains_override("upstream_l1", {"monitoring_enabled": True})
+        monitor.process_snapshot(snapshot)
+
+        assert _continuous_alerts(hass) == []
+
+    async def test_the_report_does_not_depend_on_the_state_having_been_reset(self):
+        """An override loaded from storage, with a figure already held, still reports null."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor.process_snapshot(_over_threshold())
+        monitor._store = MagicMock()
+        monitor._store.async_load = AsyncMock(
+            return_value={
+                "circuit_overrides": {"1": {"monitoring_enabled": False}},
+                "mains_overrides": {"upstream_l1": {"monitoring_enabled": False}},
+            }
+        )
+
+        await monitor.async_load_overrides()
+
+        status = monitor.get_monitoring_status()
+        assert status["circuits"]["1"]["utilization_pct"] is None
+        assert status["circuits"]["1"]["last_current_a"] is None
+        assert status["circuits"]["1"]["over_threshold_since"] is None
+        assert status["mains"]["upstream_l1"]["utilization_pct"] is None
+        assert status["mains"]["upstream_l1"]["last_current_a"] is None
