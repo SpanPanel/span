@@ -4,8 +4,9 @@ On a panel that publishes no roles the sources are exactly `pv_inverters`, so
 every MAIN 32 binding, entity and topology block is what it was. Where a panel
 says where its solar is, a circuit whose role is solar and that feeds no
 published inverter is a source keyed by its own id, bound at first sight as a
-lone circuit-fed inverter is, and its block in the topology says so. A battery
-with no solar makes no Solar device, and PV power reported with no source to
+lone circuit-fed inverter is, and its block in the topology says so. The
+panel's published PV flow is its solar, 0.0 included, so it makes the Solar
+device with no source beside it, and PV power published with no source to
 attribute it to is a diagnostics row.
 """
 
@@ -159,23 +160,66 @@ def test_a_solar_circuit_later_named_by_a_pv_device_keeps_its_key() -> None:
     assert (identity.bound_key, identity.legacy_key) == (ROOF, ROOF)
 
 
-def test_a_battery_without_solar_creates_no_solar_device() -> None:
-    """Power-flows PV at 0.0 beside a battery is not evidence of solar where the panel publishes roles."""
-    panel = _roles_panel(_circuit(KITCHEN, [1], role="LOADS"), power_flow_pv=0.0)
+@pytest.mark.parametrize("power", [-2500.0, 0.0])
+def test_a_published_pv_flow_is_solar_with_no_source_beside_it(power: float) -> None:
+    """The panel's PV flow is its solar, whatever it reads, where the panel publishes roles or not.
+
+    Solar DC-coupled into a battery can have no circuit or lugs with a SOLAR
+    role and no inverter device, as on SpanPanel/span#347, leaving the flow the
+    only place the panel says it has solar.
+    """
+    panel = _roles_panel(_circuit(KITCHEN, [1], role="LOADS"), power_flow_pv=power)
+    assert not solar_sources(panel)
+
+    assert has_pv(panel) is True
+    assert has_pv(replace(panel, publishes_solar_roles=False)) is True
+
+
+def test_an_inverter_no_circuit_feeds_is_solar_before_any_pv_flow() -> None:
+    """A published inverter is solar on a panel that publishes no roles, fed by a circuit or not."""
+    panel = replace(
+        SpanPanelSnapshotFactory.create(power_flow_pv=None),
+        pv_inverters={"upstream-pv": SpanPVSnapshot(feed_circuit_id=None, vendor_name="Example")},
+    )
+    assert not panel.publishes_solar_roles
+
+    assert has_pv(panel) is True
+
+
+def test_a_pv_circuit_is_solar_before_any_pv_flow() -> None:
+    panel = SpanPanelSnapshotFactory.create(
+        circuits={ROOF: _circuit(ROOF, [2, 4], device_type="pv")}, power_flow_pv=None
+    )
+    assert not panel.pv_inverters
+
+    assert has_pv(panel) is True
+
+
+def test_no_pv_flow_and_no_solar_source_is_no_solar() -> None:
+    """The panel leaves its PV flow unset where it has no solar, and nothing else says it has any."""
+    panel = _roles_panel(_circuit(KITCHEN, [1], role="LOADS"), power_flow_pv=None)
 
     assert has_pv(panel) is False
-    assert has_pv(replace(panel, publishes_solar_roles=False)) is True, "the flat rule is unchanged"
 
 
-@pytest.mark.parametrize(("power", "row"), [(250.0, 250.0), (0.0, None), (None, None)])
-async def test_the_tripwire_row(
+@pytest.mark.parametrize(("power", "row"), [(250.0, 250.0), (0.0, 0.0), (None, None)])
+async def test_the_pv_flow_with_no_source_is_a_diagnostics_row(
     hass: HomeAssistant, power: float | None, row: float | None
 ) -> None:
+    """A published flow with no source device to attribute it to is reported as published, 0.0 included."""
     panel = _roles_panel(_circuit(KITCHEN, [1], role="LOADS"), power_flow_pv=power)
 
     result = await async_get_config_entry_diagnostics(hass, _reference_entry(panel))
 
     assert result["pv_power_without_source_w"] == row
+
+
+async def test_a_pv_flow_with_a_solar_source_is_no_diagnostics_row(hass: HomeAssistant) -> None:
+    panel = _roles_panel(_circuit(ROOF, [2, 4], role="SOLAR"), power_flow_pv=-2500.0)
+
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(panel))
+
+    assert result["pv_power_without_source_w"] is None
 
 
 @pytest.mark.spec_only

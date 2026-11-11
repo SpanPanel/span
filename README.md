@@ -214,8 +214,10 @@ included in PV Power, the panel's total. The card's Solar tile shows its inverte
 usually close.
 
 On panels other than MAIN 32, a circuit can declare that it feeds solar. Such a circuit reads its Power and Net Energy as generation and displays as generation,
-and solar fed through one gets the **Solar** device even where the panel publishes no inverter. A panel with no solar circuit and no inverter gets no Solar
-device.
+and solar fed through one gets the **Solar** device even where the panel publishes no inverter. Wherever the panel publishes a PV power figure, 0 W included, it
+gets the Solar device and PV Power, which covers solar the panel reports only there, such as solar DC-coupled into a battery; PV Vendor, PV Product and PV
+Nameplate Capacity stay unknown when there is no inverter for them to describe. A panel that publishes no PV figure, no solar circuit and no inverter gets no
+Solar device.
 
 **Deprecated:**
 
