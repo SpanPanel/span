@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
+from pathlib import Path
+from typing import get_args
 
 import pytest
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.package_ratings import (
+    _REFUSALS,
+    ChangeReason,
     Declaration,
     MonitoringRating,
     RatingChange,
     Reconciled,
+    Refusal,
     Refused,
     StoredPackage,
     admit,
@@ -412,3 +418,37 @@ def test_admit_refuses_by_the_rule_each_with_its_reason(
 def test_admit_names_the_panels_rating_and_the_service_rating_its_refusals_quote() -> None:
     assert _admit(_snapshot(_circuit()), [30, 20]) == Refused("first_not_panel", PANEL_A, SERVICE_A)
     assert _admit(_snapshot(_circuit(), main=40), [20, 30]) == Refused("above_service_rating", PANEL_A, 40.0)
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "ratings", "reason"),
+    [
+        pytest.param(_describing(_snapshot(_circuit(rating=None, tabs=(7, 9)))), [20, 20, 20], "panel_describes_breakers", id="describes before all"),
+        pytest.param(_snapshot(_circuit(rating=None, tabs=(7, 9))), [30, 30, 30], "not_arrived", id="not arrived before spaces"),
+        pytest.param(_snapshot(_circuit(rating=None, declared=False, tabs=(7, 9))), [30, 30], "not_published", id="not published before spaces"),
+        pytest.param(_snapshot(_circuit(tabs=(7, 9))), [30, 30, 30], "not_one_space", id="spaces before the count"),
+        pytest.param(_snapshot(_circuit(tabs=(7, 9))), [30, 30], "not_one_space", id="spaces before the first rating"),
+        pytest.param(_snapshot(_circuit(tabs=(7, 9))), [50, 60], "not_one_space", id="spaces before the service rating"),
+        pytest.param(_snapshot(_circuit()), [30, 30, 30], "not_two", id="the count before the first rating"),
+        pytest.param(_snapshot(_circuit(), main=40), [30, 30], "first_not_panel", id="the first rating before the service rating"),
+    ],
+)
+def test_admit_refuses_by_one_precedence(snapshot: SpanPanelSnapshot, ratings: list[int], reason: str) -> None:
+    """Unknown circuit, then a panel that describes its breakers, then a rating not published or not arrived, then the
+    spaces, the count, the first rating and the service rating: the first that holds is the refusal."""
+    admission = _admit(snapshot, ratings)
+    assert isinstance(admission, Refused)
+    assert admission.reason == reason
+
+
+def test_every_reason_the_rule_removes_an_entry_for_is_a_refusal_for_entered_ratings() -> None:
+    """A verdict with no refusal would raise a KeyError where an entry should have been refused."""
+    assert set(_REFUSALS) == {*get_args(ChangeReason.__value__), "pending"}
+    assert set(_REFUSALS.values()) <= set(get_args(Refusal.__value__))
+
+
+def test_every_refusal_has_its_own_message_and_every_message_a_refusal() -> None:
+    strings = json.loads((Path(__file__).parent.parent / "custom_components/span_panel/strings.json").read_text(encoding="utf-8"))
+    keys = {key for key in strings["exceptions"] if key.startswith("package_ratings_")}
+    # Raised by the services, before any rule is asked: no panel to judge by.
+    assert keys - {"package_ratings_panel_not_loaded"} == {f"package_ratings_{reason}" for reason in get_args(Refusal.__value__)}
