@@ -461,7 +461,7 @@
       "message": "O painel não publica uma capacidade de serviço, por isso as capacidades copiadas da aplicação SPAN não podem ser verificadas com ela."
     },
     "package_ratings_not_arrived": {
-      "message": "O painel ainda não terminou de reportar a capacidade deste circuito, o seu espaço de disjuntor ou a sua capacidade de serviço, com os quais as capacidades copiadas são verificadas. Tente novamente dentro de momentos."
+      "message": "O painel não reportou a capacidade deste circuito, o seu espaço de disjuntor ou a sua capacidade de serviço, com os quais as capacidades copiadas são verificadas, por isso não podem ser verificadas."
     },
     "package_ratings_panel_describes_breakers": {
       "message": "Este painel publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade, e a monitorização de corrente avalia os circuitos que partilham um contador segundo essas capacidades, por isso não há capacidades a copiar da aplicação SPAN."

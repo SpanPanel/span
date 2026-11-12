@@ -47,3 +47,20 @@ def test_every_locale_says_it_the_same_way_for_every_service(language: str) -> N
     """One sentence per locale, shared by the four services, as in English."""
     path = _COMPONENT / "translations" / f"{language}.json"
     assert len({_description(path, service) for service in _SERVICES}) == 1
+
+
+_RETRY = {"en": "Try again", "es": "Vuelve a intentarlo", "fr": "Réessayez", "ja": "もう一度", "pt": "Tente novamente"}
+"""How each language would tell the user to retry, which a refusal for a value that may never arrive must not."""
+
+
+@pytest.mark.parametrize("language", ("en", *_LANGUAGES))
+def test_the_not_arrived_refusal_promises_no_value(language: str) -> None:
+    """The panel may never send it: a flat schema that declares no rating, or a declared service rating that stays unset."""
+    path = _COMPONENT / ("strings.json" if language == "en" else f"translations/{language}.json")
+    message = json.loads(path.read_text(encoding="utf-8"))["exceptions"]["package_ratings_not_arrived"]["message"]
+    assert _RETRY[language] not in message
+    if language == "en":
+        assert message == (
+            "The panel has not reported this circuit's rating, its breaker space or its service rating, "
+            "which copied ratings are checked against, so they cannot be checked."
+        )
