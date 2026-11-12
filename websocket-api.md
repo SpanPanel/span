@@ -47,6 +47,10 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
     "a1b2c3d4e5f6": {
       "tabs": [5, 6],
       "name": "Kitchen",
+      "outside_panel": false,
+      "is_generation": false,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "voltage": 240,
       "device_type": "circuit",
       "relay_state": "CLOSED",
@@ -71,6 +75,10 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
     "f6e5d4c3b2a1": {
       "tabs": [15],
       "name": "Master Bedroom",
+      "outside_panel": false,
+      "is_generation": false,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
       "voltage": 120,
       "device_type": "circuit",
       "relay_state": "CLOSED",
@@ -87,6 +95,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       }
     }
   },
+  "shared_meter_groups": {},
   "sub_devices": {
     "device_id_bess": {
       "name": "SPAN Panel Battery",
@@ -191,6 +200,10 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | ---------------------- | ----------- | ------------------------------------------------------------------------------------------ |
 | `tabs`                 | int[]       | Sorted breaker slot positions (1-indexed)                                                  |
 | `name`                 | string/null | Circuit name from the panel (null if unnamed)                                              |
+| `outside_panel`        | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer     |
+| `is_generation`        | bool        | Whether the circuit's power and energy read as generation, such as solar                   |
+| `shared_meter_group`   | string/null | The key of the group of circuits that share this circuit's meter, or null                  |
+| `shared_relay_group`   | string/null | The key of the group of circuits that share this circuit's relay, or null                  |
 | `voltage`              | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say              |
 | `device_type`          | string      | `circuit`, `pv`, or `evse`                                                                 |
 | `relay_state`          | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                             |
@@ -203,12 +216,29 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `breaker_rating_a`     | float/null  | Breaker amperage rating (null if not reported)                                             |
 | `entities`             | object      | Role-keyed map of entity IDs (see below)                                                   |
 
+A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
+first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys
+the group's record in `shared_meter_groups`.
+
 #### Shared Meter Group Object
 
 | Field              | Type       | Description                                                                                                               |
 | ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `members`          | string[]   | The group's circuit ids, the key first                                                                                    |
 | `breaker_rating_a` | float/null | The group's capacity: what current monitoring judges the shared meter against (null while any member's rating is unknown) |
+
+Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_group": "b1c2d3e4f5a6"`, and the topology answers:
+
+```json
+{
+  "shared_meter_groups": {
+    "b1c2d3e4f5a6": {
+      "members": ["b1c2d3e4f5a6", "c2d3e4f5a6b1"],
+      "breaker_rating_a": 30
+    }
+  }
+}
+```
 
 A group's capacity is what its heaviest space can carry: for each space, the ratings of the members that list it are added, and the largest total is the
 capacity, because the panel reports a two-pole meter's current as the larger of its two legs. A tandem or a quad comes to the sum of its ratings; a tandem-quad
