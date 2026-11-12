@@ -177,6 +177,7 @@
   },
   "panel_size": 40,
   "serial": "xg-7814-15i6h",
+  "shared_meter_groups": {},
   "sub_devices": {
     "xg-7814-15i6h_bess": {
       "entities": {

@@ -530,5 +530,6 @@
   },
   "panel_size": 16,
   "serial": "xg-1155-18fkf",
+  "shared_meter_groups": {},
   "sub_devices": {}
 }

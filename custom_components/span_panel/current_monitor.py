@@ -8,7 +8,7 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -83,7 +83,7 @@ class MonitoredPointState:
 
 
 type MonitoringBasis = Literal["circuit", "group"]
-"""What a monitored point's rating is: one circuit's breaker, or a shared meter's members' summed."""
+"""What a monitored point's rating is: one circuit's breaker, or a shared meter's capacity."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +92,7 @@ class MonitoredCircuit:
 
     Circuits that share a meter all report that meter's current, so judging
     each against its own breaker would overstate every one of them. The group
-    is judged once, against the sum of its members' ratings, under the id of
+    is judged once, against its capacity (`meter_capacity_a`), under the id of
     its first member: that key is stable while the membership is, which is
     enough for alerts and overrides, neither of which is an entity.
     """
@@ -105,12 +105,35 @@ class MonitoredCircuit:
     basis: MonitoringBasis
 
 
+def meter_capacity_a(members: Iterable[tuple[Collection[int], float | None]]) -> float | None:
+    """Return the current a shared meter can carry: the rating total of its heaviest space.
+
+    `members` is each circuit's spaces and rating. For each space, the ratings of
+    the members that list it add up, since each of those breakers carries that
+    space's current; the capacity is the largest total. The panel reports a
+    two-pole meter's current as the larger of its two legs, so the space with
+    the most capacity behind it is the one that reading is held to. A tandem's
+    two circuits list one space and add up; a quad's two-pole circuits list both
+    spaces and add up on each; a tandem-quad comes to its two-pole circuit plus
+    the larger of its single-pole ones.
+
+    None while any member's rating is unknown, where a partial total would
+    understate the meter, and where a member lists no space, since its load
+    cannot be placed on a leg.
+    """
+    totals: dict[int, float] = {}
+    for spaces, rating in members:
+        if rating is None or not spaces:
+            return None
+        for space in set(spaces):
+            totals[space] = totals.get(space, 0.0) + rating
+    return max(totals.values()) if totals else None
+
+
 def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircuit]:
     """Every point the monitor judges, by the id of each circuit it covers."""
     points: dict[str, MonitoredCircuit] = {}
     for key, members in shared_meter_groups(snapshot.circuits).items():
-        ratings = [snapshot.circuits[member].breaker_rating_a for member in members]
-        known = [rating for rating in ratings if rating is not None]
         point = MonitoredCircuit(
             point_id=key,
             members=members,
@@ -118,8 +141,10 @@ def monitored_circuits(snapshot: SpanPanelSnapshot) -> dict[str, MonitoredCircui
                 construct_circuit_label(snapshot.circuits[member], member) for member in members
             ),
             current_a=snapshot.circuits[key].current_a,
-            # Unknown while any member's rating is: a partial sum would understate it.
-            rating_a=sum(known) if len(known) == len(ratings) else None,
+            rating_a=meter_capacity_a(
+                (snapshot.circuits[member].tabs, snapshot.circuits[member].breaker_rating_a)
+                for member in members
+            ),
             basis="group",
         )
         points.update(dict.fromkeys(members, point))
@@ -463,6 +488,9 @@ class CurrentMonitor:
             circuits[entity_id] = {
                 "name": circuit.name if circuit else cid,
                 "basis": point.basis if point else "circuit",
+                # The point this entry's judgement is: members of a shared meter
+                # carry its key, so a consumer counts each point once.
+                "point_id": point_id,
                 "last_current_a": last_current,
                 "breaker_rating_a": rating,
                 "utilization_pct": utilization,

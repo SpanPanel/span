@@ -409,8 +409,11 @@ Applies to Main Meter and Feed Through energy sensors.
 
 Some circuits share one meter or one relay. Each keeps its own entities and names the circuits it shares with in `meter_shared_with` and `relay_shared_with`,
 which also appear on its Breaker switch. Circuits that share a meter report that one meter's readings, so their power and energy should not be added together.
-The panel view draws the group as one slot, and current monitoring judges it once against the members' combined rating, with an override on any member applying
-to the group.
+The panel view draws the group as one slot, and current monitoring judges it once, with an override on any member applying to the group.
+
+A group is judged against what its heaviest space can carry. For each space, the ratings of the members that list it are added, and the largest total is the
+group's capacity, because the panel reports a two-pole meter's current as the larger of its two legs. A tandem or a quad comes to the sum of its ratings; a
+tandem-quad comes to its two-pole rating plus the larger of its single-pole ones.
 
 ### Remote Current Transformers
 

@@ -599,6 +599,7 @@
   },
   "panel_size": 32,
   "serial": "nt-0000-panel",
+  "shared_meter_groups": {},
   "sub_devices": {
     "nt-0000-panel_bess": {
       "entities": {

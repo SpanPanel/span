@@ -517,6 +517,7 @@
   },
   "panel_size": 32,
   "serial": "nt-9874-s7rxt",
+  "shared_meter_groups": {},
   "sub_devices": {
     "nt-9874-s7rxt_pv": {
       "entities": {

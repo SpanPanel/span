@@ -236,6 +236,7 @@
   },
   "panel_size": 24,
   "serial": "xg-1334-066e8",
+  "shared_meter_groups": {},
   "sub_devices": {
     "xg-1334-066e8_bess": {
       "entities": {
