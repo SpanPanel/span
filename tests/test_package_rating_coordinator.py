@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -88,7 +87,7 @@ def _entry() -> MockConfigEntry:
 
 
 def _client(field_metadata: Mapping[str, FieldMetadata] | None) -> MagicMock:
-    client = MagicMock()
+    client = MagicMock(spec=SpanMqttClient)
     client.field_metadata = field_metadata
     return client
 
@@ -96,7 +95,7 @@ def _client(field_metadata: Mapping[str, FieldMetadata] | None) -> MagicMock:
 def _coordinator(
     hass: HomeAssistant, entry: MockConfigEntry, client: MagicMock
 ) -> SpanPanelCoordinator:
-    return SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
+    return SpanPanelCoordinator(hass, client, entry)
 
 
 async def _begun(
@@ -318,7 +317,7 @@ async def _set_up(
     def _build(
         hass_: HomeAssistant, client_: MagicMock, entry_: MockConfigEntry
     ) -> SpanPanelCoordinator:
-        coordinator = SpanPanelCoordinator(hass_, cast(SpanMqttClient, client_), entry_)
+        coordinator = SpanPanelCoordinator(hass_, client_, entry_)
         coordinators.append(coordinator)
         return coordinator
 

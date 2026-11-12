@@ -719,7 +719,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "L'entité capteur de puissance du circuit."
+          "description": "Le circuit : son capteur de courant, toute autre de ses entités ou son identifiant de circuit."
         },
         "package_ratings_a": {
           "name": "Calibres du bloc (A)",
@@ -737,7 +737,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "L'entité capteur de puissance du circuit."
+          "description": "Le circuit : son capteur de courant, toute autre de ses entités ou son identifiant de circuit."
         },
         "config_entry_id": {
           "name": "Entrée de configuration",

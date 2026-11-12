@@ -719,7 +719,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "The circuit power sensor entity."
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
         },
         "package_ratings_a": {
           "name": "Package ratings (A)",
@@ -737,7 +737,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "The circuit power sensor entity."
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
         },
         "config_entry_id": {
           "name": "Config entry",

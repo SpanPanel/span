@@ -719,7 +719,7 @@
       "fields": {
         "circuit_id": {
           "name": "回路",
-          "description": "回路電力センサーエンティティ。"
+          "description": "回路: その電流センサー、その回路の他のエンティティ、または回路 ID。"
         },
         "package_ratings_a": {
           "name": "パッケージ定格 (A)",
@@ -737,7 +737,7 @@
       "fields": {
         "circuit_id": {
           "name": "回路",
-          "description": "回路電力センサーエンティティ。"
+          "description": "回路: その電流センサー、その回路の他のエンティティ、または回路 ID。"
         },
         "config_entry_id": {
           "name": "設定エントリ",

@@ -719,7 +719,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "La entidad del sensor de potencia del circuito."
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
         },
         "package_ratings_a": {
           "name": "Capacidades del paquete (A)",
@@ -737,7 +737,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "La entidad del sensor de potencia del circuito."
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
         },
         "config_entry_id": {
           "name": "Entrada de configuración",
