@@ -233,12 +233,13 @@ class PackageRatingManager:
         )
 
     def diagnostics(self, snapshot: SpanPanelSnapshot) -> PackageRatingsDiagnostics:
-        """Every stored entry and every removal the user has not yet seen.
+        """Every stored entry and every removal the notice still lists.
 
         Each entry's state comes from `resolve`, the call every reader makes, so
         the download says what monitoring is doing with it. After a reconcile a
         stored entry either applies or waits on a value that has not arrived;
-        any other outcome has already removed it.
+        any other outcome has already removed it. The removals are the notice's
+        lines while it is on screen (`_unseen`), and none once it is dismissed.
         """
         return PackageRatingsDiagnostics(
             panel_describes_breakers=panel_describes_breakers(snapshot),
@@ -253,10 +254,22 @@ class PackageRatingManager:
                 for circuit_id, stored in self._packages.items()
             },
             unacknowledged={
-                circuit_id: _change_row(change)
-                for circuit_id, change in self._unacknowledged.items()
+                circuit_id: _change_row(change) for circuit_id, change in self._unseen().items()
             },
         )
+
+    def _on_screen(self) -> bool:
+        """Whether the notice is on screen: standing, or waiting on its text to be raised.
+
+        Standing is the notices module's to say, so this asks it rather than
+        tracking dismissals here. A notice still waiting to be raised counts as on
+        screen, or two removals in a row would drop the first.
+        """
+        return self._announce_pending or notices.is_standing(self._hass, self._entry, _NOTICE_ID)
+
+    def _unseen(self) -> dict[str, RatingChange]:
+        """Return the removals the notice lists while it is on screen; none once the user has dismissed it."""
+        return self._unacknowledged if self._on_screen() else {}
 
     def begin(
         self,
@@ -380,20 +393,17 @@ class PackageRatingManager:
         """
         if self._unacknowledged.pop(circuit_id, None) is None or not self._unacknowledged:
             return
-        if self._announce_pending or notices.is_standing(self._hass, self._entry, _NOTICE_ID):
+        if self._on_screen():
             self._announce_pending = True
             self._hass.async_create_task(self._async_announce())
 
     def _record(self, changes: tuple[RatingChange, ...]) -> None:
         """Add removals to those the user has not seen, the latest for each circuit.
 
-        What the user has seen is what was on screen: once the notice has been
-        dismissed the earlier removals are spent. A notice still waiting to be
-        raised counts as on screen, or two removals in a row would drop the first.
+        What the user has seen is what was on screen (`_on_screen`): once the
+        notice has been dismissed the earlier removals are spent.
         """
-        if not self._announce_pending and not notices.is_standing(
-            self._hass, self._entry, _NOTICE_ID
-        ):
+        if not self._on_screen():
             self._unacknowledged = {}
         for change in changes:
             self._unacknowledged[change.circuit_id] = change

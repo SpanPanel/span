@@ -33,6 +33,7 @@ from custom_components.span_panel.diagnostics import (
 )
 from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
+from custom_components.span_panel.notices import async_restore
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
@@ -696,6 +697,7 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     """Keyed by circuit id as the circuits block is: each copy, the space it was copied for, and whether it applies."""
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="sp3-diag-rating")
     entry.add_to_hass(hass)
+    await async_restore(hass, entry)  # as setup does, so the notice the removal raises stands
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     before = _rated_panel(dryer_a=30.0, oven_a=40.0)

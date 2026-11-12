@@ -630,6 +630,41 @@ async def test_diagnostics_show_each_entry_its_space_and_what_the_rule_makes_of_
     assert manager.diagnostics(_snapshot())["packages"]["circuit-2"]["state"] == "applies"
 
 
+async def test_diagnostics_list_a_removal_only_while_its_notice_stands(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Dismissing the notice spends its lines, so the download no longer lists them as unacknowledged."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    manager.reconcile(_snapshot({"circuit-2": 30.0}), _declared)
+    await hass.async_block_till_done()
+    assert list(manager.diagnostics(_snapshot({"circuit-2": 30.0}))["unacknowledged"]) == ["circuit-2"]
+
+    async_dismiss(hass, _notification_id(entry))
+    await hass.async_block_till_done()
+
+    assert manager.diagnostics(_snapshot({"circuit-2": 30.0}))["unacknowledged"] == {}
+
+
+async def test_diagnostics_list_a_removal_whose_notice_is_still_being_raised(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A notice waiting on its text counts as on screen, as it does for the notice's own lines."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    release = threading.Event()
+
+    def held(language: str, section: str) -> dict[str, str]:
+        release.wait(timeout=5)
+        return read_translations(language, section)
+
+    with patch("custom_components.span_panel.package_rating_manager.notices.read_translations", held):
+        manager.reconcile(_snapshot({"circuit-2": 30.0}), _declared)
+        assert list(manager.diagnostics(_snapshot({"circuit-2": 30.0}))["unacknowledged"]) == ["circuit-2"]
+        release.set()
+        await hass.async_block_till_done()
+
+
 # -- Notices -------------------------------------------------------------------
 
 
