@@ -187,6 +187,7 @@ def test_the_rule_follows_the_relay_on_every_update() -> None:
     assert locked["always_on"] is True
 
 
+@pytest.mark.spec_only
 def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
     """Load-shed and PCS need a relay to act on, and this circuit declares none.
 
@@ -207,6 +208,7 @@ def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
     assert not RELAY_POLICIES & attributes.keys(), attributes
 
 
+@pytest.mark.spec_only
 def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
     """Nor does it report a relay it does not have.
 
