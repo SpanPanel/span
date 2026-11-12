@@ -221,6 +221,26 @@ def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
     assert "tabs" in attributes
 
 
+@pytest.mark.parametrize("circuit_id", [CONTROLLABLE_CIRCUIT, LOCKED_CIRCUIT])
+def test_a_relay_that_has_not_reported_is_still_a_relay(circuit_id: str) -> None:
+    """Whether a circuit has a relay is the declaration's to say, not the reading's.
+
+    The `switch` node is declared and `switch/relay` carries no value, as on a
+    panel that has described the circuit and not yet published its state. The
+    relay is there and its state is UNKNOWN, which is what the facts say; a
+    rule reading the state instead would drop them as though no relay existed.
+    """
+    tree = schema_one_tree()
+    del tree[circuit_id]["switch/relay"]
+    snapshot = schema_one_snapshot(tree)
+    assert snapshot.circuits[circuit_id].relay_state == "UNKNOWN"
+
+    attributes = _attributes(snapshot, circuit_id)
+
+    assert attributes.keys() >= RELAY_FACTS, attributes
+    assert attributes["relay_state"] == "UNKNOWN"
+
+
 def test_a_flat_always_on_circuit_reports_no_shed_priority() -> None:
     """Flat firmware says the same thing through `circuit/always-on`.
 
