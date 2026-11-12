@@ -62,6 +62,9 @@ type PackageRatings = tuple[int, int]
 A space holds at most a tandem, so a package here has exactly two.
 """
 
+type JudgedState = Literal["applies", "pending"]
+"""What a kept entry is: in force, or waiting on a value not yet arrived, with no judged rating."""
+
 type ChangeReason = Literal[
     "panel_rating_changed",
     "spaces_changed",
@@ -125,10 +128,12 @@ class RatingChange:
 
 @dataclass(frozen=True, slots=True)
 class Reconciled:
-    """The entries that remain after a snapshot, and what to tell the user."""
+    """The entries that remain after a snapshot, what each is now, and what to tell the user."""
 
     packages: dict[str, StoredPackage]
     changes: tuple[RatingChange, ...]
+    states: dict[str, JudgedState]
+    """For each entry kept, whether it applies or waits on a value not yet arrived."""
 
 
 def package_ratings_payload(ratings: PackageRatings | None) -> list[int] | None:
@@ -199,7 +204,7 @@ def _capacity_a(spaces: Collection[int], ratings_a: Iterable[int]) -> float | No
     return meter_capacity_a((spaces, float(rating)) for rating in ratings_a)
 
 
-type Verdict = ChangeReason | Literal["pending", "applies"]
+type Verdict = ChangeReason | JudgedState
 """What the rule says of one entry: why it is removed, that it waits on a value, or that it applies."""
 
 
@@ -293,11 +298,12 @@ def reconcile(
 
     A snapshot holding a circuit is complete by construction, so a circuit
     absent from it has left the panel. Returns the entries to keep, with labels
-    refreshed, and a change for each entry removed.
+    refreshed, what each now is, and a change for each entry removed.
     """
     service_a = service_rating_a(snapshot)
     describes_breakers = panel_describes_breakers(snapshot)
     kept: dict[str, StoredPackage] = {}
+    states: dict[str, JudgedState] = {}
     changes: list[RatingChange] = []
 
     for circuit_id, stored in packages.items():
@@ -319,8 +325,9 @@ def reconcile(
             )
         else:
             kept[circuit_id] = stored
+            states[circuit_id] = verdict
 
-    return Reconciled(kept, tuple(changes))
+    return Reconciled(kept, tuple(changes), states)
 
 
 type Refusal = Literal[

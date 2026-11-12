@@ -353,13 +353,14 @@ is scoped to a single panel — circuits, sub-devices, and entity mappings from 
 
 ### `span_panel_package_ratings_changed`
 
-Fired on the Home Assistant event bus whenever the package ratings stored for a panel change: a package is set or cleared, or a new snapshot removes one. A
-consumer showing `monitoring_rating_a` or `package_ratings_a` re-fetches `span_panel/panel_topology` on receiving it.
+Fired on the Home Assistant event bus whenever the package ratings stored for a panel, or what they are judged as, change: a package is set or cleared, or a new
+snapshot removes one, makes one wait on a value not yet arrived, or lets it apply again. A consumer showing `monitoring_rating_a` or `package_ratings_a`
+re-fetches `span_panel/panel_topology` on receiving it.
 
-| Field             | Type          | Description                                              |
-| ----------------- | ------------- | -------------------------------------------------------- |
-| `config_entry_id` | string        | The panel's config entry; ignore events for other panels |
-| `circuit_ids`     | array[string] | The circuits whose package ratings changed               |
+| Field             | Type          | Description                                                             |
+| ----------------- | ------------- | ----------------------------------------------------------------------- |
+| `config_entry_id` | string        | The panel's config entry; ignore events for other panels                |
+| `circuit_ids`     | array[string] | The circuits whose package ratings, or what they are judged as, changed |
 
 Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator, as `span_panel/panel_topology` does, so any user who can read a
 monitoring rating can hear it change.

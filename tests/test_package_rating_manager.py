@@ -546,6 +546,47 @@ async def test_a_reconcile_removal_fires_the_event_and_a_no_op_does_not(
     ]
 
 
+async def test_an_entry_that_goes_pending_or_applies_again_fires_the_event_and_tells_no_one(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """What a circuit is judged against changes with it, so a reader re-reads; nothing was removed, so no notice."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    await hass.async_block_till_done()
+    events = _events(hass)
+
+    manager.reconcile(_snapshot(main=None), _declared)  # the service rating's value is not yet back
+    await hass.async_block_till_done()
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
+    assert manager.resolve("circuit-2", _snapshot(main=None)).judged_a is None
+
+    manager.reconcile(_snapshot(main=None), _declared)  # still waiting: nothing changed
+    await hass.async_block_till_done()
+    assert len(events) == 1
+
+    manager.reconcile(_snapshot(), _declared)  # back: it applies again
+    await hass.async_block_till_done()
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"], ["circuit-2"]]
+    assert not is_standing(hass, entry, _NOTICE)
+    assert (await _stored(hass, entry))["packages"] != {}
+
+
+async def test_a_removal_and_a_circuit_going_pending_fire_one_event_naming_both(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 20])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
+    await hass.async_block_till_done()
+    events = _events(hass)
+
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": None}), _declared)
+    await hass.async_block_till_done()
+
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2", "circuit-3"]]
+
+
 # -- begin ---------------------------------------------------------------------
 
 

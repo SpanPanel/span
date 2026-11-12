@@ -202,7 +202,11 @@ async def test_a_snapshot_before_begin_judges_nothing(
 async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
-    """`field_metadata` is None while the client rebuilds; the rating arrives on the second push."""
+    """`field_metadata` is None while the client rebuilds; the rating arrives on the second push.
+
+    The copy waits while the rating is away and applies again when it is back:
+    readers are told each time, and nothing is removed or put in a notice.
+    """
     entry = _entry()
     entry.add_to_hass(hass)
     _seed(hass_storage, entry, "circuit-2")
@@ -222,13 +226,15 @@ async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing
         await coordinator._on_snapshot_push(rated_late)
     await hass.async_block_till_done()
 
-    assert events == []
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"], ["circuit-2"]]
     assert not is_standing(hass, entry, _NOTICE)
+    assert "circuit-2" in manager._packages
     client.field_metadata = _DECLARED
     manager.reconcile(rated_late, lambda: client.field_metadata)
+    await hass.async_block_till_done()
     rating = manager.resolve("circuit-2", rated_late)
     assert (rating.user_set, rating.judged_a) == (True, 40)
-    assert events == []
+    assert len(events) == 2
 
 
 async def test_snapshots_do_not_read_field_metadata_once_the_declaration_is_known(

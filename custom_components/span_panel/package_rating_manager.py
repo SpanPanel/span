@@ -26,6 +26,7 @@ from .helpers import construct_circuit_label
 from .package_ratings import (
     ChangeReason,
     Declaration,
+    JudgedState,
     MonitoringRating,
     PackageRatings,
     RatingChange,
@@ -206,6 +207,9 @@ class PackageRatingManager:
         self._hass = hass
         self._entry = entry
         self._packages: dict[str, StoredPackage] = {}
+        # What each entry was at the last reconcile or set, so a change to it,
+        # as well as a removal, is announced on the bus.
+        self._states: dict[str, JudgedState] = {}
         self._unacknowledged: dict[str, RatingChange] = {}
         self._service: Declaration = "unknown"
         self._begun = False
@@ -307,17 +311,32 @@ class PackageRatingManager:
         self._reconcile(snapshot)
 
     def _reconcile(self, snapshot: SpanPanelSnapshot) -> None:
+        """Apply the rule, then tell readers of every entry removed or changed in what it is.
+
+        An entry that goes pending, or applies again, changes what its circuit is
+        judged against without anything being removed, so it fires the event and
+        raises no notice. An entry first judged here, at `begin`, sets what it is
+        without firing: no reader has the topology before setup completes, and
+        the runtime data readers go through is set after this.
+        """
         result = reconcile_packages(
             self._packages, snapshot, self._service, construct_circuit_label
         )
         stored_changed = result.packages != self._packages
+        moved = {
+            circuit_id
+            for circuit_id, state in result.states.items()
+            if self._states.get(circuit_id, state) != state
+        }
         self._packages = result.packages
+        self._states = dict(result.states)
         if result.changes:
             self._record(result.changes)
         if stored_changed:
             self._save()
+        if result.changes or moved:
+            self._fire([*(change.circuit_id for change in result.changes), *moved])
         if result.changes:
-            self._fire(change.circuit_id for change in result.changes)
             self._announce()
 
     def set_package_ratings(
@@ -338,6 +357,7 @@ class PackageRatingManager:
         if self._packages.get(circuit_id) == admission:
             return
         self._packages[circuit_id] = admission
+        self._states[circuit_id] = "applies"  # admit stores only what applies
         self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
@@ -349,6 +369,7 @@ class PackageRatingManager:
         self._remove(circuit_id)
 
     def _remove(self, circuit_id: str) -> None:
+        self._states.pop(circuit_id, None)
         if self._packages.pop(circuit_id, None) is None:
             return
         self._forget(circuit_id)
