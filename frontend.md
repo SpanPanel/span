@@ -133,9 +133,10 @@ of a multi-load breaker as its own circuit, with its own rating, and name the ci
 
 Copy it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit. **Breaker ratings from
 the SPAN app** shows the rating the panel publishes, which is the package's first, and asks for the other breaker in this space exactly as the SPAN app shows
-the circuit: for 20-30A, enter 30. The `span_panel.set_circuit_package_ratings` service takes the whole package in the app's order, `[20, 30]`, and
-`span_panel.clear_circuit_package_ratings` removes it. Each rating is a whole number of amps, the first must be the panel's, and both together cannot exceed the
-panel's service rating. Only a circuit in one breaker space that the panel publishes a rating for takes a copy.
+the circuit: for 20-30A, enter 30, then press Enter or leave the field; nothing is saved while you type. The `span_panel.set_circuit_package_ratings` service
+takes the whole package in the app's order, `[20, 30]`, and `span_panel.clear_circuit_package_ratings` removes it. Each rating is a whole number of amps, the
+first must be the panel's, and both together cannot exceed the panel's service rating. Only a circuit in one breaker space that the panel publishes a rating for
+takes a copy.
 
 **Remove copied ratings** beside the field removes the copy, and the circuit is judged against the panel's rating again; the service does the same when given
 the panel's rating alone. Turning monitoring off keeps the copy, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
@@ -147,8 +148,8 @@ panel's rating, and energy counter checks keep using it. The panel topology, the
 `monitoring_rating_a`, the rating judged against, `monitoring_rating_user_set` beside it, and `package_ratings_a`, the ratings copied.
 
 Thresholds are percentages of the rating a circuit is judged against. If you raised a tandem's thresholds above 100% to quiet its alerts, they now apply to both
-breakers together, which can let a real overload pass: the Monitoring section warns of that and offers **Use global thresholds**. Copying changes no threshold
-by itself.
+breakers together, which can let a real overload pass: the Monitoring section warns of that and offers **Use global thresholds**. Where the thresholds above
+100% are the global ones, it says so and points to **Global Settings** on the Monitoring tab instead. Copying changes no threshold by itself.
 
 For a circuit that spans two spaces, such as a 240 V breaker sharing a leg with a 120 V one, a MAIN 32 reports the average of the circuit's two legs. One leg
 can carry more than its breaker while the reading stays under the rating, and no copied rating can show that leg, so the Monitoring section offers none there
