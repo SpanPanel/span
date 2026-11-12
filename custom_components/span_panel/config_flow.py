@@ -154,6 +154,10 @@ def _discovered_port(record: Mapping[str, Any], *names: str) -> int | None:
     unpublished rather than raising, because a malformed TXT record must not be
     the reason a panel cannot be set up.
 
+    A number that is not a port -- outside 1 to 65535 -- is unreadable too. It
+    would otherwise reach the probe, and from an announcement that matches an
+    unpinned entry it would be stored, where nothing checks it again.
+
     None is distinct from a published value that happens to equal the default:
     only None leaves the flow free to ask the user.
     """
@@ -162,11 +166,31 @@ def _discovered_port(record: Mapping[str, Any], *names: str) -> int | None:
         if raw is None or raw == "":
             continue
         try:
-            return int(raw)
+            port = int(raw)
         except (TypeError, ValueError):
             _LOGGER.debug("Discovery record carried an unreadable %s: %r", name, raw)
             return None
+        if not 1 <= port <= 65535:
+            _LOGGER.debug("Discovery record carried %s %r, which is not a port", name, raw)
+            return None
+        return port
     return None
+
+
+def _discovered_tls_port(record: Mapping[str, Any], *names: str) -> int | None:
+    """Read a TLS port out of a discovery record, or None when it names no usable one.
+
+    `_discovered_port`, and 80 refused as well: it is the plaintext port, which
+    the library refuses under a pin, and the HTTPS port form refuses from a
+    user for the same reason. An announcement carries no more authority than a
+    user typing it, so a published 80 is read as no port published, and the
+    flow falls back exactly as it does for one that names none.
+    """
+    port = _discovered_port(record, *names)
+    if port == 80:
+        _LOGGER.debug("Discovery record named the plaintext port 80 as its TLS port")
+        return None
+    return port
 
 
 class TriggerFlowType(enum.Enum):
@@ -641,7 +665,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # too, and it is the only party that knows where. Taking the
             # published value here is what keeps the reverse-proxy question off
             # the screen of a user whose panel already answered it.
-            https_port = _discovered_port(props, "httpsPort", "httpsport")
+            https_port = _discovered_tls_port(props, "httpsPort", "httpsport")
             if https_port is not None:
                 self._https_port = https_port
                 self._https_port_known = True
@@ -709,7 +733,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Nobody else can tell the flow what it is, so being told is the
         # difference between a silent setup and a prompt for a number the user
         # would have to go read out of the add-on log.
-        https_port = _discovered_port(config, "https_port", "httpsPort")
+        https_port = _discovered_tls_port(config, "https_port", "httpsPort")
         if https_port is not None:
             self._https_port = https_port
             self._https_port_known = True

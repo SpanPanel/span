@@ -2752,6 +2752,92 @@ async def test_zeroconf_shows_a_panel_by_its_port_where_that_is_not_80(
     assert flow["context"]["title_placeholders"] == {CONF_HOST: shown_as}
 
 
+#: TXT values a port field can carry that no port can have. A TXT record is
+#: whatever the LAN broadcast, so each must read as no port published at all.
+IMPOSSIBLE_PORTS = ("0", "-5", "65536", "99999")
+
+
+@pytest.mark.parametrize("raw", IMPOSSIBLE_PORTS)
+@pytest.mark.asyncio
+async def test_zeroconf_reads_an_impossible_http_port_as_none_published(
+    hass: HomeAssistant, raw: str
+) -> None:
+    """The panel is probed on 80, as for an announcement that publishes no port."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=dataclasses.replace(_announcement(None), properties={"httpPort": raw}),
+        )
+
+    detect.assert_awaited_once()
+    assert detect.await_args.kwargs["port"] == 80
+
+
+@pytest.mark.parametrize("raw", ("80", *IMPOSSIBLE_PORTS))
+@pytest.mark.asyncio
+async def test_zeroconf_never_stores_an_https_port_that_cannot_be_one(
+    hass: HomeAssistant, raw: str
+) -> None:
+    """An entry follows its panel's HTTP port and ignores an HTTPS port it could not use.
+
+    80 is the plaintext port, which the library refuses under a pin, and the
+    rest are not ports at all. Stored, either would fail every later
+    connection; an unpinned entry has no check that would have caught it.
+    """
+    entry = _entry_at_the_shared_host(hass, SERIAL_A, 8081)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_A)),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=dataclasses.replace(
+                _announcement(8083), properties={"httpPort": "8083", "httpsPort": raw}
+            ),
+        )
+
+    assert entry.data[CONF_HTTP_PORT] == 8083
+    assert CONF_HTTPS_PORT not in entry.data
+
+
+@pytest.mark.parametrize("raw", ("80", *IMPOSSIBLE_PORTS))
+@pytest.mark.asyncio
+async def test_zeroconf_asks_for_the_https_port_when_the_one_published_cannot_be_one(
+    hass: HomeAssistant, raw: str
+) -> None:
+    """A new panel whose announced HTTPS port is unusable is asked about, as for none."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=dataclasses.replace(
+                _announcement(8082), properties={"httpPort": "8082", "httpsPort": raw}
+            ),
+        )
+        assert result["step_id"] == "confirm_discovery", result
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["step_id"] == "panel_https_port", result
+
+
 @pytest.mark.asyncio
 async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
     hass: HomeAssistant,
@@ -3396,6 +3482,49 @@ async def test_hassio_takes_both_ports_whichever_way_the_host_goes(
     assert kept.data[CONF_HOST] == "192.168.1.40"
     assert kept.data[CONF_HTTP_PORT] == 9090
     assert kept.data[CONF_HTTPS_PORT] == 10090
+
+
+@pytest.mark.parametrize("raw", (80, 0, -5, 99999))
+@pytest.mark.asyncio
+async def test_hassio_never_stores_an_https_port_that_cannot_be_one(
+    hass: HomeAssistant, raw: int
+) -> None:
+    """The add-on's ports go into the entry unguarded, so they are read with care."""
+    kept = _hassio_configured_entry(hass, **{CONF_HTTPS_PORT: 10090})
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "https_port": raw}),
+        )
+
+    assert kept.data[CONF_HTTP_PORT] == 9090
+    assert kept.data[CONF_HTTPS_PORT] == 10090
+
+
+@pytest.mark.parametrize("raw", (0, -5, 99999))
+@pytest.mark.asyncio
+async def test_hassio_reads_an_impossible_port_as_none_published(
+    hass: HomeAssistant, raw: int
+) -> None:
+    """An add-on port that is not a port is the default, as for one not published."""
+    kept = _hassio_configured_entry(hass, **{CONF_HTTP_PORT: 9090})
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "port": raw}),
+        )
+
+    assert kept.data[CONF_HTTP_PORT] == 80
 
 
 @pytest.mark.usefixtures("socket_enabled")
