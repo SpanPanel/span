@@ -111,6 +111,7 @@ __all__ = [
     "has_power_flows",
     "has_pv",
     "has_shed_forecast",
+    "has_solar_source",
     "identity_digest",
     "pv_inverter_capability_tokens",
     "match_circuit_id",
@@ -420,19 +421,34 @@ def has_bess(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.battery.soe_percentage is not None
 
 
+def has_solar_source(snapshot: SpanPanelSnapshot) -> bool:
+    """Whether a device or circuit says where the panel's solar is.
+
+    A published inverter or, where the panel publishes roles, a circuit whose
+    role is solar (`solar_sources`); or a circuit typed `pv`.
+    """
+    return bool(solar_sources(snapshot)) or any(
+        c.device_type == "pv" for c in snapshot.circuits.values()
+    )
+
+
 def has_pv(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether PV (solar) is commissioned.
 
-    Where the panel says where its solar is (`publishes_solar_roles`), only a
-    solar source is evidence: a published inverter, or a circuit whose role is
-    solar. Its power-flows PV figure alone is not, since a panel with a battery
-    and no solar publishes it as 0.0. Elsewhere the rule is unchanged.
+    A valued `power-flows/pv` is solar whatever it reads, 0.0 included, and so
+    is a solar source (`has_solar_source`). SPAN documents `pv` as unset on a
+    panel with neither a battery nor solar, and every panel known to have solar
+    publishes it. That includes solar DC-coupled into a battery, which can have
+    no inverter device and no circuit with a SOLAR role, as on
+    SpanPanel/span#347, leaving the flow the only place the panel reports it.
+
+    The flow's presence decides, not its value. Of the two battery captures
+    with no inverter and no solar circuit, one leaves `pv` unset and one values
+    it 0.0, and which of them has solar is unknown. A reading cannot settle
+    that: what the flow reads says whether the sun is up, not whether the
+    panel has solar.
     """
-    if snapshot.publishes_solar_roles:
-        return bool(solar_sources(snapshot))
-    return snapshot.power_flow_pv is not None or any(
-        c.device_type == "pv" for c in snapshot.circuits.values()
-    )
+    return snapshot.power_flow_pv is not None or has_solar_source(snapshot)
 
 
 def resolve_pv_display_suffix(

@@ -27,7 +27,12 @@ from .const import (
     PANEL_CA_PENDING,
 )
 from .counter_plausibility import implausible_counters
-from .helpers import has_pv, identity_digest, outside_meter_label, shared_relay_groups
+from .helpers import (
+    has_solar_source,
+    identity_digest,
+    outside_meter_label,
+    shared_relay_groups,
+)
 from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
@@ -314,13 +319,13 @@ class PvBlock(TypedDict):
 
 
 def _pv_power_without_source(snapshot: SpanPanelSnapshot) -> float | None:
-    """Return PV power the panel reports while it has no solar source, or None.
+    """Return the PV flow the panel publishes with no solar source to attribute it to, or None.
 
-    A valued, non-zero figure is the evidence: 0.0 is what a panel with a battery
-    and no solar publishes, and an unpublished figure says nothing.
+    Reported as published, 0.0 included. Such a flow makes the Solar device on
+    its own (`has_pv`), with no inverter or solar circuit behind it.
     """
     power = snapshot.power_flow_pv
-    if power is None or power == 0 or has_pv(snapshot):
+    if power is None or has_solar_source(snapshot):
         return None
     return power
 
@@ -473,8 +478,8 @@ async def async_get_config_entry_diagnostics(
         # Counter readings beyond what the circuit's breaker could ever have
         # passed: shown as published, never used as the dip baseline.
         "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],
-        # Solar power the panel reports with no solar source to attribute it to:
-        # the earliest sign that where this firmware says its solar is has moved.
+        # PV power the panel publishes with no solar source to attribute it to:
+        # the Solar device then has no inverter or solar circuit behind it.
         "pv_power_without_source_w": _pv_power_without_source(snapshot),
         "evse": evse_data,
         "battery": battery_data,

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.1] - 11/2026
+
+### Fixed
+
+- **On panels other than MAIN 32, the Solar device and PV Power are created again wherever the panel publishes a PV power figure, 0 W included**, so solar the
+  panel reports only there, such as solar DC-coupled into a battery, no longer shows as unavailable as it did on 2.2.0.
+
 ## [2.2.0] - 11/2026
 
 ### Added
