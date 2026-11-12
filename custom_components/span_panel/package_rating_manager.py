@@ -1,13 +1,13 @@
 """Stored monitoring ratings for one panel, and the announcements they raise.
 
-`monitoring_ratings` is the rule: whether a monitoring rating applies, and what to tell the
+`package_ratings` is the rule: whether a monitoring rating applies, and what to tell the
 user when the panel overtakes one. This module is what holds the ratings and
 acts on that rule. It stores them per config entry, reconciles them against each
 complete snapshot, fires an event for every change so a card can re-read its
 ratings, and keeps one notice per panel listing what the user has not yet seen.
 
 Nothing here decides whether a rating applies. Every comparison is a call into
-`monitoring_ratings`, so every reader of a rating agrees.
+`package_ratings`, so every reader of a rating agrees.
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ from homeassistant.helpers.storage import Store
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from . import notices
-from .const import DOMAIN, EVENT_MONITORING_RATING_CHANGED
+from .const import DOMAIN, EVENT_PACKAGE_RATINGS_CHANGED
 from .helpers import construct_circuit_label
-from .monitoring_ratings import (
+from .package_ratings import (
     ChangeReason,
     Declaration,
     MonitoringRating,
@@ -45,9 +45,9 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 _STORAGE_VERSION: Final = 1
-_STORAGE_KEY_PREFIX: Final = "span_panel_monitoring_ratings"
+_STORAGE_KEY_PREFIX: Final = "span_panel_package_ratings"
 
-_NOTICE_ID: Final = "monitoring_rating_changed"
+_NOTICE_ID: Final = "package_ratings_changed"
 
 type FieldMetadataSource = Callable[[], Mapping[str, FieldMetadata] | None]
 """Reads the adapter's field metadata: the client's `field_metadata`, read on demand."""
@@ -91,7 +91,7 @@ class RatingDiagnosticsRow(TypedDict):
     state: Literal["applies", "pending"]
 
 
-class MonitoringRatingsDiagnostics(TypedDict):
+class PackageRatingsDiagnostics(TypedDict):
     """The diagnostics download's `monitoring_ratings` row, keyed by wire circuit id."""
 
     panel_describes_breakers: bool
@@ -180,7 +180,7 @@ def _figure(value: float | None) -> str:
     return "" if value is None else f"{value:g}"
 
 
-class MonitoringRatingManager:
+class PackageRatingManager:
     """Holds one panel's monitoring ratings and tells the user when they change."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -215,7 +215,7 @@ class MonitoringRatingManager:
             describes_breakers=panel_describes_breakers(snapshot),
         )
 
-    def diagnostics(self, snapshot: SpanPanelSnapshot) -> MonitoringRatingsDiagnostics:
+    def diagnostics(self, snapshot: SpanPanelSnapshot) -> PackageRatingsDiagnostics:
         """Every stored monitoring rating and every change the user has not yet seen.
 
         Each rating's state comes from `resolve`, the call every reader makes, so
@@ -223,7 +223,7 @@ class MonitoringRatingManager:
         stored rating either applies or waits on a value that has not arrived;
         any other outcome has already removed it.
         """
-        return MonitoringRatingsDiagnostics(
+        return PackageRatingsDiagnostics(
             panel_describes_breakers=panel_describes_breakers(snapshot),
             service_rating_declaration=self._service,
             ratings={
@@ -430,7 +430,7 @@ class MonitoringRatingManager:
 
     def _fire(self, circuit_ids: Iterable[str]) -> None:
         self._hass.bus.async_fire(
-            EVENT_MONITORING_RATING_CHANGED,
+            EVENT_PACKAGE_RATINGS_CHANGED,
             {"config_entry_id": self._entry.entry_id, "circuit_ids": sorted(set(circuit_ids))},
         )
 
@@ -462,7 +462,7 @@ def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredRatings]:
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
 
 
-async def async_forget_monitoring_ratings(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def async_forget_package_ratings(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Drop the stored ratings when the entry is removed.
 
     The keys are wire circuit ids, so a store left behind would be loaded by the

@@ -3,7 +3,7 @@
 Detects spike (instantaneous) and continuous overload conditions by comparing
 current readings against the rating each point is judged against, with configurable
 thresholds. A circuit is judged against its panel rating, or the monitoring rating a
-user set for it; the monitor asks the `MonitoringRatingManager` for it and stores none.
+user set for it; the monitor asks the `PackageRatingManager` for it and stores none.
 Dispatches notifications via event bus, notify services, and persistent
 notifications.
 """
@@ -33,7 +33,6 @@ from .const import (
 )
 from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
-from .monitoring_ratings import service_rating_a
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -44,6 +43,7 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
+from .package_ratings import service_rating_a
 from .threshold_evaluator import (
     MonitoringSettings,
     check_continuous,
@@ -56,8 +56,8 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-    from .monitoring_rating_manager import MonitoringRatingManager
-    from .monitoring_ratings import MonitoringRating
+    from .package_rating_manager import PackageRatingManager
+    from .package_ratings import MonitoringRating
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -190,13 +190,13 @@ def monitored_circuits(
 class CurrentMonitor:
     """Monitors current draw against each circuit's rating for overload detection.
 
-    The ratings come from the panel's `MonitoringRatingManager`, which the
+    The ratings come from the panel's `PackageRatingManager`, which the
     coordinator reconciles before any listener sees a snapshot. The monitor only
     resolves them; it holds none, so nothing here can lose a user's monitoring rating.
     """
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, ratings: MonitoringRatingManager
+        self, hass: HomeAssistant, entry: ConfigEntry, ratings: PackageRatingManager
     ) -> None:
         """Initialize the CurrentMonitor."""
         self._hass = hass

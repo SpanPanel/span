@@ -391,7 +391,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         runtime_data, entry = result
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
-        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.monitoring_rating_manager)
+        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.package_rating_manager)
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
         # Seed the monitor with the coordinator's latest snapshot so that
@@ -564,7 +564,7 @@ def _async_register_monitoring_rating_services(hass: HomeAssistant) -> None:
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.monitoring_rating_manager.set_rating(
+        runtime_data.coordinator.package_rating_manager.set_rating(
             circuit_id, snapshot, call.data["monitoring_rating_a"]
         )
 
@@ -573,7 +573,7 @@ def _async_register_monitoring_rating_services(hass: HomeAssistant) -> None:
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.monitoring_rating_manager.clear_rating(circuit_id, snapshot)
+        runtime_data.coordinator.package_rating_manager.clear_rating(circuit_id, snapshot)
 
     hass.services.async_register(
         DOMAIN,

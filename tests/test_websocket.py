@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
-from custom_components.span_panel.monitoring_ratings import MonitoringRating
+from custom_components.span_panel.package_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
@@ -57,7 +57,7 @@ def _make_coordinator(snapshot):
     coordinator = MagicMock()
     coordinator.data = snapshot
     # No circuit has a monitoring rating: each reports the rating its panel published.
-    coordinator.monitoring_rating_manager.resolve.side_effect = _panel_rating
+    coordinator.package_rating_manager.resolve.side_effect = _panel_rating
     return coordinator
 
 
@@ -857,7 +857,7 @@ class TestHandlePanelTopology:
                 return MonitoringRating(50.0, 20.0, True)
             return _panel_rating(circuit_id, snap)
 
-        coordinator.monitoring_rating_manager.resolve.side_effect = resolve
+        coordinator.package_rating_manager.resolve.side_effect = resolve
         entry = MockConfigEntry(
             domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-test-001"
         )

@@ -346,7 +346,7 @@ async def test_a_successful_setup_clears_a_notice_left_from_a_previous_run(
     client.connect = AsyncMock()
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.monitoring_rating_manager.async_load = AsyncMock()
+    coordinator.package_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = snapshot
 
@@ -374,7 +374,7 @@ async def test_unloading_the_entry_takes_the_subscription_with_it(
     client.register_leaf_mismatch_callback = MagicMock(return_value=unregister)
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
-    coordinator.monitoring_rating_manager.async_load = AsyncMock()
+    coordinator.package_rating_manager.async_load = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-leaf-001")
 

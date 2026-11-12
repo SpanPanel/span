@@ -26,7 +26,7 @@ from .helpers import (
     shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
-from .monitoring_ratings import panel_describes_breakers
+from .package_ratings import panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -162,7 +162,7 @@ async def handle_panel_topology(
     # What each shared meter is judged against, from the monitor's own points so
     # the capacity rule runs in one place; the card reads it and adds nothing up.
     points = monitored_circuits(
-        snapshot, lambda cid: coordinator.monitoring_rating_manager.resolve(cid, snapshot)
+        snapshot, lambda cid: coordinator.package_rating_manager.resolve(cid, snapshot)
     )
     meter_groups = {
         point.point_id: _meter_group_record(point)
@@ -177,7 +177,7 @@ async def handle_panel_topology(
             continue
 
         tabs = sorted(circuit.tabs) if circuit.tabs else []
-        rating = coordinator.monitoring_rating_manager.resolve(circuit_id, snapshot)
+        rating = coordinator.package_rating_manager.resolve(circuit_id, snapshot)
         circuits[circuit_id] = {
             "tabs": tabs,
             # A meter without a breaker space publishes no name; it carries the

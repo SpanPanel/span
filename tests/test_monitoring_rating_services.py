@@ -18,7 +18,7 @@ import voluptuous as vol
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entity_resolver import resolve_circuit_id
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import (
     _async_register_monitoring_rating_services,
@@ -52,16 +52,16 @@ async def _loaded_panel(
     hass: HomeAssistant,
     unique_id: str,
     snapshot: SpanPanelSnapshot,
-) -> tuple[MockConfigEntry, MonitoringRatingManager]:
+) -> tuple[MockConfigEntry, PackageRatingManager]:
     """Return a loaded entry whose coordinator holds `snapshot` and a begun manager."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id=unique_id)
     entry.add_to_hass(hass)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.monitoring_rating_manager = manager
+    coordinator.package_rating_manager = manager
     coordinator.current_monitor = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -272,7 +272,7 @@ class TestPanelChoice:
 
     async def _two_panels(
         self, hass: HomeAssistant
-    ) -> tuple[MockConfigEntry, MonitoringRatingManager, MockConfigEntry, MonitoringRatingManager]:
+    ) -> tuple[MockConfigEntry, PackageRatingManager, MockConfigEntry, PackageRatingManager]:
         entry_a, manager_a = await _loaded_panel(hass, "sp3-001", _snapshot())
         entry_b, manager_b = await _loaded_panel(hass, "sp3-002", _snapshot())
         return entry_a, manager_a, entry_b, manager_b

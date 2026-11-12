@@ -33,7 +33,7 @@ from custom_components.span_panel.diagnostics import (
 )
 from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
@@ -692,7 +692,7 @@ async def test_diagnostics_report_the_stored_monitoring_ratings_and_the_changes_
     """Keyed by circuit id as the circuits block is: each rating, the panel rating it was set against, and whether it applies."""
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="sp3-diag-rating")
     entry.add_to_hass(hass)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     before = _rated_panel(dryer_a=30.0, oven_a=40.0)
     manager.begin(before, {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")})
@@ -711,7 +711,7 @@ async def test_diagnostics_report_the_stored_monitoring_ratings_and_the_changes_
     coordinator.schema_findings = None
     coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
-    coordinator.monitoring_rating_manager = manager
+    coordinator.package_rating_manager = manager
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id="panel-device-id",

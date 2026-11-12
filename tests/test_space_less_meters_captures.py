@@ -145,7 +145,7 @@ async def test_a_space_less_meter_never_looks_like_a_breaker(
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     topology = await _topology(hass, hass_ws_client, entry)
     assert isinstance(topology, dict)
-    monitor = CurrentMonitor(hass, entry, runtime.coordinator.monitoring_rating_manager)
+    monitor = CurrentMonitor(hass, entry, runtime.coordinator.package_rating_manager)
     monitor.process_snapshot(runtime.coordinator.data)
     monitored = monitor.get_monitoring_status()["circuits"]
 

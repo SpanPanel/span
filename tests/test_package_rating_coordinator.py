@@ -21,17 +21,17 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
     DOMAIN,
-    EVENT_MONITORING_RATING_CHANGED,
+    EVENT_PACKAGE_RATINGS_CHANGED,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.notices import is_standing
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 SERVICE_A = 100
 _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
-_NOTICE = "monitoring_rating_changed"
+_NOTICE = "package_ratings_changed"
 
 
 def _snapshot(ratings: Mapping[str, float | None]) -> SpanPanelSnapshot:
@@ -52,10 +52,10 @@ def _snapshot(ratings: Mapping[str, float | None]) -> SpanPanelSnapshot:
 
 def _seed(hass_storage: dict[str, object], entry: MockConfigEntry, circuit_id: str) -> None:
     """Leave a monitoring rating of 40 A, set when the panel said 20 A, on disk for `entry`."""
-    hass_storage[f"span_panel_monitoring_ratings.{entry.entry_id}"] = {
+    hass_storage[f"span_panel_package_ratings.{entry.entry_id}"] = {
         "version": 1,
         "minor_version": 1,
-        "key": f"span_panel_monitoring_ratings.{entry.entry_id}",
+        "key": f"span_panel_package_ratings.{entry.entry_id}",
         "data": {
             "ratings": {
                 circuit_id: {
@@ -101,8 +101,8 @@ def _coordinator(
 
 async def _begun(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, hass: HomeAssistant
-) -> MonitoringRatingManager:
-    manager = coordinator.monitoring_rating_manager
+) -> PackageRatingManager:
+    manager = coordinator.package_rating_manager
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     await hass.async_block_till_done()
@@ -110,7 +110,7 @@ async def _begun(
 
 
 def _events(hass: HomeAssistant) -> list[Event]:
-    events: list[Event] = async_capture_events(hass, EVENT_MONITORING_RATING_CHANGED)
+    events: list[Event] = async_capture_events(hass, EVENT_PACKAGE_RATINGS_CHANGED)
     return events
 
 
@@ -121,7 +121,7 @@ async def test_the_coordinator_owns_a_manager_from_construction(hass: HomeAssist
     entry = _entry()
     entry.add_to_hass(hass)
     coordinator = _coordinator(hass, entry, _client(_DECLARED))
-    assert isinstance(coordinator.monitoring_rating_manager, MonitoringRatingManager)
+    assert isinstance(coordinator.package_rating_manager, PackageRatingManager)
 
 
 # -- Before a snapshot is published ------------------------------------------
@@ -185,7 +185,7 @@ async def test_a_snapshot_before_begin_judges_nothing(
     client = _client(_DECLARED)
     client.get_snapshot = AsyncMock(return_value=_snapshot({"circuit-9": 20.0}))
     coordinator = _coordinator(hass, entry, client)
-    await coordinator.monitoring_rating_manager.async_load()
+    await coordinator.package_rating_manager.async_load()
     events = _events(hass)
 
     with patch.object(coordinator, "_run_post_update_tasks", AsyncMock()):
@@ -194,7 +194,7 @@ async def test_a_snapshot_before_begin_judges_nothing(
 
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)
-    stored = hass_storage[f"span_panel_monitoring_ratings.{entry.entry_id}"]
+    stored = hass_storage[f"span_panel_package_ratings.{entry.entry_id}"]
     assert isinstance(stored, dict)
     assert "circuit-2" in stored["data"]["ratings"]
 
@@ -269,7 +269,7 @@ async def test_snapshots_read_field_metadata_while_the_declaration_is_unknown(
     reads = PropertyMock(side_effect=[None, _DECLARED])
     type(client).field_metadata = reads
     coordinator = _coordinator(hass, entry, client)
-    manager = coordinator.monitoring_rating_manager
+    manager = coordinator.package_rating_manager
     await manager.async_load()
     manager.begin(snapshot, None)
 
@@ -346,7 +346,7 @@ async def test_a_monitoring_rating_stored_before_setup_is_in_force_after_it(
 
     _, coordinator = await _set_up(hass, entry, snapshot)
 
-    rating = coordinator.monitoring_rating_manager.resolve("circuit-2", snapshot)
+    rating = coordinator.package_rating_manager.resolve("circuit-2", snapshot)
     assert (rating.user_set, rating.judged_a) == (True, 40)
 
 
@@ -365,18 +365,18 @@ async def test_a_monitoring_rating_for_a_missing_circuit_survives_until_begin_an
         manager = coordinators_manager[0]
         before.append((len(manager._ratings), len(events)))
 
-    coordinators_manager: list[MonitoringRatingManager] = []
-    orig_load = MonitoringRatingManager.async_load
+    coordinators_manager: list[PackageRatingManager] = []
+    orig_load = PackageRatingManager.async_load
 
-    async def _capture(self: MonitoringRatingManager) -> None:
+    async def _capture(self: PackageRatingManager) -> None:
         coordinators_manager.append(self)
         await orig_load(self)
 
-    with patch.object(MonitoringRatingManager, "async_load", _capture):
+    with patch.object(PackageRatingManager, "async_load", _capture):
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_look)
 
     assert before == [(1, 0)]
-    assert coordinator.monitoring_rating_manager._ratings == {}
+    assert coordinator.package_rating_manager._ratings == {}
     assert [event.data["circuit_ids"] for event in events] == [["old-circuit"]]
 
 
@@ -388,10 +388,10 @@ async def test_a_stand_in_rekey_before_begin_keeps_the_monitoring_rating_on_the_
     _seed(hass_storage, entry, "old-circuit")
     snapshot = _snapshot({"new-circuit": 20.0})
     events = _events(hass)
-    managers: list[MonitoringRatingManager] = []
-    orig_load = MonitoringRatingManager.async_load
+    managers: list[PackageRatingManager] = []
+    orig_load = PackageRatingManager.async_load
 
-    async def _capture(self: MonitoringRatingManager) -> None:
+    async def _capture(self: PackageRatingManager) -> None:
         managers.append(self)
         await orig_load(self)
 
@@ -399,10 +399,10 @@ async def test_a_stand_in_rekey_before_begin_keeps_the_monitoring_rating_on_the_
         ratings = managers[0]._ratings
         ratings["new-circuit"] = ratings.pop("old-circuit")
 
-    with patch.object(MonitoringRatingManager, "async_load", _capture):
+    with patch.object(PackageRatingManager, "async_load", _capture):
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_migrate)
 
-    rating = coordinator.monitoring_rating_manager.resolve("new-circuit", snapshot)
+    rating = coordinator.package_rating_manager.resolve("new-circuit", snapshot)
     assert (rating.user_set, rating.judged_a) == (True, 40)
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)

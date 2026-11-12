@@ -16,7 +16,7 @@
     "title": "Panel SPAN: algunas lecturas del fabricante no se añadieron",
     "body": "Un dispositivo de tu panel declara más lecturas del fabricante de las que esta integración añade para un solo dispositivo ({limit}). El resto quedó fuera: {devices}.\n\nNada de lo que ya tienes se ve afectado y nada está roto. Las lecturas que quedaron fuera siguen apareciendo en la descarga de diagnósticos de esta integración, que es lo que conviene adjuntar si quieres que se muestren."
   },
-  "monitoring_rating_changed": {
+  "package_ratings_changed": {
     "title": "Cambiaron las capacidades de monitoreo del Panel SPAN",
     "intro": "El panel cambió algo de lo que depende una capacidad de monitoreo que estableciste. Para revisar un circuito, ábrelo en el panel de control de Span Panel: su capacidad de monitoreo está en la sección **Monitoreo** del circuito, que se muestra mientras el monitoreo está activado para ese circuito.",
     "panel_changed": "**{circuit}**: el panel ahora informa {after} A (antes {before} A). Tu capacidad de monitoreo de {rating} A sigue aplicándose.",

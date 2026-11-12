@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.monitoring_ratings import (
+from custom_components.span_panel.package_ratings import (
     Declaration,
     MonitoringRating,
     RatingChange,

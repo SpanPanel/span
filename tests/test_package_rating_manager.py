@@ -18,19 +18,19 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry
-from custom_components.span_panel.const import DOMAIN, EVENT_MONITORING_RATING_CHANGED
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
-from custom_components.span_panel.monitoring_ratings import ChangeReason
+from custom_components.span_panel.const import DOMAIN, EVENT_PACKAGE_RATINGS_CHANGED
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
+from custom_components.span_panel.package_ratings import ChangeReason
 from custom_components.span_panel.notices import async_restore, is_standing, read_translations
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
-_NOTICE = "monitoring_rating_changed"
+_NOTICE = "package_ratings_changed"
 SERVICE_A = 100
 
 
 def _store_key(entry: MockConfigEntry) -> str:
-    return f"span_panel_monitoring_ratings.{entry.entry_id}"
+    return f"span_panel_package_ratings.{entry.entry_id}"
 
 
 def _notification_id(entry: MockConfigEntry) -> str:
@@ -87,10 +87,10 @@ async def _begun(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     snapshot: SpanPanelSnapshot | None = None,
-) -> MonitoringRatingManager:
+) -> PackageRatingManager:
     """Return a loaded manager whose first reconcile has run against a declared service rating."""
     await async_restore(hass, entry)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot or _snapshot(), _DECLARED)
     await hass.async_block_till_done()
@@ -105,7 +105,7 @@ async def _stored(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, dict
 
 
 def _events(hass: HomeAssistant) -> list[Event]:
-    events: list[Event] = async_capture_events(hass, EVENT_MONITORING_RATING_CHANGED)
+    events: list[Event] = async_capture_events(hass, EVENT_PACKAGE_RATINGS_CHANGED)
     return events
 
 
@@ -133,7 +133,7 @@ async def test_a_set_rating_is_saved_and_loaded_by_the_next_manager(
         "unacknowledged": {},
     }
 
-    reloaded = MonitoringRatingManager(hass, entry)
+    reloaded = PackageRatingManager(hass, entry)
     await reloaded.async_load()
     reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded ratings
     rating = reloaded.resolve("circuit-2", _snapshot())
@@ -157,7 +157,7 @@ async def test_a_malformed_store_loads_as_empty(
             "unacknowledged": "nonsense",
         },
     }
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot({"good": 15.0, "bad": 10.0}), _DECLARED)
     assert manager.resolve("good", _snapshot({"good": 15.0})).user_set
@@ -176,7 +176,7 @@ async def test_removing_the_config_entry_deletes_its_ratings(
     await async_remove_entry(hass, entry)
 
     assert _store_key(entry) not in hass_storage
-    reloaded = MonitoringRatingManager(hass, entry)
+    reloaded = PackageRatingManager(hass, entry)
     await reloaded.async_load()
     reloaded.begin(_snapshot(), _DECLARED)
     assert not reloaded.resolve("circuit-2", _snapshot()).user_set
@@ -338,7 +338,7 @@ async def test_set_refuses_when_the_panel_declares_no_service_rating(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     await async_restore(hass, entry)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot(), _UNDECLARED)
     with pytest.raises(ServiceValidationError) as raised:
@@ -453,7 +453,7 @@ async def test_reconcile_is_inert_until_begin(
         },
     }
     await async_restore(hass, entry)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     events = _events(hass)
 
@@ -512,7 +512,7 @@ async def test_a_known_declaration_is_not_read_again_on_a_snapshot(
 ) -> None:
     """The library documents the metadata as a once-per-session read; it costs a schema walk."""
     await async_restore(hass, entry)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot(), at_begin)
     source = _Metadata(_DECLARED)
@@ -527,7 +527,7 @@ async def test_an_unknown_declaration_is_read_on_each_snapshot_until_it_is_known
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     await async_restore(hass, entry)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot(), None)
     with pytest.raises(ServiceValidationError):  # refused until the declaration is known
@@ -709,7 +709,7 @@ async def test_two_changes_before_the_notice_is_raised_are_both_kept(
         return read_translations(language, section)
 
     with patch(
-        "custom_components.span_panel.monitoring_rating_manager.notices.read_translations", held
+        "custom_components.span_panel.package_rating_manager.notices.read_translations", held
     ):
         manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _declared)
         manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _declared)
@@ -733,7 +733,7 @@ async def test_a_change_and_change_back_before_the_notice_is_raised_raises_nothi
         return read_translations(language, section)
 
     with patch(
-        "custom_components.span_panel.monitoring_rating_manager.notices.read_translations", held
+        "custom_components.span_panel.package_rating_manager.notices.read_translations", held
     ):
         manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
         manager.reconcile(_snapshot({"circuit-2": 20.0}), _declared)
@@ -787,7 +787,7 @@ async def test_a_stored_change_of_every_reason_round_trips(
         "version": 1,
         "data": {"ratings": {}, "unacknowledged": {"circuit-2": row}},
     }
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     await manager.async_save()
 
@@ -805,7 +805,7 @@ async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
     manager.reconcile(_snapshot({"circuit-3": 15.0}), _declared)  # circuit-2 leaves
     await hass.async_block_till_done()
 
-    reloaded = MonitoringRatingManager(hass, entry)
+    reloaded = PackageRatingManager(hass, entry)
     await reloaded.async_load()
     reloaded.begin(_snapshot({"circuit-3": 25.0}), _DECLARED)  # circuit-3 changes
     await hass.async_block_till_done()

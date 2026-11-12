@@ -2,7 +2,7 @@
 
 A user may set the rating a circuit is judged against (a tandem breaker is published
 at the rating of one half). The monitor never stores it: it asks the panel's
-`MonitoringRatingManager` for each circuit's rating on every snapshot, so the
+`PackageRatingManager` for each circuit's rating on every snapshot, so the
 monitoring rating applies to alerts and to the status, and survives anything that
 resets the monitor's own state.
 """
@@ -25,7 +25,7 @@ from custom_components.span_panel.alert_dispatcher import dispatch_test_alert
 from custom_components.span_panel.const import DOMAIN, EVENT_CURRENT_ALERT
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
     NOTIFY_TARGETS,
@@ -66,8 +66,8 @@ def _shared(circuit: SpanCircuitSnapshot, peer: str, tab: int) -> SpanCircuitSna
 
 async def _begun(
     hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot
-) -> MonitoringRatingManager:
-    manager = MonitoringRatingManager(hass, entry)
+) -> PackageRatingManager:
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     return manager
@@ -92,7 +92,7 @@ def _entry(hass: HomeAssistant, **options: object) -> MockConfigEntry:
 
 async def _monitor(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, **options: object
-) -> tuple[CurrentMonitor, MonitoringRatingManager]:
+) -> tuple[CurrentMonitor, PackageRatingManager]:
     entry = _entry(hass, **options)
     manager = await _begun(hass, entry, snapshot)
     return CurrentMonitor(hass, entry, manager), manager
@@ -356,12 +356,12 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
 
     async def _panel_with_services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
-    ) -> tuple[MockConfigEntry, MonitoringRatingManager]:
+    ) -> tuple[MockConfigEntry, PackageRatingManager]:
         entry = _entry(hass)
         manager = await _begun(hass, entry, snapshot)
         coordinator = MagicMock()
         coordinator.data = snapshot
-        coordinator.monitoring_rating_manager = manager
+        coordinator.package_rating_manager = manager
         coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
@@ -448,7 +448,7 @@ class TestStatusWhileMonitoringIsOff:
 
     async def _services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
-    ) -> tuple[CurrentMonitor, MonitoringRatingManager]:
+    ) -> tuple[CurrentMonitor, PackageRatingManager]:
         helper = TestMonitoringRatingSurvivesTheMonitorsOwnReset()
         entry, manager = await helper._panel_with_services(hass, snapshot)
         return entry.runtime_data.coordinator.current_monitor, manager

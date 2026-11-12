@@ -478,7 +478,7 @@ async def async_get_config_entry_diagnostics(
         # The monitoring ratings the user set, keyed by circuit id as `circuits`
         # is, and what the panel has changed under them that the user has not
         # yet seen. Labels are circuit names, which `circuits` already carries.
-        "monitoring_ratings": coordinator.monitoring_rating_manager.diagnostics(snapshot),
+        "monitoring_ratings": coordinator.package_rating_manager.diagnostics(snapshot),
         # Counter readings beyond what the circuit's breaker could ever have
         # passed: shown as published, never used as the dip baseline.
         "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],

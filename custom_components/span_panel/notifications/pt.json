@@ -16,7 +16,7 @@
     "title": "Painel SPAN: algumas leituras do fabricante não foram adicionadas",
     "body": "Um dispositivo do seu painel declara mais leituras do fabricante do que esta integração adiciona para um único dispositivo ({limit}). As restantes ficaram de fora: {devices}.\n\nNada do que já tem é afetado e nada está avariado. As leituras que ficaram de fora continuam listadas na transferência de diagnósticos desta integração, que é o que deve anexar se quiser que sejam apresentadas."
   },
-  "monitoring_rating_changed": {
+  "package_ratings_changed": {
     "title": "As capacidades de monitorização do Painel SPAN mudaram",
     "intro": "O painel alterou algo de que depende uma capacidade de monitorização que definiu. Para rever um circuito, abra-o no painel de controlo do Span Panel: a sua capacidade de monitorização está na secção **Monitoramento** do circuito, apresentada enquanto a monitorização estiver ativada para esse circuito.",
     "panel_changed": "**{circuit}**: o painel reporta agora {after} A (antes {before} A). A sua capacidade de monitorização de {rating} A continua a aplicar-se.",

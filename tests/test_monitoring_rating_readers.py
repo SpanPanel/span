@@ -3,7 +3,7 @@
 A user may set the rating current monitoring judges a circuit against. The Breaker Rating
 sensor and the topology's `breaker_rating_a` keep reporting what the panel publishes, and
 the topology's `monitoring_rating_a` and `monitoring_rating_user_set` come from the panel's
-`MonitoringRatingManager`, so they agree with current monitoring. The energy-counter bound
+`PackageRatingManager`, so they agree with current monitoring. The energy-counter bound
 keeps judging against the panel rating.
 """
 
@@ -23,8 +23,8 @@ from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.counter_plausibility import LIFETIME_HOURS, lifetime_bound_wh
 from custom_components.span_panel.id_builder import build_circuit_unique_id
-from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
-from custom_components.span_panel.monitoring_ratings import service_rating_a
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
+from custom_components.span_panel.package_ratings import service_rating_a
 from custom_components.span_panel.sensor import create_circuit_sensors
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_BREAKER_RATING_SENSOR
@@ -58,10 +58,10 @@ def _panel() -> SpanPanelSnapshot:
 
 async def _manager(
     hass: HomeAssistant, snap: SpanPanelSnapshot, *, rated: bool
-) -> MonitoringRatingManager:
+) -> PackageRatingManager:
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id=snap.serial_number)
     entry.add_to_hass(hass)
-    manager = MonitoringRatingManager(hass, entry)
+    manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snap, _DECLARED)
     if rated:
@@ -69,12 +69,12 @@ async def _manager(
     return manager
 
 
-def _coordinator(snap: SpanPanelSnapshot, manager: MonitoringRatingManager) -> MagicMock:
+def _coordinator(snap: SpanPanelSnapshot, manager: PackageRatingManager) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snap
     coordinator.panel_offline = False
     coordinator.transport_dead = False
-    coordinator.monitoring_rating_manager = manager
+    coordinator.package_rating_manager = manager
     coordinator.config_entry.options = {}
     coordinator.config_entry.data = {}
     coordinator.config_entry.title = "SPAN Panel"
@@ -208,10 +208,10 @@ def _candidate(*, describes_breakers: bool) -> tuple[Capture, tuple[str, float, 
 def _store_one_rating(
     hass_storage: dict[str, object], entry_id: str, circuit_id: str, panel_a: float, monitoring_a: int
 ) -> None:
-    hass_storage[f"span_panel_monitoring_ratings.{entry_id}"] = {
+    hass_storage[f"span_panel_package_ratings.{entry_id}"] = {
         "version": 1,
         "minor_version": 1,
-        "key": f"span_panel_monitoring_ratings.{entry_id}",
+        "key": f"span_panel_package_ratings.{entry_id}",
         "data": {
             "ratings": {
                 circuit_id: {
@@ -281,7 +281,7 @@ async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_ra
     assert isinstance(rows, dict)
     assert rows[circuit_id]["monitoring_rating_user_set"] is False
     assert rows[circuit_id]["monitoring_rating_a"] == panel_a
-    stored = hass_storage[f"span_panel_monitoring_ratings.{entry_id}"]
+    stored = hass_storage[f"span_panel_package_ratings.{entry_id}"]
     assert isinstance(stored, dict)
     assert stored["data"]["ratings"] == {}
     assert set(stored["data"]["unacknowledged"]) == {circuit_id}
