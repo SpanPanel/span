@@ -111,6 +111,13 @@ def panel_ca_available():
             "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
             new=AsyncMock(return_value=True),
         ),
+        # The verdict a pinned entry's move is held to: every candidate here
+        # serves the entry's own panel. Refusals are exercised against a live
+        # listener in `test_v2_config_flow_tls.py`.
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_verdict",
+            new=AsyncMock(return_value=LeafVerdict.TRUSTED),
+        ),
         patch(
             "custom_components.span_panel.config_flow.ca_fingerprint",
             return_value=FAKE_CA_FINGERPRINT,
@@ -2550,7 +2557,10 @@ async def test_zeroconf_recognises_a_configured_panel_on_a_new_port_by_its_seria
     """A configured panel announcing another port is probed, and is still not offered twice.
 
     The host and port no longer match its entry, so nothing short of the serial
-    can say it is the same panel. The serial check is what aborts it.
+    can say it is the same panel. The serial check is what aborts it, and the
+    abort moves the entry to the port the panel now answers on: this entry has
+    no anchor, so it follows as an unpinned entry follows a new host. The
+    pinned case is in `test_v2_config_flow_tls`.
     """
     entry = _entry_at_the_shared_host(hass, SERIAL_A, 8081)
 
@@ -2568,6 +2578,7 @@ async def test_zeroconf_recognises_a_configured_panel_on_a_new_port_by_its_seria
     detect.assert_awaited_once()
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
     assert entry.data[CONF_HOST] == SHARED_HOST
+    assert entry.data[CONF_HTTP_PORT] == 8083
 
 
 @pytest.mark.asyncio

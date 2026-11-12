@@ -325,16 +325,37 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
         self._abort_if_unique_id_configured(updates=await self._async_host_update())
 
+    def _found_at(self, entry: config_entries.ConfigEntry) -> dict[str, Any]:
+        """Return where this flow found the panel, as the entry-data keys that would move.
+
+        The host always, which is the update this abort has always carried. A
+        port only where it differs from the one the entry already uses, read
+        the way the entry's own transport reads it, so an entry is rewritten
+        only by an actual move: every real panel's entry stores no HTTP port,
+        and adding an explicit 80 to each on its next move would change data
+        that nothing moved. The HTTPS port only where something authoritative
+        named one -- an announcement's `httpsPort`; this flow's default is not a
+        statement about where the panel serves.
+        """
+        updates: dict[str, Any] = {CONF_HOST: self.host}
+        if self._http_port != as_port(entry.data.get(CONF_HTTP_PORT), 80):
+            updates[CONF_HTTP_PORT] = self._http_port
+        stored_tls_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+        if self._https_port_known and self._https_port != stored_tls_port:
+            updates[CONF_HTTPS_PORT] = self._https_port
+        return updates
+
     async def _async_host_update(self) -> dict[str, Any] | None:
-        """Return the host update the already-configured abort should carry, or None.
+        """Return the update the already-configured abort should carry, or None.
 
         The abort that follows is also how an entry follows its panel: a new
-        DHCP lease, a re-announcement on the new address, and the entry is
-        rewritten to point at it. Both routes into this reach it before anything
-        has been authenticated — an `_ebus._tcp` record is whatever the LAN
-        chose to broadcast, and the serial that matched came from the candidate
-        host's own unauthenticated `/api/v2/status` — so on its own, "claims to
-        be this serial" is a claim anything on the network can make.
+        DHCP lease, or ports an emulator reallocated on restart, a
+        re-announcement from where it now answers, and the entry is rewritten
+        to point there. Both routes into this reach it before anything has been
+        authenticated — an `_ebus._tcp` record is whatever the LAN chose to
+        broadcast, and the serial that matched came from the candidate's own
+        unauthenticated `/api/v2/status` — so on its own, "claims to be this
+        serial" is a claim anything on the network can make.
 
         A pinned entry has a better question available: does the candidate serve
         a certificate this entry's own anchor validates? Nothing but the panel
@@ -347,16 +368,20 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         registered — leaves the entry unable to reach its own panel with no flow
         left to correct it.
 
-        Verified as the host would be *stored*, against the port the entry
-        already uses. The address fallback that `_async_choose_bootstrap_host`
-        applies is deliberately not repeated: that one exists to dial a panel
-        while a name is unverified, and accepting a name here because its
-        address validates would persist exactly the host that fallback refuses
-        to write.
+        Verified as the entry would be *stored*: the host it would hold, on the
+        HTTPS port it would use -- the one the announcement published, or else
+        the one it already has. A port move is held to exactly the check a host
+        move is, because the HTTP and HTTPS ports are as unauthenticated as the
+        address beside them. The address fallback that
+        `_async_choose_bootstrap_host` applies is deliberately not repeated:
+        that one exists to dial a panel while a name is unverified, and
+        accepting a name here because its address validates would persist
+        exactly the host that fallback refuses to write.
 
-        An entry with no anchor keeps the behaviour it shipped with. There is no
-        pin to protect and no check to make, so refusing the move would cost an
-        unpinned install its panel and buy nothing.
+        An entry with no anchor keeps the behaviour it shipped with, and follows
+        a port as it follows a host. There is no pin to protect and no check to
+        make, so refusing the move would cost an unpinned install its panel and
+        buy nothing.
         """
         host = self.host
         if not host or self.unique_id is None:
@@ -366,36 +391,82 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         if entry is None:
             return {CONF_HOST: host}
+        updates = self._found_at(entry)
+        if updates.keys() == {CONF_HOST} and entry.data.get(CONF_HOST) == host:
+            # Found exactly where the entry already points: nothing would move,
+            # so there is no move for the pin to authorise.
+            return updates
         ca_pem = entry.data.get(CONF_PANEL_CA_PEM)
         if not ca_pem:
-            return {CONF_HOST: host}
+            return updates
 
-        tls_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
-        try:
-            chains = await async_leaf_chains_to_ca(host, tls_port, str(ca_pem))
-        except Exception:
-            # `async_leaf_chains_to_ca` answers False for every failure it
-            # anticipates, so reaching here at all is unexpected. Caught broadly
-            # rather than left to propagate because the two outcomes are not
-            # symmetric: an escaped error inside a discovery flow is an
-            # unhandled traceback, and what it would abandon is the one check
-            # standing between an unauthenticated claim and a pinned entry's
-            # host. Anything unrecognised is a refusal.
-            _LOGGER.exception("Could not verify %s against the pinned authority", host)
-            chains = False
-        if chains:
-            return {CONF_HOST: host}
-
-        _LOGGER.warning(
-            "Refusing to move the entry for panel %s to %s: the certificate served there on "
-            "port %s does not chain to the authority this entry is pinned to (SHA-256 %s). "
-            "If the panel really has moved, use Reconfigure to move this entry",
-            self.unique_id,
-            host,
-            tls_port,
-            pem_fingerprint_or_reason(ca_pem),
+        tls_port = as_port(
+            updates.get(CONF_HTTPS_PORT, entry.data.get(CONF_HTTPS_PORT)), DEFAULT_HTTPS_PORT
         )
+        try:
+            verdict = await async_leaf_verdict(host, tls_port, str(ca_pem))
+        except Exception:
+            # `async_leaf_verdict` answers for every failure it anticipates, so
+            # reaching here at all is unexpected. Caught broadly rather than
+            # left to propagate because the two outcomes are not symmetric: an
+            # escaped error inside a discovery flow is an unhandled traceback,
+            # and what it would abandon is the one check standing between an
+            # unauthenticated claim and a pinned entry's address. Anything
+            # unrecognised is a refusal.
+            _LOGGER.exception("Could not verify %s against the pinned authority", host)
+            verdict = LeafVerdict.UNTRUSTED
+        if verdict is LeafVerdict.TRUSTED:
+            return updates
+
+        self._log_refused_move(entry, updates, tls_port, verdict)
         return None
+
+    def _log_refused_move(
+        self,
+        entry: config_entries.ConfigEntry,
+        updates: Mapping[str, Any],
+        tls_port: int,
+        verdict: LeafVerdict,
+    ) -> None:
+        """Say, at WARNING, which move a pinned entry refused and what the check found.
+
+        Worded for what actually moved. A panel whose ports moved on the host
+        the entry already has was reported as a refused move *to that host*,
+        which describes nothing that happened, and a TLS port that nothing
+        answered on was reported as a certificate that does not chain.
+        """
+        if verdict is LeafVerdict.UNREACHABLE:
+            found = f"No TLS connection could be made on port {tls_port}"
+        else:
+            found = (
+                f"The certificate served on port {tls_port} does not chain to the authority "
+                "this entry is pinned to"
+            )
+        fingerprint = pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM))
+        if updates[CONF_HOST] != entry.data.get(CONF_HOST):
+            _LOGGER.warning(
+                "Refusing to move the entry for panel %s to %s. %s there (pinned SHA-256 %s). "
+                "If the panel really has moved, use Reconfigure to move this entry",
+                self.unique_id,
+                updates[CONF_HOST],
+                found,
+                fingerprint,
+            )
+            return
+        moved = " and ".join(
+            f"{label} {updates[key]}"
+            for key, label in ((CONF_HTTP_PORT, "HTTP port"), (CONF_HTTPS_PORT, "HTTPS port"))
+            if key in updates
+        )
+        _LOGGER.warning(
+            "Refusing to follow panel %s to %s on %s, the host its entry already has. "
+            "%s there (pinned SHA-256 %s), so the entry keeps the ports it has",
+            self.unique_id,
+            moved,
+            updates[CONF_HOST],
+            found,
+            fingerprint,
+        )
 
     async def _async_hassio_host_update(self, host: str, port: int, serial: str) -> dict[str, Any]:
         """Return the host keys a Supervisor discovery should carry, usually none.
@@ -510,9 +581,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         every other panel's announcement there before its serial was ever read.
 
         Neither check decides identity; both only save work. A panel that has
-        moved matches neither, reaches the probe, and is caught by the serial
-        check in `ensure_not_already_configured`, where `_async_host_update`
-        decides whether its entry may follow it.
+        moved -- to a new host, or to new ports on the same one -- matches
+        neither, reaches the probe, and is caught by the serial check in
+        `ensure_not_already_configured`. There `_async_host_update` decides
+        whether its entry may follow it: a pinned entry takes the new host and
+        ports only once the announced HTTPS port, or the stored one where the
+        announcement publishes none, serves a certificate its anchor validates.
         """
         host = discovery_info.host
         # Read before the probe because the checks below need it. A malformed

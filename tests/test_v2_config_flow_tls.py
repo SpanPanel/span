@@ -771,8 +771,14 @@ def _entry_reached_at_the_address(
     return entry
 
 
-async def _announce_from(hass: HomeAssistant, host: str) -> Any:
-    """Run an `_ebus._tcp` announcement claiming this panel's serial, from `host`."""
+async def _announce_from(
+    hass: HomeAssistant, host: str, properties: dict[str, str] | None = None
+) -> Any:
+    """Run an `_ebus._tcp` announcement claiming this panel's serial, from `host`.
+
+    `properties` is the TXT record, which is where an announcement publishes
+    the HTTP and HTTPS ports it serves on; none publishes neither.
+    """
     address = ipaddress.IPv4Address(host)
     return await hass.config_entries.flow.async_init(
         DOMAIN,
@@ -783,7 +789,7 @@ async def _announce_from(hass: HomeAssistant, host: str) -> Any:
             hostname="span-panel.local.",
             name="SPAN Panel._ebus._tcp.local.",
             port=8883,
-            properties={},
+            properties=properties or {},
             type="_ebus._tcp.local.",
         ),
     )
@@ -851,6 +857,183 @@ async def test_zeroconf_still_moves_an_unpinned_entry(hass: HomeAssistant, panel
     assert result["type"] == FlowResultType.ABORT, result
     assert result["reason"] == "already_configured"
     assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+# ---------- Case C': the same host, new ports ----------
+
+#: Where an entry last reached its panel's plaintext API, before the panel's
+#: ports moved. Nothing listens here; the moved panel announces elsewhere.
+STORED_HTTP_PORT = 8081
+#: Where the panel's plaintext API answers after the move.
+MOVED_HTTP_PORT = 8083
+
+
+def _flow_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """The warnings the config flow itself logged, as rendered messages."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.span_panel.config_flow"
+        and record.levelname == "WARNING"
+    ]
+
+
+def _entry_at_loopback_on_ports(
+    hass: HomeAssistant, ca_pem: str | None, tls_port: int
+) -> MockConfigEntry:
+    """Add an entry for this panel at the listener's own host, on its old ports.
+
+    The host is the one the panel still announces from, so anything that moves
+    here is a port: the case an emulator restarting on new ports produces.
+    """
+    data: dict[str, Any] = {
+        CONF_HOST: PANEL_LOOPBACK,
+        CONF_ACCESS_TOKEN: "synthetic-token",
+        CONF_API_VERSION: "v2",
+        CONF_HTTP_PORT: STORED_HTTP_PORT,
+        CONF_HTTPS_PORT: tls_port,
+    }
+    if ca_pem is not None:
+        data[CONF_PANEL_CA_PEM] = ca_pem
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="SPAN Panel",
+        data=data,
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id=PANEL_SERIAL,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_follows_a_pinned_panel_to_new_ports_on_the_same_host(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """A panel that moved both ports is still the panel, and its pin says so.
+
+    The announced HTTPS port serves a certificate the entry's own anchor
+    validates, which nothing but the panel can do, so the entry takes both
+    announced ports. Left on the old ones, it could reach nothing, and every
+    later announcement would probe the panel again without changing anything.
+    """
+    entry = _entry_at_loopback_on_ports(hass, panel.ca_pem, closed_port())
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(
+            hass,
+            PANEL_LOOPBACK,
+            {"httpPort": str(MOVED_HTTP_PORT), "httpsPort": str(panel.port)},
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+    assert entry.data[CONF_HTTP_PORT] == MOVED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_follows_an_http_port_move_its_pin_still_validates(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """An announcement that publishes no HTTPS port is checked on the one the entry has.
+
+    The TLS port did not move, and the pin validates what is still served
+    there, so only the HTTP port follows.
+    """
+    entry = _entry_at_loopback_on_ports(hass, panel.ca_pem, panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(hass, PANEL_LOOPBACK, {"httpPort": str(MOVED_HTTP_PORT)})
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HTTP_PORT] == MOVED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_will_not_follow_new_ports_its_pin_rejects(
+    hass: HomeAssistant, panel: Panel, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The port move gets the host move's guard, and a refusal that describes it.
+
+    The listener is the impostor here: a valid certificate, signed by an
+    authority the entry is not pinned to. The entry keeps its ports, and the
+    warning names the ports it refused rather than claiming to refuse a move to
+    the host the entry already has.
+    """
+    stored_tls_port = closed_port()
+    entry = _entry_at_loopback_on_ports(hass, unrelated_ca_pem(), stored_tls_port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(
+            hass,
+            PANEL_LOOPBACK,
+            {"httpPort": str(MOVED_HTTP_PORT), "httpsPort": str(panel.port)},
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HTTP_PORT] == STORED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == stored_tls_port
+    refusals = _flow_warnings(caplog)
+    assert len(refusals) == 1, refusals
+    assert "Refusing to move the entry" not in refusals[0]
+    assert f"HTTP port {MOVED_HTTP_PORT}" in refusals[0]
+    assert f"HTTPS port {panel.port}" in refusals[0]
+    assert "does not chain" in refusals[0]
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_will_not_follow_new_ports_to_a_dead_tls_port(
+    hass: HomeAssistant, panel: Panel, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Refused as what it is: no TLS connection, rather than a certificate that failed."""
+    entry = _entry_at_loopback_on_ports(hass, panel.ca_pem, panel.port)
+    dead_port = closed_port()
+
+    with _plaintext_bootstrap_stubbed(panel):
+        await _announce_from(
+            hass,
+            PANEL_LOOPBACK,
+            {"httpPort": str(MOVED_HTTP_PORT), "httpsPort": str(dead_port)},
+        )
+
+    assert entry.data[CONF_HTTP_PORT] == STORED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
+    refusals = _flow_warnings(caplog)
+    assert len(refusals) == 1, refusals
+    assert f"No TLS connection could be made on port {dead_port}" in refusals[0]
+    assert "does not chain" not in refusals[0]
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_zeroconf_moving_a_real_panel_writes_no_port_into_its_entry(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """A panel on port 80 that changes address moves its host and nothing else.
+
+    Every real panel's entry stores no HTTP port, and a re-announcement that
+    added one would change the data of every such entry on its next move.
+    """
+    entry = _entry_reached_at_the_address(hass, panel.ca_pem, panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+    assert CONF_HTTP_PORT not in entry.data
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
 
 
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
