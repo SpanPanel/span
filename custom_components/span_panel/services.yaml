@@ -55,7 +55,7 @@ clear_circuit_threshold:
         config_entry:
           integration: span_panel
 
-set_circuit_monitoring_rating:
+set_circuit_package_ratings:
   fields:
     circuit_id:
       required: true
@@ -64,19 +64,17 @@ set_circuit_monitoring_rating:
           domain: sensor
           integration: span_panel
           device_class: current
-    monitoring_rating_a:
+    package_ratings_a:
       required: true
+      example: "[20, 20]"
       selector:
-        number:
-          min: 1
-          mode: box
-          unit_of_measurement: "A"
+        object:
     config_entry_id:
       selector:
         config_entry:
           integration: span_panel
 
-clear_circuit_monitoring_rating:
+clear_circuit_package_ratings:
   fields:
     circuit_id:
       required: true

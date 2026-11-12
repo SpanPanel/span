@@ -17,14 +17,14 @@
     "body": "A device on your panel declares more vendor readings than this integration will add for one device ({limit}). The rest were left out: {devices}.\n\nNothing you already have is affected, and nothing is broken. The readings that were left out are still listed in this integration's diagnostics download, which is what to attach if you want them surfaced."
   },
   "package_ratings_changed": {
-    "title": "SPAN Panel monitoring ratings changed",
-    "intro": "The panel changed something a monitoring rating you set depends on. To review a circuit, open it in the Span Panel dashboard: its monitoring rating is in the circuit's **Monitoring** section, shown while monitoring is on for that circuit.",
-    "panel_changed": "**{circuit}**: the panel now reports {after} A (was {before} A). Your {rating} A monitoring rating still applies.",
-    "panel_agrees": "**{circuit}**: the panel now reports {after} A (was {before} A), matching your {rating} A monitoring rating, so the monitoring rating was removed.",
-    "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit (it reported {before} A), so your {rating} A monitoring rating was removed.",
-    "circuit_removed": "**{circuit}**: this circuit is no longer on the panel (it reported {before} A), so your {rating} A monitoring rating was removed.",
-    "above_service_rating": "**{circuit}**: your {rating} A monitoring rating is above the panel's service rating of {service} A, so it was removed. The panel reported {before} A and now reports {after} A.",
-    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so your {rating} A monitoring rating was removed. The panel reported {before} A for this circuit.",
-    "panel_describes_breakers": "**{circuit}**: the panel now publishes each circuit of a multi-load breaker with its own rating, which current monitoring uses, so your {rating} A monitoring rating was removed. The panel reported {before} A for this circuit."
+    "title": "SPAN Panel ratings copied from the SPAN app removed",
+    "intro": "The panel changed something that ratings you copied from the SPAN app depend on, so those ratings were removed. To review a circuit, open it in the Span Panel dashboard: the ratings are in the circuit's **Monitoring** section, shown while monitoring is on for that circuit.",
+    "panel_rating_changed": "**{circuit}**: the rating your panel publishes for this circuit changed from {before} A to {after} A, so the {package} ratings you copied from the SPAN app were removed.",
+    "spaces_changed": "**{circuit}**: this circuit's breaker spaces changed, so the {package} ratings you copied from the SPAN app were removed.",
+    "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit, so the {package} ratings you copied from the SPAN app were removed.",
+    "circuit_removed": "**{circuit}**: this circuit is no longer on the panel, so the {package} ratings you copied from the SPAN app were removed.",
+    "above_service_rating": "**{circuit}**: the {package} ratings you copied from the SPAN app add up to more than the panel's service rating of {service} A, so they were removed.",
+    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so the {package} ratings you copied from the SPAN app were removed.",
+    "panel_describes_breakers": "**{circuit}**: the panel now publishes each circuit of a multi-load breaker with its own rating, which current monitoring uses, so the {package} ratings you copied from the SPAN app were removed."
   }
 }

@@ -242,19 +242,36 @@ def _build_clear_mains_threshold_schema() -> vol.Schema:
     )
 
 
-def _build_set_circuit_monitoring_rating_schema() -> vol.Schema:
-    """Build schema for set_circuit_monitoring_rating service."""
+def _breaker_rating_a(value: object) -> int:
+    """Validate one breaker rating as the SPAN app shows it: whole amps, at least 1.
+
+    A bool is refused although Python counts it an int: `true` is no rating, and
+    stored as one it would no longer read back as a number.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise vol.Invalid("expected a whole number of amps")
+    if value < 1:
+        raise vol.Invalid("a breaker rating is at least 1 A")
+    return value
+
+
+def _build_set_circuit_package_ratings_schema() -> vol.Schema:
+    """Build schema for set_circuit_package_ratings service.
+
+    Each rating is checked here; how many there are, and how they relate to the
+    panel's, is the manager's to judge, since each refusal has its own message.
+    """
     return vol.Schema(
         {
             vol.Required("circuit_id"): str,
-            vol.Required("monitoring_rating_a"): vol.All(int, vol.Range(min=1)),
+            vol.Required("package_ratings_a"): [_breaker_rating_a],
             vol.Optional("config_entry_id"): str,
         }
     )
 
 
-def _build_clear_circuit_monitoring_rating_schema() -> vol.Schema:
-    """Build schema for clear_circuit_monitoring_rating service."""
+def _build_clear_circuit_package_ratings_schema() -> vol.Schema:
+    """Build schema for clear_circuit_package_ratings service."""
     return vol.Schema(
         {
             vol.Required("circuit_id"): str,
@@ -531,11 +548,11 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     )
 
 
-def _async_register_monitoring_rating_services(hass: HomeAssistant) -> None:
-    """Register the services that set and clear a circuit's monitoring rating.
+def _async_register_package_rating_services(hass: HomeAssistant) -> None:
+    """Register the services that set and clear the package ratings copied from the SPAN app for a circuit.
 
-    Neither touches current monitoring: monitoring merely reads the rating, so
-    both work whether monitoring is on or off.
+    Neither touches current monitoring: monitoring merely reads the rating the
+    entry gives, so both work whether monitoring is on or off.
     """
 
     def _get_runtime_data(call: ServiceCall, target: str) -> SpanPanelRuntimeData:
@@ -556,36 +573,36 @@ def _async_register_monitoring_rating_services(hass: HomeAssistant) -> None:
         raise ServiceValidationError(
             "No SPAN panel is loaded.",
             translation_domain=DOMAIN,
-            translation_key="monitoring_rating_panel_not_loaded",
+            translation_key="package_ratings_panel_not_loaded",
         )
 
-    async def async_handle_set_circuit_monitoring_rating(call: ServiceCall) -> None:
+    async def async_handle_set_circuit_package_ratings(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.package_rating_manager.set_rating(
-            circuit_id, snapshot, call.data["monitoring_rating_a"]
+        runtime_data.coordinator.package_rating_manager.set_package_ratings(
+            circuit_id, snapshot, call.data["package_ratings_a"]
         )
 
-    async def async_handle_clear_circuit_monitoring_rating(call: ServiceCall) -> None:
+    async def async_handle_clear_circuit_package_ratings(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
-        runtime_data.coordinator.package_rating_manager.clear_rating(circuit_id, snapshot)
+        runtime_data.coordinator.package_rating_manager.clear_package_ratings(circuit_id, snapshot)
 
     hass.services.async_register(
         DOMAIN,
-        "set_circuit_monitoring_rating",
-        async_handle_set_circuit_monitoring_rating,
-        schema=_build_set_circuit_monitoring_rating_schema(),
+        "set_circuit_package_ratings",
+        async_handle_set_circuit_package_ratings,
+        schema=_build_set_circuit_package_ratings_schema(),
     )
     hass.services.async_register(
         DOMAIN,
-        "clear_circuit_monitoring_rating",
-        async_handle_clear_circuit_monitoring_rating,
-        schema=_build_clear_circuit_monitoring_rating_schema(),
+        "clear_circuit_package_ratings",
+        async_handle_clear_circuit_package_ratings,
+        schema=_build_clear_circuit_package_ratings_schema(),
     )
 
 

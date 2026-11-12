@@ -1,10 +1,10 @@
 """Current monitoring judges circuits against their monitoring rating.
 
-A user may set the rating a circuit is judged against (a tandem breaker is published
-at the rating of one half). The monitor never stores it: it asks the panel's
-`PackageRatingManager` for each circuit's rating on every snapshot, so the
-monitoring rating applies to alerts and to the status, and survives anything that
-resets the monitor's own state.
+A user may copy a tandem's ratings from the SPAN app (the panel publishes only the
+first), so the space is judged against both breakers together. The monitor never
+stores the copy: it asks the panel's `PackageRatingManager` for each circuit's
+rating on every snapshot, so the monitoring rating applies to alerts and to the
+status, and survives anything that resets the monitor's own state.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ from custom_components.span_panel.options import (
 )
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import (
-    _async_register_monitoring_rating_services,
     _async_register_monitoring_services,
+    _async_register_package_rating_services,
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
@@ -127,10 +127,10 @@ class TestAlerts:
     async def test_the_same_circuit_does_not_alert_with_a_monitoring_rating_of_50a(
         self, hass: HomeAssistant
     ) -> None:
-        """30 A is 60% of a 50 A breaker, under the 80% continuous threshold."""
+        """30 A is 60% of a 20-30 tandem's 50 A, under the 80% continuous threshold."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         _run_past_the_window(monitor, snapshot, "circuit-2")
@@ -146,7 +146,7 @@ class TestAlerts:
         """Declared with no value yet: not judged against the 20 A the panel published."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         pending = replace(snapshot, main_breaker_rating_a=None)
 
         monitor.process_snapshot(pending)
@@ -170,7 +170,7 @@ class TestAlerts:
         """
         snapshot = _panel(_circuit("circuit-2", 20.0, 45.0))
         monitor, manager = await _monitor(hass, snapshot, **{NOTIFY_TARGETS: "event_bus,notify.x"})
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         with patch(
@@ -187,13 +187,13 @@ class TestAlerts:
     async def test_a_shared_meter_alert_carries_the_panel_sum_and_the_judged_sum(
         self, hass: HomeAssistant
     ) -> None:
-        """15 + 15 A, one member set to 20 A: breaker 30 A, judged against 35 A, user set."""
+        """15 + 15 A, one member judged against a 15-5 package's 20 A: breaker 30 A, judged against 35 A, user set."""
         snapshot = _panel(
             _shared(_circuit("circuit-52", 15.0, 30.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 30.0), "circuit-52", 44),
         )
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-53", snapshot, 20)
+        manager.set_package_ratings("circuit-53", snapshot, [15, 5])
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         _run_past_the_window(monitor, snapshot, "circuit-52")
@@ -225,7 +225,7 @@ class TestAlerts:
         """A spike is dispatched apart from a continuous overload; its payload reads the same way."""
         snapshot = replace(_panel(_circuit("circuit-2", 20.0, 45.0)), upstream_l1_current_a=95.0)
         monitor, manager = await _monitor(hass, snapshot, **{SPIKE_THRESHOLD_PCT: 80})
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         monitor.process_snapshot(snapshot)
@@ -285,7 +285,7 @@ class TestStatus:
         """Judged against is the monitoring rating; the breaker rating stays the panel's."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         monitor.process_snapshot(snapshot)
 
         entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
@@ -316,13 +316,13 @@ class TestSharedMeters:
     async def test_one_member_with_a_monitoring_rating_changes_the_sum_and_marks_the_group(
         self, hass: HomeAssistant
     ) -> None:
-        """15 + 15 A with one member given a 20 A monitoring rating is judged against 35 A, breaker 30 A, user set."""
+        """15 + 15 A with one member judged against a 15-5 package's 20 A is judged against 35 A, breaker 30 A, user set."""
         snapshot = _panel(
             _shared(_circuit("circuit-52", 15.0, 12.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 12.0), "circuit-52", 44),
         )
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-53", snapshot, 20)
+        manager.set_package_ratings("circuit-53", snapshot, [15, 5])
         monitor.process_snapshot(snapshot)
 
         status = monitor.get_monitoring_status()["circuits"]
@@ -340,7 +340,7 @@ class TestSharedMeters:
         unrated = _shared(_circuit("circuit-53", None, 12.0), "circuit-52", 44)
         snapshot = _panel(rated, unrated)
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_rating("circuit-52", snapshot, 20)
+        manager.set_package_ratings("circuit-52", snapshot, [15, 5])
         monitor.process_snapshot(snapshot)
 
         status = monitor.get_monitoring_status()["circuits"]
@@ -371,7 +371,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
             setup_snapshot=snapshot,
         )
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        _async_register_monitoring_rating_services(hass)
+        _async_register_package_rating_services(hass)
         _async_register_monitoring_services(hass)
         return entry, manager
 
@@ -392,7 +392,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
         """Clearing a circuit's thresholds resets its monitor state, not its monitoring rating."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         entry.runtime_data.coordinator.current_monitor.process_snapshot(snapshot)
         await hass.services.async_call(
             DOMAIN,
@@ -411,7 +411,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
         """A new monitor, built when monitoring is turned back on, reads the same monitoring rating."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 50)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 30])
         original = entry.runtime_data.coordinator.current_monitor
 
         await hass.services.async_call(
@@ -434,7 +434,7 @@ async def test_a_monitor_is_judged_by_the_manager_it_was_given(
     snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
     monitor, manager = await _monitor(hass, snapshot)
     if stored is not None:
-        manager.set_rating("circuit-2", snapshot, stored)
+        manager.set_package_ratings("circuit-2", snapshot, [20, stored - 20])
     monitor.process_snapshot(snapshot)
 
     entry = monitor.get_monitoring_status()["circuits"]["circuit-2"]
@@ -464,7 +464,7 @@ class TestStatusWhileMonitoringIsOff:
         """Over threshold, then off: the frozen figures are gone, the alert history is kept."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await self._services(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 35)
+        manager.set_package_ratings("circuit-2", snapshot, [20, 15])
         _run_past_the_window(monitor, snapshot, "circuit-2")
         before = monitor.get_monitoring_status()["circuits"]["circuit-2"]
         assert before["utilization_pct"] == 85.7
@@ -488,7 +488,7 @@ class TestStatusWhileMonitoringIsOff:
         """A window opened before it was turned off does not make the first sample after an alert."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, manager = await self._services(hass, snapshot)
-        manager.set_rating("circuit-2", snapshot, 20)
+        manager.set_package_ratings("circuit-2", snapshot, [20])
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
         monitor.process_snapshot(snapshot)
         state = monitor.get_circuit_state("circuit-2")

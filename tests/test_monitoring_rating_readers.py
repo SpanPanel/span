@@ -1,8 +1,9 @@
 """The breaker rating stays the panel's; the topology adds the monitoring rating.
 
-A user may set the rating current monitoring judges a circuit against. The Breaker Rating
-sensor and the topology's `breaker_rating_a` keep reporting what the panel publishes, and
-the topology's `monitoring_rating_a` and `monitoring_rating_user_set` come from the panel's
+A user may copy a tandem's ratings from the SPAN app, so current monitoring judges the
+space against both breakers together. The Breaker Rating sensor and the topology's
+`breaker_rating_a` keep reporting what the panel publishes, and the topology's
+`monitoring_rating_a` and `monitoring_rating_user_set` come from the panel's
 `PackageRatingManager`, so they agree with current monitoring. The energy-counter bound
 keeps judging against the panel rating.
 """
@@ -35,6 +36,7 @@ from .test_expected_entities import _install, _topology
 
 SERVICE_A: Final = 100
 PANEL_A: Final = 20.0
+PACKAGE: Final = [20, 30]
 MONITORING_A: Final = 50
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
 
@@ -65,7 +67,7 @@ async def _manager(
     await manager.async_load()
     manager.begin(snap, _DECLARED)
     if rated:
-        manager.set_rating("circuit-2", snap, MONITORING_A)
+        manager.set_package_ratings("circuit-2", snap, PACKAGE)
     return manager
 
 
@@ -181,15 +183,21 @@ async def test_a_monitoring_rating_does_not_change_the_energy_counter_bound(
 
 
 def _capture_with_headroom(captured: Capture) -> tuple[str, float, int] | None:
-    """Return a circuit rated below the service rating, with its rating and the service rating."""
+    """Return a one-space circuit whose rating, doubled as a tandem, fits the service rating, with its rating and space."""
     snap = snapshot(captured.tree())
     service = service_rating_a(snap)
     if service is None:
         return None
     for circuit_id, circuit in sorted(snap.circuits.items()):
         rating = circuit.breaker_rating_a
-        if rating is not None and rating < service and not circuit.measures_outside_panel:
-            return circuit_id, rating, int(service)
+        if (
+            rating is not None
+            and rating.is_integer()
+            and 2 * rating <= service
+            and len(circuit.tabs) == 1
+            and not circuit.measures_outside_panel
+        ):
+            return circuit_id, rating, circuit.tabs[0]
     return None
 
 
@@ -205,18 +213,19 @@ def _candidate(*, describes_breakers: bool) -> tuple[Capture, tuple[str, float, 
     return candidates[0]
 
 
-def _store_one_rating(
-    hass_storage: dict[str, object], entry_id: str, circuit_id: str, panel_a: float, monitoring_a: int
+def _store_one_package(
+    hass_storage: dict[str, object], entry_id: str, circuit_id: str, panel_a: float, space: int
 ) -> None:
+    """Store a tandem of two breakers at the panel's rating, copied for the circuit's one space."""
     hass_storage[f"span_panel_package_ratings.{entry_id}"] = {
         "version": 1,
         "minor_version": 1,
         "key": f"span_panel_package_ratings.{entry_id}",
         "data": {
-            "ratings": {
+            "packages": {
                 circuit_id: {
-                    "rating_a": monitoring_a,
-                    "panel_a_at_set": panel_a,
+                    "package_ratings_a": [int(panel_a), int(panel_a)],
+                    "space": space,
                     "label": "Synthetic label",
                 }
             },
@@ -225,13 +234,13 @@ def _store_one_rating(
     }
 
 
-async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
+async def test_a_replay_with_one_stored_package_reports_its_capacity(
     hass: HomeAssistant,
     hass_storage: dict[str, object],
     hass_ws_client: WebSocketGenerator,
 ) -> None:
-    captured, (circuit_id, panel_a, monitoring_a) = _candidate(describes_breakers=False)
-    _store_one_rating(hass_storage, f"entry-{captured.name}", circuit_id, panel_a, monitoring_a)
+    captured, (circuit_id, panel_a, space) = _candidate(describes_breakers=False)
+    _store_one_package(hass_storage, f"entry-{captured.name}", circuit_id, panel_a, space)
     tree = captured.tree()
     replayed = snapshot(tree)
 
@@ -244,7 +253,7 @@ async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
     assert isinstance(rows, dict)
     rated = rows[circuit_id]
     assert rated["breaker_rating_a"] == panel_a
-    assert rated["monitoring_rating_a"] == float(monitoring_a)
+    assert rated["monitoring_rating_a"] == 2 * panel_a
     assert rated["monitoring_rating_user_set"] is True
     for other_id, row in rows.items():
         assert "panel_breaker_rating_a" not in row, other_id
@@ -261,15 +270,15 @@ async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
     assert er.async_get(hass).async_get_entity_id("sensor", DOMAIN, unique_id) is not None
 
 
-async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_rating(
+async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_package(
     hass: HomeAssistant,
     hass_storage: dict[str, object],
     hass_ws_client: WebSocketGenerator,
 ) -> None:
-    """Its circuits each publish their own rating, so the topology offers no monitoring rating and judges the panel's."""
-    captured, (circuit_id, panel_a, monitoring_a) = _candidate(describes_breakers=True)
+    """Its circuits each publish their own rating, so the topology offers no package ratings and judges the panel's."""
+    captured, (circuit_id, panel_a, space) = _candidate(describes_breakers=True)
     entry_id = f"entry-{captured.name}"
-    _store_one_rating(hass_storage, entry_id, circuit_id, panel_a, monitoring_a)
+    _store_one_package(hass_storage, entry_id, circuit_id, panel_a, space)
 
     entry = await _install(hass, captured.tree(), captured.name)
     topology = await _topology(hass, hass_ws_client, entry)
@@ -283,5 +292,5 @@ async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_ra
     assert rows[circuit_id]["monitoring_rating_a"] == panel_a
     stored = hass_storage[f"span_panel_package_ratings.{entry_id}"]
     assert isinstance(stored, dict)
-    assert stored["data"]["ratings"] == {}
+    assert stored["data"]["packages"] == {}
     assert set(stored["data"]["unacknowledged"]) == {circuit_id}

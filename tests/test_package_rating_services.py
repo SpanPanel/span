@@ -1,4 +1,4 @@
-"""Tests for the services that set and clear a circuit's monitoring rating."""
+"""Tests for the services that set and clear the package ratings copied from the SPAN app for a circuit."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from custom_components.span_panel.entity_resolver import resolve_circuit_id
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import (
-    _async_register_monitoring_rating_services,
-    _build_clear_circuit_monitoring_rating_schema,
-    _build_set_circuit_monitoring_rating_schema,
+    _async_register_package_rating_services,
+    _build_clear_circuit_package_ratings_schema,
+    _build_set_circuit_package_ratings_schema,
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
@@ -32,13 +32,14 @@ SERVICE_A = 100
 _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
 
 
-def _snapshot(ratings: Mapping[str, float | None] | None = None) -> SpanPanelSnapshot:
+def _snapshot(ratings: Mapping[str, float | None] | None = None, tabs: list[int] | None = None) -> SpanPanelSnapshot:
     ratings = {"circuit-2": 20.0} if ratings is None else ratings
     return SpanPanelSnapshotFactory.create(
         circuits={
             cid: SpanCircuitSnapshotFactory.create(
                 circuit_id=cid,
                 name=f"Name of {cid}",
+                tabs=tabs if tabs is not None else [2],
                 breaker_rating_a=rating,
                 breaker_rating_declared=True,
             )
@@ -89,104 +90,120 @@ def _entity(hass: HomeAssistant, entry: MockConfigEntry, circuit_id: str) -> str
 
 @pytest.fixture(autouse=True)
 def _services(hass: HomeAssistant) -> None:
-    _async_register_monitoring_rating_services(hass)
+    _async_register_package_rating_services(hass)
 
 
 async def _set(hass: HomeAssistant, **data: object) -> None:
-    await hass.services.async_call(DOMAIN, "set_circuit_monitoring_rating", data, blocking=True)
+    await hass.services.async_call(DOMAIN, "set_circuit_package_ratings", data, blocking=True)
 
 
 async def _clear(hass: HomeAssistant, **data: object) -> None:
-    await hass.services.async_call(DOMAIN, "clear_circuit_monitoring_rating", data, blocking=True)
+    await hass.services.async_call(DOMAIN, "clear_circuit_package_ratings", data, blocking=True)
 
 
 class TestSchemas:
-    """The schemas take an integer rating of at least 1."""
+    """The set schema takes a list of whole-amp ratings of at least 1; how many is the manager's to judge."""
 
-    def test_set_accepts_an_id_and_a_rating(self) -> None:
-        """Set accepts an id and a rating."""
-        schema = _build_set_circuit_monitoring_rating_schema()
-        assert schema({"circuit_id": "circuit-2", "monitoring_rating_a": 30}) == {
+    def test_set_accepts_an_id_and_ratings(self) -> None:
+        """Set accepts an id and the ratings."""
+        schema = _build_set_circuit_package_ratings_schema()
+        assert schema({"circuit_id": "circuit-2", "package_ratings_a": [20, 30]}) == {
             "circuit_id": "circuit-2",
-            "monitoring_rating_a": 30,
+            "package_ratings_a": [20, 30],
         }
 
     def test_set_accepts_a_config_entry_id(self) -> None:
         """Set accepts a config entry id."""
-        schema = _build_set_circuit_monitoring_rating_schema()
-        assert schema({"circuit_id": "c", "monitoring_rating_a": 1, "config_entry_id": "e"})
+        schema = _build_set_circuit_package_ratings_schema()
+        assert schema({"circuit_id": "c", "package_ratings_a": [1, 1], "config_entry_id": "e"})
 
-    @pytest.mark.parametrize("rating", [0, -1, "20", 20.5, None])
-    def test_set_rejects_a_rating_that_is_not_a_positive_integer(self, rating: object) -> None:
-        """Set rejects a rating that is not a positive integer."""
-        schema = _build_set_circuit_monitoring_rating_schema()
+    @pytest.mark.parametrize("ratings", [[], [20], [20, 20, 20]])
+    def test_set_leaves_the_count_to_the_manager(self, ratings: list[int]) -> None:
+        """A refusal for the count names what to enter, which a schema error cannot."""
+        schema = _build_set_circuit_package_ratings_schema()
+        assert schema({"circuit_id": "circuit-2", "package_ratings_a": ratings})["package_ratings_a"] == ratings
+
+    @pytest.mark.parametrize("rating", [0, -1, "20", 20.5, None, True])
+    def test_set_rejects_a_rating_that_is_not_a_positive_whole_number(self, rating: object) -> None:
+        """Set rejects a rating that is not a positive whole number, a bool included."""
+        schema = _build_set_circuit_package_ratings_schema()
         with pytest.raises(vol.Invalid):
-            schema({"circuit_id": "circuit-2", "monitoring_rating_a": rating})
+            schema({"circuit_id": "circuit-2", "package_ratings_a": [20, rating]})
+
+    @pytest.mark.parametrize("ratings", [20, "20-20", None])
+    def test_set_rejects_ratings_that_are_not_a_list(self, ratings: object) -> None:
+        """Set rejects ratings that are not a list."""
+        schema = _build_set_circuit_package_ratings_schema()
+        with pytest.raises(vol.Invalid):
+            schema({"circuit_id": "circuit-2", "package_ratings_a": ratings})
 
     def test_set_rejects_a_missing_circuit(self) -> None:
         """Set rejects a missing circuit."""
-        schema = _build_set_circuit_monitoring_rating_schema()
+        schema = _build_set_circuit_package_ratings_schema()
         with pytest.raises(vol.Invalid):
-            schema({"monitoring_rating_a": 30})
+            schema({"package_ratings_a": [20, 20]})
 
-    def test_set_rejects_a_missing_rating(self) -> None:
-        """Set rejects a missing rating."""
-        schema = _build_set_circuit_monitoring_rating_schema()
+    def test_set_rejects_missing_ratings(self) -> None:
+        """Set rejects missing ratings."""
+        schema = _build_set_circuit_package_ratings_schema()
         with pytest.raises(vol.Invalid):
             schema({"circuit_id": "circuit-2"})
 
     def test_clear_accepts_an_id_and_an_entry(self) -> None:
         """Clear accepts an id and an entry."""
-        schema = _build_clear_circuit_monitoring_rating_schema()
+        schema = _build_clear_circuit_package_ratings_schema()
         assert schema({"circuit_id": "circuit-2", "config_entry_id": "e"})
 
     def test_clear_rejects_a_missing_circuit(self) -> None:
         """Clear rejects a missing circuit."""
-        schema = _build_clear_circuit_monitoring_rating_schema()
+        schema = _build_clear_circuit_package_ratings_schema()
         with pytest.raises(vol.Invalid):
             schema({})
 
 
 class TestSet:
-    """set_circuit_monitoring_rating sets the rating a circuit is judged against."""
+    """set_circuit_package_ratings stores the copy a circuit's space is judged against."""
 
     async def test_by_entity_id(self, hass: HomeAssistant) -> None:
         """By entity id."""
         entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
         entity_id = _entity(hass, entry, "circuit-2")
 
-        await _set(hass, circuit_id=entity_id, monitoring_rating_a=30)
+        await _set(hass, circuit_id=entity_id, package_ratings_a=[20, 30])
 
-        assert manager.resolve("circuit-2", _snapshot()).judged_a == 30
+        assert manager.resolve("circuit-2", _snapshot()).judged_a == 50
 
     async def test_by_circuit_id(self, hass: HomeAssistant) -> None:
         """By circuit id."""
         _entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
 
-        await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+        await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
-        assert manager.resolve("circuit-2", _snapshot()).judged_a == 30
+        assert manager.resolve("circuit-2", _snapshot()).judged_a == 50
 
     async def test_works_with_monitoring_off(self, hass: HomeAssistant) -> None:
         """Works with monitoring off."""
         entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
         assert entry.runtime_data.coordinator.current_monitor is None
 
-        await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+        await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
-        assert manager.resolve("circuit-2", _snapshot()).judged_a == 30
+        assert manager.resolve("circuit-2", _snapshot()).judged_a == 50
 
     @pytest.mark.parametrize(
-        ("snapshot", "circuit_id", "rating", "key"),
+        ("snapshot", "circuit_id", "ratings", "key"),
         [
-            (_snapshot(), "circuit-9", 30, "monitoring_rating_circuit_unknown"),
-            (_snapshot({"circuit-2": None}), "circuit-2", 30, "monitoring_rating_not_published"),
-            (_snapshot(), "circuit-2", SERVICE_A + 1, "monitoring_rating_above_service_rating"),
+            (_snapshot(), "circuit-9", [20, 30], "package_ratings_circuit_unknown"),
+            (_snapshot({"circuit-2": None}), "circuit-2", [20, 30], "package_ratings_not_published"),
+            (_snapshot(), "circuit-2", [20, SERVICE_A], "package_ratings_above_service_rating"),
+            (_snapshot(tabs=[2, 4]), "circuit-2", [20, 30], "package_ratings_not_one_space"),
+            (_snapshot(), "circuit-2", [20, 20, 20], "package_ratings_not_two"),
+            (_snapshot(), "circuit-2", [30, 20], "package_ratings_first_not_panel"),
             (
                 replace(_snapshot(), publishes_shared_meters=True),
                 "circuit-2",
-                30,
-                "monitoring_rating_panel_describes_breakers",
+                [20, 30],
+                "package_ratings_panel_describes_breakers",
             ),
         ],
     )
@@ -195,14 +212,14 @@ class TestSet:
         hass: HomeAssistant,
         snapshot: SpanPanelSnapshot,
         circuit_id: str,
-        rating: int,
+        ratings: list[int],
         key: str,
     ) -> None:
         """A refusal reaches the caller."""
         await _loaded_panel(hass, "sp3-001", snapshot)
 
         with pytest.raises(ServiceValidationError) as raised:
-            await _set(hass, circuit_id=circuit_id, monitoring_rating_a=rating)
+            await _set(hass, circuit_id=circuit_id, package_ratings_a=ratings)
 
         assert raised.value.translation_domain == DOMAIN
         assert raised.value.translation_key == key
@@ -220,19 +237,19 @@ class TestSet:
         await _loaded_panel(hass, "sp3-001", snapshot)
 
         with pytest.raises(ServiceValidationError) as raised:
-            await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+            await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
-        assert raised.value.translation_key == "monitoring_rating_no_service_rating"
+        assert raised.value.translation_key == "package_ratings_no_service_rating"
 
 
 class TestClear:
-    """clear_circuit_monitoring_rating removes a monitoring rating."""
+    """clear_circuit_package_ratings removes a circuit's copy."""
 
     async def test_by_entity_id(self, hass: HomeAssistant) -> None:
         """By entity id."""
         entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
         entity_id = _entity(hass, entry, "circuit-2")
-        await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+        await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
         await _clear(hass, circuit_id=entity_id)
 
@@ -241,7 +258,7 @@ class TestClear:
     async def test_by_circuit_id(self, hass: HomeAssistant) -> None:
         """By circuit id."""
         _entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
-        await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+        await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
         await _clear(hass, circuit_id="circuit-2")
 
@@ -250,21 +267,21 @@ class TestClear:
     async def test_works_with_monitoring_off(self, hass: HomeAssistant) -> None:
         """Works with monitoring off."""
         _entry, manager = await _loaded_panel(hass, "sp3-001", _snapshot())
-        await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+        await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
         await _clear(hass, circuit_id="circuit-2")
 
         assert manager.resolve("circuit-2", _snapshot()).judged_a == 20
 
     async def test_an_entity_whose_circuit_has_left_is_refused(self, hass: HomeAssistant) -> None:
-        """A circuit the panel no longer publishes has no monitoring rating to clear."""
+        """A circuit the panel no longer publishes has no copy to clear."""
         entry, _manager = await _loaded_panel(hass, "sp3-001", _snapshot())
         entity_id = _entity(hass, entry, "circuit-gone")
 
         with pytest.raises(ServiceValidationError) as raised:
             await _clear(hass, circuit_id=entity_id)
 
-        assert raised.value.translation_key == "monitoring_rating_circuit_unknown"
+        assert raised.value.translation_key == "package_ratings_circuit_unknown"
 
 
 class TestPanelChoice:
@@ -284,9 +301,9 @@ class TestPanelChoice:
         _a, manager_a, entry_b, manager_b = await self._two_panels(hass)
         entity_id = _entity(hass, entry_b, "circuit-2")
 
-        await _set(hass, circuit_id=entity_id, monitoring_rating_a=30)
+        await _set(hass, circuit_id=entity_id, package_ratings_a=[20, 30])
 
-        assert manager_b.resolve("circuit-2", _snapshot()).judged_a == 30
+        assert manager_b.resolve("circuit-2", _snapshot()).judged_a == 50
         assert manager_a.resolve("circuit-2", _snapshot()).judged_a == 20
 
     async def test_an_entity_cleared_without_an_entry_lands_on_its_panel(
@@ -295,7 +312,7 @@ class TestPanelChoice:
         """An entity cleared without an entry lands on its panel."""
         _a, manager_a, entry_b, manager_b = await self._two_panels(hass)
         entity_id = _entity(hass, entry_b, "circuit-2")
-        await _set(hass, circuit_id=entity_id, monitoring_rating_a=30)
+        await _set(hass, circuit_id=entity_id, package_ratings_a=[20, 30])
 
         await _clear(hass, circuit_id=entity_id)
 
@@ -306,14 +323,14 @@ class TestPanelChoice:
         _a, manager_a, entry_b, manager_b = await self._two_panels(hass)
 
         await _set(
-            hass, circuit_id="circuit-2", monitoring_rating_a=30, config_entry_id=entry_b.entry_id
+            hass, circuit_id="circuit-2", package_ratings_a=[20, 30], config_entry_id=entry_b.entry_id
         )
 
-        assert manager_b.resolve("circuit-2", _snapshot()).judged_a == 30
+        assert manager_b.resolve("circuit-2", _snapshot()).judged_a == 50
         assert manager_a.resolve("circuit-2", _snapshot()).judged_a == 20
 
     @pytest.mark.parametrize(
-        "service", ["set_circuit_monitoring_rating", "clear_circuit_monitoring_rating"]
+        "service", ["set_circuit_package_ratings", "clear_circuit_package_ratings"]
     )
     async def test_an_entry_that_is_not_the_entitys_panel_is_refused(
         self, hass: HomeAssistant, service: str
@@ -322,8 +339,8 @@ class TestPanelChoice:
         entry_a, manager_a, entry_b, manager_b = await self._two_panels(hass)
         entity_id = _entity(hass, entry_b, "circuit-2")
         data: dict[str, object] = {"circuit_id": entity_id, "config_entry_id": entry_a.entry_id}
-        if service == "set_circuit_monitoring_rating":
-            data["monitoring_rating_a"] = 30
+        if service == "set_circuit_package_ratings":
+            data["package_ratings_a"] = [20, 30]
 
         with pytest.raises(ServiceValidationError) as raised:
             await hass.services.async_call(DOMAIN, service, data, blocking=True)
@@ -340,7 +357,7 @@ class TestPanelChoice:
         entity_id = _entity(hass, entry_b, "circuit-2")
 
         with pytest.raises(ServiceValidationError) as raised:
-            await _set(hass, circuit_id=entity_id, monitoring_rating_a=30)
+            await _set(hass, circuit_id=entity_id, package_ratings_a=[20, 30])
 
         assert raised.value.translation_key == "favorite_panel_not_loaded"
         assert entry_a.state is ConfigEntryState.LOADED
@@ -352,11 +369,11 @@ class TestPanelChoice:
         """With no panel loaded either call says so, with the one message that fits both."""
         with pytest.raises(ServiceValidationError) as raised:
             if service == "set":
-                await _set(hass, circuit_id="circuit-2", monitoring_rating_a=30)
+                await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
             else:
                 await _clear(hass, circuit_id="circuit-2")
 
-        assert raised.value.translation_key == "monitoring_rating_panel_not_loaded"
+        assert raised.value.translation_key == "package_ratings_panel_not_loaded"
 
 
 class TestResolveCircuitId:

@@ -1,8 +1,8 @@
-"""Tests for the manager that stores monitoring ratings and announces changes."""
+"""Tests for the manager that stores package ratings copied from the SPAN app and announces their removal."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from string import Formatter
 import threading
@@ -19,9 +19,9 @@ from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry
 from custom_components.span_panel.const import DOMAIN, EVENT_PACKAGE_RATINGS_CHANGED
-from custom_components.span_panel.package_rating_manager import PackageRatingManager
-from custom_components.span_panel.package_ratings import ChangeReason
 from custom_components.span_panel.notices import async_restore, is_standing, read_translations
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
+from custom_components.span_panel.package_ratings import ChangeReason, MonitoringRating
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -37,18 +37,26 @@ def _notification_id(entry: MockConfigEntry) -> str:
     return f"{DOMAIN}_{_NOTICE}_{entry.entry_id}"
 
 
+def _space(circuit_id: str) -> list[int]:
+    """Each synthetic circuit sits in the space its id names: circuit-2 in space 2."""
+    return [int(circuit_id.rsplit("-", 1)[1])]
+
+
 def _snapshot(
     ratings: Mapping[str, float | None] | None = None,
     main: int | None = SERVICE_A,
     declared: Mapping[str, bool | None] | None = None,
+    tabs: Mapping[str, list[int]] | None = None,
 ) -> SpanPanelSnapshot:
     ratings = {"circuit-2": 20.0} if ratings is None else ratings
     declared = declared or {}
+    tabs = tabs or {}
     return SpanPanelSnapshotFactory.create(
         circuits={
             cid: SpanCircuitSnapshotFactory.create(
                 circuit_id=cid,
                 name=f"Name of {cid}",
+                tabs=tabs.get(cid, _space(cid)),
                 breaker_rating_a=rating,
                 breaker_rating_declared=declared.get(cid, True),
             )
@@ -113,63 +121,94 @@ def _message(hass: HomeAssistant, entry: MockConfigEntry) -> str:
     return str(hass.data["persistent_notification"][_notification_id(entry)]["message"])
 
 
+def _refused(manager: PackageRatingManager, snapshot: SpanPanelSnapshot, ratings: Sequence[int], circuit: str = "circuit-2") -> ServiceValidationError:
+    with pytest.raises(ServiceValidationError) as raised:
+        manager.set_package_ratings(circuit, snapshot, ratings)
+    return raised.value
+
+
 # -- Store -------------------------------------------------------------------
 
 
-async def test_a_set_rating_is_saved_and_loaded_by_the_next_manager(
+async def test_copied_ratings_are_saved_and_loaded_by_the_next_manager(
     hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
 ) -> None:
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])
     await hass.async_block_till_done()
 
     stored = hass_storage[_store_key(entry)]
     assert isinstance(stored, dict)
     assert stored["version"] == 1
     assert stored["data"] == {
-        "ratings": {
-            "circuit-2": {"rating_a": 50, "panel_a_at_set": 20.0, "label": "Name of circuit-2"}
+        "packages": {
+            "circuit-2": {"package_ratings_a": [20, 30], "space": 2, "label": "Name of circuit-2"}
         },
         "unacknowledged": {},
     }
 
     reloaded = PackageRatingManager(hass, entry)
     await reloaded.async_load()
-    reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded ratings
-    rating = reloaded.resolve("circuit-2", _snapshot())
-    # The declaration is unknown until `begin`, so the monitoring rating is pending: unrated.
-    assert (rating.judged_a, rating.panel_a, rating.user_set) == (None, 20.0, False)
+    reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded entries
+    # The declaration is unknown until `begin`, so the entry is pending: unrated, and kept.
+    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(None, 20.0, False, (20, 30))
     reloaded.begin(_snapshot(), _DECLARED)
-    rating = reloaded.resolve("circuit-2", _snapshot())
-    assert (rating.judged_a, rating.panel_a, rating.user_set) == (50.0, 20.0, True)
+    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(50.0, 20.0, True, (20, 30))
 
 
-async def test_a_malformed_store_loads_as_empty(
-    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
+@pytest.mark.parametrize(
+    "bad",
+    [
+        pytest.param({"package_ratings_a": "x", "space": 3, "label": "Bad"}, id="ratings not a list"),
+        pytest.param({"package_ratings_a": [10], "space": 3, "label": "Bad"}, id="one rating"),
+        pytest.param({"package_ratings_a": [10, 10, 10], "space": 3, "label": "Bad"}, id="three ratings"),
+        pytest.param({"package_ratings_a": [10, True], "space": 3, "label": "Bad"}, id="a bool rating"),
+        pytest.param({"package_ratings_a": [10, 0], "space": 3, "label": "Bad"}, id="a zero rating"),
+        pytest.param({"package_ratings_a": [10, 15.5], "space": 3, "label": "Bad"}, id="a fractional rating"),
+        pytest.param({"package_ratings_a": [10, 10], "label": "Bad"}, id="no space"),
+        pytest.param({"package_ratings_a": [10, 10], "space": True, "label": "Bad"}, id="a bool space"),
+        pytest.param({"package_ratings_a": [10, 10], "space": 3}, id="no label"),
+        pytest.param({"rating_a": 20, "panel_a_at_set": 10.0, "label": "Bad"}, id="a row of an older shape"),
+        pytest.param("nonsense", id="not a row"),
+    ],
+)
+async def test_a_malformed_row_is_dropped_and_the_rest_load(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object], bad: object
 ) -> None:
     hass_storage[_store_key(entry)] = {
         "version": 1,
         "data": {
-            "ratings": {
-                "good": {"rating_a": 30, "panel_a_at_set": 15.0, "label": "Good"},
-                "bad": {"rating_a": "x"},
+            "packages": {
+                "circuit-1": {"package_ratings_a": [15, 20], "space": 1, "label": "Good"},
+                "circuit-3": bad,
             },
             "unacknowledged": "nonsense",
         },
     }
+    snapshot = _snapshot({"circuit-1": 15.0, "circuit-3": 10.0})
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
-    manager.begin(_snapshot({"good": 15.0, "bad": 10.0}), _DECLARED)
-    assert manager.resolve("good", _snapshot({"good": 15.0})).user_set
-    assert not manager.resolve("bad", _snapshot({"bad": 10.0})).user_set
+    manager.begin(snapshot, _DECLARED)
+    assert manager.resolve("circuit-1", snapshot).user_set
+    assert manager.resolve("circuit-3", snapshot) == MonitoringRating(10.0, 10.0, False, None)
 
 
-async def test_removing_the_config_entry_deletes_its_ratings(
+async def test_a_store_without_packages_loads_as_empty(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
+) -> None:
+    hass_storage[_store_key(entry)] = {"version": 1, "data": {"packages": "nonsense"}}
+    manager = PackageRatingManager(hass, entry)
+    await manager.async_load()
+    manager.begin(_snapshot(), _DECLARED)
+    assert not manager.resolve("circuit-2", _snapshot()).user_set
+
+
+async def test_removing_the_config_entry_deletes_its_entries(
     hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
 ) -> None:
     """Keyed by wire circuit ids, the store would be picked up by the next entry for the same panel."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     await hass.async_block_till_done()
     assert _store_key(entry) in hass_storage
 
@@ -187,19 +226,18 @@ async def test_removing_the_config_entry_deletes_its_ratings(
 _LANGUAGES = ("en", "es", "fr", "ja", "pt")
 
 _LINE_PLACEHOLDERS: dict[str, set[str]] = {
-    "panel_changed": {"circuit", "rating", "before", "after"},
-    "panel_agrees": {"circuit", "rating", "before", "after"},
-    "rating_undeclared": {"circuit", "rating", "before"},
-    "circuit_removed": {"circuit", "rating", "before"},
-    "above_service_rating": {"circuit", "rating", "before", "after", "service"},
-    "service_rating_undeclared": {"circuit", "rating", "before"},
-    "panel_describes_breakers": {"circuit", "rating", "before"},
+    "panel_rating_changed": {"circuit", "package", "before", "after"},
+    "spaces_changed": {"circuit", "package"},
+    "rating_undeclared": {"circuit", "package"},
+    "circuit_removed": {"circuit", "package"},
+    "above_service_rating": {"circuit", "package", "service"},
+    "service_rating_undeclared": {"circuit", "package"},
+    "panel_describes_breakers": {"circuit", "package"},
 }
-"""What each line names: the user's rating and the panel's before, and after where there is one.
+"""What each line names: the circuit and the ratings copied, and what changed where a figure says it.
 
-A circuit that has left, or no longer declares a rating, has no rating after;
-neither may a circuit when the service rating goes, since that removes every
-monitoring rating, present or not.
+The package already names the rating the panel published when it was copied,
+its first, so only a changed panel rating names it again, beside the new one.
 """
 
 _MONITORING_SECTION = {
@@ -211,14 +249,14 @@ _MONITORING_SECTION = {
 }
 """The card's Monitoring section by its title, `sidepanel.monitoring` in the card's i18n."""
 
-_MONITORING_RATING = {
-    "en": "monitoring rating",
-    "es": "capacidad de monitoreo",
-    "fr": "calibre de surveillance",
-    "ja": "モニタリング定格",
-    "pt": "capacidade de monitorização",
+_COPIED = {
+    "en": "copied from the SPAN app",
+    "es": "copiaste de la app de SPAN",
+    "fr": "copiés depuis l'application SPAN",
+    "ja": "SPAN アプリからコピーした",
+    "pt": "copiou da aplicação SPAN",
 }
-"""What each language calls the user's value; every line that names it uses these words."""
+"""How each language says where the ratings came from; the intro and every line say it."""
 
 _BREAKER = {"en": "breaker", "es": "interruptor", "fr": "disjoncteur", "ja": "ブレーカー", "pt": "disjuntor"}
 """What each language calls a breaker. The intro heads every reason, and most are no breaker change."""
@@ -242,13 +280,10 @@ def test_the_line_placeholders_cover_every_reason() -> None:
 
 
 @pytest.mark.parametrize("language", _LANGUAGES)
-def test_every_line_names_the_users_rating_and_the_panels_before_and_after(
-    language: str,
-) -> None:
+def test_every_line_names_the_circuit_the_copy_and_what_changed(language: str) -> None:
     text = read_translations(language, _NOTICE)
-    assert {reason: _placeholders(text[reason]) for reason in _LINE_PLACEHOLDERS} == (
-        _LINE_PLACEHOLDERS
-    )
+    assert {reason: _placeholders(text[reason]) for reason in _LINE_PLACEHOLDERS} == _LINE_PLACEHOLDERS
+    assert set(text) == {"title", "intro", *_LINE_PLACEHOLDERS}
 
 
 @pytest.mark.parametrize("language", _LANGUAGES)
@@ -260,7 +295,7 @@ def test_the_notice_points_to_the_cards_monitoring_section(language: str) -> Non
 
 @pytest.mark.parametrize("language", _LANGUAGES)
 def test_the_intro_fits_every_reason_the_notice_reports(language: str) -> None:
-    """A circuit removed, or a service rating gone or exceeded, is no breaker rating changing on a circuit."""
+    """A circuit removed, or a service rating gone or exceeded, is no breaker changing on a circuit."""
     intro = read_translations(language, _NOTICE)["intro"]
     assert _BREAKER[language] not in intro.lower()
 
@@ -272,43 +307,35 @@ def test_the_intro_says_the_section_shows_while_monitoring_is_on(language: str) 
 
 
 @pytest.mark.parametrize("language", _LANGUAGES)
-def test_the_notice_calls_the_users_value_a_monitoring_rating(language: str) -> None:
+def test_the_notice_says_the_ratings_were_copied_from_the_span_app(language: str) -> None:
     text = read_translations(language, _NOTICE)
-    assert _MONITORING_RATING[language] in text["intro"]
+    assert _COPIED[language] in text["intro"]
     for reason in _LINE_PLACEHOLDERS:
-        assert _MONITORING_RATING[language] in text[reason], reason
+        assert _COPIED[language] in text[reason], reason
 
 
-# -- set_rating and clear_rating ------------------------------------------
+# -- set_package_ratings and clear_package_ratings -----------------------------
 
 
-async def test_set_refuses_a_circuit_the_panel_does_not_have(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_set_refuses_a_circuit_the_panel_does_not_have(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     manager = await _begun(hass, entry)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-9", _snapshot(), 50)
-    assert raised.value.translation_key == "monitoring_rating_circuit_unknown"
+    assert _refused(manager, _snapshot(), [20, 20], "circuit-9").translation_key == "package_ratings_circuit_unknown"
 
 
-async def test_set_refuses_on_a_panel_that_describes_its_breakers(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_set_refuses_on_a_panel_that_describes_its_breakers(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     """Each circuit there publishes its own rating, and shared meters are judged without the user's help."""
     snapshot = replace(_snapshot(), publishes_shared_meters=True)
     manager = await _begun(hass, entry, snapshot)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-2", snapshot, 50)
-    assert raised.value.translation_key == "monitoring_rating_panel_describes_breakers"
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_panel_describes_breakers"
     assert not manager.resolve("circuit-2", snapshot).user_set
 
 
-async def test_a_panel_that_describes_its_breakers_removes_a_stored_rating_and_says_so(
+async def test_a_panel_that_describes_its_breakers_removes_a_stored_entry_and_says_so(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """A rating set while the panel published no shared-meter list goes once it does, with a notice line."""
+    """An entry copied while the panel published no shared-meter list goes once it does, with a notice line."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     events = _events(hass)
     describing = replace(_snapshot(), publishes_shared_meters=True)
 
@@ -316,34 +343,26 @@ async def test_a_panel_that_describes_its_breakers_removes_a_stored_rating_and_s
     manager.reconcile(describing, _declared)
     await hass.async_block_till_done()
 
-    assert (await _stored(hass, entry))["ratings"] == {}
+    assert (await _stored(hass, entry))["packages"] == {}
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
     assert (
-        "**Name of circuit-2**: the panel now publishes each circuit of a multi-load breaker with its own rating"
-        in _message(hass, entry)
-    )
+        "**Name of circuit-2**: the panel now publishes each circuit of a multi-load breaker with its own rating, "
+        "which current monitoring uses, so the 20-20 ratings you copied from the SPAN app were removed."
+    ) in _message(hass, entry)
 
 
-async def test_set_refuses_a_circuit_with_no_panel_rating(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_set_refuses_a_circuit_with_no_panel_rating(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     snapshot = _snapshot({"circuit-2": None})
     manager = await _begun(hass, entry, snapshot)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-2", snapshot, 50)
-    assert raised.value.translation_key == "monitoring_rating_not_published"
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_published"
 
 
-async def test_set_refuses_when_the_panel_declares_no_service_rating(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_set_refuses_when_the_panel_declares_no_service_rating(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await async_restore(hass, entry)
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot(), _UNDECLARED)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-2", _snapshot(), 50)
-    assert raised.value.translation_key == "monitoring_rating_no_service_rating"
+    assert _refused(manager, _snapshot(), [20, 20]).translation_key == "package_ratings_no_service_rating"
 
 
 async def test_set_refuses_when_the_declared_service_rating_has_no_value(
@@ -351,49 +370,80 @@ async def test_set_refuses_when_the_declared_service_rating_has_no_value(
 ) -> None:
     snapshot = _snapshot(main=None)
     manager = await _begun(hass, entry, snapshot)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-2", snapshot, 50)
-    assert raised.value.translation_key == "monitoring_rating_no_service_rating"
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_no_service_rating"
 
 
-async def test_set_refuses_a_rating_above_the_service_rating_and_accepts_it_equal(
+@pytest.mark.parametrize("tabs", [[2, 4], []], ids=["two spaces", "no space yet"])
+async def test_set_refuses_a_circuit_not_in_exactly_one_space(
+    hass: HomeAssistant, entry: MockConfigEntry, tabs: list[int]
+) -> None:
+    """A two-space circuit's current is the average of its legs, which no copied package can be checked against."""
+    snapshot = _snapshot(tabs={"circuit-2": tabs})
+    manager = await _begun(hass, entry, snapshot)
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_one_space"
+
+
+@pytest.mark.parametrize("ratings", [[], [20, 20, 20]], ids=["none", "three"])
+async def test_set_refuses_other_than_two_ratings(hass: HomeAssistant, entry: MockConfigEntry, ratings: list[int]) -> None:
+    """A space holds at most a tandem; a single rating is the clear, tested below."""
+    manager = await _begun(hass, entry)
+    assert _refused(manager, _snapshot(), ratings).translation_key == "package_ratings_not_two"
+
+
+@pytest.mark.parametrize("ratings", [[30, 20], [25]], ids=["a package", "a single breaker"])
+async def test_set_refuses_a_first_rating_that_is_not_the_panels_and_names_it(
+    hass: HomeAssistant, entry: MockConfigEntry, ratings: list[int]
+) -> None:
+    """The panel publishes the package's first rating, so a copy that starts elsewhere was not copied in order."""
+    manager = await _begun(hass, entry)
+    refusal = _refused(manager, _snapshot(), ratings)
+    assert refusal.translation_key == "package_ratings_first_not_panel"
+    assert refusal.translation_placeholders == {"panel_rating": "20"}
+
+
+async def test_set_refuses_a_capacity_above_the_service_rating_and_accepts_it_equal(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     manager = await _begun(hass, entry)
-    with pytest.raises(ServiceValidationError) as raised:
-        manager.set_rating("circuit-2", _snapshot(), SERVICE_A + 1)
-    assert raised.value.translation_key == "monitoring_rating_above_service_rating"
-    assert raised.value.translation_placeholders == {"service_rating": "100"}
+    refusal = _refused(manager, _snapshot(), [20, 81])
+    assert refusal.translation_key == "package_ratings_above_service_rating"
+    assert refusal.translation_placeholders == {"service_rating": "100"}
 
-    manager.set_rating("circuit-2", _snapshot(), SERVICE_A)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 80])
     assert manager.resolve("circuit-2", _snapshot()).judged_a == float(SERVICE_A)
 
 
-async def test_set_to_the_panel_rating_clears(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+async def test_set_to_the_panels_rating_alone_clears(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """A single breaker in the space: nothing to add, so there is no entry."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
-    manager.set_rating("circuit-2", _snapshot(), 20)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    manager.set_package_ratings("circuit-2", _snapshot(), [20])
     await hass.async_block_till_done()
-    rating = manager.resolve("circuit-2", _snapshot())
-    assert (rating.judged_a, rating.user_set) == (20.0, False)
-    assert (await _stored(hass, entry))["ratings"] == {}
+    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(20.0, 20.0, False, None)
+    assert (await _stored(hass, entry))["packages"] == {}
 
 
-async def test_clear_refuses_a_circuit_not_in_the_snapshot(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_setting_the_same_copy_again_is_quiet(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    await hass.async_block_till_done()
+    events = _events(hass)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    await hass.async_block_till_done()
+    assert events == []
+
+
+async def test_clear_refuses_a_circuit_not_in_the_snapshot(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     manager = await _begun(hass, entry)
     with pytest.raises(ServiceValidationError) as raised:
-        manager.clear_rating("circuit-9", _snapshot())
-    assert raised.value.translation_key == "monitoring_rating_circuit_unknown"
+        manager.clear_package_ratings("circuit-9", _snapshot())
+    assert raised.value.translation_key == "package_ratings_circuit_unknown"
 
 
-async def test_clear_with_nothing_stored_is_quiet(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_clear_with_nothing_stored_is_quiet(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     manager = await _begun(hass, entry)
     events = _events(hass)
-    manager.clear_rating("circuit-2", _snapshot())
+    manager.clear_package_ratings("circuit-2", _snapshot())
     await hass.async_block_till_done()
     assert events == []
 
@@ -401,14 +451,12 @@ async def test_clear_with_nothing_stored_is_quiet(
 # -- Events --------------------------------------------------------------------
 
 
-async def test_set_and_clear_fire_the_event_for_their_entry(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_set_and_clear_fire_the_event_for_their_entry(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     manager = await _begun(hass, entry)
     events = _events(hass)
 
-    manager.set_rating("circuit-2", _snapshot(), 50)
-    manager.clear_rating("circuit-2", _snapshot())
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    manager.clear_package_ratings("circuit-2", _snapshot())
     await hass.async_block_till_done()
 
     assert [event.data for event in events] == [
@@ -417,13 +465,13 @@ async def test_set_and_clear_fire_the_event_for_their_entry(
     ]
 
 
-async def test_a_reconcile_change_fires_the_event_and_a_no_op_does_not(
+async def test_a_reconcile_removal_fires_the_event_and_a_no_op_does_not(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
     manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 20])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
     await hass.async_block_till_done()
     events = _events(hass)
 
@@ -444,11 +492,11 @@ async def test_a_reconcile_change_fires_the_event_and_a_no_op_does_not(
 async def test_reconcile_is_inert_until_begin(
     hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
 ) -> None:
-    """A snapshot that lacks the circuit must not delete its monitoring rating before the first one is judged."""
+    """A snapshot that lacks the circuit must not delete its entry before the first one is judged."""
     hass_storage[_store_key(entry)] = {
         "version": 1,
         "data": {
-            "ratings": {"circuit-2": {"rating_a": 50, "panel_a_at_set": 20.0, "label": "Oven"}},
+            "packages": {"circuit-2": {"package_ratings_a": [20, 20], "space": 2, "label": "Oven"}},
             "unacknowledged": {},
         },
     }
@@ -492,17 +540,16 @@ async def test_missing_metadata_after_a_known_declaration_changes_nothing(
 ) -> None:
     """A rebuild hands out no metadata; the declaration made at `begin` stands for the session."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     await hass.async_block_till_done()
     events = _events(hass)
 
     manager.reconcile(_snapshot(), _Metadata(None))
     await hass.async_block_till_done()
 
-    rating = manager.resolve("circuit-2", _snapshot())
-    assert (rating.judged_a, rating.user_set) == (50.0, True)
-    manager.set_rating("circuit-2", _snapshot(), 60)  # still bounded, not refused
-    assert manager.resolve("circuit-2", _snapshot()).judged_a == 60.0
+    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(40.0, 20.0, True, (20, 20))
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])  # still bounded, not refused
+    assert manager.resolve("circuit-2", _snapshot()).judged_a == 50.0
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
 
 
@@ -530,8 +577,7 @@ async def test_an_unknown_declaration_is_read_on_each_snapshot_until_it_is_known
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(_snapshot(), None)
-    with pytest.raises(ServiceValidationError):  # refused until the declaration is known
-        manager.set_rating("circuit-2", _snapshot(), 50)
+    _refused(manager, _snapshot(), [20, 20])  # refused until the declaration is known
     source = _Metadata(None)
 
     manager.reconcile(_snapshot(), source)
@@ -541,176 +587,147 @@ async def test_an_unknown_declaration_is_read_on_each_snapshot_until_it_is_known
     manager.reconcile(_snapshot(), source)
 
     assert source.reads == 3
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     assert manager.resolve("circuit-2", _snapshot()).user_set
+
+
+# -- Diagnostics -----------------------------------------------------------------
+
+
+async def test_diagnostics_show_each_entry_its_space_and_what_the_rule_makes_of_it(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 20])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
+    manager.reconcile(_snapshot({"circuit-2": 20.0, "circuit-3": 30.0}), _declared)
+    await hass.async_block_till_done()
+
+    pending = _snapshot({"circuit-2": None})
+    assert manager.diagnostics(pending) == {
+        "panel_describes_breakers": False,
+        "service_rating_declaration": "declared",
+        "packages": {
+            "circuit-2": {
+                "label": "Name of circuit-2",
+                "package_ratings_a": [20, 20],
+                "space": 2,
+                "state": "pending",
+            }
+        },
+        "unacknowledged": {
+            "circuit-3": {
+                "circuit_id": "circuit-3",
+                "label": "Name of circuit-3",
+                "reason": "panel_rating_changed",
+                "package_ratings_a": [15, 20],
+                "panel_after_a": 30.0,
+                "service_a": 100.0,
+            }
+        },
+    }
+    assert manager.diagnostics(_snapshot())["packages"]["circuit-2"]["state"] == "applies"
 
 
 # -- Notices -------------------------------------------------------------------
 
 
-async def test_a_change_raises_one_notice_naming_the_circuit(
+async def test_a_changed_panel_rating_raises_one_notice_naming_the_circuit(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])
 
     manager.reconcile(_snapshot({"circuit-2": 30.0}), _declared)
     await hass.async_block_till_done()
 
-    message = _message(hass, entry)
     assert (
-        "**Name of circuit-2**: the panel now reports 30 A (was 20 A). Your 50 A monitoring rating still applies."
-        in message
-    )
+        "**Name of circuit-2**: the rating your panel publishes for this circuit changed from 20 A to 30 A, "
+        "so the 20-30 ratings you copied from the SPAN app were removed."
+    ) in _message(hass, entry)
     notification = hass.data["persistent_notification"][_notification_id(entry)]
-    assert notification["title"] == "SPAN Panel monitoring ratings changed"
+    assert notification["title"] == "SPAN Panel ratings copied from the SPAN app removed"
 
 
-async def test_changes_accumulate_while_the_notice_stands_and_reset_after_dismissal(
+async def test_a_circuit_in_another_space_loses_its_copy_and_is_told(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
-    manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
+    """Same id, same first rating, but the space no longer holds the package that was copied."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _declared)
+    manager.reconcile(_snapshot(tabs={"circuit-2": [4]}), _declared)
+    await hass.async_block_till_done()
+
+    assert (await _stored(hass, entry))["packages"] == {}
+    assert (
+        "**Name of circuit-2**: this circuit's breaker spaces changed, "
+        "so the 20-30 ratings you copied from the SPAN app were removed."
+    ) in _message(hass, entry)
+
+
+async def test_a_capacity_above_a_lowered_service_rating_is_removed_and_told(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])
+
+    manager.reconcile(_snapshot(main=40), _declared)
+    await hass.async_block_till_done()
+
+    assert (
+        "**Name of circuit-2**: the 20-30 ratings you copied from the SPAN app add up to more than the panel's "
+        "service rating of 40 A, so they were removed."
+    ) in _message(hass, entry)
+
+
+async def test_removals_accumulate_while_the_notice_stands_and_reset_after_dismissal(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    ratings = {"circuit-2": 20.0, "circuit-3": 15.0, "circuit-4": 15.0}
+    manager = await _begun(hass, entry, _snapshot(ratings))
+    for circuit_id in ratings:
+        manager.set_package_ratings(circuit_id, _snapshot(ratings), [int(ratings[circuit_id]), 20])
+
+    manager.reconcile(_snapshot({**ratings, "circuit-2": 30.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
     assert "circuit-3" not in _message(hass, entry)
 
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _declared)
+    manager.reconcile(_snapshot({**ratings, "circuit-2": 30.0, "circuit-3": 25.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
     assert "circuit-3" in _message(hass, entry)
 
     async_dismiss(hass, _notification_id(entry))
     await hass.async_block_till_done()
-    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 35.0}), _declared)
+    manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0, "circuit-4": 35.0}), _declared)
     await hass.async_block_till_done()
     assert "circuit-2" not in _message(hass, entry)
-    assert "circuit-3" in _message(hass, entry)
+    assert "circuit-3" not in _message(hass, entry)
+    assert "circuit-4" in _message(hass, entry)
 
 
-async def test_a_change_and_change_back_before_the_user_looks_is_not_reported(
+async def test_two_removals_before_the_notice_is_raised_are_both_kept(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """50 A set against 20 A; the panel says 25 A, then 20 A again, before the notice is dismissed.
+    """The text is read off the loop, so a second removal can land before the first notice does.
 
-    As it stands nothing changed, so the line goes; it must not report "now 20 A
-    (was 25 A)", a value the user never saw. With no other line the notice has
-    nothing left to say, and is taken down.
-    """
-    manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
-    await hass.async_block_till_done()
-    assert "now reports 25 A (was 20 A)" in _message(hass, entry)
-
-    manager.reconcile(_snapshot({"circuit-2": 20.0}), _declared)
-    await hass.async_block_till_done()
-
-    assert not is_standing(hass, entry, _NOTICE)
-    assert _notification_id(entry) not in hass.data["persistent_notification"]
-    stored = await _stored(hass, entry)
-    assert stored["unacknowledged"] == {}
-    assert stored["ratings"]["circuit-2"] == {
-        "rating_a": 50,
-        "panel_a_at_set": 20.0,
-        "label": "Name of circuit-2",
-    }
-    assert manager.resolve("circuit-2", _snapshot()).user_set
-
-
-async def test_a_change_and_change_back_leaves_the_other_circuits_lines(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
-    manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
-    manager.reconcile(_snapshot({"circuit-2": 25.0, "circuit-3": 30.0}), _declared)
-    await hass.async_block_till_done()
-
-    manager.reconcile(_snapshot({"circuit-2": 20.0, "circuit-3": 30.0}), _declared)
-    await hass.async_block_till_done()
-
-    message = _message(hass, entry)
-    assert "circuit-2" not in message
-    assert "**Name of circuit-3**: the panel now reports 30 A (was 15 A)" in message
-    assert list((await _stored(hass, entry))["unacknowledged"]) == ["circuit-3"]
-
-
-async def test_a_change_then_a_removal_is_reported_from_the_rating_the_user_last_saw(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    """20 A, then 25 A, then 50 A, which matches the monitoring rating: removed, and "was 20 A"."""
-    manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
-    await hass.async_block_till_done()
-
-    manager.reconcile(_snapshot({"circuit-2": 50.0}), _declared)
-    await hass.async_block_till_done()
-
-    change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
-    assert isinstance(change, dict)
-    assert (change["reason"], change["removed"]) == ("panel_agrees", True)
-    assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 50.0)
-    assert (
-        "**Name of circuit-2**: the panel now reports 50 A (was 20 A), matching your 50 A "
-        "monitoring rating, so the monitoring rating was removed."
-    ) in _message(hass, entry)
-
-
-async def test_a_removal_stands_even_when_the_rating_ends_where_it_began(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    """20 A, then 25 A, then 20 A with the service rating cut to 40 A: removed, so the user is told.
-
-    The panel's rating is back where the user last saw it, which would drop a
-    line for a monitoring rating still in force; this one is gone.
-    """
-    manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
-    manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
-    await hass.async_block_till_done()
-
-    manager.reconcile(_snapshot({"circuit-2": 20.0}, main=40), _declared)
-    await hass.async_block_till_done()
-
-    change = (await _stored(hass, entry))["unacknowledged"]["circuit-2"]
-    assert isinstance(change, dict)
-    assert (change["reason"], change["removed"]) == ("above_service_rating", True)
-    assert (change["panel_before_a"], change["panel_after_a"]) == (20.0, 20.0)
-    assert is_standing(hass, entry, _NOTICE)
-    assert (
-        "**Name of circuit-2**: your 50 A monitoring rating is above the panel's service rating of "
-        "40 A, so it was removed. The panel reported 20 A and now reports 20 A."
-    ) in _message(hass, entry)
-
-
-async def test_two_changes_before_the_notice_is_raised_are_both_kept(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    """The text is read off the loop, so a second change can land before the first notice does.
-
-    The read is held until both changes are in, which is the only way to make the
+    The read is held until both are in, which is the only way to make the
     interleaving certain: left to the executor it sometimes finishes between them.
     """
     ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
     manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 20])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
     release = threading.Event()
 
     def held(language: str, section: str) -> dict[str, str]:
         release.wait(timeout=5)
         return read_translations(language, section)
 
-    with patch(
-        "custom_components.span_panel.package_rating_manager.notices.read_translations", held
-    ):
+    with patch("custom_components.span_panel.package_rating_manager.notices.read_translations", held):
         manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 15.0}), _declared)
         manager.reconcile(_snapshot({"circuit-2": 30.0, "circuit-3": 25.0}), _declared)
         release.set()
@@ -720,56 +737,51 @@ async def test_two_changes_before_the_notice_is_raised_are_both_kept(
     assert "circuit-3" in _message(hass, entry)
 
 
-async def test_a_change_and_change_back_before_the_notice_is_raised_raises_nothing(
+async def test_a_user_change_while_the_text_is_read_raises_no_empty_notice(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Both land while the first notice's text is still being read: no empty notice follows."""
+    """The user copies the package again before the notice for its removal is raised."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    changed = _snapshot({"circuit-2": 30.0})
     release = threading.Event()
 
     def held(language: str, section: str) -> dict[str, str]:
         release.wait(timeout=5)
         return read_translations(language, section)
 
-    with patch(
-        "custom_components.span_panel.package_rating_manager.notices.read_translations", held
-    ):
-        manager.reconcile(_snapshot({"circuit-2": 25.0}), _declared)
-        manager.reconcile(_snapshot({"circuit-2": 20.0}), _declared)
+    with patch("custom_components.span_panel.package_rating_manager.notices.read_translations", held):
+        manager.reconcile(changed, _declared)
+        manager.set_package_ratings("circuit-2", changed, [30, 20])
         release.set()
         await hass.async_block_till_done()
 
-    assert not is_standing(hass, entry, _NOTICE)
     assert _notification_id(entry) not in hass.data.get("persistent_notification", {})
+    assert (await _stored(hass, entry))["unacknowledged"] == {}
 
 
-async def test_unacknowledged_changes_are_stored_and_a_reloaded_manager_adds_to_them(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def test_unacknowledged_removals_are_stored(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])
     manager.reconcile(_snapshot({}), _declared)  # the circuit leaves: removed, told
     await hass.async_block_till_done()
 
     stored = await _stored(hass, entry)
-    assert stored["ratings"] == {}
+    assert stored["packages"] == {}
     assert stored["unacknowledged"] == {
         "circuit-2": {
             "circuit_id": "circuit-2",
             "label": "Name of circuit-2",
             "reason": "circuit_removed",
-            "rating_a": 50,
-            "panel_before_a": 20.0,
+            "package_ratings_a": [20, 30],
             "panel_after_a": None,
             "service_a": 100.0,
-            "removed": True,
         }
     }
 
 
 @pytest.mark.parametrize("reason", get_args(ChangeReason.__value__))
-async def test_a_stored_change_of_every_reason_round_trips(
+async def test_a_stored_removal_of_every_reason_round_trips(
     hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object], reason: str
 ) -> None:
     """A reason the loader does not accept would drop the line as malformed."""
@@ -777,16 +789,11 @@ async def test_a_stored_change_of_every_reason_round_trips(
         "circuit_id": "circuit-2",
         "label": "Oven",
         "reason": reason,
-        "rating_a": 50,
-        "panel_before_a": 20.0,
+        "package_ratings_a": [20, 30],
         "panel_after_a": 30.0,
         "service_a": 100.0,
-        "removed": reason != "panel_changed",
     }
-    hass_storage[_store_key(entry)] = {
-        "version": 1,
-        "data": {"ratings": {}, "unacknowledged": {"circuit-2": row}},
-    }
+    hass_storage[_store_key(entry)] = {"version": 1, "data": {"packages": {}, "unacknowledged": {"circuit-2": row}}}
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     await manager.async_save()
@@ -794,47 +801,79 @@ async def test_a_stored_change_of_every_reason_round_trips(
     assert (await _stored(hass, entry))["unacknowledged"] == {"circuit-2": row}
 
 
-async def test_a_reloaded_manager_keeps_the_stored_changes_and_adds_a_new_one(
+_GOOD_CHANGE: dict[str, object] = {
+    "circuit_id": "circuit-2",
+    "label": "Oven",
+    "reason": "circuit_removed",
+    "package_ratings_a": [20, 30],
+    "panel_after_a": None,
+    "service_a": None,
+}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        pytest.param({**_GOOD_CHANGE, "reason": "panel_changed"}, id="a reason no longer given"),
+        pytest.param({**_GOOD_CHANGE, "package_ratings_a": [20]}, id="one rating"),
+        pytest.param({**_GOOD_CHANGE, "label": 7}, id="label not text"),
+        pytest.param({**_GOOD_CHANGE, "panel_after_a": "30"}, id="panel rating not a number"),
+        pytest.param({**_GOOD_CHANGE, "service_a": True}, id="service rating a bool"),
+        pytest.param("nonsense", id="not a row"),
+    ],
+)
+async def test_a_malformed_stored_removal_is_dropped(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object], bad: object
+) -> None:
+    hass_storage[_store_key(entry)] = {
+        "version": 1,
+        "data": {"packages": {}, "unacknowledged": {"circuit-2": _GOOD_CHANGE, "circuit-3": bad}},
+    }
+    manager = PackageRatingManager(hass, entry)
+    await manager.async_load()
+    await manager.async_save()
+
+    assert (await _stored(hass, entry))["unacknowledged"] == {"circuit-2": _GOOD_CHANGE}
+
+
+async def test_a_reloaded_manager_keeps_the_stored_removals_and_adds_a_new_one(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """The stored changes round trip, reason included; `notices.async_restore` re-raises the notice."""
+    """The stored removals round trip, reason included; `notices.async_restore` re-raises the notice."""
     ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
     manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 30])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
     manager.reconcile(_snapshot({"circuit-3": 15.0}), _declared)  # circuit-2 leaves
     await hass.async_block_till_done()
 
     reloaded = PackageRatingManager(hass, entry)
     await reloaded.async_load()
-    reloaded.begin(_snapshot({"circuit-3": 25.0}), _DECLARED)  # circuit-3 changes
+    reloaded.begin(_snapshot({"circuit-3": 25.0}), _DECLARED)  # circuit-3's panel rating changes
     await hass.async_block_till_done()
 
     message = _message(hass, entry)
     assert (
-        "**Name of circuit-2**: this circuit is no longer on the panel (it reported 20 A), "
-        "so your 50 A monitoring rating was removed."
+        "**Name of circuit-2**: this circuit is no longer on the panel, "
+        "so the 20-30 ratings you copied from the SPAN app were removed."
     ) in message
-    assert "**Name of circuit-3**: the panel now reports 25 A (was 15 A)" in message
+    assert "**Name of circuit-3**: the rating your panel publishes for this circuit changed from 15 A to 25 A" in message
 
 
-@pytest.mark.parametrize("how", ["clear", "set"])
-async def test_a_user_change_drops_that_circuit_from_the_standing_notice(
-    hass: HomeAssistant, entry: MockConfigEntry, how: str
+async def test_copying_again_drops_that_circuit_from_the_standing_notice(
+    hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
+    """The line says the copy was removed; once the user copies the package again it no longer holds."""
     ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
     manager = await _begun(hass, entry, _snapshot(ratings))
-    manager.set_rating("circuit-2", _snapshot(ratings), 50)
-    manager.set_rating("circuit-3", _snapshot(ratings), 40)
+    manager.set_package_ratings("circuit-2", _snapshot(ratings), [20, 20])
+    manager.set_package_ratings("circuit-3", _snapshot(ratings), [15, 20])
     changed = _snapshot({"circuit-2": 30.0, "circuit-3": 25.0})
     manager.reconcile(changed, _declared)
     await hass.async_block_till_done()
     assert "circuit-2" in _message(hass, entry)
 
-    if how == "clear":
-        manager.clear_rating("circuit-2", changed)
-    else:
-        manager.set_rating("circuit-2", changed, 60)
+    manager.set_package_ratings("circuit-2", changed, [30, 20])
     await hass.async_block_till_done()
 
     assert "circuit-2" not in _message(hass, entry)
@@ -842,20 +881,36 @@ async def test_a_user_change_drops_that_circuit_from_the_standing_notice(
     assert "circuit-2" not in (await _stored(hass, entry))["unacknowledged"]
 
 
-async def test_a_user_change_to_the_only_listed_circuit_leaves_the_notice_standing(
+async def test_copying_again_the_only_listed_circuit_leaves_the_notice_standing(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
+    """A notice left with no line is the user's to dismiss."""
     manager = await _begun(hass, entry)
-    manager.set_rating("circuit-2", _snapshot(), 50)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     changed = _snapshot({"circuit-2": 30.0})
     manager.reconcile(changed, _declared)
     await hass.async_block_till_done()
 
-    manager.clear_rating("circuit-2", changed)
+    manager.set_package_ratings("circuit-2", changed, [30, 20])
     await hass.async_block_till_done()
 
     assert is_standing(hass, entry, _NOTICE)
     assert (await _stored(hass, entry))["unacknowledged"] == {}
+
+
+async def test_clearing_a_removed_entry_leaves_its_line(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """There is nothing left to clear, and the line, that the copy was removed, still holds."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    changed = _snapshot({"circuit-2": 30.0})
+    manager.reconcile(changed, _declared)
+    await hass.async_block_till_done()
+
+    manager.clear_package_ratings("circuit-2", changed)
+    await hass.async_block_till_done()
+
+    assert "circuit-2" in _message(hass, entry)
+    assert list((await _stored(hass, entry))["unacknowledged"]) == ["circuit-2"]
 
 
 async def test_two_panels_with_the_same_circuit_id_stay_independent(
@@ -865,7 +920,7 @@ async def test_two_panels_with_the_same_circuit_id_stay_independent(
     second = await _begun(hass, other)
     events = _events(hass)
 
-    first.set_rating("circuit-2", _snapshot(), 50)
+    first.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     await hass.async_block_till_done()
 
     assert first.resolve("circuit-2", _snapshot()).user_set

@@ -454,23 +454,32 @@
     "adopted_control_not_delivered": {
       "message": "A escrita de {property} em {device} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto o valor permanece inalterado e não mudará mais tarde."
     },
-    "monitoring_rating_above_service_rating": {
-      "message": "A capacidade de monitorização não pode ser superior à capacidade de serviço do painel, de {service_rating} A."
+    "package_ratings_not_published": {
+      "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível copiar capacidades da aplicação SPAN para ele."
     },
-    "monitoring_rating_circuit_unknown": {
+    "package_ratings_no_service_rating": {
+      "message": "O painel não publica uma capacidade de serviço, por isso as capacidades copiadas da aplicação SPAN não podem ser verificadas com ela."
+    },
+    "package_ratings_panel_describes_breakers": {
+      "message": "Este painel publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade, e a monitorização de corrente avalia os circuitos que partilham um contador segundo essas capacidades, por isso não há capacidades a copiar da aplicação SPAN."
+    },
+    "package_ratings_not_one_space": {
+      "message": "Só é possível copiar capacidades da aplicação SPAN para um circuito que ocupa um único espaço de disjuntor."
+    },
+    "package_ratings_not_two": {
+      "message": "Introduza ambas as capacidades pela ordem em que a aplicação SPAN as mostra, como [20, 30] para 20-30A, ou apenas a capacidade do painel para as limpar."
+    },
+    "package_ratings_first_not_panel": {
+      "message": "A primeira capacidade tem de ser os {panel_rating} A que o painel publica para este circuito. Introduza as capacidades pela ordem em que a aplicação SPAN as mostra."
+    },
+    "package_ratings_above_service_rating": {
+      "message": "As capacidades copiadas da aplicação SPAN somam mais do que a capacidade de serviço do painel, de {service_rating} A."
+    },
+    "package_ratings_circuit_unknown": {
       "message": "Este painel não tem nenhum circuito com esse identificador."
     },
-    "monitoring_rating_panel_not_loaded": {
-      "message": "Não há nenhum SPAN Panel carregado, por isso não é possível definir nem limpar uma capacidade de monitorização."
-    },
-    "monitoring_rating_no_service_rating": {
-      "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma capacidade de monitorização."
-    },
-    "monitoring_rating_panel_describes_breakers": {
-      "message": "Este painel publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade, e a monitorização de corrente avalia os circuitos que partilham um contador segundo essas capacidades, por isso não é possível definir uma capacidade de monitorização nele."
-    },
-    "monitoring_rating_not_published": {
-      "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível definir uma capacidade de monitorização."
+    "package_ratings_panel_not_loaded": {
+      "message": "Não há nenhum SPAN Panel carregado, por isso não é possível copiar nem limpar capacidades."
     },
     "circuit_priority_failed": {
       "message": "A alteração de prioridade para {circuit} foi recusada: {reason}. Nada foi enviado ao painel, portanto a prioridade permanece inalterada."
@@ -701,17 +710,17 @@
         }
       }
     },
-    "set_circuit_monitoring_rating": {
-      "name": "Definir capacidade de monitorização do circuito",
-      "description": "Definir a capacidade segundo a qual a monitorização de corrente avalia um circuito. É a maior corrente que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só se pode definir para um circuito cuja capacidade de disjuntor o painel publica, e não pode ser superior à capacidade de serviço do painel. Não é oferecida num painel que publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade.",
+    "set_circuit_package_ratings": {
+      "name": "Definir capacidades do pacote do circuito",
+      "description": "Copiar da aplicação SPAN as capacidades de um disjuntor tandem, pela ordem em que as mostra (20-30A é [20, 30]), para que a monitorização de corrente avalie o espaço do circuito pelos dois disjuntores em conjunto. A primeira tem de ser a capacidade que o painel publica para o circuito, e apenas a capacidade do painel limpa-as. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só é oferecido para um circuito num único espaço de disjuntor, com os dois disjuntores em conjunto não acima da capacidade de serviço do painel, e não num painel que publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
           "description": "A entidade do sensor de potência do circuito."
         },
-        "monitoring_rating_a": {
-          "name": "Capacidade de monitorização (A)",
-          "description": "A maior corrente, em amperes, que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. Um número inteiro de 1 até à capacidade de serviço do painel."
+        "package_ratings_a": {
+          "name": "Capacidades do pacote (A)",
+          "description": "As capacidades dos disjuntores tal como a aplicação SPAN mostra este circuito, da primeira à última, em amperes inteiros: [20, 30] para 20-30A. A primeira é a capacidade que o painel publica."
         },
         "config_entry_id": {
           "name": "Entrada de configuração",
@@ -719,9 +728,9 @@
         }
       }
     },
-    "clear_circuit_monitoring_rating": {
-      "name": "Limpar capacidade de monitorização do circuito",
-      "description": "Remover a capacidade de monitorização de um circuito, para que a monitorização de corrente o avalie pela capacidade de disjuntor publicada pelo painel.",
+    "clear_circuit_package_ratings": {
+      "name": "Limpar capacidades do pacote do circuito",
+      "description": "Remover as capacidades copiadas da aplicação SPAN para um circuito, para que a monitorização de corrente o avalie pela capacidade de disjuntor publicada pelo painel.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

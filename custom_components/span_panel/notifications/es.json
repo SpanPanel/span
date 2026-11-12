@@ -17,14 +17,14 @@
     "body": "Un dispositivo de tu panel declara más lecturas del fabricante de las que esta integración añade para un solo dispositivo ({limit}). El resto quedó fuera: {devices}.\n\nNada de lo que ya tienes se ve afectado y nada está roto. Las lecturas que quedaron fuera siguen apareciendo en la descarga de diagnósticos de esta integración, que es lo que conviene adjuntar si quieres que se muestren."
   },
   "package_ratings_changed": {
-    "title": "Cambiaron las capacidades de monitoreo del Panel SPAN",
-    "intro": "El panel cambió algo de lo que depende una capacidad de monitoreo que estableciste. Para revisar un circuito, ábrelo en el panel de control de Span Panel: su capacidad de monitoreo está en la sección **Monitoreo** del circuito, que se muestra mientras el monitoreo está activado para ese circuito.",
-    "panel_changed": "**{circuit}**: el panel ahora informa {after} A (antes {before} A). Tu capacidad de monitoreo de {rating} A sigue aplicándose.",
-    "panel_agrees": "**{circuit}**: el panel ahora informa {after} A (antes {before} A), igual que tu capacidad de monitoreo de {rating} A, por lo que la capacidad de monitoreo se eliminó.",
-    "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito (informaba {before} A), por lo que tu capacidad de monitoreo de {rating} A se eliminó.",
-    "circuit_removed": "**{circuit}**: este circuito ya no está en el panel (informaba {before} A), por lo que tu capacidad de monitoreo de {rating} A se eliminó.",
-    "above_service_rating": "**{circuit}**: tu capacidad de monitoreo de {rating} A supera la capacidad de servicio del panel, de {service} A, por lo que se eliminó. El panel informaba {before} A y ahora informa {after} A.",
-    "service_rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad de servicio, por lo que tu capacidad de monitoreo de {rating} A se eliminó. El panel informaba {before} A para este circuito.",
-    "panel_describes_breakers": "**{circuit}**: el panel ahora publica cada circuito de un interruptor de varias cargas con su propia capacidad, que es la que usa el monitoreo de corriente, por lo que tu capacidad de monitoreo de {rating} A se eliminó. El panel informaba {before} A para este circuito."
+    "title": "Se eliminaron las capacidades copiadas de la app de SPAN en el Panel SPAN",
+    "intro": "El panel cambió algo de lo que dependen capacidades que copiaste de la app de SPAN, por lo que esas capacidades se eliminaron. Para revisar un circuito, ábrelo en el panel de control de Span Panel: las capacidades están en la sección **Monitoreo** del circuito, que se muestra mientras el monitoreo está activado para ese circuito.",
+    "panel_rating_changed": "**{circuit}**: la capacidad que tu panel publica para este circuito cambió de {before} A a {after} A, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron.",
+    "spaces_changed": "**{circuit}**: cambiaron los espacios de interruptor de este circuito, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron.",
+    "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron.",
+    "circuit_removed": "**{circuit}**: este circuito ya no está en el panel, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron.",
+    "above_service_rating": "**{circuit}**: las capacidades {package} que copiaste de la app de SPAN suman más que la capacidad de servicio del panel, de {service} A, por lo que se eliminaron.",
+    "service_rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad de servicio, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron.",
+    "panel_describes_breakers": "**{circuit}**: el panel ahora publica cada circuito de un interruptor de varias cargas con su propia capacidad, que es la que usa el monitoreo de corriente, por lo que las capacidades {package} que copiaste de la app de SPAN se eliminaron."
   }
 }

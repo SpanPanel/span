@@ -1,9 +1,10 @@
-"""Tests for the pure rule deciding when a monitoring rating applies."""
+"""Tests for the pure rule deciding when a tandem's copied package ratings apply."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.package_ratings import (
@@ -11,7 +12,7 @@ from custom_components.span_panel.package_ratings import (
     MonitoringRating,
     RatingChange,
     Reconciled,
-    StoredRating,
+    StoredPackage,
     is_change_reason,
     reconcile,
     resolve,
@@ -21,7 +22,9 @@ from custom_components.span_panel.package_ratings import (
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 PANEL_A = 20.0
-MONITORING_A = 50
+PACKAGE: tuple[int, int] = (20, 20)
+CAPACITY_A = 40.0
+SPACE = 7
 SERVICE_A = 100.0
 CIRCUIT_ID = "circuit-2"
 LIVE_LABEL = "label of Oven (circuit-2)"
@@ -35,10 +38,12 @@ def _circuit(
     rating: float | None = PANEL_A,
     declared: bool | None = True,
     name: str = "Oven",
+    tabs: tuple[int, ...] = (SPACE,),
 ) -> SpanCircuitSnapshot:
     return SpanCircuitSnapshotFactory.create(
         circuit_id=CIRCUIT_ID,
         name=name,
+        tabs=list(tabs),
         breaker_rating_a=rating,
         breaker_rating_declared=declared,
     )
@@ -49,16 +54,28 @@ def _snapshot(circuit: SpanCircuitSnapshot | None, main: int | None = 100) -> Sp
     return SpanPanelSnapshotFactory.create(circuits=circuits, main_breaker_rating_a=main)
 
 
-def _stored(rating: int = MONITORING_A, at_set: float = PANEL_A) -> StoredRating:
-    return StoredRating(rating_a=rating, panel_a_at_set=at_set, label="stored label")
+def _stored(ratings: tuple[int, int] = PACKAGE, space: int = SPACE) -> StoredPackage:
+    return StoredPackage(ratings_a=ratings, space=space, label="stored label")
 
 
 def _reconcile(
     snapshot: SpanPanelSnapshot,
     service: Declaration = "declared",
-    stored: StoredRating | None = None,
+    stored: StoredPackage | None = None,
 ) -> Reconciled:
     return reconcile({CIRCUIT_ID: stored or _stored()}, snapshot, service, _label)
+
+
+def _change(
+    reason: str,
+    *,
+    label: str = LIVE_LABEL,
+    after: float | None = PANEL_A,
+    service: float | None = SERVICE_A,
+    ratings: tuple[int, int] = PACKAGE,
+) -> RatingChange:
+    assert is_change_reason(reason)
+    return RatingChange(CIRCUIT_ID, label, reason, ratings, after, service)
 
 
 # --- service_rating_declaration ---
@@ -90,210 +107,166 @@ def test_service_declaration_unresolved_or_absent_is_undeclared() -> None:
 # --- resolve ---
 
 
-def test_resolve_no_monitoring_rating_shows_panel() -> None:
-    assert resolve(_circuit(), None, SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
-        PANEL_A, PANEL_A, False
+def _resolve(
+    circuit: SpanCircuitSnapshot | None = None,
+    stored: StoredPackage | None = None,
+    service_a: float | None = SERVICE_A,
+    service: Declaration = "declared",
+    *,
+    describes_breakers: bool = False,
+) -> MonitoringRating:
+    return resolve(
+        _circuit() if circuit is None else circuit, stored, service_a, service, describes_breakers=describes_breakers
     )
 
 
-def test_resolve_monitoring_rating_applies() -> None:
-    assert resolve(_circuit(), _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
-        float(MONITORING_A), PANEL_A, True
-    )
+def test_resolve_with_no_package_judges_the_panel_rating() -> None:
+    assert _resolve() == MonitoringRating(PANEL_A, PANEL_A, False, None)
 
 
-def test_resolve_monitoring_rating_equal_to_service_applies() -> None:
-    assert resolve(_circuit(), _stored(100), SERVICE_A, "declared", describes_breakers=False).user_set is True
+def test_resolve_judges_a_package_against_both_its_breakers() -> None:
+    assert _resolve(stored=_stored()) == MonitoringRating(CAPACITY_A, PANEL_A, True, PACKAGE)
 
 
-def test_resolve_missing_circuit_is_unrated() -> None:
-    assert resolve(None, _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(None, None, False)
+@pytest.mark.parametrize(("ratings", "capacity"), [((20, 30), 50.0), ((15, 20), 35.0)])
+def test_resolve_judges_an_unequal_tandem_against_its_sum(ratings: tuple[int, int], capacity: float) -> None:
+    """A 20-30 publishes 20 A and a 15-20 15 A; one space's sensor reads both breakers, so the space carries their sum."""
+    circuit = _circuit(rating=float(ratings[0]))
+    assert _resolve(circuit, _stored(ratings)) == MonitoringRating(capacity, float(ratings[0]), True, ratings)
 
 
-def test_resolve_pending_panel_rating_is_unrated() -> None:
-    assert resolve(_circuit(rating=None), _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
-        None, None, False
-    )
+def test_resolve_a_capacity_equal_to_the_service_rating_applies() -> None:
+    assert _resolve(stored=_stored((20, 80))).user_set is True
 
 
-def test_resolve_pending_service_rating_is_unrated() -> None:
-    """A circuit with a monitoring rating is not judged against the panel rating, even for a moment.
-
-    The panel's own rating is still reported beside it: it is the wire value, and
-    known.
-    """
-    pending = MonitoringRating(None, PANEL_A, False)
-    assert resolve(_circuit(), _stored(), None, "declared", describes_breakers=False) == pending
-    assert resolve(_circuit(), _stored(), SERVICE_A, "unknown", describes_breakers=False) == pending
-    assert resolve(_circuit(), _stored(), None, "unknown", describes_breakers=False) == pending
+def test_resolve_a_missing_circuit_is_unrated() -> None:
+    assert resolve(None, _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(None, None, False, None)
 
 
-def test_resolve_pending_service_rating_without_a_monitoring_rating_shows_panel() -> None:
-    expected = MonitoringRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), None, None, "declared", describes_breakers=False) == expected
-    assert resolve(_circuit(), None, SERVICE_A, "unknown", describes_breakers=False) == expected
+def test_resolve_a_pending_panel_rating_is_unrated_and_keeps_the_package() -> None:
+    assert _resolve(_circuit(rating=None), _stored()) == MonitoringRating(None, None, False, PACKAGE)
 
 
-def test_resolve_undeclared_service_rating_shows_panel() -> None:
-    """No service rating published: the monitoring rating is being deleted, and the panel's rating applies."""
-    expected = MonitoringRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), _stored(), None, "undeclared", describes_breakers=False) == expected
-    assert resolve(_circuit(), _stored(), SERVICE_A, "undeclared", describes_breakers=False) == expected
+def test_resolve_a_pending_service_rating_is_unrated_and_keeps_the_package() -> None:
+    """A space with copied ratings is not judged against the one the panel publishes, even for a moment."""
+    pending = MonitoringRating(None, PANEL_A, False, PACKAGE)
+    assert _resolve(stored=_stored(), service_a=None) == pending
+    assert _resolve(stored=_stored(), service="unknown") == pending
+    assert _resolve(stored=_stored(), service_a=None, service="unknown") == pending
 
 
-def test_resolve_monitoring_rating_above_service_shows_panel() -> None:
-    assert resolve(_circuit(), _stored(101), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
-        PANEL_A, PANEL_A, False
-    )
+def test_resolve_a_space_not_yet_arrived_is_unrated_and_keeps_the_package() -> None:
+    """A circuit always sits in a space, so listing none means the value has not landed, not that the package moved."""
+    assert _resolve(_circuit(tabs=()), _stored()) == MonitoringRating(None, PANEL_A, False, PACKAGE)
 
 
-def test_resolve_monitoring_rating_equal_to_panel_shows_panel() -> None:
-    assert resolve(_circuit(), _stored(20), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
-        PANEL_A, PANEL_A, False
-    )
+def test_resolve_a_pending_service_rating_with_no_package_judges_the_panel_rating() -> None:
+    expected = MonitoringRating(PANEL_A, PANEL_A, False, None)
+    assert _resolve(service_a=None) == expected
+    assert _resolve(service="unknown") == expected
+
+
+@pytest.mark.parametrize(
+    ("circuit", "stored", "service_a", "service"),
+    [
+        pytest.param(_circuit(), _stored(), SERVICE_A, "undeclared", id="no service rating published"),
+        pytest.param(_circuit(), _stored((20, 90)), SERVICE_A, "declared", id="capacity above the service rating"),
+        pytest.param(_circuit(rating=30.0), _stored(), SERVICE_A, "declared", id="the panel's rating changed"),
+        pytest.param(_circuit(tabs=(9,)), _stored(), SERVICE_A, "declared", id="moved to another space"),
+        pytest.param(_circuit(tabs=(7, 9)), _stored(), SERVICE_A, "declared", id="now lists two spaces"),
+    ],
+)
+def test_resolve_a_package_that_no_longer_holds_judges_the_panel_rating(
+    circuit: SpanCircuitSnapshot, stored: StoredPackage, service_a: float, service: Declaration
+) -> None:
+    """Each is being deleted, so the circuit is judged against what the panel publishes."""
+    panel = circuit.breaker_rating_a
+    assert _resolve(circuit, stored, service_a, service) == MonitoringRating(panel, panel, False, None)
 
 
 # --- reconcile ---
 
 
-def test_reconcile_unchanged_keeps_silently() -> None:
-    result = _reconcile(_snapshot(_circuit()))
-    assert result.changes == ()
-    assert result.ratings == {
-        CIRCUIT_ID: StoredRating(MONITORING_A, PANEL_A, _label(_circuit(), CIRCUIT_ID))
-    }
-
-
-def test_reconcile_refreshes_label_silently() -> None:
+def test_reconcile_unchanged_keeps_silently_with_the_label_refreshed() -> None:
     result = _reconcile(_snapshot(_circuit(name="Range")))
     assert result.changes == ()
-    assert result.ratings[CIRCUIT_ID].label == "label of Range (circuit-2)"
+    assert result.packages == {CIRCUIT_ID: StoredPackage(PACKAGE, SPACE, "label of Range (circuit-2)")}
 
 
-def test_reconcile_panel_agrees_removes() -> None:
-    result = _reconcile(_snapshot(_circuit(rating=50.0)))
-    assert result.ratings == {}
-    assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID, LIVE_LABEL, "panel_agrees", MONITORING_A, PANEL_A, 50.0, SERVICE_A, True
-        ),
-    )
-
-
-def test_reconcile_panel_changed_keeps_and_reconfirms() -> None:
+def test_reconcile_a_changed_panel_rating_removes_the_copy() -> None:
+    """The panel was re-commissioned, so what was copied against its old rating is stale."""
     result = _reconcile(_snapshot(_circuit(rating=30.0)))
-    assert result.ratings[CIRCUIT_ID].panel_a_at_set == 30.0
-    assert result.ratings[CIRCUIT_ID].rating_a == MONITORING_A
-    assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID, LIVE_LABEL, "panel_changed", MONITORING_A, PANEL_A, 30.0, SERVICE_A, False
-        ),
-    )
+    assert result.packages == {}
+    assert result.changes == (_change("panel_rating_changed", after=30.0),)
 
 
-def test_reconcile_rating_undeclared_removes() -> None:
+@pytest.mark.parametrize("tabs", [(9,), (7, 9)], ids=["moved to another space", "now lists two spaces"])
+def test_reconcile_changed_spaces_remove_the_copy(tabs: tuple[int, ...]) -> None:
+    """The circuit no longer holds the package that was copied, whatever its id and first rating."""
+    result = _reconcile(_snapshot(_circuit(tabs=tabs)))
+    assert result.packages == {}
+    assert result.changes == (_change("spaces_changed"),)
+
+
+def test_reconcile_an_undeclared_rating_removes_the_copy() -> None:
     result = _reconcile(_snapshot(_circuit(rating=None, declared=False)))
-    assert result.ratings == {}
-    assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID,
-            LIVE_LABEL,
-            "rating_undeclared",
-            MONITORING_A,
-            PANEL_A,
-            None,
-            SERVICE_A,
-            True,
-        ),
-    )
+    assert result.packages == {}
+    assert result.changes == (_change("rating_undeclared", after=None),)
 
 
-def test_reconcile_declared_unvalued_keeps_silently() -> None:
-    before = _stored()
-    result = _reconcile(_snapshot(_circuit(rating=None, declared=True)), stored=before)
+@pytest.mark.parametrize(
+    ("snapshot", "service"),
+    [
+        pytest.param(_snapshot(_circuit(rating=None, declared=True)), "declared", id="rating declared, no value yet"),
+        pytest.param(_snapshot(_circuit(rating=None, declared=None)), "declared", id="rating declaration not known"),
+        pytest.param(_snapshot(_circuit(rating=30.0)), "unknown", id="service declaration not known"),
+        pytest.param(_snapshot(_circuit(rating=30.0), main=None), "declared", id="service rating declared, no value yet"),
+        pytest.param(_snapshot(_circuit(rating=None, declared=None), main=None), "unknown", id="replayed with no metadata"),
+        pytest.param(_snapshot(_circuit(tabs=())), "declared", id="space not yet arrived"),
+        pytest.param(_snapshot(_circuit(rating=30.0, tabs=())), "declared", id="space not yet arrived, rating changed"),
+    ],
+)
+def test_reconcile_keeps_a_pending_copy_silently(snapshot: SpanPanelSnapshot, service: Declaration) -> None:
+    result = _reconcile(snapshot, service)
     assert result.changes == ()
-    assert result.ratings[CIRCUIT_ID].rating_a == before.rating_a
-    assert result.ratings[CIRCUIT_ID].panel_a_at_set == before.panel_a_at_set
+    assert result.packages[CIRCUIT_ID].ratings_a == PACKAGE
 
 
-def test_reconcile_declaration_not_known_keeps_silently() -> None:
-    result = _reconcile(_snapshot(_circuit(rating=None, declared=None)))
-    assert result.changes == ()
-    assert CIRCUIT_ID in result.ratings
+def test_reconcile_a_capacity_above_the_service_rating_removes_the_copy() -> None:
+    result = _reconcile(_snapshot(_circuit(), main=30))
+    assert result.packages == {}
+    assert result.changes == (_change("above_service_rating", service=30.0),)
 
 
-def test_reconcile_declaration_unknown_keeps_silently() -> None:
-    result = _reconcile(_snapshot(_circuit(rating=30.0)), service="unknown")
-    assert result.changes == ()
-    assert result.ratings[CIRCUIT_ID].panel_a_at_set == PANEL_A
-
-
-def test_reconcile_service_declared_unvalued_keeps_silently() -> None:
-    result = _reconcile(_snapshot(_circuit(rating=30.0), main=None))
-    assert result.changes == ()
-    assert result.ratings[CIRCUIT_ID].panel_a_at_set == PANEL_A
-
-
-def test_reconcile_above_service_removes() -> None:
+def test_reconcile_a_capacity_equal_to_the_service_rating_keeps_the_copy() -> None:
     result = _reconcile(_snapshot(_circuit(), main=40))
-    assert result.ratings == {}
-    assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID,
-            LIVE_LABEL,
-            "above_service_rating",
-            MONITORING_A,
-            PANEL_A,
-            PANEL_A,
-            40.0,
-            True,
-        ),
-    )
-
-
-def test_reconcile_equal_to_service_keeps() -> None:
-    result = _reconcile(_snapshot(_circuit(), main=MONITORING_A))
     assert result.changes == ()
-    assert CIRCUIT_ID in result.ratings
+    assert CIRCUIT_ID in result.packages
 
 
-def test_reconcile_service_undeclared_removes_all() -> None:
-    ratings = {
-        CIRCUIT_ID: _stored(),
-        "circuit-9": _stored(),
-    }
-    result = reconcile(ratings, _snapshot(_circuit()), "undeclared", _label)
-    assert result.ratings == {}
-    assert {c.circuit_id for c in result.changes} == set(ratings)
-    assert all(c.reason == "service_rating_undeclared" and c.removed for c in result.changes)
-    labels = {c.circuit_id: c.label for c in result.changes}
-    assert labels == {CIRCUIT_ID: LIVE_LABEL, "circuit-9": "stored label"}
+def test_reconcile_an_undeclared_service_rating_removes_every_copy() -> None:
+    packages = {CIRCUIT_ID: _stored(), "circuit-9": _stored()}
+    result = reconcile(packages, _snapshot(_circuit()), "undeclared", _label)
+    assert result.packages == {}
+    assert {c.circuit_id for c in result.changes} == set(packages)
+    assert all(c.reason == "service_rating_undeclared" for c in result.changes)
+    assert {c.circuit_id: c.label for c in result.changes} == {CIRCUIT_ID: LIVE_LABEL, "circuit-9": "stored label"}
 
 
-def test_reconcile_absent_circuit_removes_with_last_label() -> None:
+def test_reconcile_an_absent_circuit_removes_the_copy_with_its_last_label() -> None:
     result = _reconcile(_snapshot(None))
-    assert result.ratings == {}
-    assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID,
-            "stored label",
-            "circuit_removed",
-            MONITORING_A,
-            PANEL_A,
-            None,
-            SERVICE_A,
-            True,
-        ),
-    )
+    assert result.packages == {}
+    assert result.changes == (_change("circuit_removed", label="stored label", after=None),)
 
 
-def test_reconcile_unknown_declaration_with_no_metadata_deletes_nothing() -> None:
-    """A rating replayed after its description while field_metadata is None."""
-    result = _reconcile(
-        _snapshot(_circuit(rating=None, declared=None), main=None), service="unknown"
-    )
-    assert result.changes == ()
-    assert CIRCUIT_ID in result.ratings
+def test_reconcile_gives_a_capacity_above_the_service_rating_before_a_changed_panel_rating() -> None:
+    result = _reconcile(_snapshot(_circuit(rating=30.0), main=30))
+    assert [change.reason for change in result.changes] == ["above_service_rating"]
+
+
+def test_reconcile_gives_a_changed_panel_rating_before_changed_spaces() -> None:
+    result = _reconcile(_snapshot(_circuit(rating=30.0, tabs=(9,))))
+    assert [change.reason for change in result.changes] == ["panel_rating_changed"]
 
 
 # --- a panel that describes its multi-load breakers ---
@@ -305,54 +278,45 @@ def _describing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
 
 
 def test_resolve_on_a_panel_that_describes_its_breakers_judges_the_panel_rating() -> None:
-    """Each circuit there publishes its own rating, so a stored monitoring rating never applies."""
-    expected = MonitoringRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), _stored(), SERVICE_A, "declared", describes_breakers=True) == expected
-    assert resolve(_circuit(), None, SERVICE_A, "declared", describes_breakers=True) == expected
+    """Each circuit there publishes its own rating, so a stored copy never applies."""
+    expected = MonitoringRating(PANEL_A, PANEL_A, False, None)
+    assert _resolve(stored=_stored(), describes_breakers=True) == expected
+    assert _resolve(describes_breakers=True) == expected
 
 
 def test_resolve_on_a_panel_that_describes_its_breakers_still_needs_a_panel_rating() -> None:
-    assert resolve(
-        _circuit(rating=None), _stored(), SERVICE_A, "declared", describes_breakers=True
-    ) == MonitoringRating(None, None, False)
+    assert _resolve(_circuit(rating=None), _stored(), describes_breakers=True) == MonitoringRating(None, None, False, None)
 
 
-def test_reconcile_on_a_panel_that_describes_its_breakers_removes_every_rating() -> None:
-    ratings = {CIRCUIT_ID: _stored(), "circuit-9": _stored()}
-    result = reconcile(ratings, _describing(_snapshot(_circuit())), "declared", _label)
-    assert result.ratings == {}
+def test_reconcile_on_a_panel_that_describes_its_breakers_removes_every_copy() -> None:
+    packages = {CIRCUIT_ID: _stored(), "circuit-9": _stored()}
+    result = reconcile(packages, _describing(_snapshot(_circuit())), "declared", _label)
+    assert result.packages == {}
     assert result.changes == (
-        RatingChange(
-            CIRCUIT_ID,
-            LIVE_LABEL,
-            "panel_describes_breakers",
-            MONITORING_A,
-            PANEL_A,
-            PANEL_A,
-            SERVICE_A,
-            True,
-        ),
-        RatingChange(
-            "circuit-9",
-            "stored label",
-            "panel_describes_breakers",
-            MONITORING_A,
-            PANEL_A,
-            None,
-            SERVICE_A,
-            True,
-        ),
+        _change("panel_describes_breakers"),
+        RatingChange("circuit-9", "stored label", "panel_describes_breakers", PACKAGE, None, SERVICE_A),
     )
 
 
 def test_reconcile_gives_the_described_breakers_as_the_reason_before_any_other() -> None:
-    """Whatever else the panel stopped publishing, the rating is gone because the panel describes its breakers."""
+    """Whatever else the panel stopped publishing, the copy is gone because the panel describes its breakers."""
     snapshot = _describing(_snapshot(_circuit(rating=None, declared=False)))
     for service in ("declared", "undeclared", "unknown"):
         result = reconcile({CIRCUIT_ID: _stored()}, snapshot, service, _label)
         assert [change.reason for change in result.changes] == ["panel_describes_breakers"]
-        assert result.ratings == {}
+        assert result.packages == {}
 
 
-def test_the_described_breakers_reason_reads_back_from_storage() -> None:
-    assert is_change_reason("panel_describes_breakers")
+def test_every_reason_reads_back_from_storage_and_retired_ones_do_not() -> None:
+    for reason in (
+        "panel_rating_changed",
+        "spaces_changed",
+        "rating_undeclared",
+        "circuit_removed",
+        "above_service_rating",
+        "service_rating_undeclared",
+        "panel_describes_breakers",
+    ):
+        assert is_change_reason(reason)
+    assert not is_change_reason("panel_changed")
+    assert not is_change_reason("panel_agrees")

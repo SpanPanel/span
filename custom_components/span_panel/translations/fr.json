@@ -454,23 +454,32 @@
     "adopted_control_not_delivered": {
       "message": "L'écriture de {property} sur {device} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la valeur est donc inchangée et ne changera pas plus tard."
     },
-    "monitoring_rating_above_service_rating": {
-      "message": "Un calibre de surveillance ne peut pas dépasser le calibre de service du panneau, soit {service_rating} A."
+    "package_ratings_not_published": {
+      "message": "Le panneau ne publie pas de calibre de disjoncteur pour ce circuit ; des calibres ne peuvent donc pas être copiés depuis l'application SPAN pour celui-ci."
     },
-    "monitoring_rating_circuit_unknown": {
+    "package_ratings_no_service_rating": {
+      "message": "Le panneau ne publie pas de calibre de service ; les calibres copiés depuis l'application SPAN ne peuvent donc pas être vérifiés par rapport à celui-ci."
+    },
+    "package_ratings_panel_describes_breakers": {
+      "message": "Ce panneau publie chaque circuit d'un disjoncteur multicharge avec son propre calibre, et la surveillance du courant juge les circuits qui partagent un compteur par rapport à ces calibres ; il n'y a donc aucun calibre à copier depuis l'application SPAN."
+    },
+    "package_ratings_not_one_space": {
+      "message": "Des calibres ne peuvent être copiés depuis l'application SPAN que pour un circuit occupant un seul emplacement de disjoncteur."
+    },
+    "package_ratings_not_two": {
+      "message": "Saisissez les deux calibres dans l'ordre où l'application SPAN les affiche, par exemple [20, 30] pour 20-30A, ou le seul calibre du panneau pour les effacer."
+    },
+    "package_ratings_first_not_panel": {
+      "message": "Le premier calibre doit être les {panel_rating} A que le panneau publie pour ce circuit. Saisissez les calibres dans l'ordre où l'application SPAN les affiche."
+    },
+    "package_ratings_above_service_rating": {
+      "message": "Les calibres copiés depuis l'application SPAN dépassent ensemble le calibre de service du panneau, soit {service_rating} A."
+    },
+    "package_ratings_circuit_unknown": {
       "message": "Ce panneau n'a aucun circuit avec cet identifiant."
     },
-    "monitoring_rating_panel_not_loaded": {
-      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre de surveillance ne peut donc être défini ni effacé."
-    },
-    "monitoring_rating_no_service_rating": {
-      "message": "Le panneau ne publie pas de calibre de service ; un calibre de surveillance ne peut donc pas être défini."
-    },
-    "monitoring_rating_panel_describes_breakers": {
-      "message": "Ce panneau publie chaque circuit d'un disjoncteur multicharge avec son propre calibre, et la surveillance du courant juge les circuits qui partagent un compteur par rapport à ces calibres ; un calibre de surveillance ne peut donc pas y être défini."
-    },
-    "monitoring_rating_not_published": {
-      "message": "Le panneau ne publie pas de calibre de disjoncteur pour ce circuit ; un calibre de surveillance ne peut donc pas être défini."
+    "package_ratings_panel_not_loaded": {
+      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre ne peut donc être copié ni effacé."
     },
     "circuit_priority_failed": {
       "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
@@ -701,17 +710,17 @@
         }
       }
     },
-    "set_circuit_monitoring_rating": {
-      "name": "Définir le calibre de surveillance du circuit",
-      "description": "Définir le calibre par rapport auquel la surveillance du courant juge un circuit. C'est le courant maximal que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Seul un circuit dont le panneau publie le calibre de disjoncteur peut en recevoir un, et il ne peut pas dépasser le calibre de service du panneau. Il n'est pas proposé sur un panneau qui publie chaque circuit d'un disjoncteur multicharge avec son propre calibre.",
+    "set_circuit_package_ratings": {
+      "name": "Définir les calibres du bloc du circuit",
+      "description": "Copier depuis l'application SPAN les calibres d'un disjoncteur tandem, dans l'ordre où elle les affiche (20-30A donne [20, 30]), afin que la surveillance du courant juge l'emplacement du circuit par rapport aux deux disjoncteurs ensemble. Le premier doit être le calibre que le panneau publie pour le circuit, et le seul calibre du panneau les efface. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Proposé uniquement pour un circuit occupant un seul emplacement de disjoncteur, les deux disjoncteurs ensemble ne dépassant pas le calibre de service du panneau, et pas sur un panneau qui publie chaque circuit d'un disjoncteur multicharge avec son propre calibre.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
           "description": "L'entité capteur de puissance du circuit."
         },
-        "monitoring_rating_a": {
-          "name": "Calibre de surveillance (A)",
-          "description": "Le courant maximal, en ampères, que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Un nombre entier de 1 jusqu'au calibre de service du panneau."
+        "package_ratings_a": {
+          "name": "Calibres du bloc (A)",
+          "description": "Les calibres des disjoncteurs tels que l'application SPAN affiche ce circuit, du premier au dernier, en ampères entiers : [20, 30] pour 20-30A. Le premier est le calibre que publie le panneau."
         },
         "config_entry_id": {
           "name": "Entrée de configuration",
@@ -719,9 +728,9 @@
         }
       }
     },
-    "clear_circuit_monitoring_rating": {
-      "name": "Effacer le calibre de surveillance du circuit",
-      "description": "Supprimer le calibre de surveillance d'un circuit, de sorte que la surveillance du courant le juge selon le calibre de disjoncteur publié par le panneau.",
+    "clear_circuit_package_ratings": {
+      "name": "Effacer les calibres du bloc du circuit",
+      "description": "Supprimer les calibres copiés depuis l'application SPAN pour un circuit, de sorte que la surveillance du courant le juge selon le calibre de disjoncteur publié par le panneau.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

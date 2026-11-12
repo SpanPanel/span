@@ -283,9 +283,10 @@ async def handle_panel_topology(
             "config_entry_id": config_entry_id,
             "device_name": device_entry.name,
             "panel_entities": panel_entities,
-            # Whether `set_circuit_monitoring_rating` takes a rating on this panel
-            # at all. False where the panel describes its multi-load breakers:
-            # current monitoring then judges every circuit by the panel's ratings.
+            # Whether `set_circuit_package_ratings` takes ratings on this panel at
+            # all. False where the panel describes its multi-load breakers: current
+            # monitoring then judges every circuit by the panel's ratings. Each
+            # circuit must also list a single space, which the card reads off it.
             "monitoring_rating_offered": not panel_describes_breakers(snapshot),
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
@@ -300,7 +301,7 @@ class MeterGroupRecord(TypedDict):
 
     `breaker_rating_a` is the capacity of the ratings the panel published and
     `monitoring_rating_a` the capacity of the ratings its members are judged
-    against, both by `current_monitor.meter_capacity_a`, and null where unknown.
+    against, both by `meter_capacity.meter_capacity_a`, and null where unknown.
     `monitoring_rating_user_set` is whether any member's monitoring rating applies.
     """
 

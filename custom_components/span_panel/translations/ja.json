@@ -454,23 +454,32 @@
     "adopted_control_not_delivered": {
       "message": "{device}の{property}への書き込みをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、値は変わっておらず、後から変わることもありません。"
     },
-    "monitoring_rating_above_service_rating": {
-      "message": "モニタリング定格はパネルのサービス定格 {service_rating} A を超えることはできません。"
+    "package_ratings_not_published": {
+      "message": "パネルはこの回路のブレーカー定格を公開していないため、SPAN アプリから定格をコピーできません。"
     },
-    "monitoring_rating_circuit_unknown": {
+    "package_ratings_no_service_rating": {
+      "message": "パネルがサービス定格を公開していないため、SPAN アプリからコピーした定格を確認できません。"
+    },
+    "package_ratings_panel_describes_breakers": {
+      "message": "このパネルは複数負荷ブレーカーの各回路をそれぞれの定格で公開し、電流モニタリングはメーターを共有する回路をそれらの定格で判定するため、SPAN アプリからコピーする定格はありません。"
+    },
+    "package_ratings_not_one_space": {
+      "message": "SPAN アプリから定格をコピーできるのは、ブレーカースペースを 1 つだけ占める回路のみです。"
+    },
+    "package_ratings_not_two": {
+      "message": "SPAN アプリに表示される順に両方の定格を入力してください(20-30A なら [20, 30])。クリアするにはパネルの定格だけを入力します。"
+    },
+    "package_ratings_first_not_panel": {
+      "message": "最初の定格は、パネルがこの回路について公開している {panel_rating} A でなければなりません。SPAN アプリに表示される順に定格を入力してください。"
+    },
+    "package_ratings_above_service_rating": {
+      "message": "SPAN アプリからコピーした定格の合計が、パネルのサービス定格 {service_rating} A を超えています。"
+    },
+    "package_ratings_circuit_unknown": {
       "message": "このパネルには、その ID の回路がありません。"
     },
-    "monitoring_rating_panel_not_loaded": {
-      "message": "SPAN Panel が読み込まれていないため、モニタリング定格を設定することもクリアすることもできません。"
-    },
-    "monitoring_rating_no_service_rating": {
-      "message": "パネルがサービス定格を公開していないため、モニタリング定格を設定できません。"
-    },
-    "monitoring_rating_panel_describes_breakers": {
-      "message": "このパネルは複数負荷ブレーカーの各回路をそれぞれの定格で公開し、電流モニタリングはメーターを共有する回路をそれらの定格で判定するため、モニタリング定格は設定できません。"
-    },
-    "monitoring_rating_not_published": {
-      "message": "パネルはこの回路のブレーカー定格を公開していないため、モニタリング定格を設定できません。"
+    "package_ratings_panel_not_loaded": {
+      "message": "SPAN Panel が読み込まれていないため、定格をコピーすることもクリアすることもできません。"
     },
     "circuit_priority_failed": {
       "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
@@ -701,17 +710,17 @@
         }
       }
     },
-    "set_circuit_monitoring_rating": {
-      "name": "回路のモニタリング定格の設定",
-      "description": "電流モニタリングが回路を判定する際の定格を設定します。これは回路の測定対象の配線が流せる最大電流です。1 つのスペースにあるタンデムブレーカーの場合は、各ブレーカーの合計になります。ブレーカー定格センサーは引き続きパネルの定格を表示します。パネルがブレーカー定格を公開している回路にのみ設定でき、パネルのサービス定格を超えることはできません。複数負荷ブレーカーの各回路をそれぞれの定格で公開するパネルでは提供されません。",
+    "set_circuit_package_ratings": {
+      "name": "回路のパッケージ定格の設定",
+      "description": "タンデムブレーカーの定格を SPAN アプリに表示される順にコピーし(20-30A なら [20, 30])、電流モニタリングが回路のスペースを両方のブレーカーの合計で判定するようにします。最初の定格はパネルがその回路について公開している定格でなければならず、パネルの定格だけを指定するとクリアされます。ブレーカー定格センサーは引き続きパネルの定格を表示します。ブレーカースペースを 1 つだけ占める回路で、両方のブレーカーの合計がパネルのサービス定格以下の場合にのみ提供され、複数負荷ブレーカーの各回路をそれぞれの定格で公開するパネルでは提供されません。",
       "fields": {
         "circuit_id": {
           "name": "回路",
           "description": "回路電力センサーエンティティ。"
         },
-        "monitoring_rating_a": {
-          "name": "モニタリング定格 (A)",
-          "description": "回路の測定対象の配線が流せる最大電流(アンペア単位)。1 つのスペースにあるタンデムブレーカーの場合は、各ブレーカーの合計です。1 からパネルのサービス定格までの整数です。"
+        "package_ratings_a": {
+          "name": "パッケージ定格 (A)",
+          "description": "SPAN アプリがこの回路について表示するとおりのブレーカー定格を、最初から最後まで整数のアンペアで指定します。20-30A なら [20, 30] です。最初の定格はパネルが公開している定格です。"
         },
         "config_entry_id": {
           "name": "設定エントリ",
@@ -719,9 +728,9 @@
         }
       }
     },
-    "clear_circuit_monitoring_rating": {
-      "name": "回路のモニタリング定格のクリア",
-      "description": "回路のモニタリング定格を削除し、電流モニタリングがパネルの公開しているブレーカー定格で判定するように戻します。",
+    "clear_circuit_package_ratings": {
+      "name": "回路のパッケージ定格のクリア",
+      "description": "回路について SPAN アプリからコピーした定格を削除し、電流モニタリングがパネルの公開しているブレーカー定格で判定するように戻します。",
       "fields": {
         "circuit_id": {
           "name": "回路",

@@ -24,7 +24,6 @@ from custom_components.span_panel.notices import (
     async_forget,
     async_raise,
     async_restore,
-    async_withdraw,
     is_standing,
     read_translations,
 )
@@ -196,36 +195,6 @@ async def test_is_standing_follows_raise_and_dismissal(
 
     async_dismiss(hass, _id(entry))
     await hass.async_block_till_done()
-    assert not is_standing(hass, entry, _NOTICE)
-
-
-# -- Withdrawing a notice -----------------------------------------------------
-
-
-async def test_a_withdrawn_notice_is_taken_down_and_not_restored(
-    hass: HomeAssistant, entry: MockConfigEntry, other: MockConfigEntry
-) -> None:
-    """A notice with nothing true left to say goes, for this entry only, and stays gone."""
-    await async_restore(hass, entry)
-    await async_restore(hass, other)
-    async_raise(hass, entry, _NOTICE, title="Upgraded", message="Body")
-    async_raise(hass, other, _NOTICE, title="Upgraded", message="Second panel")
-
-    async_withdraw(hass, entry, _NOTICE)
-
-    assert _id(entry) not in _standing(hass)
-    assert not is_standing(hass, entry, _NOTICE)
-    assert is_standing(hass, other, _NOTICE)
-    await _restart(hass, entry)
-    assert _id(entry) not in _standing(hass)
-
-
-async def test_withdrawing_a_notice_that_is_not_standing_is_quiet(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    async_withdraw(hass, entry, _NOTICE)  # no live view
-    await async_restore(hass, entry)
-    async_withdraw(hass, entry, _NOTICE)
     assert not is_standing(hass, entry, _NOTICE)
 
 

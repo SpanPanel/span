@@ -10,7 +10,7 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -33,6 +33,7 @@ from .const import (
 )
 from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
+from .meter_capacity import meter_capacity_a
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -118,31 +119,6 @@ class MonitoredCircuit:
     panel_rating_a: float | None
     rating_user_set: bool
     basis: MonitoringBasis
-
-
-def meter_capacity_a(members: Iterable[tuple[Collection[int], float | None]]) -> float | None:
-    """Return the current a shared meter can carry: the rating total of its heaviest space.
-
-    `members` is each circuit's spaces and rating. For each space, the ratings of
-    the members that list it add up, since each of those breakers carries that
-    space's current; the capacity is the largest total. The panel reports a
-    two-pole meter's current as the larger of its two legs, so the space with
-    the most capacity behind it is the one that reading is held to. A tandem's
-    two circuits list one space and add up; a quad's two-pole circuits list both
-    spaces and add up on each; a tandem-quad comes to its two-pole circuit plus
-    the larger of its single-pole ones.
-
-    None while any member's rating is unknown, where a partial total would
-    understate the meter, and where a member lists no space, since its load
-    cannot be placed on a leg.
-    """
-    totals: dict[int, float] = {}
-    for spaces, rating in members:
-        if rating is None or not spaces:
-            return None
-        for space in set(spaces):
-            totals[space] = totals.get(space, 0.0) + rating
-    return max(totals.values()) if totals else None
 
 
 def monitored_circuits(

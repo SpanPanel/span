@@ -132,13 +132,13 @@ from .services import (  # noqa: F401
     _async_register_credential_services,
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
-    _async_register_monitoring_rating_services,
     _async_register_monitoring_services,
+    _async_register_package_rating_services,
     _async_register_services,
-    _build_clear_circuit_monitoring_rating_schema,
+    _build_clear_circuit_package_ratings_schema,
     _build_clear_circuit_threshold_schema,
     _build_clear_mains_threshold_schema,
-    _build_set_circuit_monitoring_rating_schema,
+    _build_set_circuit_package_ratings_schema,
     _build_set_circuit_threshold_schema,
     _build_set_global_monitoring_schema,
     _build_set_mains_threshold_schema,
@@ -186,7 +186,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
-    _async_register_monitoring_rating_services(hass)
+    _async_register_package_rating_services(hass)
     _async_register_favorites_services(hass)
     _async_register_credential_services(hass)
 

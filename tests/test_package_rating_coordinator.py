@@ -1,4 +1,4 @@
-"""Tests for the coordinator's wiring of monitoring ratings."""
+"""Tests for the coordinator's wiring of package ratings copied from the SPAN app."""
 
 from __future__ import annotations
 
@@ -51,16 +51,16 @@ def _snapshot(ratings: Mapping[str, float | None]) -> SpanPanelSnapshot:
 
 
 def _seed(hass_storage: dict[str, object], entry: MockConfigEntry, circuit_id: str) -> None:
-    """Leave a monitoring rating of 40 A, set when the panel said 20 A, on disk for `entry`."""
+    """Leave a 20-20 package, 40 A together, copied for space 1 where the panel says 20 A, on disk for `entry`."""
     hass_storage[f"span_panel_package_ratings.{entry.entry_id}"] = {
         "version": 1,
         "minor_version": 1,
         "key": f"span_panel_package_ratings.{entry.entry_id}",
         "data": {
-            "ratings": {
+            "packages": {
                 circuit_id: {
-                    "rating_a": 40,
-                    "panel_a_at_set": 20.0,
+                    "package_ratings_a": [20, 20],
+                    "space": 1,
                     "label": f"Name of {circuit_id}",
                 }
             },
@@ -130,7 +130,7 @@ async def test_the_coordinator_owns_a_manager_from_construction(hass: HomeAssist
 async def test_a_pushed_snapshot_is_reconciled_before_listeners_are_told(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
-    """The panel overtakes a monitoring rating; once the snapshot is published, its readers see the panel's rating."""
+    """The panel's rating changes under a copy; by the time the snapshot is published, the copy is gone."""
     entry = _entry()
     entry.add_to_hass(hass)
     _seed(hass_storage, entry, "circuit-2")
@@ -139,10 +139,10 @@ async def test_a_pushed_snapshot_is_reconciled_before_listeners_are_told(
     assert manager.resolve("circuit-2", _snapshot({"circuit-2": 20.0})).user_set
 
     overtaken = _snapshot({"circuit-2": 30.0})
-    seen: list[float] = []
+    seen: list[set[str]] = []
 
     def _listeners(_: SpanPanelSnapshot) -> None:
-        seen.append(manager._ratings["circuit-2"].panel_a_at_set)
+        seen.append(set(manager._packages))
 
     with (
         patch.object(coordinator, "async_set_updated_data", side_effect=_listeners),
@@ -150,7 +150,7 @@ async def test_a_pushed_snapshot_is_reconciled_before_listeners_are_told(
     ):
         await coordinator._on_snapshot_push(overtaken)
 
-    assert seen == [30.0]
+    assert seen == [set()]
 
 
 async def test_a_polled_snapshot_is_reconciled_before_it_is_returned(
@@ -171,7 +171,7 @@ async def test_a_polled_snapshot_is_reconciled_before_it_is_returned(
     await hass.async_block_till_done()
 
     assert result is overtaken
-    assert manager._ratings["circuit-2"].panel_a_at_set == 30.0
+    assert "circuit-2" not in manager._packages
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
 
 
@@ -196,7 +196,7 @@ async def test_a_snapshot_before_begin_judges_nothing(
     assert not is_standing(hass, entry, _NOTICE)
     stored = hass_storage[f"span_panel_package_ratings.{entry.entry_id}"]
     assert isinstance(stored, dict)
-    assert "circuit-2" in stored["data"]["ratings"]
+    assert "circuit-2" in stored["data"]["packages"]
 
 
 async def test_a_reconnect_replay_with_no_metadata_deletes_and_announces_nothing(
@@ -336,7 +336,7 @@ async def _set_up(
     return client, coordinators[0]
 
 
-async def test_a_monitoring_rating_stored_before_setup_is_in_force_after_it(
+async def test_a_package_stored_before_setup_is_in_force_after_it(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     entry = _entry()
@@ -350,7 +350,7 @@ async def test_a_monitoring_rating_stored_before_setup_is_in_force_after_it(
     assert (rating.user_set, rating.judged_a) == (True, 40)
 
 
-async def test_a_monitoring_rating_for_a_missing_circuit_survives_until_begin_and_is_then_judged(
+async def test_a_package_for_a_missing_circuit_survives_until_begin_and_is_then_judged(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     """Without a migration the first reconcile removes it; before then nothing is deleted or announced."""
@@ -363,7 +363,7 @@ async def test_a_monitoring_rating_for_a_missing_circuit_survives_until_begin_an
 
     def _look(*_: object) -> None:
         manager = coordinators_manager[0]
-        before.append((len(manager._ratings), len(events)))
+        before.append((len(manager._packages), len(events)))
 
     coordinators_manager: list[PackageRatingManager] = []
     orig_load = PackageRatingManager.async_load
@@ -376,11 +376,11 @@ async def test_a_monitoring_rating_for_a_missing_circuit_survives_until_begin_an
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_look)
 
     assert before == [(1, 0)]
-    assert coordinator.package_rating_manager._ratings == {}
+    assert coordinator.package_rating_manager._packages == {}
     assert [event.data["circuit_ids"] for event in events] == [["old-circuit"]]
 
 
-async def test_a_stand_in_rekey_before_begin_keeps_the_monitoring_rating_on_the_new_id(
+async def test_a_stand_in_rekey_before_begin_keeps_the_package_on_the_new_id(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     entry = _entry()
@@ -396,8 +396,8 @@ async def test_a_stand_in_rekey_before_begin_keeps_the_monitoring_rating_on_the_
         await orig_load(self)
 
     def _migrate(*_: object) -> None:
-        ratings = managers[0]._ratings
-        ratings["new-circuit"] = ratings.pop("old-circuit")
+        packages = managers[0]._packages
+        packages["new-circuit"] = packages.pop("old-circuit")
 
     with patch.object(PackageRatingManager, "async_load", _capture):
         _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_migrate)

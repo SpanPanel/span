@@ -17,14 +17,14 @@
     "body": "Un appareil de votre panneau déclare plus de mesures du fabricant que cette intégration n'en ajoute pour un seul appareil ({limit}). Les autres ont été laissées de côté : {devices}.\n\nRien de ce que vous avez déjà n'est affecté et rien n'est cassé. Les mesures laissées de côté figurent toujours dans le téléchargement des diagnostics de cette intégration, qu'il convient de joindre si vous souhaitez les voir apparaître."
   },
   "package_ratings_changed": {
-    "title": "Les calibres de surveillance du panneau SPAN ont changé",
-    "intro": "Le panneau a modifié un élément dont dépend un calibre de surveillance que vous avez défini. Pour examiner un circuit, ouvrez-le dans le tableau de bord Span Panel : son calibre de surveillance se trouve dans la section **Surveillance** du circuit, affichée tant que la surveillance est activée pour ce circuit.",
-    "panel_changed": "**{circuit}** : le panneau indique maintenant {after} A (auparavant {before} A). Votre calibre de surveillance de {rating} A s'applique toujours.",
-    "panel_agrees": "**{circuit}** : le panneau indique maintenant {after} A (auparavant {before} A), ce qui correspond à votre calibre de surveillance de {rating} A ; le calibre de surveillance a donc été supprimé.",
-    "rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre pour ce circuit (il indiquait {before} A) ; votre calibre de surveillance de {rating} A a donc été supprimé.",
-    "circuit_removed": "**{circuit}** : ce circuit n'est plus sur le panneau (il indiquait {before} A) ; votre calibre de surveillance de {rating} A a donc été supprimé.",
-    "above_service_rating": "**{circuit}** : votre calibre de surveillance de {rating} A dépasse le calibre de service du panneau, soit {service} A ; il a donc été supprimé. Le panneau indiquait {before} A et indique maintenant {after} A.",
-    "service_rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre de service ; votre calibre de surveillance de {rating} A a donc été supprimé. Le panneau indiquait {before} A pour ce circuit.",
-    "panel_describes_breakers": "**{circuit}** : le panneau publie désormais chaque circuit d'un disjoncteur multicharge avec son propre calibre, que la surveillance du courant utilise ; votre calibre de surveillance de {rating} A a donc été supprimé. Le panneau indiquait {before} A pour ce circuit."
+    "title": "Calibres copiés depuis l'application SPAN supprimés du panneau SPAN",
+    "intro": "Le panneau a modifié un élément dont dépendent des calibres que vous avez copiés depuis l'application SPAN ; ces calibres ont donc été supprimés. Pour examiner un circuit, ouvrez-le dans le tableau de bord Span Panel : ses calibres se trouvent dans la section **Surveillance** du circuit, affichée tant que la surveillance est activée pour ce circuit.",
+    "panel_rating_changed": "**{circuit}** : le calibre que votre panneau publie pour ce circuit est passé de {before} A à {after} A ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés.",
+    "spaces_changed": "**{circuit}** : les emplacements de disjoncteur de ce circuit ont changé ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés.",
+    "rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre pour ce circuit ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés.",
+    "circuit_removed": "**{circuit}** : ce circuit n'est plus sur le panneau ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés.",
+    "above_service_rating": "**{circuit}** : les calibres {package} que vous avez copiés depuis l'application SPAN dépassent ensemble le calibre de service du panneau, soit {service} A ; ils ont donc été supprimés.",
+    "service_rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre de service ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés.",
+    "panel_describes_breakers": "**{circuit}** : le panneau publie désormais chaque circuit d'un disjoncteur multicharge avec son propre calibre, que la surveillance du courant utilise ; les calibres {package} que vous avez copiés depuis l'application SPAN ont donc été supprimés."
   }
 }
