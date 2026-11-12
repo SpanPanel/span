@@ -14,6 +14,7 @@ from custom_components.span_panel.package_ratings import (
     Reconciled,
     StoredPackage,
     is_change_reason,
+    panel_describes_breakers,
     reconcile,
     resolve,
     service_rating_declaration,
@@ -270,6 +271,32 @@ def test_reconcile_gives_a_changed_panel_rating_before_changed_spaces() -> None:
 
 
 # --- a panel that describes its multi-load breakers ---
+
+
+def _sharing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
+    """The same panel with its circuit naming another that shares its meter."""
+    circuit = replace(snapshot.circuits[CIRCUIT_ID], meter_shared_with=("circuit-9",))
+    return replace(snapshot, circuits={CIRCUIT_ID: circuit})
+
+
+def test_a_panel_that_declares_the_shared_meter_list_describes_its_breakers() -> None:
+    assert panel_describes_breakers(_describing(_snapshot(_circuit())))
+
+
+def test_a_panel_that_declares_no_list_and_names_no_shared_meter_does_not() -> None:
+    assert not panel_describes_breakers(_snapshot(_circuit()))
+
+
+def test_a_circuit_naming_a_shared_meter_describes_the_breakers_whatever_the_flag_says() -> None:
+    """Only a panel that describes its breakers names a shared meter, so a group is never judged against a package."""
+    assert panel_describes_breakers(_sharing(_snapshot(_circuit())))
+
+
+@pytest.mark.parametrize(("shares", "describes"), [(True, True), (False, False)])
+def test_an_adapter_that_does_not_say_leaves_it_to_the_circuits(shares: bool, describes: bool) -> None:
+    """`publishes_shared_meters` None: the adapter did not say whether the panel declares the list."""
+    snapshot = _sharing(_snapshot(_circuit())) if shares else _snapshot(_circuit())
+    assert panel_describes_breakers(replace(snapshot, publishes_shared_meters=None)) is describes
 
 
 def _describing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:

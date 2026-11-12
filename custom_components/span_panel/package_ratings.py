@@ -149,19 +149,26 @@ def service_rating_a(snapshot: SpanPanelSnapshot) -> float | None:
 def panel_describes_breakers(snapshot: SpanPanelSnapshot) -> bool:
     """Whether the panel describes its multi-load breakers, so no package ratings are offered.
 
-    A panel that declares `meter/shared-with-device-ids` on any circuit, as panels
-    other than MAIN 32 do on every circuit, publishes each circuit
-    of a multi-load breaker as its own device with its own commissioned
-    rating, and names the circuits that share its meter. Current monitoring
-    then judges the shared meter against those ratings without the user's
-    help. Package ratings exist for the panel that cannot say any of that:
-    MAIN 32 declares neither list and publishes a tandem as one circuit with
-    the rating of its first breaker.
+    A panel that describes its multi-load breakers, as panels other than MAIN 32
+    do, declares `meter/shared-with-device-ids` on its circuits, publishes each
+    circuit of a multi-load breaker as its own device with its own commissioned
+    rating, and names the circuits that share its meter. Current monitoring then
+    judges the shared meter against those ratings without the user's help.
+    Package ratings exist for the panel that cannot say any of that: MAIN 32
+    declares neither list and publishes a tandem as one circuit with the rating
+    of its first breaker.
 
-    The declaration decides, not a value, so the answer is the same on the
-    first complete snapshot as on every later one.
+    The declaration decides where the adapter states it
+    (`publishes_shared_meters` true), so the answer is the same on the first
+    complete snapshot as on every later one. A circuit that names a shared meter
+    decides it too, whatever the flag says or where the adapter does not say
+    (None): only a panel that describes its breakers names one, and a group of
+    circuits is judged by its capacity, so none of its members may hold a
+    package. The flag's default is not relied on.
     """
-    return snapshot.publishes_shared_meters
+    if snapshot.publishes_shared_meters is True:
+        return True
+    return any(circuit.meter_shared_with for circuit in snapshot.circuits.values())
 
 
 def service_rating_declaration(field_metadata: Mapping[str, FieldMetadata] | None) -> Declaration:

@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
@@ -62,6 +63,11 @@ def _panel(*circuits: SpanCircuitSnapshot) -> SpanPanelSnapshot:
 
 def _shared(circuit: SpanCircuitSnapshot, peer: str, tab: int) -> SpanCircuitSnapshot:
     return replace(circuit, tabs=[tab], meter_shared_with=(peer,), relay_shared_with=(peer,))
+
+
+def _sharing_panel(*circuits: SpanCircuitSnapshot) -> SpanPanelSnapshot:
+    """A panel naming its shared meters, which only a panel that describes its breakers does."""
+    return replace(_panel(*circuits), publishes_shared_meters=True)
 
 
 async def _begun(
@@ -184,23 +190,24 @@ class TestAlerts:
         message = dispatched.call_args.args[3]
         assert "90.0% of 50A rating" in message
 
-    async def test_a_shared_meter_alert_carries_the_panel_sum_and_the_judged_sum(
+    async def test_a_shared_meter_alert_carries_its_capacity_and_never_a_package(
         self, hass: HomeAssistant
     ) -> None:
-        """15 + 15 A, one member judged against a 15-5 package's 20 A: breaker 30 A, judged against 35 A, user set."""
-        snapshot = _panel(
+        """15 + 15 A on one space: breaker and judged-against are both its 30 A capacity, not user set."""
+        snapshot = _sharing_panel(
             _shared(_circuit("circuit-52", 15.0, 30.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 30.0), "circuit-52", 44),
         )
         monitor, manager = await _monitor(hass, snapshot)
-        manager.set_package_ratings("circuit-53", snapshot, [15, 5])
+        with pytest.raises(ServiceValidationError) as refused:
+            manager.set_package_ratings("circuit-53", snapshot, [15, 5])
+        assert refused.value.translation_key == "package_ratings_panel_describes_breakers"
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         _run_past_the_window(monitor, snapshot, "circuit-52")
         await hass.async_block_till_done()
 
-        # A package is one circuit's; the group is judged by its members' capacity and carries none.
-        assert [_ratings_in(a.data) for a in alerts] == [(30.0, 35.0, True, None)]
+        assert [_ratings_in(a.data) for a in alerts] == [(30.0, 30.0, False, None)]
 
     async def test_a_mains_alert_carries_the_service_rating_twice_never_user_set(
         self, hass: HomeAssistant
@@ -316,37 +323,39 @@ class TestStatus:
 
 
 class TestSharedMeters:
-    """A shared meter is judged against its members' summed ratings."""
+    """A shared meter is judged against its capacity, and never against a package a user copied."""
 
-    async def test_one_member_with_a_monitoring_rating_changes_the_sum_and_marks_the_group(
+    async def test_a_package_copied_before_the_meter_was_shared_is_removed_and_the_group_judged_by_its_capacity(
         self, hass: HomeAssistant
     ) -> None:
-        """15 + 15 A with one member judged against a 15-5 package's 20 A is judged against 35 A, breaker 30 A, user set."""
-        snapshot = _panel(
+        """A copy made while the circuit stood alone goes once the panel names the meter's sharers."""
+        alone = _panel(_circuit("circuit-52", 15.0, 12.0), _circuit("circuit-53", 15.0, 12.0))
+        shared = _sharing_panel(
             _shared(_circuit("circuit-52", 15.0, 12.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 12.0), "circuit-52", 44),
         )
-        monitor, manager = await _monitor(hass, snapshot)
-        manager.set_package_ratings("circuit-53", snapshot, [15, 5])
-        monitor.process_snapshot(snapshot)
+        monitor, manager = await _monitor(hass, alone)
+        manager.set_package_ratings("circuit-53", alone, [15, 5])
+        assert manager.resolve("circuit-53", alone).user_set
+
+        manager.reconcile(shared, lambda: _DECLARED)
+        monitor.process_snapshot(shared)
 
         status = monitor.get_monitoring_status()["circuits"]
-
         for member in ("circuit-52", "circuit-53"):
             assert status[member]["breaker_rating_a"] == 30.0
-            assert status[member]["monitoring_rating_a"] == 35.0
-            assert status[member]["monitoring_rating_user_set"] is True
+            assert status[member]["monitoring_rating_a"] == 30.0
+            assert status[member]["monitoring_rating_user_set"] is False
             assert status[member]["package_ratings_a"] is None
 
-    async def test_a_group_with_an_unrated_member_is_unratable_yet_still_user_set(
+    async def test_a_group_with_an_unrated_member_has_no_capacity_and_is_not_user_set(
         self, hass: HomeAssistant
     ) -> None:
-        """One member with a monitoring rating, another with no panel rating: no sum, but the flag is true."""
+        """One member with no panel rating: no capacity can be given, and nothing the user copied stands in for it."""
         rated = _shared(_circuit("circuit-52", 15.0, 12.0), "circuit-53", 44)
         unrated = _shared(_circuit("circuit-53", None, 12.0), "circuit-52", 44)
-        snapshot = _panel(rated, unrated)
-        monitor, manager = await _monitor(hass, snapshot)
-        manager.set_package_ratings("circuit-52", snapshot, [15, 5])
+        snapshot = _sharing_panel(rated, unrated)
+        monitor, _manager = await _monitor(hass, snapshot)
         monitor.process_snapshot(snapshot)
 
         status = monitor.get_monitoring_status()["circuits"]
@@ -354,7 +363,7 @@ class TestSharedMeters:
         for member in ("circuit-52", "circuit-53"):
             assert status[member]["breaker_rating_a"] is None
             assert status[member]["monitoring_rating_a"] is None
-            assert status[member]["monitoring_rating_user_set"] is True
+            assert status[member]["monitoring_rating_user_set"] is False
 
 
 class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
@@ -539,7 +548,7 @@ class TestStatusWhileMonitoringIsOff:
         self, hass: HomeAssistant
     ) -> None:
         """Turning off either member turns off the group, and both rows read null."""
-        snapshot = _panel(
+        snapshot = _sharing_panel(
             _shared(_circuit("circuit-52", 15.0, 40.0), "circuit-53", 44),
             _shared(_circuit("circuit-53", 15.0, 40.0), "circuit-52", 44),
         )
