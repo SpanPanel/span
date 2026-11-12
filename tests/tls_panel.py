@@ -130,6 +130,17 @@ def unrelated_ca_pem() -> str:
     return ca_pem_of(ca_cert)
 
 
+def closed_port() -> int:
+    """Return a loopback port nothing is listening on, by binding and immediately closing.
+
+    A connection to it is refused outright: the TLS port of a panel that is
+    reachable but serves nothing there, so no certificate is ever presented.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((PANEL_LOOPBACK, 0))
+        return int(sock.getsockname()[1])
+
+
 # ---------- a listener that serves the panel's leaf ----------
 
 

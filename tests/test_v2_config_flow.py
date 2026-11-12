@@ -37,7 +37,11 @@ from custom_components.span_panel.config_flow import (
     SpanPanelConfigFlow,
     TriggerFlowType,
 )
-from custom_components.span_panel.config_flow_validation import PanelRestTransport
+from custom_components.span_panel.config_flow_validation import (
+    LeafVerdict,
+    PanelLeafHost,
+    PanelRestTransport,
+)
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -84,6 +88,13 @@ FAKE_CA_FINGERPRINT = "0" * 64
 UNREADABLE_CA_PEM = "-----BEGIN CERTIFICATE-----\nbm90LWEtY2VydA==\n-----END CERTIFICATE-----\n"
 
 
+def _reached_at_the_host_given(
+    _hass: HomeAssistant, host: str, _tls_port: int, _ca_pem: str
+) -> PanelLeafHost:
+    """Answer the leaf-host chooser as a panel whose certificate names the host it is given."""
+    return PanelLeafHost(host, LeafVerdict.TRUSTED)
+
+
 @pytest.fixture(autouse=True)
 def panel_ca_available():
     """Answer the CA step without touching the network.
@@ -118,7 +129,7 @@ def panel_ca_available():
         # listener in `test_v2_config_flow_tls.py`.
         patch(
             "custom_components.span_panel.config_flow.async_panel_leaf_host",
-            new=AsyncMock(side_effect=lambda _hass, host, _port, _pem: host),
+            new=AsyncMock(side_effect=_reached_at_the_host_given),
         ),
     ):
         yield
@@ -574,7 +585,7 @@ async def test_a_ca_that_does_not_sign_what_the_panel_serves_is_not_offered(
         patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
         patch(
             "custom_components.span_panel.config_flow.async_panel_leaf_host",
-            new=AsyncMock(return_value=None),
+            new=AsyncMock(return_value=PanelLeafHost(None, LeafVerdict.UNTRUSTED)),
         ),
     ):
         result = await _reach_the_ca_step(hass)
@@ -1438,7 +1449,7 @@ async def test_reauth_refuses_to_send_the_passphrase_when_the_leaf_does_not_chai
         ),
         patch(
             "custom_components.span_panel.config_flow.async_panel_leaf_host",
-            new=AsyncMock(return_value=None),
+            new=AsyncMock(return_value=PanelLeafHost(None, LeafVerdict.UNTRUSTED)),
         ),
         patch(
             "custom_components.span_panel.config_flow_validation.register_v2",
@@ -1614,7 +1625,7 @@ async def test_reauth_asks_where_a_moved_panel_serves_tls_and_keeps_the_answer(
     """An entry behind a proxy has to say where the leaf is before it can be checked."""
     entry = _unpinned_entry(hass, {CONF_API_VERSION: "v2", CONF_HTTP_PORT: 8080})
 
-    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
+    leaf_host = AsyncMock(side_effect=_reached_at_the_host_given)
 
     with (
         patch(
@@ -3330,7 +3341,7 @@ async def test_hassio_published_https_port_is_used_without_asking(hass: HomeAssi
     for a number they would have to go read out of an add-on log is a question
     with a worse answer available.
     """
-    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
+    leaf_host = AsyncMock(side_effect=_reached_at_the_host_given)
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -3389,7 +3400,7 @@ async def test_zeroconf_https_port_txt_record_is_used_without_asking(
         type="_ebus._tcp.local.",
     )
 
-    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
+    leaf_host = AsyncMock(side_effect=_reached_at_the_host_given)
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -4182,7 +4193,7 @@ async def test_reconfigure_stores_a_corrected_https_port(hass: HomeAssistant) ->
     )
     entry.add_to_hass(hass)
 
-    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
+    leaf_host = AsyncMock(side_effect=_reached_at_the_host_given)
     with (
         patch(
             "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",

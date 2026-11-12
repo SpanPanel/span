@@ -21,6 +21,7 @@
       "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo.",
       "host_required": "Se requiere host",
       "https_port_is_plaintext": "El puerto 80 es el puerto HTTP sin cifrar. Introduzca el puerto en el que el panel sirve TLS — 443 salvo que algo lo haya movido.",
+      "https_port_unreachable": "Nada respondió en el puerto HTTPS {https_port}, por lo que no había ningún certificado que comprobar con la autoridad que ha publicado el panel. Compruebe que el panel sirve TLS en ese puerto — 443 salvo que algo lo haya movido — y vuelva a intentarlo.",
       "invalid_auth": "Autenticación invalida",
       "panel_not_ready": "El panel aún no está listo para registrar Home Assistant, normalmente porque todavía se está iniciando. Espere un momento e intente de nuevo.",
       "passphrase_unavailable": "El panel no puede emitir credenciales porque su frase de contraseña aún no está disponible. Esto no significa que se haya introducido una frase de contraseña incorrecta. Espere unos minutos e intente de nuevo.",
@@ -940,7 +941,8 @@
         "abort": {
           "entry_gone": "Ese SPAN Panel ya no está configurado.",
           "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo.",
-          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado, por lo que esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo."
+          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado, por lo que esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo.",
+          "broker_port_unreachable": "Nada respondió en el puerto {broker_port} del broker del panel, por lo que la autoridad que ha publicado no se ha podido comprobar con el certificado que sirve; esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el panel es accesible y está encendido, y vuelva a intentarlo."
         }
       }
     },
@@ -956,7 +958,8 @@
         "abort": {
           "entry_gone": "Ese SPAN Panel ya no está configurado.",
           "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo.",
-          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que publicó, por lo que esa autoridad no se le ha ofrecido para aceptar y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, e inténtelo de nuevo."
+          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que publicó, por lo que esa autoridad no se le ha ofrecido para aceptar y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, e inténtelo de nuevo.",
+          "broker_port_unreachable": "Nada respondió en el puerto {broker_port} del broker del panel, por lo que la autoridad que ha publicado no se ha podido comprobar con el certificado que sirve; esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el panel es accesible y está encendido, y vuelva a intentarlo."
         }
       }
     },

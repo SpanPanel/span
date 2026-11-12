@@ -47,6 +47,7 @@ from .tls_panel import (
     PANEL_SERIAL,
     PANEL_SHORTNAME,
     Panel,
+    closed_port,
     issue_ca,
     issue_leaf,
     resolving_to_loopback,
@@ -289,6 +290,72 @@ async def test_fresh_install_still_refuses_a_leaf_the_ca_does_not_sign(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "panel_ca"
     assert result["errors"] == {"base": "ca_leaf_mismatch"}
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_dead_https_port_typed_at_setup_is_not_called_a_certificate_mismatch(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Nothing answering on the HTTPS port is a port to check, not a certificate to distrust.
+
+    The panel is reachable -- its CA was just read over HTTP -- but nothing
+    listens where the user said TLS is. That used to be reported as "the
+    certificate this panel serves is not signed by the authority it published",
+    about a certificate nothing ever presented.
+    """
+    dead_port = closed_port()
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_LOOPBACK, CONF_HTTP_PORT: 8080}
+        )
+        assert result["step_id"] == "panel_https_port", result
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HTTPS_PORT: dead_port}
+        )
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "panel_ca"
+    assert result["errors"] == {"base": "https_port_unreachable"}
+    assert result["description_placeholders"] == {"https_port": str(dead_port)}
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_dead_https_port_a_panel_published_is_not_called_a_certificate_mismatch(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The same answer when discovery supplied the port and nobody was asked for it.
+
+    The step is shared by every route into setup, so the port is named whoever
+    chose it: here the announcement's `httpsPort`, which nothing answers.
+    """
+    dead_port = closed_port()
+    address = ipaddress.IPv4Address(PANEL_LOOPBACK)
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=ZeroconfServiceInfo(
+                ip_address=address,
+                ip_addresses=[address],
+                hostname="span-panel.local.",
+                name="SPAN Panel._ebus._tcp.local.",
+                port=8883,
+                properties={"httpPort": "8080", "httpsPort": str(dead_port)},
+                type="_ebus._tcp.local.",
+            ),
+        )
+        assert result["step_id"] == "confirm_discovery", result
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "panel_ca"
+    assert result["errors"] == {"base": "https_port_unreachable"}
+    assert result["description_placeholders"] == {"https_port": str(dead_port)}
 
 
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
@@ -964,7 +1031,7 @@ async def test_an_unreachable_host_is_not_accused_of_interception(
 
     # A port on loopback with nothing listening: connection refused, no TLS.
     hass.config_entries.async_update_entry(
-        entry, data={**entry.data, CONF_HTTPS_PORT: _closed_port()}
+        entry, data={**entry.data, CONF_HTTPS_PORT: closed_port()}
     )
 
     result = await entry.start_reconfigure_flow(hass)
@@ -974,15 +1041,6 @@ async def test_an_unreachable_host_is_not_accused_of_interception(
 
     assert result["type"] == FlowResultType.FORM, result
     assert result["errors"] == {"base": "cannot_connect"}
-
-
-def _closed_port() -> int:
-    """Return a port nothing is listening on, by binding and immediately closing."""
-    import socket as _socket
-
-    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
 
 
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")

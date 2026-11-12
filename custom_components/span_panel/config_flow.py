@@ -275,7 +275,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             raise ConfigFlowError("Reached a panel REST call with no transport pinned")
         return self._rest_transport
 
-    async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> bool:
+    async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> LeafVerdict:
         """Settle which address the panel is dialled by, and whether it can be at all.
 
         Which addresses are tried, and in what order, is `async_panel_leaf_host`
@@ -286,26 +286,28 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         exactly that, so every later step about to persist `self.host` can read
         it as "the anchor would reject this" and refuse.
 
-        Returns False when nothing answers under the published CA, which is a
-        leaf mismatch and is fatal to the step that called it.
+        Returns TRUSTED when an address was settled on. Anything else is fatal
+        to the step that called it, and says why: UNREACHABLE when nothing
+        answered on `tls_port` at all, which is not a certificate failure, and
+        otherwise the verdict on the certificate that did answer.
         """
         self._bootstrap_host = None
         host = self.host
         if not host:
-            return False
+            return LeafVerdict.UNREACHABLE
 
-        reached = await async_panel_leaf_host(self.hass, host, tls_port, ca_pem)
-        if reached is None:
-            return False
-        if reached != host:
-            self._bootstrap_host = reached
+        choice = await async_panel_leaf_host(self.hass, host, tls_port, ca_pem)
+        if choice.reached is None:
+            return choice.verdict
+        if choice.reached != host:
+            self._bootstrap_host = choice.reached
             _LOGGER.debug(
                 "The certificate this panel serves does not name %s; reaching it "
                 "at %s until it does",
                 host,
-                reached,
+                choice.reached,
             )
-        return True
+        return LeafVerdict.TRUSTED
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -1257,7 +1259,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # user is never asked to accept a value that already failed. Hostname
         # verification stays on throughout -- what the chooser varies is the
         # address the panel is dialled by, never whether the name is checked.
-        if not await self._async_choose_bootstrap_host(ca_pem, self._https_port):
+        verdict = await self._async_choose_bootstrap_host(ca_pem, self._https_port)
+        if verdict is LeafVerdict.UNREACHABLE:
+            # The CA fetch over HTTP just answered, so the panel is there: what
+            # did not answer is the TLS port. No certificate was presented, so
+            # none failed, and saying one did would accuse the network of
+            # interception over a port number.
+            _LOGGER.warning(
+                "Nothing answered on HTTPS port %s at %s, so the CA the panel published "
+                "could not be checked against the certificate it serves; refusing to pin it",
+                self._https_port,
+                self.host,
+            )
+            return self._async_show_ca_error(
+                "https_port_unreachable", {"https_port": str(self._https_port)}
+            )
+        if verdict is not LeafVerdict.TRUSTED:
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
                 "panel published; refusing to pin it",
@@ -1280,7 +1297,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._panel_ca_pem = ca_pem
         return await self._async_adopt_anchor_and_authenticate()
 
-    def _async_show_ca_error(self, reason: str) -> ConfigFlowResult:
+    def _async_show_ca_error(
+        self, reason: str, placeholders: Mapping[str, str] | None = None
+    ) -> ConfigFlowResult:
         """Re-show the CA step with an actionable error.
 
         Deliberately not a way past. There is no "carry on unpinned" option here,
@@ -1296,6 +1315,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             step_id="panel_ca",
             data_schema=vol.Schema({}),
             errors={"base": reason},
+            description_placeholders=placeholders,
         )
 
     async def _async_adopt_anchor_and_authenticate(self) -> ConfigFlowResult:
@@ -1607,7 +1627,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._leaf_names_host = True
         pinned_pem = self._rest_transport.ca_pem
         if pinned_pem is not None:
-            if await self._async_choose_bootstrap_host(pinned_pem, self._rest_transport.port):
+            chosen = await self._async_choose_bootstrap_host(pinned_pem, self._rest_transport.port)
+            if chosen is LeafVerdict.TRUSTED:
                 # Something under the pin both validates and names itself. The
                 # host is storable only when that something was the host: a
                 # substituted address reaches the panel but says nothing about
@@ -1617,6 +1638,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 # Nothing the anchor both validates and names, which used to end
                 # the flow here. Three different things produce that, and only
                 # one of them is the panel being absent.
+                #
+                # Asked of the host itself rather than taken from the chooser,
+                # which may be reporting on the address the host resolves to:
+                # NAME_MISMATCH below unlocks a transport with the name binding
+                # dropped, and only the host the user asked to store may earn it.
                 verdict = await async_leaf_verdict(host, self._rest_transport.port, pinned_pem)
                 if verdict is LeafVerdict.UNREACHABLE:
                     return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")

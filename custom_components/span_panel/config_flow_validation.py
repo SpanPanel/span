@@ -381,14 +381,37 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
     return await async_leaf_verdict(host, tls_port, ca_pem) is LeafVerdict.TRUSTED
 
 
+@dataclass(frozen=True, slots=True)
+class PanelLeafHost:
+    """Which address reached the panel under an anchor, and why none did when none did.
+
+    `reached` is the candidate whose certificate both chains to the anchor and
+    names it -- the host asked about, or the address it resolves to -- and None
+    when no candidate's does. `verdict` is TRUSTED exactly when `reached` is
+    set.
+
+    Otherwise `verdict` is UNREACHABLE only when no candidate answered at all,
+    and the verdict of the first candidate that did answer when one did. Both
+    halves of that rule are about one thing: a refused or silent TLS port
+    presents no certificate, so it must never come back as a certificate the
+    anchor rejects -- that is the verdict a caller reports as "not signed by the
+    authority it published" -- while a certificate that was presented and
+    failed says more than a candidate that presented nothing.
+    """
+
+    reached: str | None
+    verdict: LeafVerdict
+
+
 async def async_panel_leaf_host(
     hass: HomeAssistant, host: str, tls_port: int, ca_pem: str
-) -> str | None:
-    """Return the address that reaches the panel at `host` under `ca_pem`, or None.
+) -> PanelLeafHost:
+    """Return which address reaches the panel at `host` under `ca_pem`, or why none does.
 
     The single implementation of "which address does this panel answer on".
     `host` itself when the certificate it serves already names it, the resolved
-    address when only that works, and None when neither does.
+    address when only that works, and no address when neither does -- with the
+    verdict then saying whether anything answered at all; see `PanelLeafHost`.
 
     The name is tried first, always: the panel's leaf names the addresses it
     knows itself by, and where it already names the host there is nothing to
@@ -409,20 +432,22 @@ async def async_panel_leaf_host(
     host the anchor rejects.
     """
     if not host:
-        return None
-    if await async_leaf_chains_to_ca(host, tls_port, ca_pem):
-        return host
+        return PanelLeafHost(None, LeafVerdict.UNREACHABLE)
+    verdict = await async_leaf_verdict(host, tls_port, ca_pem)
+    if verdict is LeafVerdict.TRUSTED:
+        return PanelLeafHost(host, verdict)
     if is_ip_literal(host):
-        return None
+        return PanelLeafHost(None, verdict)
     resolved = await async_resolve_host(hass, host)
     if resolved is None:
         _LOGGER.debug("Could not resolve %s to an address; only the name is tried", host)
-        return None
+        return PanelLeafHost(None, verdict)
     if resolved == host:
-        return None
-    if await async_leaf_chains_to_ca(resolved, tls_port, ca_pem):
-        return resolved
-    return None
+        return PanelLeafHost(None, verdict)
+    fallback = await async_leaf_verdict(resolved, tls_port, ca_pem)
+    if fallback is LeafVerdict.TRUSTED:
+        return PanelLeafHost(resolved, fallback)
+    return PanelLeafHost(None, fallback if verdict is LeafVerdict.UNREACHABLE else verdict)
 
 
 async def async_ca_signs_panel_leaf(
@@ -438,11 +463,11 @@ async def async_ca_signs_panel_leaf(
     change diagnosis finds the fetched CA and the pinned one identical and has
     no change to report, and the entry retries forever with no repair to offer.
 
-    For callers that only need the verdict; `async_panel_leaf_host` carries the
-    address the panel was actually reached on, and why there is more than one
-    candidate.
+    For callers that only need the yes or no; `async_panel_leaf_host` carries
+    the address the panel was actually reached on, why there is more than one
+    candidate, and -- for a no -- whether anything answered at all.
     """
-    return await async_panel_leaf_host(hass, host, tls_port, ca_pem) is not None
+    return (await async_panel_leaf_host(hass, host, tls_port, ca_pem)).reached is not None
 
 
 async def validate_v2_proximity(

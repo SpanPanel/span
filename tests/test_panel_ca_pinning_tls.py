@@ -46,6 +46,7 @@ from .tls_panel import (
     PANEL_SERIAL,
     PANEL_SHORTNAME,
     Panel,
+    closed_port,
     resolving_to_loopback,
     unrelated_ca_pem,
 )
@@ -217,6 +218,37 @@ async def test_the_repair_refuses_a_ca_that_signs_nothing_the_panel_serves(
     assert result["type"] == "abort"
     assert result["reason"] == "ca_leaf_mismatch"
     assert entry.data[CONF_PANEL_CA_PEM] == panel.ca_pem
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_the_repair_does_not_call_a_silent_broker_a_certificate_mismatch(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Nothing answering on the broker's port is not a certificate the CA fails to sign.
+
+    No certificate was presented, so none can have failed: the repair says that
+    nothing answered and on which port, offers nothing, and leaves the pin alone.
+    It used to report the panel's certificate as unsigned by its own authority.
+    """
+    standing_pin = unrelated_ca_pem()
+    dead_port = closed_port()
+    entry = _entry(
+        hass, panel, **{CONF_PANEL_CA_PEM: standing_pin, CONF_EBUS_BROKER_PORT: dead_port}
+    )
+    flow = PanelCAChangedRepairFlow(entry.entry_id)
+    flow.hass = hass
+
+    with patch(
+        "custom_components.span_panel.repairs.async_fetch_panel_ca",
+        new=AsyncMock(return_value=panel.ca_pem),
+    ):
+        result = await flow.async_step_init()
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "broker_port_unreachable"
+    assert result["description_placeholders"] == {"broker_port": str(dead_port)}
+    assert entry.data[CONF_PANEL_CA_PEM] == standing_pin
 
 
 @pytest.mark.usefixtures("socket_enabled")
