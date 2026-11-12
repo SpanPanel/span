@@ -312,9 +312,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         it as "the anchor would reject this" and refuse.
 
         Returns TRUSTED when an address was settled on. Anything else is fatal
-        to the step that called it, and says why: UNREACHABLE when nothing
-        answered on `tls_port` at all, which is not a certificate failure, and
-        otherwise the verdict on the certificate that did answer.
+        to the step that called it, and says why: UNREACHABLE when no TLS
+        connection could be made on `tls_port`, so no certificate was presented
+        and none failed, and otherwise the verdict on the certificate that was.
         """
         self._bootstrap_host = None
         host = self.host
@@ -395,9 +395,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         Verified as the entry would be *stored*: the host it would hold, on the
         HTTPS port it would use -- the one the announcement published, or else
-        the one it already has. A port move is held to exactly the check a host
-        move is, because the HTTP and HTTPS ports are as unauthenticated as the
-        address beside them. The address fallback that
+        the one it already has. A host or HTTPS port that moves is therefore
+        verified where it moves to, the check a host move has always faced.
+        An HTTP port that moves alone is authorised by the TLS port the entry
+        already uses, which is not moving: the pin then proves the panel still
+        holds this host, and the new HTTP port rests on the serial the probe
+        read there. That is less than proof that the port is the panel's, and
+        it is enough for what a pinned entry uses it for: plaintext CA reads,
+        none of which can change what the entry trusts, because each is held
+        against the certificate the panel serves or the pinned fingerprint.
+        The address fallback that
         `_async_choose_bootstrap_host` applies is deliberately not repeated:
         that one exists to dial a panel while a name is unverified, and
         accepting a name here because its address validates would persist
@@ -455,27 +462,38 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> None:
         """Say, at WARNING, which move a pinned entry refused and what the check found.
 
-        Worded for what actually moved. A panel whose ports moved on the host
-        the entry already has was reported as a refused move *to that host*,
-        which describes nothing that happened, and a TLS port that nothing
-        answered on was reported as a certificate that does not chain.
+        Worded for what actually moved and for what the check found. A panel
+        whose ports moved on the host the entry already has was reported as a
+        refused move *to that host*, which describes nothing that happened; a
+        TLS port no connection could be made to, and a certificate the pinned
+        authority signs but that names another address, were both reported as
+        a certificate that does not chain, which accuses the network of
+        interception in two cases where nothing was intercepted.
+
+        Each refusal names its remedy. Reconfigure sets a pinned entry's host
+        and HTTPS port, which is what the panel's own connections use.
         """
+        host = updates[CONF_HOST]
+        fingerprint = pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM))
         if verdict is LeafVerdict.UNREACHABLE:
-            found = f"No TLS connection could be made on port {tls_port}"
+            found = f"no TLS connection could be made to {host} on port {tls_port}"
+        elif verdict is LeafVerdict.NAME_MISMATCH:
+            found = (
+                f"the certificate {host} serves on port {tls_port} is signed by the authority "
+                f"this entry is pinned to (SHA-256 {fingerprint}) but does not name {host}"
+            )
         else:
             found = (
-                f"The certificate served on port {tls_port} does not chain to the authority "
-                "this entry is pinned to"
+                f"the certificate {host} serves on port {tls_port} does not chain to the "
+                f"authority this entry is pinned to (SHA-256 {fingerprint})"
             )
-        fingerprint = pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM))
-        if updates[CONF_HOST] != entry.data.get(CONF_HOST):
+        if host != entry.data.get(CONF_HOST):
             _LOGGER.warning(
-                "Refusing to move the entry for panel %s to %s. %s there (pinned SHA-256 %s). "
-                "If the panel really has moved, use Reconfigure to move this entry",
+                "Refusing to move the entry for panel %s to %s: %s. If the panel really has "
+                "moved, use Reconfigure to move this entry",
                 self.unique_id,
-                updates[CONF_HOST],
+                host,
                 found,
-                fingerprint,
             )
             return
         moved = " and ".join(
@@ -484,13 +502,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             if key in updates
         )
         _LOGGER.warning(
-            "Refusing to follow panel %s to %s on %s, the host its entry already has. "
-            "%s there (pinned SHA-256 %s), so the entry keeps the ports it has",
+            "Refusing to follow panel %s to %s on %s, the host its entry already has: %s. "
+            "The entry keeps the ports it has; if the panel's TLS port really has moved, use "
+            "Reconfigure to set it",
             self.unique_id,
             moved,
-            updates[CONF_HOST],
+            host,
             found,
-            fingerprint,
         )
 
     async def _async_hassio_host_update(self, host: str, port: int, serial: str) -> dict[str, Any]:

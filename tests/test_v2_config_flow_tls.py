@@ -1156,7 +1156,11 @@ async def test_zeroconf_will_not_follow_new_ports_its_pin_rejects(
     assert "Refusing to move the entry" not in refusals[0]
     assert f"HTTP port {MOVED_HTTP_PORT}" in refusals[0]
     assert f"HTTPS port {panel.port}" in refusals[0]
-    assert "does not chain" in refusals[0]
+    assert (
+        f"the certificate {PANEL_LOOPBACK} serves on port {panel.port} does not chain to the "
+        "authority this entry is pinned to (SHA-256 "
+    ) in refusals[0]
+    assert "use Reconfigure" in refusals[0]
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -1179,8 +1183,11 @@ async def test_zeroconf_will_not_follow_new_ports_to_a_dead_tls_port(
     assert entry.data[CONF_HTTPS_PORT] == panel.port
     refusals = _flow_warnings(caplog)
     assert len(refusals) == 1, refusals
-    assert f"No TLS connection could be made on port {dead_port}" in refusals[0]
+    assert f"no TLS connection could be made to {PANEL_LOOPBACK} on port {dead_port}" in (
+        refusals[0]
+    )
     assert "does not chain" not in refusals[0]
+    assert "use Reconfigure" in refusals[0]
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -1247,6 +1254,57 @@ async def test_zeroconf_moving_a_real_panel_writes_no_port_into_its_entry(
     assert entry.data[CONF_HOST] == PANEL_LOOPBACK
     assert CONF_HTTP_PORT not in entry.data
     assert entry.data[CONF_HTTPS_PORT] == panel.port
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_refuses_a_host_its_pin_rejects_in_words_that_fit(
+    hass: HomeAssistant, panel: Panel, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A refused host move says where it was refused and what the certificate was."""
+    entry = _entry_reached_at_the_address(hass, unrelated_ca_pem(), panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert entry.data[CONF_HOST] == PANEL_ADDRESS
+    refusals = _flow_warnings(caplog)
+    assert len(refusals) == 1, refusals
+    assert refusals[0].startswith(f"Refusing to move the entry for panel {PANEL_SERIAL} to ")
+    assert (
+        f"the certificate {PANEL_LOOPBACK} serves on port {panel.port} does not chain to the "
+        "authority this entry is pinned to (SHA-256 "
+    ) in refusals[0]
+    assert "there (pinned" not in refusals[0]
+    assert "use Reconfigure" in refusals[0]
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_refuses_a_host_its_pinned_panel_does_not_name_as_a_naming_failure(
+    hass: HomeAssistant, moved_panel: Panel, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The panel answered under its own anchor and named another address: not a chain failure.
+
+    Only the panel holds a key its anchor signed, so this is the panel, and its
+    certificate does not name the address it was announced from. Calling that
+    a certificate that does not chain would accuse the network of
+    interception over a name.
+    """
+    entry = _entry_reached_at_the_address(hass, moved_panel.ca_pem, moved_panel.port)
+
+    with _plaintext_bootstrap_stubbed(moved_panel):
+        await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert entry.data[CONF_HOST] == PANEL_ADDRESS
+    refusals = _flow_warnings(caplog)
+    assert len(refusals) == 1, refusals
+    assert (
+        f"the certificate {PANEL_LOOPBACK} serves on port {moved_panel.port} is signed by the "
+        "authority this entry is pinned to (SHA-256 "
+    ) in refusals[0]
+    assert f"but does not name {PANEL_LOOPBACK}" in refusals[0]
+    assert "does not chain" not in refusals[0]
 
 
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
