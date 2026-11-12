@@ -380,15 +380,18 @@ class PackageRatingManager:
         """Drop a circuit the user has just changed from what the notice says.
 
         The notice reports an entry the rule removed, and the user has since
-        copied the package again or cleared it, so its line would be stale. A
-        notice left with no line is not dismissed on the user's behalf; one with
-        others is raised again without it.
+        copied the package again, so its line would be stale. A notice with
+        other lines is raised again without it; one left with none has nothing
+        true to say and is withdrawn, as the download's list of removals empties.
+        A notice whose text is still being read raises nothing once it is empty.
         """
-        if self._unacknowledged.pop(circuit_id, None) is None or not self._unacknowledged:
+        if self._unacknowledged.pop(circuit_id, None) is None or not self._on_screen():
             return
-        if self._on_screen():
+        if self._unacknowledged:
             self._announce_pending = True
             self._hass.async_create_task(self._async_announce())
+        else:
+            notices.async_withdraw(self._hass, self._entry, _NOTICE_ID)
 
     def _record(self, changes: tuple[RatingChange, ...]) -> None:
         """Add removals to those the user has not seen, the latest for each circuit.

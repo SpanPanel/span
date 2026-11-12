@@ -1017,20 +1017,23 @@ async def test_copying_again_drops_that_circuit_from_the_standing_notice(
     assert "circuit-2" not in (await _stored(hass, entry))["unacknowledged"]
 
 
-async def test_copying_again_the_only_listed_circuit_leaves_the_notice_standing(
+async def test_copying_again_the_only_listed_circuit_withdraws_the_notice(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """A notice left with no line is the user's to dismiss."""
+    """With no line left the notice has nothing true to say, so it goes, as the download's list of removals does."""
     manager = await _begun(hass, entry)
     manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     changed = _snapshot({"circuit-2": 30.0})
     manager.reconcile(changed, _declared)
     await hass.async_block_till_done()
+    assert is_standing(hass, entry, _NOTICE)
 
     manager.set_package_ratings("circuit-2", changed, [30, 20])
     await hass.async_block_till_done()
 
-    assert is_standing(hass, entry, _NOTICE)
+    assert not is_standing(hass, entry, _NOTICE)
+    assert _notification_id(entry) not in hass.data["persistent_notification"]
+    assert manager.diagnostics(changed)["unacknowledged"] == {}
     assert (await _stored(hass, entry))["unacknowledged"] == {}
 
 
