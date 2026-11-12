@@ -1,4 +1,4 @@
-"""The breaker rating stays the panel's; the topology adds the monitoring rating.
+"""The breaker rating stays the panel's; the topology adds what a copied package is judged as.
 
 A user may copy a tandem's ratings from the SPAN app, so current monitoring judges the
 space against both breakers together. The Breaker Rating sensor and the topology's
@@ -93,7 +93,7 @@ def _breaker_rating_sensor(
     return SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snap, "circuit-2")
 
 
-async def test_the_sensor_reports_the_panel_rating_whatever_the_monitoring_rating(
+async def test_the_sensor_reports_the_panel_rating_whatever_package_is_copied(
     hass: HomeAssistant,
 ) -> None:
     snap = _panel()
@@ -130,7 +130,7 @@ async def test_the_sensor_carries_no_rating_attributes(hass: HomeAssistant) -> N
         assert "breaker_rating_user_set" not in attributes
         assert "monitoring_rating_a" not in attributes
         assert "monitoring_rating_user_set" not in attributes
-    # A monitoring rating changes nothing the sensor reports.
+    # A copied package changes nothing the sensor reports.
     assert rated == plain
 
 
@@ -166,7 +166,7 @@ async def test_the_rating_sensor_is_the_plain_circuit_sensor(hass: HomeAssistant
 # -- Counter plausibility keeps the panel rating ---------------------------------
 
 
-async def test_a_monitoring_rating_does_not_change_the_energy_counter_bound(
+async def test_a_copied_package_does_not_change_the_energy_counter_bound(
     hass: HomeAssistant,
 ) -> None:
     snap = _panel()

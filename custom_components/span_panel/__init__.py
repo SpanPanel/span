@@ -702,8 +702,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             entry.async_on_unload(lambda: client.set_control_interceptor(None))
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
-            # Before the first refresh, so the monitoring ratings are in memory when the
-            # first snapshot is judged.
+            # Before the first refresh, so the copied package ratings are in memory
+            # when the first snapshot is judged.
             await coordinator.package_rating_manager.async_load()
             await coordinator.async_config_entry_first_refresh()
 
@@ -713,9 +713,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # dispatch and closes the client -- before the error leaves setup.
             _async_enforce_hardware_verdict(hass, entry, hardware_version, coordinator.data.model)
 
-            # The first reconcile deletes every monitoring rating whose circuit id the
-            # snapshot lacks, so a device-id migration, when one exists, must run
-            # immediately before this. It also needs the notices restored above.
+            # The first reconcile deletes every package whose circuit id the snapshot
+            # lacks, so a device-id migration, when one exists, must run immediately
+            # before this. It also needs the notices restored above.
             coordinator.package_rating_manager.begin(coordinator.data, client.field_metadata)
 
             await coordinator.async_setup_streaming()
@@ -863,7 +863,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     The curation overlay goes for the same reason. Its keys are wire addresses
     rather than registry ids, so a store left behind is one the next entry for
     the same panel would load and apply, re-asserting metadata the user is no
-    longer here to have asked for. The monitoring ratings go for that
+    longer here to have asked for. The copied package ratings go for that
     reason too: they are keyed by wire circuit ids.
     """
     async_clear_schema_issues(hass, entry)

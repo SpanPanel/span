@@ -133,7 +133,7 @@ def test_each_members_power_sensor_and_switch_carry_its_peers() -> None:
 
 
 def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], MonitoringRating]:
-    """Resolve every circuit to the rating its panel published: no user has set a monitoring rating."""
+    """Resolve every circuit to the rating its panel published: no user has copied a package."""
 
     def resolve(circuit_id: str) -> MonitoringRating:
         rating = snapshot.circuits[circuit_id].breaker_rating_a

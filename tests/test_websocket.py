@@ -56,13 +56,13 @@ def _make_coordinator(snapshot):
     """Create a mock coordinator wrapping a snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    # No circuit has a monitoring rating: each reports the rating its panel published.
+    # No circuit has a copied package: each reports the rating its panel published.
     coordinator.package_rating_manager.resolve.side_effect = _panel_rating
     return coordinator
 
 
 def _panel_rating(circuit_id, snapshot):
-    """Resolve a circuit to the rating its panel published, as a manager holding no monitoring rating does."""
+    """Resolve a circuit to the rating its panel published, as a manager holding no package does."""
     circuit = snapshot.circuits.get(circuit_id)
     rating = circuit.breaker_rating_a if circuit else None
     return MonitoringRating(rating, rating, False, None)
@@ -837,10 +837,10 @@ class TestHandlePanelTopology:
         }
 
     @pytest.mark.asyncio
-    async def test_topology_keeps_the_panel_breaker_rating_beside_the_monitoring_rating(
+    async def test_topology_keeps_the_panel_breaker_rating_beside_what_the_package_gives(
         self, hass: HomeAssistant
     ):
-        """`breaker_rating_a` is the panel's; the monitoring rating and the copied package ride beside it."""
+        """`breaker_rating_a` is the panel's; what monitoring judges against, and the copied package, ride beside it."""
         kitchen = SpanCircuitSnapshotFactory.create(
             circuit_id="uuid_kitchen", name="Kitchen", tabs=[5], breaker_rating_a=20
         )

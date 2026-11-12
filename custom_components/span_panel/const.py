@@ -133,8 +133,9 @@ NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
 )
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
 
-# Fired on every change to a circuit's monitoring rating, so a card can re-fetch
-# the ratings it shows. Carries `config_entry_id` and `circuit_ids`.
+# Fired whenever a circuit's package ratings, or what they are judged as, change,
+# so a card can re-fetch the ratings it shows. Carries `config_entry_id` and
+# `circuit_ids`.
 EVENT_PACKAGE_RATINGS_CHANGED = "span_panel_package_ratings_changed"
 
 # Fired alongside a schema Repair so an automation can react without polling

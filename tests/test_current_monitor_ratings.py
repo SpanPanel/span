@@ -1,10 +1,10 @@
-"""Current monitoring judges circuits against their monitoring rating.
+"""Current monitoring judges a tandem against both breakers once its package is copied.
 
 A user may copy a tandem's ratings from the SPAN app (the panel publishes only the
 first), so the space is judged against both breakers together. The monitor never
 stores the copy: it asks the panel's `PackageRatingManager` for each circuit's
-rating on every snapshot, so the monitoring rating applies to alerts and to the
-status, and survives anything that resets the monitor's own state.
+rating on every snapshot, so the copy applies to alerts and to the status, and
+survives anything that resets the monitor's own state.
 """
 
 from __future__ import annotations
@@ -114,12 +114,12 @@ def _run_past_the_window(monitor: CurrentMonitor, snapshot: SpanPanelSnapshot, c
 
 
 class TestAlerts:
-    """A circuit is judged against the monitoring rating the user set for it."""
+    """A circuit is judged against both breakers of the package the user copied for it."""
 
-    async def test_a_20a_circuit_at_30a_alerts_continuously_without_a_monitoring_rating(
+    async def test_a_20a_circuit_at_30a_alerts_continuously_without_a_copied_package(
         self, hass: HomeAssistant
     ) -> None:
-        """Without a monitoring rating the panel's rating applies, 30 A on 20 A."""
+        """Without a copied package the panel's rating applies, 30 A on 20 A."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 30.0))
         monitor, _manager = await _monitor(hass, snapshot)
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
@@ -130,7 +130,7 @@ class TestAlerts:
         assert [a.data["alert_type"] for a in alerts] == ["continuous_overload"]
         assert _ratings_in(alerts[0].data) == (20.0, 20.0, False, None)
 
-    async def test_the_same_circuit_does_not_alert_with_a_monitoring_rating_of_50a(
+    async def test_the_same_circuit_does_not_alert_with_a_20_30_package_copied(
         self, hass: HomeAssistant
     ) -> None:
         """30 A is 60% of a 20-30 tandem's 50 A, under the 80% continuous threshold."""
@@ -146,7 +146,7 @@ class TestAlerts:
         status = monitor.get_monitoring_status()["circuits"]["circuit-2"]
         assert status["utilization_pct"] == 60.0
 
-    async def test_a_circuit_with_a_monitoring_rating_is_skipped_while_the_service_rating_is_pending(
+    async def test_a_circuit_with_a_copied_package_is_skipped_while_the_service_rating_is_pending(
         self, hass: HomeAssistant
     ) -> None:
         """Declared with no value yet: not judged against the 20 A the panel published."""
@@ -167,8 +167,8 @@ class TestAlerts:
             False,
         )
 
-    async def test_the_alert_names_the_monitoring_rating(self, hass: HomeAssistant) -> None:
-        """At 45 A a 50 A monitoring rating is over 80%; the text says 50 A, the payload both.
+    async def test_the_alert_names_the_rating_the_package_gives(self, hass: HomeAssistant) -> None:
+        """At 45 A a 20-30 package's 50 A is over 80%; the text says 50 A, the payload both.
 
         The payload's `breaker_rating_a` stays the panel's 20 A: a structured reader
         must not be handed the user's judgement as panel data. The text placeholder
@@ -212,7 +212,7 @@ class TestAlerts:
     async def test_a_mains_alert_carries_the_service_rating_twice_never_user_set(
         self, hass: HomeAssistant
     ) -> None:
-        """The mains has no monitoring rating: both ratings are the service rating."""
+        """The mains takes no package ratings: both ratings are the service rating."""
         snapshot = replace(_panel(_circuit("circuit-2", 20.0, 1.0)), upstream_l1_current_a=95.0)
         monitor, _manager = await _monitor(hass, snapshot)
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
@@ -272,7 +272,7 @@ def _ratings_in(payload: Mapping[str, object]) -> tuple[object, object, object, 
 class TestStatus:
     """Status entries carry the panel's rating, the one judged against, and whether the user set it."""
 
-    async def test_a_circuit_without_a_monitoring_rating_reports_the_panels_rating(
+    async def test_a_circuit_without_a_copied_package_reports_the_panels_rating(
         self, hass: HomeAssistant
     ) -> None:
         """Judged against is the panel's rating, and the user did not set it."""
@@ -289,10 +289,10 @@ class TestStatus:
         assert "panel_breaker_rating_a" not in entry
         assert "breaker_rating_user_set" not in entry
 
-    async def test_a_circuit_with_a_monitoring_rating_reports_both_ratings(
+    async def test_a_circuit_with_a_copied_package_reports_both_ratings(
         self, hass: HomeAssistant
     ) -> None:
-        """Judged against is the monitoring rating; the breaker rating stays the panel's."""
+        """Judged against is the package's 50 A; the breaker rating stays the panel's."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, manager = await _monitor(hass, snapshot)
         manager.set_package_ratings("circuit-2", snapshot, [20, 30])
@@ -307,7 +307,7 @@ class TestStatus:
         assert entry["utilization_pct"] == 20.0
 
     async def test_the_mains_entry_has_the_same_shape(self, hass: HomeAssistant) -> None:
-        """The mains has no monitoring rating: it is judged against its panel rating, never user set."""
+        """The mains takes no package ratings: it is judged against its panel rating, never user set."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         monitor, _manager = await _monitor(hass, snapshot)
         monitor.process_snapshot(snapshot)
@@ -366,8 +366,8 @@ class TestSharedMeters:
             assert status[member]["monitoring_rating_user_set"] is False
 
 
-class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
-    """The monitoring rating is the manager's, so the monitor's resets cannot lose it."""
+class TestACopySurvivesTheMonitorsOwnReset:
+    """The copied package is the manager's, so the monitor's resets cannot lose it."""
 
     async def _panel_with_services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
@@ -404,7 +404,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
     async def test_clear_circuit_threshold_leaves_the_rating_alone(
         self, hass: HomeAssistant
     ) -> None:
-        """Clearing a circuit's thresholds resets its monitor state, not its monitoring rating."""
+        """Clearing a circuit's thresholds resets its monitor state, not its copied package."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
         manager.set_package_ratings("circuit-2", snapshot, [20, 30])
@@ -423,7 +423,7 @@ class TestMonitoringRatingSurvivesTheMonitorsOwnReset:
         assert await self._rating_in_status(hass) == (50.0, True)
 
     async def test_monitoring_off_and_on_leaves_the_rating_alone(self, hass: HomeAssistant) -> None:
-        """A new monitor, built when monitoring is turned back on, reads the same monitoring rating."""
+        """A new monitor, built when monitoring is turned back on, reads the same copied package."""
         snapshot = _panel(_circuit("circuit-2", 20.0, 10.0))
         entry, manager = await self._panel_with_services(hass, snapshot)
         manager.set_package_ratings("circuit-2", snapshot, [20, 30])
@@ -464,7 +464,7 @@ class TestStatusWhileMonitoringIsOff:
     async def _services(
         self, hass: HomeAssistant, snapshot: SpanPanelSnapshot
     ) -> tuple[CurrentMonitor, PackageRatingManager]:
-        helper = TestMonitoringRatingSurvivesTheMonitorsOwnReset()
+        helper = TestACopySurvivesTheMonitorsOwnReset()
         entry, manager = await helper._panel_with_services(hass, snapshot)
         return entry.runtime_data.coordinator.current_monitor, manager
 

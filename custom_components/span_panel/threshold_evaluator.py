@@ -43,8 +43,9 @@ class AlertEvent:
     """Describes an alert to be dispatched.
 
     `monitoring_rating_a` is the rating the point was judged against: for a circuit
-    its monitoring rating where the user set one, else its panel rating; for a mains
-    leg the service rating. It is not the breaker rating, which the caller adds.
+    both breakers of a package the user copied from the SPAN app where it applies,
+    else its panel rating; for a mains leg the service rating. It is not the breaker
+    rating, which the caller adds.
     """
 
     alert_type: str  # "spike" or "continuous_overload"

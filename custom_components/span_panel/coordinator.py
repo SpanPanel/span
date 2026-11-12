@@ -175,8 +175,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Graph horizon manager — set by async_setup_entry
         self.graph_horizon_manager: GraphHorizonManager | None = None
 
-        # Monitoring ratings. Built here so every reader of a rating has one
-        # to ask; `async_setup_entry` loads it and runs its first reconcile.
+        # Package ratings copied from the SPAN app. Built here so every reader of
+        # a rating has one to ask; `async_setup_entry` loads it and runs its first
+        # reconcile.
         self.package_rating_manager = PackageRatingManager(hass, config_entry)
 
         update_interval = _STREAMING_FALLBACK_INTERVAL
@@ -508,8 +509,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """Handle a pushed snapshot from MQTT streaming."""
         self._mark_panel_online()
         # Before the snapshot is published: the current monitor and the panel
-        # topology judge circuits by the monitoring ratings resolved against it,
-        # and neither may judge by one the panel has overtaken.
+        # topology judge circuits by the packages resolved against it, and neither
+        # may judge by one the rule has removed.
         self._reconcile_package_ratings(snapshot)
         self._check_capability_change(snapshot)
         self._check_settability_change(snapshot)
@@ -884,7 +885,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self.hass.async_create_task(self._async_reload_task())
 
     def _reconcile_package_ratings(self, snapshot: SpanPanelSnapshot) -> None:
-        """Judge the stored monitoring ratings against a snapshot, before anything reads it.
+        """Judge the stored package ratings against a snapshot, before anything reads it.
 
         The manager reads the field metadata only while the service rating
         declaration is still unknown, so the read is handed over rather than

@@ -2,8 +2,9 @@
 
 Detects spike (instantaneous) and continuous overload conditions by comparing
 current readings against the rating each point is judged against, with configurable
-thresholds. A circuit is judged against its panel rating, or the monitoring rating a
-user set for it; the monitor asks the `PackageRatingManager` for it and stores none.
+thresholds. A circuit is judged against its panel rating, or both breakers of a
+package the user copied from the SPAN app; the monitor asks the
+`PackageRatingManager` for that rating and stores none.
 Dispatches notifications via event bus, notify services, and persistent
 notifications.
 """
@@ -111,8 +112,8 @@ class MonitoredCircuit:
     `rating_a` is the capacity of; None for a group, which is judged by its
     members' capacity and holds no one circuit's package (a panel that names
     shared meters describes its breakers, so none of its circuits has one).
-    `rating_user_set` is whether any member's judged-against rating is a user's
-    monitoring rating, whether or not the capacity is known.
+    `rating_user_set` is whether any member is judged against a package the user
+    copied, whether or not the capacity is known.
     """
 
     point_id: str
@@ -175,7 +176,7 @@ class CurrentMonitor:
 
     The ratings come from the panel's `PackageRatingManager`, which the
     coordinator reconciles before any listener sees a snapshot. The monitor only
-    resolves them; it holds none, so nothing here can lose a user's monitoring rating.
+    resolves them; it holds none, so nothing here can lose a package the user copied.
     """
 
     def __init__(
@@ -547,7 +548,7 @@ class CurrentMonitor:
             "name": "Mains Breaker",
             "last_current_a": peak_current,
             "breaker_rating_a": main_rating,
-            # The mains has no monitoring rating, so every entry reads the same way.
+            # The mains takes no package ratings, so every entry reads the same way.
             "monitoring_rating_a": main_rating,
             "monitoring_rating_user_set": False,
             "package_ratings_a": None,
@@ -721,7 +722,7 @@ class CurrentMonitor:
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,
-                    # The mains has no monitoring rating: it is judged against its panel rating.
+                    # The mains takes no package ratings: it is judged against its panel rating.
                     breaker_rating_a=rating,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=False,
@@ -741,7 +742,7 @@ class CurrentMonitor:
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,
-                    # The mains has no monitoring rating: it is judged against its panel rating.
+                    # The mains takes no package ratings: it is judged against its panel rating.
                     breaker_rating_a=rating,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=False,

@@ -59,9 +59,10 @@ def format_notification(
         {alert_type}      - "spike" or "continuous_overload"
         {current_a}       - Current draw in amps (e.g. 18.3)
         {breaker_rating_a}- The rating in amps the circuit is judged against (e.g. 20):
-                            the user's monitoring rating where one is set, else the
-                            panel's breaker rating. The name is kept so existing
-                            templates still work.
+                            both breakers of a package copied from the SPAN
+                            app where it applies, else the panel's breaker
+                            rating. The name is kept so existing templates
+                            still work.
         {threshold_pct}   - Configured threshold percentage
         {utilization_pct} - Actual utilization percentage
         {window_m}        - Window duration in minutes (continuous only)
@@ -177,7 +178,7 @@ def dispatch_alert(
     The event payload carries the ratings as `get_monitoring_status` does:
     `breaker_rating_a` is the panel's rating (a shared meter's members' sum, None
     if any is unknown), `monitoring_rating_a` the rating the alert judged against,
-    `monitoring_rating_user_set` whether that is a user's monitoring rating, and
+    `monitoring_rating_user_set` whether that comes from a package the user copied, and
     `package_ratings_a` the ratings the user copied from the SPAN app it is the
     capacity of, None where there are none. A structured reader is never handed
     the user's judgement as the breaker rating.
