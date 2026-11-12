@@ -390,20 +390,20 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit Power Sensor Attributes
 
-| Attribute              | Type   | Notes                                                                                                                                          |
-| ---------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tabs`                 | string | Breaker slot position(s)                                                                                                                       |
-| `voltage`              | number | The nominal voltage the circuit declares, otherwise 120 for a one-pole circuit or 240 for a two-pole one. Absent where neither is known        |
-| `always_on`            | bool   | Whether circuit is always-on                                                                                                                   |
-| `relay_state`          | string | OPEN / CLOSED / UNKNOWN                                                                                                                        |
-| `relay_requester`      | string | Who requested relay state                                                                                                                      |
-| `shed_priority`        | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                                                          |
-| `is_sheddable`         | bool   | Whether circuit can be shed                                                                                                                    |
-| `pcs_managed`          | bool   | Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it                                        |
-| `pcs_priority`         | int    | This circuit's shed order under an active import limit — distinct from`shed_priority`, which is the backup tier                                |
-| `protection_functions` | list   | The protections the circuit's breaker provides: OVERCURRENT, SHORT_CIRCUIT, GROUND_FAULT, ARC_FAULT. Present only where the breaker lists them |
-| `meter_shared_with`    | list   | Names of the other circuits measured by this circuit's meter. Present only where the circuit declares the list                                 |
-| `relay_shared_with`    | list   | Names of the other circuits switched by this circuit's relay. Present only where the circuit declares the list                                 |
+| Attribute              | Type   | Notes                                                                                                                                                                                     |
+| ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabs`                 | string | Breaker slot position(s)                                                                                                                                                                  |
+| `voltage`              | number | The nominal voltage the circuit declares, otherwise 120 for a one-pole circuit or 240 for a two-pole one. Absent where neither is known                                                   |
+| `always_on`            | bool   | Whether the circuit's relay is locked on. Present only where the circuit has a relay                                                                                                      |
+| `relay_state`          | string | OPEN / CLOSED / UNKNOWN. Present only where the circuit has a relay                                                                                                                       |
+| `relay_requester`      | string | Who requested relay state. Present only where the circuit has a relay                                                                                                                     |
+| `shed_priority`        | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN. Present only where the circuit's relay is controllable: a relay locked on is never shed, whatever priority the panel stores for it |
+| `is_sheddable`         | bool   | Whether circuit can be shed. Present only where the circuit has a relay                                                                                                                   |
+| `pcs_managed`          | bool   | Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it and its relay is controllable                                                     |
+| `pcs_priority`         | int    | This circuit's shed order under an active import limit — distinct from `shed_priority`, which is the backup tier. Present only when the circuit reports it and its relay is controllable  |
+| `protection_functions` | list   | The protections the circuit's breaker provides: OVERCURRENT, SHORT_CIRCUIT, GROUND_FAULT, ARC_FAULT. Present only where the breaker lists them                                            |
+| `meter_shared_with`    | list   | Names of the other circuits measured by this circuit's meter. Present only where the circuit declares the list                                                                            |
+| `relay_shared_with`    | list   | Names of the other circuits switched by this circuit's relay. Present only where the circuit declares the list                                                                            |
 
 ### Circuits That Share a Meter or Relay
 
