@@ -127,6 +127,11 @@ class Reconciled:
     changes: tuple[RatingChange, ...]
 
 
+def package_ratings_payload(ratings: PackageRatings | None) -> list[int] | None:
+    """Return a package as the topology, the monitoring status and the alert payload carry it: a list, null where none."""
+    return None if ratings is None else list(ratings)
+
+
 def service_rating_a(snapshot: SpanPanelSnapshot) -> float | None:
     """Return the rating the mains legs, and any capacity, are judged against.
 

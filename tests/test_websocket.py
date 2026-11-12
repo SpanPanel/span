@@ -828,6 +828,7 @@ class TestHandlePanelTopology:
             "breaker_rating_a",
             "monitoring_rating_a",
             "monitoring_rating_user_set",
+            "package_ratings_a",
             "always_on",
             "priority",
             "priority_target",
@@ -839,9 +840,9 @@ class TestHandlePanelTopology:
     async def test_topology_keeps_the_panel_breaker_rating_beside_the_monitoring_rating(
         self, hass: HomeAssistant
     ):
-        """`breaker_rating_a` is the panel's; the monitoring rating rides beside it."""
+        """`breaker_rating_a` is the panel's; the monitoring rating and the copied package ride beside it."""
         kitchen = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_kitchen", name="Kitchen", tabs=[5, 6], breaker_rating_a=20
+            circuit_id="uuid_kitchen", name="Kitchen", tabs=[5], breaker_rating_a=20
         )
         bedroom = SpanCircuitSnapshotFactory.create(
             circuit_id="uuid_bedroom", name="Bedroom", tabs=[15], breaker_rating_a=15
@@ -881,10 +882,12 @@ class TestHandlePanelTopology:
         assert kitchen_data["breaker_rating_a"] == 20
         assert kitchen_data["monitoring_rating_a"] == 50.0
         assert kitchen_data["monitoring_rating_user_set"] is True
+        assert kitchen_data["package_ratings_a"] == [20, 30]
         bedroom_data = circuits["uuid_bedroom"]
         assert bedroom_data["breaker_rating_a"] == 15
         assert bedroom_data["monitoring_rating_a"] == 15
         assert bedroom_data["monitoring_rating_user_set"] is False
+        assert bedroom_data["package_ratings_a"] is None
         for row in (kitchen_data, bedroom_data):
             assert "panel_breaker_rating_a" not in row
             assert "breaker_rating_user_set" not in row

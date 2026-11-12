@@ -44,7 +44,7 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-from .package_ratings import service_rating_a
+from .package_ratings import package_ratings_payload, service_rating_a
 from .threshold_evaluator import (
     MonitoringSettings,
     check_continuous,
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .package_rating_manager import PackageRatingManager
-    from .package_ratings import MonitoringRating
+    from .package_ratings import MonitoringRating, PackageRatings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +107,10 @@ class MonitoredCircuit:
     panel published, each None where a circuit, or the capacity of a group, is unknown.
     For a group, both are capacities by the same rule: `rating_a` over the ratings its
     members are judged against, `panel_rating_a` over the ratings the panel published.
+    `package_ratings_a` is the package a user copied for a circuit, which its
+    `rating_a` is the capacity of; None for a group, which is judged by its
+    members' capacity and holds no one circuit's package (a panel that names
+    shared meters describes its breakers, so none of its circuits has one).
     `rating_user_set` is whether any member's judged-against rating is a user's
     monitoring rating, whether or not the capacity is known.
     """
@@ -118,6 +122,7 @@ class MonitoredCircuit:
     rating_a: float | None
     panel_rating_a: float | None
     rating_user_set: bool
+    package_ratings_a: PackageRatings | None
     basis: MonitoringBasis
 
 
@@ -143,6 +148,7 @@ def monitored_circuits(
             rating_a=meter_capacity_a((spaces[m], r.judged_a) for m, r in resolved.items()),
             panel_rating_a=meter_capacity_a((spaces[m], r.panel_a) for m, r in resolved.items()),
             rating_user_set=any(r.user_set for r in resolved.values()),
+            package_ratings_a=None,
             basis="group",
         )
         points.update(dict.fromkeys(members, point))
@@ -158,6 +164,7 @@ def monitored_circuits(
                 rating_a=rating.judged_a,
                 panel_rating_a=rating.panel_a,
                 rating_user_set=rating.user_set,
+                package_ratings_a=rating.package_ratings_a,
                 basis="circuit",
             )
     return points
@@ -486,6 +493,9 @@ class CurrentMonitor:
                 "breaker_rating_a": breaker_rating,
                 "monitoring_rating_a": rating,
                 "monitoring_rating_user_set": point.rating_user_set if point else False,
+                "package_ratings_a": package_ratings_payload(
+                    point.package_ratings_a if point else None
+                ),
                 "utilization_pct": utilization,
                 "continuous_threshold_pct": cont_pct,
                 "spike_threshold_pct": spike_pct,
@@ -540,6 +550,7 @@ class CurrentMonitor:
             # The mains has no monitoring rating, so every entry reads the same way.
             "monitoring_rating_a": main_rating,
             "monitoring_rating_user_set": False,
+            "package_ratings_a": None,
             "utilization_pct": utilization,
             "continuous_threshold_pct": cont_pct,
             "spike_threshold_pct": spike_pct,
@@ -648,6 +659,7 @@ class CurrentMonitor:
                     breaker_rating_a=point.panel_rating_a,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=point.rating_user_set,
+                    package_ratings_a=package_ratings_payload(point.package_ratings_a),
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,
@@ -666,6 +678,7 @@ class CurrentMonitor:
                     breaker_rating_a=point.panel_rating_a,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=point.rating_user_set,
+                    package_ratings_a=package_ratings_payload(point.package_ratings_a),
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,
@@ -712,6 +725,7 @@ class CurrentMonitor:
                     breaker_rating_a=rating,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=False,
+                    package_ratings_a=None,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,
@@ -731,6 +745,7 @@ class CurrentMonitor:
                     breaker_rating_a=rating,
                     monitoring_rating_a=alert.monitoring_rating_a,
                     monitoring_rating_user_set=False,
+                    package_ratings_a=None,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,

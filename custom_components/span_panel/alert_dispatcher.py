@@ -165,6 +165,7 @@ def dispatch_alert(
     breaker_rating_a: float | None,
     monitoring_rating_a: float,
     monitoring_rating_user_set: bool,
+    package_ratings_a: list[int] | None,
     threshold_pct: int,
     utilization_pct: float,
     panel_serial: str,
@@ -176,8 +177,10 @@ def dispatch_alert(
     The event payload carries the ratings as `get_monitoring_status` does:
     `breaker_rating_a` is the panel's rating (a shared meter's members' sum, None
     if any is unknown), `monitoring_rating_a` the rating the alert judged against,
-    and `monitoring_rating_user_set` whether that is a user's monitoring rating. A
-    structured reader is never handed the user's judgement as the breaker rating.
+    `monitoring_rating_user_set` whether that is a user's monitoring rating, and
+    `package_ratings_a` the ratings the user copied from the SPAN app it is the
+    capacity of, None where there are none. A structured reader is never handed
+    the user's judgement as the breaker rating.
     The text's `{breaker_rating_a}` placeholder carries the judged value, so the
     message and its threshold agree.
     """
@@ -193,6 +196,7 @@ def dispatch_alert(
         "breaker_rating_a": breaker_rating_a,
         "monitoring_rating_a": monitoring_rating_a,
         "monitoring_rating_user_set": monitoring_rating_user_set,
+        "package_ratings_a": package_ratings_a,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
@@ -288,6 +292,7 @@ def dispatch_test_alert(
         "breaker_rating_a": breaker_rating_a,
         "monitoring_rating_a": monitoring_rating_a,
         "monitoring_rating_user_set": False,
+        "package_ratings_a": None,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,

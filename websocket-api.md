@@ -59,6 +59,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "breaker_rating_a": 30,
       "monitoring_rating_a": 30,
       "monitoring_rating_user_set": false,
+      "package_ratings_a": null,
       "always_on": false,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
@@ -89,6 +90,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "breaker_rating_a": 15,
       "monitoring_rating_a": 15,
       "monitoring_rating_user_set": false,
+      "package_ratings_a": null,
       "always_on": false,
       "priority": "NEVER",
       "priority_target": null,
@@ -185,51 +187,52 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Top Level
 
-| Field                       | Type        | Description                                                                                                                                                    |
-| --------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serial`                    | string      | Panel serial number                                                                                                                                            |
-| `firmware`                  | string      | Panel firmware version                                                                                                                                         |
-| `panel_size`                | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                            |
-| `device_id`                 | string      | HA device registry ID (echoed from request)                                                                                                                    |
-| `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                      |
-| `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                           |
-| `device_name`               | string      | HA device display name                                                                                                                                         |
-| `monitoring_rating_offered` | bool        | Whether `set_circuit_monitoring_rating` takes a rating on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
-| `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                             |
-| `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared        |
-| `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                         |
+| Field                       | Type        | Description                                                                                                                                                 |
+| --------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serial`                    | string      | Panel serial number                                                                                                                                         |
+| `firmware`                  | string      | Panel firmware version                                                                                                                                      |
+| `panel_size`                | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                         |
+| `device_id`                 | string      | HA device registry ID (echoed from request)                                                                                                                 |
+| `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                   |
+| `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                        |
+| `device_name`               | string      | HA device display name                                                                                                                                      |
+| `monitoring_rating_offered` | bool        | Whether `set_circuit_package_ratings` takes ratings on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
+| `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                          |
+| `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared     |
+| `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                      |
 
 #### Circuit Object
 
-| Field                        | Type        | Description                                                                                                                                          |
-| ---------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tabs`                       | int[]       | Sorted breaker slot positions (1-indexed)                                                                                                            |
-| `name`                       | string/null | Circuit name from the panel (null if unnamed)                                                                                                        |
-| `outside_panel`              | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer                                                               |
-| `is_generation`              | bool        | Whether the circuit's power and energy read as generation, such as solar                                                                             |
-| `shared_meter_group`         | string/null | The key of the group of circuits that share this circuit's meter, or null                                                                            |
-| `shared_relay_group`         | string/null | The key of the group of circuits that share this circuit's relay, or null                                                                            |
-| `voltage`                    | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say                                                                        |
-| `device_type`                | string      | `circuit`, `pv`, or `evse`                                                                                                                           |
-| `relay_state`                | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                                                                                       |
-| `relay_state_target`         | string/null | The relay state last commanded and not yet reached, or null                                                                                          |
-| `always_on`                  | bool        | Whether the panel keeps this circuit on and offers no relay control                                                                                  |
-| `priority`                   | string      | Shed priority as the panel publishes it: `NEVER`, `SOC_THRESHOLD`, `OFF_GRID` or `UNKNOWN`                                                           |
-| `priority_target`            | string/null | The priority last commanded and not yet reached, or null                                                                                             |
-| `is_never_backup`            | bool        | Whether the panel pins the priority, so it cannot be set                                                                                             |
-| `is_user_controllable`       | bool        | Whether the circuit relay can be toggled                                                                                                             |
-| `breaker_rating_a`           | float/null  | The breaker's rating as the panel publishes it (null if not reported); a monitoring rating never changes it                                          |
-| `monitoring_rating_a`        | float/null  | What current monitoring judges this circuit against: the user's monitoring rating where one applies, else the panel's (null where nothing is judged) |
-| `monitoring_rating_user_set` | bool        | Whether a user's monitoring rating applies, so `monitoring_rating_a` differs from `breaker_rating_a`                                                 |
-| `entities`                   | object      | Role-keyed map of entity IDs (see below)                                                                                                             |
+| Field                        | Type        | Description                                                                                                                                                                                  |
+| ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabs`                       | int[]       | Sorted breaker slot positions (1-indexed)                                                                                                                                                    |
+| `name`                       | string/null | Circuit name from the panel (null if unnamed)                                                                                                                                                |
+| `outside_panel`              | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer                                                                                                       |
+| `is_generation`              | bool        | Whether the circuit's power and energy read as generation, such as solar                                                                                                                     |
+| `shared_meter_group`         | string/null | The key of the group of circuits that share this circuit's meter, or null                                                                                                                    |
+| `shared_relay_group`         | string/null | The key of the group of circuits that share this circuit's relay, or null                                                                                                                    |
+| `voltage`                    | int/null    | 120 (single tab), 240 (double tab), or null where the pole count does not say                                                                                                                |
+| `device_type`                | string      | `circuit`, `pv`, or `evse`                                                                                                                                                                   |
+| `relay_state`                | string      | `CLOSED`, `OPEN`, or `UNKNOWN`                                                                                                                                                               |
+| `relay_state_target`         | string/null | The relay state last commanded and not yet reached, or null                                                                                                                                  |
+| `always_on`                  | bool        | Whether the panel keeps this circuit on and offers no relay control                                                                                                                          |
+| `priority`                   | string      | Shed priority as the panel publishes it: `NEVER`, `SOC_THRESHOLD`, `OFF_GRID` or `UNKNOWN`                                                                                                   |
+| `priority_target`            | string/null | The priority last commanded and not yet reached, or null                                                                                                                                     |
+| `is_never_backup`            | bool        | Whether the panel pins the priority, so it cannot be set                                                                                                                                     |
+| `is_user_controllable`       | bool        | Whether the circuit relay can be toggled                                                                                                                                                     |
+| `breaker_rating_a`           | float/null  | The breaker's rating as the panel publishes it (null if not reported); copied package ratings never change it                                                                                |
+| `monitoring_rating_a`        | float/null  | What current monitoring judges this circuit against: both breakers of the package the user copied from the SPAN app where it applies, else the panel's rating (null where nothing is judged) |
+| `monitoring_rating_user_set` | bool        | Whether the copied package applies, so `monitoring_rating_a` differs from `breaker_rating_a`                                                                                                 |
+| `package_ratings_a`          | int[]/null  | The package's breaker ratings the user copied from the SPAN app, in its order, the first the panel's; kept while it waits on a value not yet arrived, null where there is none               |
+| `entities`                   | object      | Role-keyed map of entity IDs (see below)                                                                                                                                                     |
 
-`get_monitoring_status` reports the same three fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` is the group's capacity over
-its members' panel ratings and `monitoring_rating_a` its capacity over the ratings they are judged against, each null while unknown (see the Shared Meter Group
-Object), and `monitoring_rating_user_set` is true when any member's monitoring rating applies. The mains entry carries the three keys too: `breaker_rating_a`
-and `monitoring_rating_a` are both its rating, and `monitoring_rating_user_set` is false. `utilization_pct` is measured against `monitoring_rating_a`. While a
-point's monitoring is off (`monitoring_enabled` false), its entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no
-judgement; `last_spike_alert` and `last_continuous_alert` stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window
-carried over from before.
+`get_monitoring_status` reports the same four fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` is the group's capacity over its
+members' panel ratings and `monitoring_rating_a` its capacity over the ratings they are judged against, each null while unknown (see the Shared Meter Group
+Object), `monitoring_rating_user_set` is true when any member is judged against a copied package, and `package_ratings_a` is null, a package being one
+circuit's. The mains entry carries the four keys too: `breaker_rating_a` and `monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false
+and `package_ratings_a` null. `utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off (`monitoring_enabled` false), its
+entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement; `last_spike_alert` and `last_continuous_alert`
+stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window carried over from before.
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys
@@ -242,7 +245,7 @@ the group's record in `shared_meter_groups`.
 | `members`                    | string[]   | The group's circuit ids, the key first                                                                                 |
 | `breaker_rating_a`           | float/null | The group's capacity over the ratings the panel publishes (null while any member's is unknown)                         |
 | `monitoring_rating_a`        | float/null | The group's capacity over the ratings its members are judged against: what current monitoring judges the meter against |
-| `monitoring_rating_user_set` | bool       | Whether any member's monitoring rating applies                                                                         |
+| `monitoring_rating_user_set` | bool       | Whether any member is judged against a package copied from the SPAN app                                                |
 
 Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_group": "b1c2d3e4f5a6"`, and the topology answers:
 
@@ -350,13 +353,13 @@ is scoped to a single panel — circuits, sub-devices, and entity mappings from 
 
 ### `span_panel_package_ratings_changed`
 
-Fired on the Home Assistant event bus whenever the stored monitoring ratings of a panel change: a rating is set or cleared, or a new snapshot makes one no
-longer apply. A consumer showing `monitoring_rating_a` re-fetches `span_panel/panel_topology` on receiving it.
+Fired on the Home Assistant event bus whenever the package ratings stored for a panel change: a package is set or cleared, or a new snapshot removes one. A
+consumer showing `monitoring_rating_a` or `package_ratings_a` re-fetches `span_panel/panel_topology` on receiving it.
 
 | Field             | Type          | Description                                              |
 | ----------------- | ------------- | -------------------------------------------------------- |
 | `config_entry_id` | string        | The panel's config entry; ignore events for other panels |
-| `circuit_ids`     | array[string] | The circuits whose monitoring rating may have changed    |
+| `circuit_ids`     | array[string] | The circuits whose package ratings changed               |
 
 Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator, as `span_panel/panel_topology` does, so any user who can read a
 monitoring rating can hear it change.

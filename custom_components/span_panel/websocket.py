@@ -26,7 +26,7 @@ from .helpers import (
     shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
-from .package_ratings import panel_describes_breakers
+from .package_ratings import package_ratings_payload, panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -204,10 +204,12 @@ async def handle_panel_topology(
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
             # The breaker's rating is the panel's fact. What current monitoring judges
-            # the circuit against, which a user may set, rides beside it.
+            # the circuit against rides beside it, with the package ratings a user
+            # copied from the SPAN app where those are what it is judged against.
             "breaker_rating_a": circuit.breaker_rating_a,
             "monitoring_rating_a": rating.judged_a,
             "monitoring_rating_user_set": rating.user_set,
+            "package_ratings_a": package_ratings_payload(rating.package_ratings_a),
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,

@@ -255,6 +255,7 @@ async def test_a_replay_with_one_stored_package_reports_its_capacity(
     assert rated["breaker_rating_a"] == panel_a
     assert rated["monitoring_rating_a"] == 2 * panel_a
     assert rated["monitoring_rating_user_set"] is True
+    assert rated["package_ratings_a"] == [int(panel_a), int(panel_a)]
     for other_id, row in rows.items():
         assert "panel_breaker_rating_a" not in row, other_id
         assert "breaker_rating_user_set" not in row, other_id
@@ -263,6 +264,7 @@ async def test_a_replay_with_one_stored_package_reports_its_capacity(
             continue
         assert row["monitoring_rating_user_set"] is False, other_id
         assert row["monitoring_rating_a"] == row["breaker_rating_a"], other_id
+        assert row["package_ratings_a"] is None, other_id
     assert json.dumps(topology)  # serialisable, as the websocket requires
 
     # The sensor's identity is the one every installation registers.
@@ -290,6 +292,7 @@ async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_pa
     assert isinstance(rows, dict)
     assert rows[circuit_id]["monitoring_rating_user_set"] is False
     assert rows[circuit_id]["monitoring_rating_a"] == panel_a
+    assert rows[circuit_id]["package_ratings_a"] is None
     stored = hass_storage[f"span_panel_package_ratings.{entry_id}"]
     assert isinstance(stored, dict)
     assert stored["data"]["packages"] == {}
