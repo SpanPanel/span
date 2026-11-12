@@ -4,9 +4,9 @@ The library reports each circuit's `meter_shared_with` and `relay_shared_with`
 peers, `None` where a circuit declares none and `()` where it names no circuit
 the panel has. Every member keeps its own entities, as the panel publishes
 them. Here each member's power sensor and switch name the peers, the current
-monitor judges a shared meter once against its members' summed ratings, and
-the topology and diagnostics carry the groups. No reading is ever added up:
-every member already reports the one meter's values.
+monitor judges a shared meter once against its capacity, what its heaviest
+space can carry, and the topology and diagnostics carry the groups. No reading
+is ever added up: every member already reports the one meter's values.
 """
 
 from __future__ import annotations
@@ -147,6 +147,55 @@ def test_a_group_with_an_unrated_member_has_no_rating() -> None:
     assert monitored_circuits(unrated)["circuit-52"].rating_a is None
 
 
+def _breaker(*members: tuple[str, list[int], float | None]) -> SpanPanelSnapshot:
+    """One multi-load breaker: every member names the others and lists its own spaces."""
+    ids = tuple(circuit_id for circuit_id, _, _ in members)
+    circuits = []
+    for circuit_id, spaces, rating in members:
+        peers = tuple(other for other in ids if other != circuit_id)
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id=circuit_id, name=circuit_id, tabs=spaces, breaker_rating_a=rating, current_a=12.0
+        )
+        circuits.append(replace(circuit, meter_shared_with=peers, relay_shared_with=peers))
+    return _panel(*circuits)
+
+
+@pytest.mark.parametrize(
+    ("members", "capacity"),
+    [
+        # A tandem: both circuits sit on space 44 and carry its current together.
+        ((("t-1", [44], 15.0), ("t-2", [44], 10.0)), 25.0),
+        # A quad: both two-pole circuits list both spaces, so each space carries both.
+        ((("q-1", [34, 36], 20.0), ("q-2", [34, 36], 30.0)), 50.0),
+        # A tandem-quad with equal single poles: either space carries the two-pole and one single pole.
+        ((("tq-1", [34], 20.0), ("tq-2", [36], 20.0), ("tq-3", [34, 36], 30.0)), 50.0),
+        # Unequal single poles: the reading is the heavier leg, 25 + 30 on space 36.
+        ((("tq-1", [34], 15.0), ("tq-2", [36], 25.0), ("tq-3", [34, 36], 30.0)), 55.0),
+    ],
+    ids=["tandem", "quad", "tandem-quad-equal", "tandem-quad-unequal"],
+)
+def test_a_shared_meter_is_rated_by_its_heaviest_space(
+    members: tuple[tuple[str, list[int], float], ...], capacity: float
+) -> None:
+    """The panel reports a two-pole meter's larger leg, so the group can carry what its heaviest space can."""
+    snapshot = _breaker(*members)
+
+    assert monitored_circuits(snapshot)[members[0][0]].rating_a == capacity
+
+
+def test_a_tandem_quad_with_an_unrated_member_has_no_rating() -> None:
+    snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], None), ("tq-3", [34, 36], 30.0))
+
+    assert monitored_circuits(snapshot)["tq-1"].rating_a is None
+
+
+def test_a_member_listing_no_space_leaves_the_group_unrated() -> None:
+    """Its load cannot be placed on a leg, so no capacity is claimed for the group."""
+    snapshot = _breaker(("t-1", [44], 15.0), ("t-2", [], 10.0))
+
+    assert monitored_circuits(snapshot)["t-1"].rating_a is None
+
+
 def test_the_monitor_alerts_on_the_group_under_its_first_member() -> None:
     """28 A on one shared meter: 93 % of the pair's 30 A, not 187 % of each member's 15 A."""
     hass = _make_hass()
@@ -200,6 +249,56 @@ async def test_topology_carries_both_group_keys(hass: HomeAssistant) -> None:
     ):
         assert rows[circuit_id]["shared_meter_group"] == key, circuit_id
         assert rows[circuit_id]["shared_relay_group"] == key, circuit_id
+
+
+async def _topology_of(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, object]:
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=SERIAL)
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=_make_coordinator(snapshot),
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    device = _register_panel_device(hass, "span_entry", serial=SERIAL)
+    connection = _make_mock_connection()
+    await _handle_panel_topology_inner(
+        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+    )
+    result: dict[str, object] = connection.send_result.call_args[0][1]
+    return result
+
+
+@pytest.mark.asyncio
+async def test_topology_publishes_each_groups_capacity_under_its_key(hass: HomeAssistant) -> None:
+    """The card draws a group's rating from here and adds nothing up itself."""
+    topology = await _topology_of(hass, SNAPSHOT)
+
+    assert topology["shared_meter_groups"] == {
+        "circuit-52": {"members": ["circuit-52", "circuit-53"], "breaker_rating_a": 30.0},
+        "circuit-56": {"members": ["circuit-56", "circuit-57"], "breaker_rating_a": 25.0},
+    }
+
+
+@pytest.mark.asyncio
+async def test_topology_rates_a_tandem_quad_by_its_heavier_leg(hass: HomeAssistant) -> None:
+    snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], 25.0), ("tq-3", [34, 36], 30.0))
+
+    topology = await _topology_of(hass, snapshot)
+
+    groups = topology["shared_meter_groups"]
+    assert isinstance(groups, dict)
+    assert groups["tq-1"] == {"members": ["tq-1", "tq-2", "tq-3"], "breaker_rating_a": 55.0}
+    rows = topology["circuits"]
+    assert isinstance(rows, dict)
+    assert [rows[cid]["breaker_rating_a"] for cid in ("tq-1", "tq-2", "tq-3")] == [15.0, 25.0, 30.0]
+
+
+@pytest.mark.asyncio
+async def test_topology_has_no_groups_where_no_meter_is_shared(hass: HomeAssistant) -> None:
+    assert (await _topology_of(hass, _panel(ALONE)))["shared_meter_groups"] == {}
 
 
 @pytest.mark.asyncio

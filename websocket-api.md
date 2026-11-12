@@ -172,17 +172,18 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Top Level
 
-| Field             | Type        | Description                                            |
-| ----------------- | ----------- | ------------------------------------------------------ |
-| `serial`          | string      | Panel serial number                                    |
-| `firmware`        | string      | Panel firmware version                                 |
-| `panel_size`      | int or null | Total breaker spaces (e.g., 32, 40)                    |
-| `device_id`       | string      | HA device registry ID (echoed from request)            |
-| `panel_device_id` | string      | The panel's current HA device registry ID              |
-| `config_entry_id` | string      | The config entry that owns the panel                   |
-| `device_name`     | string      | HA device display name                                 |
-| `circuits`        | object      | Circuit UUID keyed map (see below)                     |
-| `sub_devices`     | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below) |
+| Field                 | Type        | Description                                                                                                                                             |
+| --------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serial`              | string      | Panel serial number                                                                                                                                     |
+| `firmware`            | string      | Panel firmware version                                                                                                                                  |
+| `panel_size`          | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                     |
+| `device_id`           | string      | HA device registry ID (echoed from request)                                                                                                             |
+| `panel_device_id`     | string      | The panel's current HA device registry ID                                                                                                               |
+| `config_entry_id`     | string      | The config entry that owns the panel                                                                                                                    |
+| `device_name`         | string      | HA device display name                                                                                                                                  |
+| `circuits`            | object      | Circuit UUID keyed map (see below)                                                                                                                      |
+| `shared_meter_groups` | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared |
+| `sub_devices`         | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                  |
 
 #### Circuit Object
 
@@ -201,6 +202,19 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `is_user_controllable` | bool        | Whether the circuit relay can be toggled                                                   |
 | `breaker_rating_a`     | float/null  | Breaker amperage rating (null if not reported)                                             |
 | `entities`             | object      | Role-keyed map of entity IDs (see below)                                                   |
+
+#### Shared Meter Group Object
+
+| Field              | Type       | Description                                                                                                               |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `members`          | string[]   | The group's circuit ids, the key first                                                                                    |
+| `breaker_rating_a` | float/null | The group's capacity: what current monitoring judges the shared meter against (null while any member's rating is unknown) |
+
+A group's capacity is what its heaviest space can carry: for each space, the ratings of the members that list it are added, and the largest total is the
+capacity, because the panel reports a two-pole meter's current as the larger of its two legs. A tandem or a quad comes to the sum of its ratings; a tandem-quad
+comes to its two-pole rating plus the larger of its single-pole ones. A member listing no space leaves the capacity null. `get_monitoring_status` reports the
+same capacity as `breaker_rating_a` on each member's entry, and the card reads it here rather than adding the members' ratings up. Each circuit's own
+`breaker_rating_a` stays that circuit's rating.
 
 #### Circuit Entity Roles
 

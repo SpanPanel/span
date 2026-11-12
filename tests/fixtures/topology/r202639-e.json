@@ -1407,6 +1407,29 @@
   },
   "panel_size": 48,
   "serial": "xg-6159-74dlx",
+  "shared_meter_groups": {
+    "circuit-52": {
+      "breaker_rating_a": 30.0,
+      "members": [
+        "circuit-52",
+        "circuit-53"
+      ]
+    },
+    "circuit-54": {
+      "breaker_rating_a": 40.0,
+      "members": [
+        "circuit-54",
+        "circuit-55"
+      ]
+    },
+    "circuit-56": {
+      "breaker_rating_a": 25.0,
+      "members": [
+        "circuit-56",
+        "circuit-57"
+      ]
+    }
+  },
   "sub_devices": {
     "xg-6159-74dlx_evse_dt-6692-e9t57": {
       "entities": {

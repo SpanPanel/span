@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
@@ -14,6 +14,7 @@ import voluptuous as vol
 
 from .const import DOMAIN
 from .control_gate import ControlMode
+from .current_monitor import MonitoredCircuit, monitored_circuits
 from .energy_orientation import circuit_is_generation
 from .entity_resolver import entity_id_in_entry
 from .helpers import (
@@ -157,6 +158,14 @@ async def handle_panel_topology(
     meter_group = _group_of(shared_meter_groups(snapshot.circuits))
     relay_group = _group_of(shared_relay_groups(snapshot.circuits))
 
+    # What each shared meter is judged against, from the monitor's own points so
+    # the capacity rule runs in one place; the card reads it and adds nothing up.
+    meter_groups = {
+        point.point_id: _meter_group_record(point)
+        for point in monitored_circuits(snapshot).values()
+        if point.basis == "group"
+    }
+
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
@@ -266,9 +275,27 @@ async def handle_panel_topology(
             "device_name": device_entry.name,
             "panel_entities": panel_entities,
             "circuits": circuits,
+            # Each shared meter by the key its members carry in `shared_meter_group`.
+            "shared_meter_groups": meter_groups,
             "sub_devices": sub_devices,
         },
     )
+
+
+class MeterGroupRecord(TypedDict):
+    """One shared meter in the topology: its members, and the capacity it is judged against.
+
+    `breaker_rating_a` is the group's capacity over the ratings the panel
+    publishes, by `current_monitor.meter_capacity_a`, and null where unknown. A
+    member's own `breaker_rating_a` stays that circuit's rating.
+    """
+
+    members: list[str]
+    breaker_rating_a: float | None
+
+
+def _meter_group_record(point: MonitoredCircuit) -> MeterGroupRecord:
+    return MeterGroupRecord(members=list(point.members), breaker_rating_a=point.rating_a)
 
 
 def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:
