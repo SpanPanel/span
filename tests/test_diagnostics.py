@@ -13,7 +13,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import MaskedTree, SpanPanelSnapshot, SpanPVSnapshot, TreeExportingAdapter
+from span_panel_api import FieldMetadata, MaskedTree, SpanPanelSnapshot, SpanPVSnapshot, TreeExportingAdapter
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -33,6 +33,7 @@ from custom_components.span_panel.diagnostics import (
 )
 from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
+from custom_components.span_panel.monitoring_rating_manager import MonitoringRatingManager
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
@@ -666,3 +667,81 @@ async def test_an_offline_panel_still_reports_its_last_tree(hass: HomeAssistant)
 
     assert result["coordinator"]["panel_offline"] is True
     assert result["device_tree"] == export
+
+
+def _rated_panel(dryer_a: float | None, oven_a: float) -> SpanPanelSnapshot:
+    return SpanPanelSnapshotFactory.create(
+        serial_number="sp3-diag-rating",
+        circuits={
+            circuit_id: SpanCircuitSnapshotFactory.create(
+                circuit_id=circuit_id, name=name, breaker_rating_a=rating, breaker_rating_declared=True
+            )
+            for circuit_id, name, rating in (
+                ("uuid_kitchen", "Kitchen", 20.0),
+                ("uuid_dryer", "Dryer", dryer_a),
+                ("uuid_oven", "Oven", oven_a),
+            )
+        },
+        main_breaker_rating_a=100,
+    )
+
+
+async def test_diagnostics_report_the_stored_monitoring_ratings_and_the_changes_not_yet_seen(
+    hass: HomeAssistant,
+) -> None:
+    """Keyed by circuit id as the circuits block is: each rating, the panel rating it was set against, and whether it applies."""
+    entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="sp3-diag-rating")
+    entry.add_to_hass(hass)
+    manager = MonitoringRatingManager(hass, entry)
+    await manager.async_load()
+    before = _rated_panel(dryer_a=30.0, oven_a=40.0)
+    manager.begin(before, {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")})
+    manager.set_rating("uuid_kitchen", before, 40)
+    manager.set_rating("uuid_dryer", before, 45)
+    manager.set_rating("uuid_oven", before, 50)
+    # The dryer's rating is declared and has not arrived again; the oven's panel rating moved.
+    now = _rated_panel(dryer_a=None, oven_a=45.0)
+    manager.reconcile(now, lambda: None)
+    await hass.async_block_till_done()
+
+    coordinator = MagicMock()
+    coordinator.data = now
+    coordinator.panel_offline = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    coordinator.client.schema_major = "schema_1"
+    coordinator.client.masked_tree.return_value = None
+    coordinator.monitoring_rating_manager = manager
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(now),
+        setup_snapshot=now,
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["monitoring_ratings"] == {
+        "panel_describes_breakers": False,
+        "service_rating_declaration": "declared",
+        "ratings": {
+            "uuid_kitchen": {"label": "Kitchen", "rating_a": 40, "panel_a_at_set": 20.0, "state": "applies"},
+            "uuid_dryer": {"label": "Dryer", "rating_a": 45, "panel_a_at_set": 30.0, "state": "pending"},
+            "uuid_oven": {"label": "Oven", "rating_a": 50, "panel_a_at_set": 45.0, "state": "applies"},
+        },
+        "unacknowledged": {
+            "uuid_oven": {
+                "circuit_id": "uuid_oven",
+                "label": "Oven",
+                "reason": "panel_changed",
+                "rating_a": 50,
+                "panel_before_a": 40.0,
+                "panel_after_a": 45.0,
+                "service_a": 100.0,
+                "removed": False,
+            }
+        },
+    }
+    assert set(result["monitoring_ratings"]["ratings"]) <= set(result["circuits"])
+    assert json.dumps(result["monitoring_ratings"])

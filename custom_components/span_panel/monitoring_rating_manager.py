@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 import logging
-from typing import TYPE_CHECKING, Final, TypedDict
+from typing import TYPE_CHECKING, Final, Literal, TypedDict
 
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
@@ -74,6 +74,29 @@ class StoredRatings(TypedDict):
     """What is written to disk for one panel."""
 
     ratings: dict[str, _StoredRatingRow]
+    unacknowledged: dict[str, _StoredChangeRow]
+
+
+class RatingDiagnosticsRow(TypedDict):
+    """One stored monitoring rating, as the diagnostics download shows it.
+
+    `state` is what the rule makes of it against the current snapshot: it
+    `applies`, or it is `pending`, kept while a declared panel or service rating
+    has not arrived, or while the service rating's declaration is not known.
+    """
+
+    label: str
+    rating_a: int
+    panel_a_at_set: float
+    state: Literal["applies", "pending"]
+
+
+class MonitoringRatingsDiagnostics(TypedDict):
+    """The diagnostics download's `monitoring_ratings` row, keyed by wire circuit id."""
+
+    panel_describes_breakers: bool
+    service_rating_declaration: Declaration
+    ratings: dict[str, RatingDiagnosticsRow]
     unacknowledged: dict[str, _StoredChangeRow]
 
 
@@ -190,6 +213,32 @@ class MonitoringRatingManager:
             service_rating_a(snapshot),
             self._service,
             describes_breakers=panel_describes_breakers(snapshot),
+        )
+
+    def diagnostics(self, snapshot: SpanPanelSnapshot) -> MonitoringRatingsDiagnostics:
+        """Every stored monitoring rating and every change the user has not yet seen.
+
+        Each rating's state comes from `resolve`, the call every reader makes, so
+        the download says what monitoring is doing with it. After a reconcile a
+        stored rating either applies or waits on a value that has not arrived;
+        any other outcome has already removed it.
+        """
+        return MonitoringRatingsDiagnostics(
+            panel_describes_breakers=panel_describes_breakers(snapshot),
+            service_rating_declaration=self._service,
+            ratings={
+                circuit_id: RatingDiagnosticsRow(
+                    label=stored.label,
+                    rating_a=stored.rating_a,
+                    panel_a_at_set=stored.panel_a_at_set,
+                    state="applies" if self.resolve(circuit_id, snapshot).user_set else "pending",
+                )
+                for circuit_id, stored in self._ratings.items()
+            },
+            unacknowledged={
+                circuit_id: _change_row(change)
+                for circuit_id, change in self._unacknowledged.items()
+            },
         )
 
     def begin(

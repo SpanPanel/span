@@ -839,7 +839,8 @@ name, and a log attached to an issue would publish them.
 ### Diagnostics
 
 **Download diagnostics** on the integration's page includes the panel's device tree, every device and property it publishes, with serial numbers, device ids and
-site details masked.
+site details masked. It also lists each monitoring rating you set, with the panel rating it was set against and whether it applies or is waiting on a rating the
+panel has not sent yet, and anything the panel changed under one that a notification reported and you have not yet dismissed.
 
 ## Development
 
