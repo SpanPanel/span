@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - **On panels other than MAIN 32, the Solar device and PV Power are created again wherever the panel publishes a PV power figure, 0 W included**, so solar the
   panel reports only there, such as solar DC-coupled into a battery, no longer shows as unavailable as it did on 2.2.0.
+- **The panel view draws a tandem-quad across both of its spaces**, where it could draw it over one space and show the other as empty.
 
 ## [2.2.0] - 11/2026
 
