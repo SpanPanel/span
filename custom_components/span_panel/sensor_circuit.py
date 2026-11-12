@@ -267,11 +267,15 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         # `is_user_controllable` is the field that answers that question on
         # both adapters: schema_1 reads it from `switch/relay-controllable`, and
         # false where no `switch` is declared at all; flat derives it as `not
-        # always-on`. It is also what `circuit_has_a_breaker_switch` and
-        # `circuit_has_a_priority_select` withhold the two controls on, so the
-        # attribute and the control cannot disagree. `always_on` is narrower --
-        # a relay that exists and is locked -- and on schema_1 is false for a
-        # circuit declaring no relay, where both policies are as meaningless.
+        # always-on`. `circuit_has_a_breaker_switch` and
+        # `circuit_has_a_priority_select` both withhold their control where it
+        # is false, so no switch or select is ever offered on a circuit whose
+        # policies are omitted here. The converse does not hold: the select is
+        # also withheld from a never-backup circuit and from a PV or EVSE
+        # circuit not wired at a breaker, which keep these attributes.
+        # `always_on` is narrower -- a relay that exists and is locked -- and on
+        # schema_1 is false for a circuit declaring no relay, where both
+        # policies are as meaningless.
         # Read from the live snapshot on every update, so a circuit
         # re-commissioned in place gains or loses them with its relay.
         relay_policies_apply = circuit.is_user_controllable
