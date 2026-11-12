@@ -75,40 +75,40 @@ thresholds and utilization use the monitoring rating instead of the panel's brea
 - **Priority** — Notification priority level (controls iOS interruption level and Android notification channel)
 - **Title/Message Templates** — Customizable templates with the following variables:
 
-  | Variable             | Description                                                          | Example                     |
-  | -------------------- | -------------------------------------------------------------------- | --------------------------- |
-  | `{name}`             | Circuit or mains friendly name                                       | Kitchen Oven                |
-  | `{entity_id}`        | HA entity ID                                                         | sensor.kitchen_oven_current |
-  | `{alert_type}`       | Alert category                                                       | spike, continuous_overload  |
-  | `{current_a}`        | Current draw in amps                                                 | 18.3                        |
-  | `{breaker_rating_a}` | Rating in amps the circuit is judged against                         | 20                          |
-  | `{threshold_pct}`    | Configured threshold percentage                                      | 80                          |
-  | `{utilization_pct}`  | Actual utilization percentage                                        | 91.5                        |
-  | `{window_m}`         | Window duration in minutes                                           | 5                           |
-  | `{local_time}`       | Local time of the alert                                              | 2:15 PM                     |
+  | Variable             | Description                                  | Example                     |
+  | -------------------- | -------------------------------------------- | --------------------------- |
+  | `{name}`             | Circuit or mains friendly name               | Kitchen Oven                |
+  | `{entity_id}`        | HA entity ID                                 | sensor.kitchen_oven_current |
+  | `{alert_type}`       | Alert category                               | spike, continuous_overload  |
+  | `{current_a}`        | Current draw in amps                         | 18.3                        |
+  | `{breaker_rating_a}` | Rating in amps the circuit is judged against | 20                          |
+  | `{threshold_pct}`    | Configured threshold percentage              | 80                          |
+  | `{utilization_pct}`  | Actual utilization percentage                | 91.5                        |
+  | `{window_m}`         | Window duration in minutes                   | 5                           |
+  | `{local_time}`       | Local time of the alert                      | 2:15 PM                     |
 
   `{breaker_rating_a}` keeps its name so existing templates still work, but it carries the rating the circuit is judged against: the circuit's monitoring rating
   where one is set, else the breaker rating the panel publishes.
 
 - **Event bus** — With the HA event bus selected, each alert fires a `span_panel_current_alert` event for automations. Its data:
 
-  | Key                          | Description                                                                                                                  |
-  | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-  | `alert_source`               | `circuit` or `mains`                                                                                                         |
-  | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                                   |
-  | `alert_name`                 | Circuit or mains friendly name                                                                                               |
-  | `alert_type`                 | `spike` or `continuous_overload`                                                                                             |
-  | `current_a`                  | Current draw in amps                                                                                                         |
-  | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, their sum, and null if any has none                 |
-  | `monitoring_rating_a`        | The rating the alert judged against: the circuit's monitoring rating where one is set, else the panel's rating               |
-  | `monitoring_rating_user_set` | Whether `monitoring_rating_a` is a monitoring rating you set                                                                 |
-  | `threshold_pct`              | Configured threshold percentage                                                                                              |
-  | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                                 |
-  | `panel_serial`               | The panel's serial number                                                                                                    |
-  | `local_time`                 | Local time of the alert                                                                                                      |
-  | `window_duration_s`          | Seconds spent over the continuous threshold (continuous overloads; the test event carries a sample)                          |
-  | `over_threshold_since`       | When the circuit went over the continuous threshold, as an ISO 8601 time (continuous overloads only)                         |
-  | `test`                       | Present, and true, only on the event the test notification fires                                                             |
+  | Key                          | Description                                                                                                    |
+  | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+  | `alert_source`               | `circuit` or `mains`                                                                                           |
+  | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                     |
+  | `alert_name`                 | Circuit or mains friendly name                                                                                 |
+  | `alert_type`                 | `spike` or `continuous_overload`                                                                               |
+  | `current_a`                  | Current draw in amps                                                                                           |
+  | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, their sum, and null if any has none   |
+  | `monitoring_rating_a`        | The rating the alert judged against: the circuit's monitoring rating where one is set, else the panel's rating |
+  | `monitoring_rating_user_set` | Whether `monitoring_rating_a` is a monitoring rating you set                                                   |
+  | `threshold_pct`              | Configured threshold percentage                                                                                |
+  | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                   |
+  | `panel_serial`               | The panel's serial number                                                                                      |
+  | `local_time`                 | Local time of the alert                                                                                        |
+  | `window_duration_s`          | Seconds spent over the continuous threshold (continuous overloads; the test event carries a sample)            |
+  | `over_threshold_since`       | When the circuit went over the continuous threshold, as an ISO 8601 time (continuous overloads only)           |
+  | `test`                       | Present, and true, only on the event the test notification fires                                               |
 
   A monitoring rating never changes `breaker_rating_a`, which is the panel's rating, as the Breaker Rating sensor shows. The rating the `{breaker_rating_a}`
   text placeholder carries is `monitoring_rating_a` here. For the mains both are its rating, and `monitoring_rating_user_set` is false.
@@ -122,27 +122,27 @@ values.
 
 ### Setting a Monitoring Rating
 
-Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as
-one circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring
-what to judge the circuit against instead.
+Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as one
+circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to
+judge the circuit against instead.
 
 Set it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit, or with the
 `span_panel.set_circuit_monitoring_rating` and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's
 service rating, and only a circuit the panel publishes a breaker rating for can be given one. Enter the most current the measured wire can carry; for a tandem
 in one space, that is the sum of its breakers.
 
-Entering the panel's own rating clears the monitoring rating, as does the reset beside it, and the circuit is judged against the panel's rating again.
-Turning monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
+Entering the panel's own rating clears the monitoring rating, as does the reset beside it, and the circuit is judged against the panel's rating again. Turning
+monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
 
 Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
 show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
 changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the panel's rating, and
-energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the
-rating judged against, and `monitoring_rating_user_set` beside it.
+energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the rating
+judged against, and `monitoring_rating_user_set` beside it.
 
-For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel
-measures, and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit
-is the safer choice than guessing.
+For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel measures,
+and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit is the safer
+choice than guessing.
 
 A notification tells you when the panel overtakes a monitoring rating:
 
