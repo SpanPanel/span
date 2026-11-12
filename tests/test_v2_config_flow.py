@@ -2838,6 +2838,90 @@ async def test_zeroconf_asks_for_the_https_port_when_the_one_published_cannot_be
     assert result["step_id"] == "panel_https_port", result
 
 
+def _pinned_entry_at_the_shared_host(hass: HomeAssistant, **data: object) -> MockConfigEntry:
+    """Add a pinned entry for `SERIAL_A` at `SHARED_HOST`, with any extra data given."""
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: SHARED_HOST,
+            CONF_ACCESS_TOKEN: "existing-token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+            **data,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id=SERIAL_A,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+@pytest.mark.asyncio
+async def test_re_adding_a_panel_where_its_entry_points_makes_no_tls_probe(
+    hass: HomeAssistant,
+) -> None:
+    """A re-add that finds the panel exactly where its entry points has nothing to authorise.
+
+    Nothing would move, so the pin is not asked anything: no handshake, and no
+    refusal logged for a move nobody requested when the panel's TLS port is
+    merely down.
+    """
+    entry = _pinned_entry_at_the_shared_host(hass)
+    verdict = AsyncMock(return_value=LeafVerdict.UNTRUSTED)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_A)),
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+        patch("custom_components.span_panel.config_flow.async_leaf_verdict", new=verdict),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: SHARED_HOST}
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    verdict.assert_not_awaited()
+    assert entry.data[CONF_HOST] == SHARED_HOST
+    assert CONF_HTTP_PORT not in entry.data
+
+
+@pytest.mark.asyncio
+async def test_a_pin_check_that_raises_refuses_the_move(hass: HomeAssistant) -> None:
+    """An unexpected failure in the one check guarding a pinned entry's address is a refusal.
+
+    Trusting on an error would let anything that makes the check raise move the
+    entry wherever an unauthenticated announcement points.
+    """
+    entry = _pinned_entry_at_the_shared_host(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_A)),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_verdict",
+            new=AsyncMock(side_effect=RuntimeError("unexpected")),
+        ),
+    ):
+        result = await _discover(hass, 8083)
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert CONF_HTTP_PORT not in entry.data
+
+
 @pytest.mark.asyncio
 async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
     hass: HomeAssistant,

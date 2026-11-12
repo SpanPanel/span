@@ -1307,6 +1307,34 @@ async def test_zeroconf_refuses_a_host_its_pinned_panel_does_not_name_as_a_namin
     assert "does not chain" not in refusals[0]
 
 
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_re_adding_a_pinned_panel_on_a_new_http_port_follows_it(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The by-hand re-add carries the port the user reached the panel on, under the pin.
+
+    The user typed the panel's address and a new HTTP port, and the panel
+    answered there with this serial. The entry's own TLS port still serves a
+    certificate its anchor validates, so the entry takes the new HTTP port.
+    """
+    entry = _pinned_entry(hass, panel)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_LOOPBACK, CONF_HTTP_PORT: MOVED_HTTP_PORT}
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+    assert entry.data[CONF_HTTP_PORT] == MOVED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
+
+
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
 @pytest.mark.asyncio
 async def test_re_adding_a_pinned_panel_by_an_unserved_name_leaves_its_host_alone(
