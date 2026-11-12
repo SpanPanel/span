@@ -216,6 +216,10 @@ comes to its two-pole rating plus the larger of its single-pole ones. A member l
 same capacity as `breaker_rating_a` on each member's entry, and the card reads it here rather than adding the members' ratings up. Each circuit's own
 `breaker_rating_a` stays that circuit's rating.
 
+Each circuit entry of `get_monitoring_status` also names the point it is judged as: `basis` is `circuit` for a circuit judged alone and `group` for circuits
+that share a meter, and `point_id` is the id of the circuit the point is keyed by, the group's key for a shared meter. Every member of a group carries the
+group's `point_id` and the same judgement, so count each `point_id` once.
+
 #### Circuit Entity Roles
 
 | Role              | Domain | Description            |

@@ -220,6 +220,23 @@ def test_the_monitor_alerts_on_the_group_under_its_first_member() -> None:
     assert all(row["utilization_pct"] == pytest.approx(93.3) for row in rows)
 
 
+def test_each_status_entry_names_the_point_it_is_judged_as() -> None:
+    """Members of one group are one point: a consumer counts each `point_id` once."""
+    monitor = _make_monitor(_make_hass(), _make_options())
+    monitor.process_snapshot(SNAPSHOT)
+
+    with patch.object(monitor, "_resolve_circuit_entity_id", side_effect=lambda cid: cid):
+        status = monitor.get_monitoring_status()["circuits"]
+
+    assert {cid: row["point_id"] for cid, row in status.items()} == {
+        "circuit-52": "circuit-52",
+        "circuit-53": "circuit-52",
+        "circuit-56": "circuit-56",
+        "circuit-57": "circuit-56",
+        "circuit-1": "circuit-1",
+    }
+
+
 @pytest.mark.asyncio
 async def test_topology_carries_both_group_keys(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=SERIAL)

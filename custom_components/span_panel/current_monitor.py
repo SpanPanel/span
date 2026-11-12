@@ -488,6 +488,9 @@ class CurrentMonitor:
             circuits[entity_id] = {
                 "name": circuit.name if circuit else cid,
                 "basis": point.basis if point else "circuit",
+                # The point this entry's judgement is: members of a shared meter
+                # carry its key, so a consumer counts each point once.
+                "point_id": point_id,
                 "last_current_a": last_current,
                 "breaker_rating_a": rating,
                 "utilization_pct": utilization,
