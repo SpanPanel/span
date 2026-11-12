@@ -26,6 +26,7 @@ from .helpers import (
     shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
+from .monitoring_ratings import panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -282,6 +283,10 @@ async def handle_panel_topology(
             "config_entry_id": config_entry_id,
             "device_name": device_entry.name,
             "panel_entities": panel_entities,
+            # Whether `set_circuit_monitoring_rating` takes a rating on this panel
+            # at all. False where the panel describes its multi-load breakers:
+            # current monitoring then judges every circuit by the panel's ratings.
+            "monitoring_rating_offered": not panel_describes_breakers(snapshot),
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,

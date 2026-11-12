@@ -546,6 +546,7 @@
   "firmware": "spanos3/r202639/03",
   "first_position": 9,
   "last_position": 24,
+  "monitoring_rating_offered": false,
   "panel_device_id": "xg-1155-18fkf",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

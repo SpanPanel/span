@@ -466,6 +466,9 @@
     "monitoring_rating_no_service_rating": {
       "message": "Le panneau ne publie pas de calibre de service ; un calibre de surveillance ne peut donc pas être défini."
     },
+    "monitoring_rating_panel_describes_breakers": {
+      "message": "Ce panneau publie chaque circuit d'un disjoncteur multicharge avec son propre calibre, et la surveillance du courant juge les circuits qui partagent un compteur par rapport à ces calibres ; un calibre de surveillance ne peut donc pas y être défini."
+    },
     "monitoring_rating_not_published": {
       "message": "Le panneau ne publie pas de calibre de disjoncteur pour ce circuit ; un calibre de surveillance ne peut donc pas être défini."
     },
@@ -700,7 +703,7 @@
     },
     "set_circuit_monitoring_rating": {
       "name": "Définir le calibre de surveillance du circuit",
-      "description": "Définir le calibre par rapport auquel la surveillance du courant juge un circuit. C'est le courant maximal que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Seul un circuit dont le panneau publie le calibre de disjoncteur peut en recevoir un, et il ne peut pas dépasser le calibre de service du panneau.",
+      "description": "Définir le calibre par rapport auquel la surveillance du courant juge un circuit. C'est le courant maximal que peut supporter le fil mesuré du circuit ; pour un disjoncteur tandem dans un seul emplacement, la somme de ses disjoncteurs. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Seul un circuit dont le panneau publie le calibre de disjoncteur peut en recevoir un, et il ne peut pas dépasser le calibre de service du panneau. Il n'est pas proposé sur un panneau qui publie chaque circuit d'un disjoncteur multicharge avec son propre calibre.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

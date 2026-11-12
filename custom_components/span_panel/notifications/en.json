@@ -24,6 +24,7 @@
     "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit (it reported {before} A), so your {rating} A monitoring rating was removed.",
     "circuit_removed": "**{circuit}**: this circuit is no longer on the panel (it reported {before} A), so your {rating} A monitoring rating was removed.",
     "above_service_rating": "**{circuit}**: your {rating} A monitoring rating is above the panel's service rating of {service} A, so it was removed. The panel reported {before} A and now reports {after} A.",
-    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so your {rating} A monitoring rating was removed. The panel reported {before} A for this circuit."
+    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so your {rating} A monitoring rating was removed. The panel reported {before} A for this circuit.",
+    "panel_describes_breakers": "**{circuit}**: the panel now publishes each circuit of a multi-load breaker with its own rating, which current monitoring uses, so your {rating} A monitoring rating was removed. The panel reported {before} A for this circuit."
   }
 }

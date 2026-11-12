@@ -185,18 +185,19 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 #### Top Level
 
-| Field                 | Type        | Description                                                                                                                                             |
-| --------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serial`              | string      | Panel serial number                                                                                                                                     |
-| `firmware`            | string      | Panel firmware version                                                                                                                                  |
-| `panel_size`          | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                     |
-| `device_id`           | string      | HA device registry ID (echoed from request)                                                                                                             |
-| `panel_device_id`     | string      | The panel's current HA device registry ID                                                                                                               |
-| `config_entry_id`     | string      | The config entry that owns the panel                                                                                                                    |
-| `device_name`         | string      | HA device display name                                                                                                                                  |
-| `circuits`            | object      | Circuit UUID keyed map (see below)                                                                                                                      |
-| `shared_meter_groups` | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared |
-| `sub_devices`         | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                  |
+| Field                       | Type        | Description                                                                                                                                                    |
+| --------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serial`                    | string      | Panel serial number                                                                                                                                            |
+| `firmware`                  | string      | Panel firmware version                                                                                                                                         |
+| `panel_size`                | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                            |
+| `device_id`                 | string      | HA device registry ID (echoed from request)                                                                                                                    |
+| `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                      |
+| `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                           |
+| `device_name`               | string      | HA device display name                                                                                                                                         |
+| `monitoring_rating_offered` | bool        | Whether `set_circuit_monitoring_rating` takes a rating on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
+| `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                             |
+| `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared        |
+| `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                         |
 
 #### Circuit Object
 

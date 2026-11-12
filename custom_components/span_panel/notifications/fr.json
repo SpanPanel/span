@@ -24,6 +24,7 @@
     "rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre pour ce circuit (il indiquait {before} A) ; votre calibre de surveillance de {rating} A a donc été supprimé.",
     "circuit_removed": "**{circuit}** : ce circuit n'est plus sur le panneau (il indiquait {before} A) ; votre calibre de surveillance de {rating} A a donc été supprimé.",
     "above_service_rating": "**{circuit}** : votre calibre de surveillance de {rating} A dépasse le calibre de service du panneau, soit {service} A ; il a donc été supprimé. Le panneau indiquait {before} A et indique maintenant {after} A.",
-    "service_rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre de service ; votre calibre de surveillance de {rating} A a donc été supprimé. Le panneau indiquait {before} A pour ce circuit."
+    "service_rating_undeclared": "**{circuit}** : le panneau n'indique plus de calibre de service ; votre calibre de surveillance de {rating} A a donc été supprimé. Le panneau indiquait {before} A pour ce circuit.",
+    "panel_describes_breakers": "**{circuit}** : le panneau publie désormais chaque circuit d'un disjoncteur multicharge avec son propre calibre, que la surveillance du courant utilise ; votre calibre de surveillance de {rating} A a donc été supprimé. Le panneau indiquait {before} A pour ce circuit."
   }
 }

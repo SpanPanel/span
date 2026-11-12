@@ -54,8 +54,8 @@ top of the panel header) → **List View Columns**.
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
-circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit has a monitoring rating, set in its Monitoring section,
-thresholds and utilization use the monitoring rating instead of the panel's breaker rating.
+circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit on a MAIN 32 has a monitoring rating, set in its Monitoring
+section, thresholds and utilization use the monitoring rating instead of the panel's breaker rating.
 
 ### Global Settings
 
@@ -122,9 +122,13 @@ values.
 
 ### Setting a Monitoring Rating
 
-Current monitoring divides a circuit's current by its breaker rating. A tandem breaker, which puts two breakers in one space, is published by the panel as one
-circuit with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to
-judge the circuit against instead.
+Current monitoring divides a circuit's current by its breaker rating. A MAIN 32 publishes a tandem breaker, which puts two breakers in one space, as one circuit
+with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to judge the
+circuit against instead.
+
+On panels other than MAIN 32 a monitoring rating is not offered: the Monitoring section shows no field for it and the services refuse one. Those panels publish
+each circuit of a multi-load breaker as its own circuit, with its own rating, and name the circuits that share its meter, so current monitoring already judges
+them together (see [Circuits That Share a Meter or Relay](README.md#circuits-that-share-a-meter-or-relay)).
 
 Set it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit, or with the
 `span_panel.set_circuit_monitoring_rating` and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's
@@ -150,7 +154,8 @@ A notification tells you when the panel overtakes a monitoring rating:
 - the panel's rating now matches the monitoring rating, which was removed;
 - the panel no longer reports a rating for the circuit, and the monitoring rating was removed;
 - the circuit is no longer on the panel, and the monitoring rating was removed;
-- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed.
+- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed;
+- the panel now publishes each circuit of a multi-load breaker with its own rating, and the monitoring rating was removed.
 
 Each line names the circuit, your monitoring rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed
 back before you looked is not reported.

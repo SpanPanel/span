@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from string import Formatter
 import threading
 from typing import get_args
@@ -192,6 +193,7 @@ _LINE_PLACEHOLDERS: dict[str, set[str]] = {
     "circuit_removed": {"circuit", "rating", "before"},
     "above_service_rating": {"circuit", "rating", "before", "after", "service"},
     "service_rating_undeclared": {"circuit", "rating", "before"},
+    "panel_describes_breakers": {"circuit", "rating", "before"},
 }
 """What each line names: the user's rating and the panel's before, and after where there is one.
 
@@ -287,6 +289,39 @@ async def test_set_refuses_a_circuit_the_panel_does_not_have(
     with pytest.raises(ServiceValidationError) as raised:
         manager.set_rating("circuit-9", _snapshot(), 50)
     assert raised.value.translation_key == "monitoring_rating_circuit_unknown"
+
+
+async def test_set_refuses_on_a_panel_that_describes_its_breakers(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Each circuit there publishes its own rating, and shared meters are judged without the user's help."""
+    snapshot = replace(_snapshot(), publishes_shared_meters=True)
+    manager = await _begun(hass, entry, snapshot)
+    with pytest.raises(ServiceValidationError) as raised:
+        manager.set_rating("circuit-2", snapshot, 50)
+    assert raised.value.translation_key == "monitoring_rating_panel_describes_breakers"
+    assert not manager.resolve("circuit-2", snapshot).user_set
+
+
+async def test_a_panel_that_describes_its_breakers_removes_a_stored_rating_and_says_so(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A rating set while the panel published no shared-meter list goes once it does, with a notice line."""
+    manager = await _begun(hass, entry)
+    manager.set_rating("circuit-2", _snapshot(), 50)
+    events = _events(hass)
+    describing = replace(_snapshot(), publishes_shared_meters=True)
+
+    assert not manager.resolve("circuit-2", describing).user_set
+    manager.reconcile(describing, _declared)
+    await hass.async_block_till_done()
+
+    assert (await _stored(hass, entry))["ratings"] == {}
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
+    assert (
+        "**Name of circuit-2**: the panel now publishes each circuit of a multi-load breaker with its own rating"
+        in _message(hass, entry)
+    )
 
 
 async def test_set_refuses_a_circuit_with_no_panel_rating(

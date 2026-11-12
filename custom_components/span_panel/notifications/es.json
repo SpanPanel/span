@@ -24,6 +24,7 @@
     "rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad para este circuito (informaba {before} A), por lo que tu capacidad de monitoreo de {rating} A se eliminó.",
     "circuit_removed": "**{circuit}**: este circuito ya no está en el panel (informaba {before} A), por lo que tu capacidad de monitoreo de {rating} A se eliminó.",
     "above_service_rating": "**{circuit}**: tu capacidad de monitoreo de {rating} A supera la capacidad de servicio del panel, de {service} A, por lo que se eliminó. El panel informaba {before} A y ahora informa {after} A.",
-    "service_rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad de servicio, por lo que tu capacidad de monitoreo de {rating} A se eliminó. El panel informaba {before} A para este circuito."
+    "service_rating_undeclared": "**{circuit}**: el panel ya no informa una capacidad de servicio, por lo que tu capacidad de monitoreo de {rating} A se eliminó. El panel informaba {before} A para este circuito.",
+    "panel_describes_breakers": "**{circuit}**: el panel ahora publica cada circuito de un interruptor de varias cargas con su propia capacidad, que es la que usa el monitoreo de corriente, por lo que tu capacidad de monitoreo de {rating} A se eliminó. El panel informaba {before} A para este circuito."
   }
 }

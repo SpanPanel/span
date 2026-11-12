@@ -31,6 +31,7 @@ from .monitoring_ratings import (
     RatingChange,
     StoredRating,
     is_change_reason,
+    panel_describes_breakers,
     reconcile as reconcile_ratings,
     resolve as resolve_rating,
     service_rating_a,
@@ -188,6 +189,7 @@ class MonitoringRatingManager:
             self._ratings.get(circuit_id),
             service_rating_a(snapshot),
             self._service,
+            describes_breakers=panel_describes_breakers(snapshot),
         )
 
     def begin(
@@ -240,13 +242,16 @@ class MonitoringRatingManager:
         """Set a circuit's monitoring rating.
 
         Raises ServiceValidationError where the circuit is not on the panel, the
-        panel publishes no rating for it, the panel publishes no service rating
-        to bound the monitoring rating, or the monitoring rating is above it. A monitoring rating
-        equal to the panel's rating is a clear.
+        panel describes its multi-load breakers itself, the panel publishes no
+        rating for the circuit, the panel publishes no service rating to bound
+        the monitoring rating, or the monitoring rating is above it. A
+        monitoring rating equal to the panel's rating is a clear.
         """
         circuit = snapshot.circuits.get(circuit_id)
         if circuit is None:
             raise _refusal("monitoring_rating_circuit_unknown")
+        if panel_describes_breakers(snapshot):
+            raise _refusal("monitoring_rating_panel_describes_breakers")
         panel = circuit.breaker_rating_a
         if panel is None:
             raise _refusal("monitoring_rating_not_published")

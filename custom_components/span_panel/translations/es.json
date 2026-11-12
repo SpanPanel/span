@@ -466,6 +466,9 @@
     "monitoring_rating_no_service_rating": {
       "message": "El panel no publica una capacidad de servicio, por lo que no se puede establecer una capacidad de monitoreo."
     },
+    "monitoring_rating_panel_describes_breakers": {
+      "message": "Este panel publica cada circuito de un interruptor de varias cargas con su propia capacidad, y el monitoreo de corriente juzga los circuitos que comparten un medidor según esas capacidades, por lo que no se puede establecer una capacidad de monitoreo en él."
+    },
     "monitoring_rating_not_published": {
       "message": "El panel no publica una capacidad de interruptor para este circuito, por lo que no se puede establecer una capacidad de monitoreo."
     },
@@ -700,7 +703,7 @@
     },
     "set_circuit_monitoring_rating": {
       "name": "Establecer capacidad de monitoreo del circuito",
-      "description": "Establecer la capacidad con la que el monitoreo de corriente juzga un circuito. Es la mayor corriente que puede soportar el cable medido del circuito; para un tándem en un solo espacio, la suma de sus interruptores. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se puede establecer para un circuito cuya capacidad de interruptor publica el panel, y no puede superar la capacidad de servicio del panel.",
+      "description": "Establecer la capacidad con la que el monitoreo de corriente juzga un circuito. Es la mayor corriente que puede soportar el cable medido del circuito; para un tándem en un solo espacio, la suma de sus interruptores. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se puede establecer para un circuito cuya capacidad de interruptor publica el panel, y no puede superar la capacidad de servicio del panel. No se ofrece en un panel que publica cada circuito de un interruptor de varias cargas con su propia capacidad.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

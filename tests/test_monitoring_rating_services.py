@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 from homeassistant.config_entries import ConfigEntryState
@@ -181,6 +182,12 @@ class TestSet:
             (_snapshot(), "circuit-9", 30, "monitoring_rating_circuit_unknown"),
             (_snapshot({"circuit-2": None}), "circuit-2", 30, "monitoring_rating_not_published"),
             (_snapshot(), "circuit-2", SERVICE_A + 1, "monitoring_rating_above_service_rating"),
+            (
+                replace(_snapshot(), publishes_shared_meters=True),
+                "circuit-2",
+                30,
+                "monitoring_rating_panel_describes_breakers",
+            ),
         ],
     )
     async def test_a_refusal_reaches_the_caller(

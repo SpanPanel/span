@@ -193,19 +193,21 @@ def _capture_with_headroom(captured: Capture) -> tuple[str, float, int] | None:
     return None
 
 
-async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
-    hass: HomeAssistant,
-    hass_storage: dict[str, object],
-    hass_ws_client: WebSocketGenerator,
-) -> None:
+def _candidate(*, describes_breakers: bool) -> tuple[Capture, tuple[str, float, int]]:
+    """The first capture with headroom whose panel does, or does not, describe its multi-load breakers."""
     candidates = [
         (captured, found)
         for captured in CAPTURES
-        if (found := _capture_with_headroom(captured)) is not None
+        if snapshot(captured.tree()).publishes_shared_meters is describes_breakers
+        and (found := _capture_with_headroom(captured)) is not None
     ]
     assert candidates
-    captured, (circuit_id, panel_a, monitoring_a) = candidates[0]
-    entry_id = f"entry-{captured.name}"
+    return candidates[0]
+
+
+def _store_one_rating(
+    hass_storage: dict[str, object], entry_id: str, circuit_id: str, panel_a: float, monitoring_a: int
+) -> None:
     hass_storage[f"span_panel_monitoring_ratings.{entry_id}"] = {
         "version": 1,
         "minor_version": 1,
@@ -221,6 +223,15 @@ async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
             "unacknowledged": {},
         },
     }
+
+
+async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
+    hass: HomeAssistant,
+    hass_storage: dict[str, object],
+    hass_ws_client: WebSocketGenerator,
+) -> None:
+    captured, (circuit_id, panel_a, monitoring_a) = _candidate(describes_breakers=False)
+    _store_one_rating(hass_storage, f"entry-{captured.name}", circuit_id, panel_a, monitoring_a)
     tree = captured.tree()
     replayed = snapshot(tree)
 
@@ -228,6 +239,7 @@ async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
     topology = await _topology(hass, hass_ws_client, entry)
 
     assert isinstance(topology, dict)
+    assert topology["monitoring_rating_offered"] is True
     rows = topology["circuits"]
     assert isinstance(rows, dict)
     rated = rows[circuit_id]
@@ -247,3 +259,29 @@ async def test_a_replay_with_one_stored_monitoring_rating_reports_it(
     # The sensor's identity is the one every installation registers.
     unique_id = build_circuit_unique_id(str(entry.unique_id), circuit_id, "breaker_rating")
     assert er.async_get(hass).async_get_entity_id("sensor", DOMAIN, unique_id) is not None
+
+
+async def test_a_replay_of_a_panel_that_describes_its_breakers_drops_a_stored_rating(
+    hass: HomeAssistant,
+    hass_storage: dict[str, object],
+    hass_ws_client: WebSocketGenerator,
+) -> None:
+    """Its circuits each publish their own rating, so the topology offers no monitoring rating and judges the panel's."""
+    captured, (circuit_id, panel_a, monitoring_a) = _candidate(describes_breakers=True)
+    entry_id = f"entry-{captured.name}"
+    _store_one_rating(hass_storage, entry_id, circuit_id, panel_a, monitoring_a)
+
+    entry = await _install(hass, captured.tree(), captured.name)
+    topology = await _topology(hass, hass_ws_client, entry)
+    await hass.async_block_till_done()
+
+    assert isinstance(topology, dict)
+    assert topology["monitoring_rating_offered"] is False
+    rows = topology["circuits"]
+    assert isinstance(rows, dict)
+    assert rows[circuit_id]["monitoring_rating_user_set"] is False
+    assert rows[circuit_id]["monitoring_rating_a"] == panel_a
+    stored = hass_storage[f"span_panel_monitoring_ratings.{entry_id}"]
+    assert isinstance(stored, dict)
+    assert stored["data"]["ratings"] == {}
+    assert set(stored["data"]["unacknowledged"]) == {circuit_id}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.monitoring_ratings import (
@@ -10,6 +12,7 @@ from custom_components.span_panel.monitoring_ratings import (
     RatingChange,
     Reconciled,
     StoredRating,
+    is_change_reason,
     reconcile,
     resolve,
     service_rating_declaration,
@@ -88,27 +91,27 @@ def test_service_declaration_unresolved_or_absent_is_undeclared() -> None:
 
 
 def test_resolve_no_monitoring_rating_shows_panel() -> None:
-    assert resolve(_circuit(), None, SERVICE_A, "declared") == MonitoringRating(
+    assert resolve(_circuit(), None, SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
         PANEL_A, PANEL_A, False
     )
 
 
 def test_resolve_monitoring_rating_applies() -> None:
-    assert resolve(_circuit(), _stored(), SERVICE_A, "declared") == MonitoringRating(
+    assert resolve(_circuit(), _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
         float(MONITORING_A), PANEL_A, True
     )
 
 
 def test_resolve_monitoring_rating_equal_to_service_applies() -> None:
-    assert resolve(_circuit(), _stored(100), SERVICE_A, "declared").user_set is True
+    assert resolve(_circuit(), _stored(100), SERVICE_A, "declared", describes_breakers=False).user_set is True
 
 
 def test_resolve_missing_circuit_is_unrated() -> None:
-    assert resolve(None, _stored(), SERVICE_A, "declared") == MonitoringRating(None, None, False)
+    assert resolve(None, _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(None, None, False)
 
 
 def test_resolve_pending_panel_rating_is_unrated() -> None:
-    assert resolve(_circuit(rating=None), _stored(), SERVICE_A, "declared") == MonitoringRating(
+    assert resolve(_circuit(rating=None), _stored(), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
         None, None, False
     )
 
@@ -120,32 +123,32 @@ def test_resolve_pending_service_rating_is_unrated() -> None:
     known.
     """
     pending = MonitoringRating(None, PANEL_A, False)
-    assert resolve(_circuit(), _stored(), None, "declared") == pending
-    assert resolve(_circuit(), _stored(), SERVICE_A, "unknown") == pending
-    assert resolve(_circuit(), _stored(), None, "unknown") == pending
+    assert resolve(_circuit(), _stored(), None, "declared", describes_breakers=False) == pending
+    assert resolve(_circuit(), _stored(), SERVICE_A, "unknown", describes_breakers=False) == pending
+    assert resolve(_circuit(), _stored(), None, "unknown", describes_breakers=False) == pending
 
 
 def test_resolve_pending_service_rating_without_a_monitoring_rating_shows_panel() -> None:
     expected = MonitoringRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), None, None, "declared") == expected
-    assert resolve(_circuit(), None, SERVICE_A, "unknown") == expected
+    assert resolve(_circuit(), None, None, "declared", describes_breakers=False) == expected
+    assert resolve(_circuit(), None, SERVICE_A, "unknown", describes_breakers=False) == expected
 
 
 def test_resolve_undeclared_service_rating_shows_panel() -> None:
     """No service rating published: the monitoring rating is being deleted, and the panel's rating applies."""
     expected = MonitoringRating(PANEL_A, PANEL_A, False)
-    assert resolve(_circuit(), _stored(), None, "undeclared") == expected
-    assert resolve(_circuit(), _stored(), SERVICE_A, "undeclared") == expected
+    assert resolve(_circuit(), _stored(), None, "undeclared", describes_breakers=False) == expected
+    assert resolve(_circuit(), _stored(), SERVICE_A, "undeclared", describes_breakers=False) == expected
 
 
 def test_resolve_monitoring_rating_above_service_shows_panel() -> None:
-    assert resolve(_circuit(), _stored(101), SERVICE_A, "declared") == MonitoringRating(
+    assert resolve(_circuit(), _stored(101), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
         PANEL_A, PANEL_A, False
     )
 
 
 def test_resolve_monitoring_rating_equal_to_panel_shows_panel() -> None:
-    assert resolve(_circuit(), _stored(20), SERVICE_A, "declared") == MonitoringRating(
+    assert resolve(_circuit(), _stored(20), SERVICE_A, "declared", describes_breakers=False) == MonitoringRating(
         PANEL_A, PANEL_A, False
     )
 
@@ -291,3 +294,65 @@ def test_reconcile_unknown_declaration_with_no_metadata_deletes_nothing() -> Non
     )
     assert result.changes == ()
     assert CIRCUIT_ID in result.ratings
+
+
+# --- a panel that describes its multi-load breakers ---
+
+
+def _describing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
+    """The same panel, on a model that declares `meter/shared-with-device-ids`."""
+    return replace(snapshot, publishes_shared_meters=True)
+
+
+def test_resolve_on_a_panel_that_describes_its_breakers_judges_the_panel_rating() -> None:
+    """Each circuit there publishes its own rating, so a stored monitoring rating never applies."""
+    expected = MonitoringRating(PANEL_A, PANEL_A, False)
+    assert resolve(_circuit(), _stored(), SERVICE_A, "declared", describes_breakers=True) == expected
+    assert resolve(_circuit(), None, SERVICE_A, "declared", describes_breakers=True) == expected
+
+
+def test_resolve_on_a_panel_that_describes_its_breakers_still_needs_a_panel_rating() -> None:
+    assert resolve(
+        _circuit(rating=None), _stored(), SERVICE_A, "declared", describes_breakers=True
+    ) == MonitoringRating(None, None, False)
+
+
+def test_reconcile_on_a_panel_that_describes_its_breakers_removes_every_rating() -> None:
+    ratings = {CIRCUIT_ID: _stored(), "circuit-9": _stored()}
+    result = reconcile(ratings, _describing(_snapshot(_circuit())), "declared", _label)
+    assert result.ratings == {}
+    assert result.changes == (
+        RatingChange(
+            CIRCUIT_ID,
+            LIVE_LABEL,
+            "panel_describes_breakers",
+            MONITORING_A,
+            PANEL_A,
+            PANEL_A,
+            SERVICE_A,
+            True,
+        ),
+        RatingChange(
+            "circuit-9",
+            "stored label",
+            "panel_describes_breakers",
+            MONITORING_A,
+            PANEL_A,
+            None,
+            SERVICE_A,
+            True,
+        ),
+    )
+
+
+def test_reconcile_gives_the_described_breakers_as_the_reason_before_any_other() -> None:
+    """Whatever else the panel stopped publishing, the rating is gone because the panel describes its breakers."""
+    snapshot = _describing(_snapshot(_circuit(rating=None, declared=False)))
+    for service in ("declared", "undeclared", "unknown"):
+        result = reconcile({CIRCUIT_ID: _stored()}, snapshot, service, _label)
+        assert [change.reason for change in result.changes] == ["panel_describes_breakers"]
+        assert result.ratings == {}
+
+
+def test_the_described_breakers_reason_reads_back_from_storage() -> None:
+    assert is_change_reason("panel_describes_breakers")

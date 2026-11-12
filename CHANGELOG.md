@@ -6,8 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **A circuit's monitoring rating can be set in the dashboard**, so current monitoring judges a tandem or other multi-load breaker against the capacity the user
-  gives instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
+- **On MAIN 32, a circuit's monitoring rating can be set in the dashboard**, so current monitoring judges a tandem or other multi-load breaker against the
+  capacity the user gives instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
 
 ### Fixed
 

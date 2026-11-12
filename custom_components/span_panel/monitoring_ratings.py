@@ -7,9 +7,10 @@ stored by the integration. This module is the one rule that says whether it
 applies, so every reader of a rating agrees. First match wins:
 
 1. No monitoring rating: the panel's rating.
-2. The panel declares no service rating, or the circuit declares no rating, or
-   the circuit has left a complete snapshot: the monitoring rating is deleted and the
-   user told.
+2. The panel describes its multi-load breakers (`panel_describes_breakers`),
+   or declares no service rating, or the circuit declares no rating, or the
+   circuit has left a complete snapshot: the monitoring rating is deleted and
+   the user told.
 3. The circuit's rating, or the service rating, is declared but has no value
    yet, or whether it is declared is not known: the monitoring rating is kept,
    silently, and the circuit has no judged rating, so nothing shows it as
@@ -51,6 +52,7 @@ type ChangeReason = Literal[
     "circuit_removed",
     "above_service_rating",
     "service_rating_undeclared",
+    "panel_describes_breakers",
 ]
 """Why the user is told about a monitoring rating: kept under a new panel rating, or removed."""
 
@@ -122,6 +124,24 @@ def service_rating_a(snapshot: SpanPanelSnapshot) -> float | None:
     return None
 
 
+def panel_describes_breakers(snapshot: SpanPanelSnapshot) -> bool:
+    """Whether the panel describes its multi-load breakers, so no monitoring rating is offered.
+
+    A panel that declares `meter/shared-with-device-ids` on any circuit, as panels
+    other than MAIN 32 do on every circuit, publishes each circuit
+    of a multi-load breaker as its own device with its own commissioned
+    rating, and names the circuits that share its meter. Current monitoring
+    then judges the shared meter against those ratings without the user's
+    help. A monitoring rating exists for the panel that cannot say any of
+    that: MAIN 32 declares neither list and publishes a tandem as one circuit
+    with the rating of one half.
+
+    The declaration decides, not a value, so the answer is the same on the
+    first complete snapshot as on every later one.
+    """
+    return snapshot.publishes_shared_meters
+
+
 def service_rating_declaration(field_metadata: Mapping[str, FieldMetadata] | None) -> Declaration:
     """Whether the panel declares a service rating, from the adapter's field metadata.
 
@@ -142,6 +162,8 @@ def resolve(
     stored: StoredRating | None,
     service_a: float | None,
     service: Declaration,
+    *,
+    describes_breakers: bool,
 ) -> MonitoringRating:
     """Return the rating a reader should use for one circuit.
 
@@ -151,13 +173,18 @@ def resolve(
     the one the user set a monitoring rating against. Judging a tandem breaker against it even for a
     moment raises the false alert the monitoring rating exists to stop. The panel's
     rating is still reported, since it is known.
+
+    On a panel that describes its multi-load breakers (`describes_breakers`,
+    from `panel_describes_breakers`) a stored monitoring rating never applies:
+    it is being deleted, and the panel's own rating is what the circuit is
+    judged against.
     """
     if circuit is None:
         return MonitoringRating(None, None, False)
     panel = circuit.breaker_rating_a
     if panel is None:
         return MonitoringRating(None, None, False)
-    if stored is None or service == "undeclared":
+    if stored is None or describes_breakers or service == "undeclared":
         return MonitoringRating(panel, panel, False)
     if service == "unknown" or service_a is None:
         return MonitoringRating(None, panel, False)
@@ -201,6 +228,7 @@ def reconcile(
     each monitoring rating removed or kept under a new panel rating.
     """
     service_a = service_rating_a(snapshot)
+    describes_breakers = panel_describes_breakers(snapshot)
     kept: dict[str, StoredRating] = {}
     changes: list[RatingChange] = []
 
@@ -210,6 +238,19 @@ def reconcile(
         if circuit is not None:
             stored = replace(stored, label=label_of(circuit, circuit_id))
 
+        # First, since it holds panel-wide whatever else the snapshot says.
+        if describes_breakers:
+            changes.append(
+                _change(
+                    circuit_id,
+                    stored,
+                    "panel_describes_breakers",
+                    panel,
+                    service_a,
+                    removed=True,
+                )
+            )
+            continue
         if service == "undeclared":
             changes.append(
                 _change(

@@ -530,6 +530,7 @@
   "firmware": "spanos3/r202639/03",
   "first_position": 1,
   "last_position": 32,
+  "monitoring_rating_offered": true,
   "panel_device_id": "nt-9874-s7rxt",
   "panel_entities": {
     "current_power": "sensor.span_panel_current_power",

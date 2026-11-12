@@ -24,6 +24,7 @@
     "rating_undeclared": "**{circuit}**: パネルがこの回路の定格を報告しなくなったため(以前は {before} A)、{rating} A のモニタリング定格は削除されました。",
     "circuit_removed": "**{circuit}**: この回路はパネルにもうないため(以前は {before} A)、{rating} A のモニタリング定格は削除されました。",
     "above_service_rating": "**{circuit}**: {rating} A のモニタリング定格はパネルのサービス定格 {service} A を超えているため、削除されました。パネルは以前 {before} A、現在 {after} A を報告しています。",
-    "service_rating_undeclared": "**{circuit}**: パネルがサービス定格を報告しなくなったため、{rating} A のモニタリング定格は削除されました。パネルはこの回路について以前 {before} A を報告していました。"
+    "service_rating_undeclared": "**{circuit}**: パネルがサービス定格を報告しなくなったため、{rating} A のモニタリング定格は削除されました。パネルはこの回路について以前 {before} A を報告していました。",
+    "panel_describes_breakers": "**{circuit}**: パネルが複数負荷ブレーカーの各回路をそれぞれの定格で公開するようになり、電流モニタリングはその定格を使用するため、{rating} A のモニタリング定格は削除されました。パネルはこの回路について以前 {before} A を報告していました。"
   }
 }

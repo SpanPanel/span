@@ -466,6 +466,9 @@
     "monitoring_rating_no_service_rating": {
       "message": "O painel não publica uma capacidade de serviço, por isso não é possível definir uma capacidade de monitorização."
     },
+    "monitoring_rating_panel_describes_breakers": {
+      "message": "Este painel publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade, e a monitorização de corrente avalia os circuitos que partilham um contador segundo essas capacidades, por isso não é possível definir uma capacidade de monitorização nele."
+    },
     "monitoring_rating_not_published": {
       "message": "O painel não publica uma capacidade de disjuntor para este circuito, por isso não é possível definir uma capacidade de monitorização."
     },
@@ -700,7 +703,7 @@
     },
     "set_circuit_monitoring_rating": {
       "name": "Definir capacidade de monitorização do circuito",
-      "description": "Definir a capacidade segundo a qual a monitorização de corrente avalia um circuito. É a maior corrente que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só se pode definir para um circuito cuja capacidade de disjuntor o painel publica, e não pode ser superior à capacidade de serviço do painel.",
+      "description": "Definir a capacidade segundo a qual a monitorização de corrente avalia um circuito. É a maior corrente que o cabo medido do circuito consegue suportar; para um tandem num só espaço, a soma dos seus disjuntores. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só se pode definir para um circuito cuja capacidade de disjuntor o painel publica, e não pode ser superior à capacidade de serviço do painel. Não é oferecida num painel que publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",

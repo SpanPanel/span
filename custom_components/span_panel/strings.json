@@ -586,6 +586,9 @@
     "monitoring_rating_no_service_rating": {
       "message": "The panel does not publish a service rating, so a monitoring rating cannot be set on it."
     },
+    "monitoring_rating_panel_describes_breakers": {
+      "message": "This panel publishes each circuit of a multi-load breaker with its own rating, and current monitoring judges circuits that share a meter against those ratings, so a monitoring rating cannot be set on it."
+    },
     "monitoring_rating_above_service_rating": {
       "message": "A monitoring rating cannot be above the panel's service rating of {service_rating} A."
     },
@@ -700,7 +703,7 @@
     },
     "set_circuit_monitoring_rating": {
       "name": "Set circuit monitoring rating",
-      "description": "Set the rating current monitoring judges a circuit against. This is the most current the circuit's measured wire can carry; for a tandem breaker in one space, the sum of its breakers. The Breaker Rating sensor keeps showing the panel's rating. Only a circuit whose breaker rating the panel publishes can be given one, and it cannot exceed the panel's service rating.",
+      "description": "Set the rating current monitoring judges a circuit against. This is the most current the circuit's measured wire can carry; for a tandem breaker in one space, the sum of its breakers. The Breaker Rating sensor keeps showing the panel's rating. Only a circuit whose breaker rating the panel publishes can be given one, and it cannot exceed the panel's service rating. It is not offered on a panel that publishes each circuit of a multi-load breaker with its own rating.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",

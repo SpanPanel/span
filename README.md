@@ -813,10 +813,10 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 
 ### Constant high-current alerts on a tandem or multi-load breaker
 
-**Symptom:** a circuit raises current alerts again and again. In the SPAN app its rating reads as two values, such as "20-20A" or "20-30A", while the
-integration shows one, such as "20A".
+**Symptom:** on a MAIN 32, a circuit raises current alerts again and again. In the SPAN app its rating reads as two values, such as "20-20A" or "20-30A", while
+the integration shows one, such as "20A".
 
-**Cause:** the panel publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
+**Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
 both loads against one breaker.
 
 **A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and set its monitoring rating to the sum of the two breakers (20-20A is
@@ -826,6 +826,9 @@ both loads against one breaker.
 panel does not publish that. Turn monitoring off for that circuit rather than guess, since a value set too high hides a real overload.
 
 If the panel's rating for the circuit later changes, a notification says so.
+
+Panels other than MAIN 32 publish each circuit of a multi-load breaker with its own rating and name the circuits that share its meter, so current monitoring
+already judges them together and offers no monitoring rating. See [Circuits That Share a Meter or Relay](#circuits-that-share-a-meter-or-relay).
 
 ### Debug logging
 
