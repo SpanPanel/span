@@ -281,9 +281,9 @@ def test_reconcile_gives_a_changed_panel_rating_before_changed_spaces() -> None:
 # --- a panel that describes its multi-load breakers ---
 
 
-def _sharing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
-    """The same panel with its circuit naming another that shares its meter."""
-    circuit = replace(snapshot.circuits[CIRCUIT_ID], meter_shared_with=("circuit-9",))
+def _sharing(snapshot: SpanPanelSnapshot, shared_with: tuple[str, ...] = ("circuit-9",)) -> SpanPanelSnapshot:
+    """The same panel with its circuit publishing the list of circuits that share its meter."""
+    circuit = replace(snapshot.circuits[CIRCUIT_ID], meter_shared_with=shared_with)
     return replace(snapshot, circuits={CIRCUIT_ID: circuit})
 
 
@@ -300,11 +300,9 @@ def test_a_circuit_naming_a_shared_meter_describes_the_breakers_whatever_the_fla
     assert panel_describes_breakers(_sharing(_snapshot(_circuit())))
 
 
-@pytest.mark.parametrize(("shares", "describes"), [(True, True), (False, False)])
-def test_an_adapter_that_does_not_say_leaves_it_to_the_circuits(shares: bool, describes: bool) -> None:
-    """`publishes_shared_meters` None: the adapter did not say whether the panel declares the list."""
-    snapshot = _sharing(_snapshot(_circuit())) if shares else _snapshot(_circuit())
-    assert panel_describes_breakers(replace(snapshot, publishes_shared_meters=None)) is describes
+def test_a_circuit_publishing_an_empty_shared_meter_list_describes_the_breakers() -> None:
+    """An empty list is still the panel declaring it: no other circuit shares this one's meter."""
+    assert panel_describes_breakers(_sharing(_snapshot(_circuit()), ()))
 
 
 def _describing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:

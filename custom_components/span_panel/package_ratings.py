@@ -169,15 +169,15 @@ def panel_describes_breakers(snapshot: SpanPanelSnapshot) -> bool:
 
     The declaration decides where the adapter states it
     (`publishes_shared_meters` true), so the answer is the same on the first
-    complete snapshot as on every later one. A circuit that names a shared meter
-    decides it too, whatever the flag says or where the adapter does not say
-    (None): only a panel that describes its breakers names one, and a group of
-    circuits is judged by its capacity, so none of its members may hold a
+    complete snapshot as on every later one. A circuit that publishes the list
+    decides it too, even empty, whatever the flag says or where the adapter does
+    not say: only a panel that describes its breakers publishes one, and a group
+    of circuits is judged by its capacity, so none of its members may hold a
     package. The flag's default is not relied on.
     """
     if snapshot.publishes_shared_meters is True:
         return True
-    return any(circuit.meter_shared_with for circuit in snapshot.circuits.values())
+    return any(circuit.meter_shared_with is not None for circuit in snapshot.circuits.values())
 
 
 def service_rating_declaration(field_metadata: Mapping[str, FieldMetadata] | None) -> Declaration:
