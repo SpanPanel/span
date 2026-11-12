@@ -144,9 +144,9 @@ changes: the Breaker Rating sensor, the panel view's breaker labels and every `b
 energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the rating
 judged against, and `monitoring_rating_user_set` beside it.
 
-For a circuit that spans more than one space, such as a 240 V breaker sharing a leg with a 120 V one, the right value depends on which leg the panel measures,
-and the panel does not publish that. The dashboard says so. A value set too high hides a real overload, so turning monitoring off for that circuit is the safer
-choice than guessing.
+For a circuit that spans two spaces, such as a 240 V breaker sharing a leg with a 120 V one, a MAIN 32 reports the average of the circuit's two legs. One leg
+can carry more than its breaker while the reading stays under the rating, and no monitoring rating can see that leg. The dashboard says so: turning monitoring
+off for that circuit is the safer choice.
 
 A notification tells you when the panel overtakes a monitoring rating:
 

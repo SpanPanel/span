@@ -822,8 +822,9 @@ both loads against one breaker.
 **A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and set its monitoring rating to the sum of the two breakers (20-20A is
 40 A). The Breaker Rating sensor keeps showing the panel's rating. See [Setting a Monitoring Rating](frontend.md#setting-a-monitoring-rating).
 
-**A package across several spaces**, such as a 240 V breaker sharing a leg with a 120 V one: the right value depends on which leg the panel measures, and the
-panel does not publish that. Turn monitoring off for that circuit rather than guess, since a value set too high hides a real overload.
+**A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports the average of the circuit's two legs, so one leg can
+carry more than its breaker while the reading stays under the rating. Turn monitoring off for that circuit rather than rely on a rating, since no rating can see
+the heavier leg.
 
 If the panel's rating for the circuit later changes, a notification says so.
 
