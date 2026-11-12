@@ -194,7 +194,7 @@ class TestSet:
         ("snapshot", "circuit_id", "ratings", "key"),
         [
             (_snapshot(), "circuit-9", [20, 30], "package_ratings_circuit_unknown"),
-            (_snapshot({"circuit-2": None}), "circuit-2", [20, 30], "package_ratings_not_published"),
+            (_snapshot({"circuit-2": None}), "circuit-2", [20, 30], "package_ratings_not_arrived"),
             (_snapshot(), "circuit-2", [20, SERVICE_A], "package_ratings_above_service_rating"),
             (_snapshot(tabs=[2, 4]), "circuit-2", [20, 30], "package_ratings_not_one_space"),
             (_snapshot(), "circuit-2", [20, 20, 20], "package_ratings_not_two"),
@@ -224,8 +224,8 @@ class TestSet:
         assert raised.value.translation_domain == DOMAIN
         assert raised.value.translation_key == key
 
-    async def test_a_panel_with_no_service_rating_refuses(self, hass: HomeAssistant) -> None:
-        """A panel with no service rating refuses."""
+    async def test_a_service_rating_not_yet_arrived_refuses_as_not_arrived(self, hass: HomeAssistant) -> None:
+        """Declared with no value yet: the refusal says to wait, not that the panel has none."""
         snapshot = SpanPanelSnapshotFactory.create(
             circuits={
                 "circuit-2": SpanCircuitSnapshotFactory.create(
@@ -239,7 +239,7 @@ class TestSet:
         with pytest.raises(ServiceValidationError) as raised:
             await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
 
-        assert raised.value.translation_key == "package_ratings_no_service_rating"
+        assert raised.value.translation_key == "package_ratings_not_arrived"
 
 
 class TestClear:

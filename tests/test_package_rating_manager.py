@@ -351,10 +351,20 @@ async def test_a_panel_that_describes_its_breakers_removes_a_stored_entry_and_sa
     ) in _message(hass, entry)
 
 
-async def test_set_refuses_a_circuit_with_no_panel_rating(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    snapshot = _snapshot({"circuit-2": None})
+async def test_set_refuses_a_circuit_the_panel_declares_no_rating_for(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    snapshot = _snapshot({"circuit-2": None}, declared={"circuit-2": False})
     manager = await _begun(hass, entry, snapshot)
     assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_published"
+
+
+@pytest.mark.parametrize("declared", [True, None], ids=["declared", "declaration not known"])
+async def test_set_refuses_a_panel_rating_not_yet_arrived_as_not_arrived(
+    hass: HomeAssistant, entry: MockConfigEntry, declared: bool | None
+) -> None:
+    """The panel has not said the circuit has no rating, only not sent it yet, so the refusal says to wait."""
+    snapshot = _snapshot({"circuit-2": None}, declared={"circuit-2": declared})
+    manager = await _begun(hass, entry, snapshot)
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_arrived"
 
 
 async def test_set_refuses_when_the_panel_declares_no_service_rating(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -365,22 +375,38 @@ async def test_set_refuses_when_the_panel_declares_no_service_rating(hass: HomeA
     assert _refused(manager, _snapshot(), [20, 20]).translation_key == "package_ratings_no_service_rating"
 
 
-async def test_set_refuses_when_the_declared_service_rating_has_no_value(
+async def test_set_refuses_a_declared_service_rating_not_yet_arrived_as_not_arrived(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     snapshot = _snapshot(main=None)
     manager = await _begun(hass, entry, snapshot)
-    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_no_service_rating"
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_arrived"
 
 
-@pytest.mark.parametrize("tabs", [[2, 4], []], ids=["two spaces", "no space yet"])
-async def test_set_refuses_a_circuit_not_in_exactly_one_space(
-    hass: HomeAssistant, entry: MockConfigEntry, tabs: list[int]
+async def test_set_refuses_while_the_service_rating_declaration_is_not_known_as_not_arrived(
+    hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
+    await async_restore(hass, entry)
+    manager = PackageRatingManager(hass, entry)
+    await manager.async_load()
+    manager.begin(_snapshot(), None)
+    assert _refused(manager, _snapshot(), [20, 20]).translation_key == "package_ratings_not_arrived"
+
+
+async def test_set_refuses_a_circuit_in_two_spaces(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     """A two-space circuit's current is the average of its legs, which no copied package can be checked against."""
-    snapshot = _snapshot(tabs={"circuit-2": tabs})
+    snapshot = _snapshot(tabs={"circuit-2": [2, 4]})
     manager = await _begun(hass, entry, snapshot)
     assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_one_space"
+
+
+async def test_set_refuses_a_circuit_whose_space_has_not_arrived_as_not_arrived(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A circuit always sits in a space, so one listing none has not had it arrive."""
+    snapshot = _snapshot(tabs={"circuit-2": []})
+    manager = await _begun(hass, entry, snapshot)
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_arrived"
 
 
 @pytest.mark.parametrize("ratings", [[], [20, 20, 20]], ids=["none", "three"])
@@ -421,6 +447,40 @@ async def test_set_to_the_panels_rating_alone_clears(hass: HomeAssistant, entry:
     await hass.async_block_till_done()
     assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(20.0, 20.0, False, None)
     assert (await _stored(hass, entry))["packages"] == {}
+
+
+@pytest.mark.parametrize(
+    "later",
+    [
+        pytest.param(_snapshot(main=None), id="service rating not yet arrived"),
+        pytest.param(_snapshot({"circuit-2": None}), id="panel rating not yet arrived"),
+        pytest.param(_snapshot(tabs={"circuit-2": []}), id="space not yet arrived"),
+    ],
+)
+async def test_a_single_rating_clears_wherever_the_clear_service_would(
+    hass: HomeAssistant, entry: MockConfigEntry, later: SpanPanelSnapshot
+) -> None:
+    """Clearing needs only the circuit; a value not yet arrived does not stand in its way."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+    manager.reconcile(later, _declared)  # kept, pending
+    await hass.async_block_till_done()
+
+    manager.set_package_ratings("circuit-2", later, [20])
+    await hass.async_block_till_done()
+
+    assert (await _stored(hass, entry))["packages"] == {}
+
+
+async def test_a_single_rating_clears_where_the_panel_publishes_none_and_on_a_panel_that_describes_its_breakers(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """With no panel rating to contradict it, a lone breaker's rating is the clear; nothing is refused."""
+    undeclared = _snapshot({"circuit-2": None}, declared={"circuit-2": False})
+    manager = await _begun(hass, entry, undeclared)
+    manager.set_package_ratings("circuit-2", undeclared, [25])
+    describing = replace(_snapshot(), publishes_shared_meters=True)
+    manager.set_package_ratings("circuit-2", describing, [20])
 
 
 async def test_setting_the_same_copy_again_is_quiet(hass: HomeAssistant, entry: MockConfigEntry) -> None:

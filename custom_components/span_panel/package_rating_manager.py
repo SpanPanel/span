@@ -29,9 +29,10 @@ from .package_ratings import (
     MonitoringRating,
     PackageRatings,
     RatingChange,
+    Refused,
     StoredPackage,
+    admit,
     is_change_reason,
-    judge,
     panel_describes_breakers,
     reconcile as reconcile_packages,
     resolve as resolve_rating,
@@ -324,48 +325,19 @@ class PackageRatingManager:
     ) -> None:
         """Store the ratings a user copied from the SPAN app for one circuit, in the app's order.
 
-        Raises ServiceValidationError where the circuit is not on the panel, the
-        panel describes its multi-load breakers itself, publishes no rating for
-        the circuit or no service rating to bound the capacity, the circuit is
-        not in exactly one space, the list holds other than two ratings, its
-        first is not the panel's, or the capacity is above the service rating.
-        The panel's rating alone, a single breaker in the space, is a clear.
+        What the rule makes of them is `admit`'s to say: an entry, stored only
+        where it applies; a clear, for the panel's rating alone; or a refusal,
+        raised as a ServiceValidationError with its own key.
         """
-        circuit = snapshot.circuits.get(circuit_id)
-        if circuit is None:
-            raise _refusal("package_ratings_circuit_unknown")
-        if panel_describes_breakers(snapshot):
-            raise _refusal("package_ratings_panel_describes_breakers")
-        panel = circuit.breaker_rating_a
-        if panel is None:
-            raise _refusal("package_ratings_not_published")
-        service_a = service_rating_a(snapshot)
-        if self._service != "declared" or service_a is None:
-            raise _refusal("package_ratings_no_service_rating")
-        if len(circuit.tabs) != 1:
-            raise _refusal("package_ratings_not_one_space")
-        if len(ratings_a) not in (1, 2):
-            raise _refusal("package_ratings_not_two")
-        if ratings_a[0] != panel:
-            raise _refusal("package_ratings_first_not_panel", panel_rating=_figure(panel))
-        if len(ratings_a) == 1:
+        admission = admit(snapshot, circuit_id, ratings_a, self._service, construct_circuit_label)
+        if isinstance(admission, Refused):
+            raise _refusal(f"package_ratings_{admission.reason}", **_placeholders(admission))
+        if not isinstance(admission, StoredPackage):
             self._remove(circuit_id)
             return
-        ratings: PackageRatings = (ratings_a[0], ratings_a[1])
-        stored = StoredPackage(
-            ratings, circuit.tabs[0], construct_circuit_label(circuit, circuit_id)
-        )
-        # The rule the stored entry is read by, so what is set is what applies.
-        if (
-            judge(circuit, stored, self._service, service_a, describes_breakers=False)
-            == "above_service_rating"
-        ):
-            raise _refusal(
-                "package_ratings_above_service_rating", service_rating=_figure(service_a)
-            )
-        if self._packages.get(circuit_id) == stored:
+        if self._packages.get(circuit_id) == admission:
             return
-        self._packages[circuit_id] = stored
+        self._packages[circuit_id] = admission
         self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
@@ -503,6 +475,15 @@ def _change_row(change: RatingChange) -> _StoredChangeRow:
         panel_after_a=change.panel_after_a,
         service_a=change.service_a,
     )
+
+
+def _placeholders(refused: Refused) -> dict[str, str]:
+    """Return what a refusal's message names: the panel's rating, or the service rating."""
+    if refused.reason == "first_not_panel":
+        return {"panel_rating": _figure(refused.panel_a)}
+    if refused.reason == "above_service_rating":
+        return {"service_rating": _figure(refused.service_a)}
+    return {}
 
 
 def _refusal(key: str, **placeholders: str) -> ServiceValidationError:

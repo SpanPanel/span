@@ -460,6 +460,9 @@
     "package_ratings_no_service_rating": {
       "message": "パネルがサービス定格を公開していないため、SPAN アプリからコピーした定格を確認できません。"
     },
+    "package_ratings_not_arrived": {
+      "message": "パネルがこの回路の定格、ブレーカースペース、またはサービス定格をまだ報告し終えていないため、コピーした定格を確認できません。しばらくしてからもう一度お試しください。"
+    },
     "package_ratings_panel_describes_breakers": {
       "message": "このパネルは複数負荷ブレーカーの各回路をそれぞれの定格で公開し、電流モニタリングはメーターを共有する回路をそれらの定格で判定するため、SPAN アプリからコピーする定格はありません。"
     },

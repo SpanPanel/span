@@ -460,6 +460,9 @@
     "package_ratings_no_service_rating": {
       "message": "El panel no publica una capacidad de servicio, por lo que las capacidades copiadas de la app de SPAN no se pueden comprobar con ella."
     },
+    "package_ratings_not_arrived": {
+      "message": "El panel aún no ha terminado de informar la capacidad de este circuito, su espacio de interruptor o su capacidad de servicio, con los que se comprueban las capacidades copiadas. Vuelve a intentarlo en un momento."
+    },
     "package_ratings_panel_describes_breakers": {
       "message": "Este panel publica cada circuito de un interruptor de varias cargas con su propia capacidad, y el monitoreo de corriente juzga los circuitos que comparten un medidor según esas capacidades, por lo que no hay capacidades que copiar de la app de SPAN."
     },

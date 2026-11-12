@@ -12,7 +12,9 @@ from custom_components.span_panel.package_ratings import (
     MonitoringRating,
     RatingChange,
     Reconciled,
+    Refused,
     StoredPackage,
+    admit,
     is_change_reason,
     panel_describes_breakers,
     reconcile,
@@ -347,3 +349,66 @@ def test_every_reason_reads_back_from_storage_and_retired_ones_do_not() -> None:
         assert is_change_reason(reason)
     assert not is_change_reason("panel_changed")
     assert not is_change_reason("panel_agrees")
+
+
+# --- admit: ratings a user enters, judged by the same rule ---
+
+
+def _admit(
+    snapshot: SpanPanelSnapshot, ratings: list[int], service: Declaration = "declared", circuit_id: str = CIRCUIT_ID
+) -> object:
+    return admit(snapshot, circuit_id, ratings, service, _label)
+
+
+def test_admit_stores_a_package_for_the_circuits_one_space() -> None:
+    assert _admit(_snapshot(_circuit()), [20, 30]) == StoredPackage((20, 30), SPACE, LIVE_LABEL)
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "ratings"),
+    [
+        pytest.param(_snapshot(_circuit()), [20], id="the panel's rating alone"),
+        pytest.param(_snapshot(_circuit(rating=None)), [25], id="no panel rating to contradict it"),
+        pytest.param(_snapshot(_circuit(rating=None, declared=False)), [25], id="no panel rating declared"),
+        pytest.param(_snapshot(_circuit(), main=None), [20], id="service rating not arrived"),
+        pytest.param(_snapshot(_circuit(tabs=())), [20], id="space not arrived"),
+        pytest.param(_describing(_snapshot(_circuit())), [20], id="a panel that describes its breakers"),
+    ],
+)
+def test_admit_reads_a_single_rating_as_the_clear_wherever_the_circuit_is_on_the_panel(
+    snapshot: SpanPanelSnapshot, ratings: list[int]
+) -> None:
+    assert _admit(snapshot, ratings) == "clear"
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "ratings", "service", "reason"),
+    [
+        pytest.param(_snapshot(_circuit()), [20, 30], "declared", "circuit_unknown", id="no such circuit"),
+        pytest.param(_snapshot(_circuit()), [25], "declared", "first_not_panel", id="a single rating not the panel's"),
+        pytest.param(_snapshot(_circuit()), [], "declared", "not_two", id="no ratings"),
+        pytest.param(_snapshot(_circuit()), [20, 20, 20], "declared", "not_two", id="three ratings"),
+        pytest.param(_describing(_snapshot(_circuit())), [20, 30], "declared", "panel_describes_breakers", id="describes"),
+        pytest.param(_snapshot(_circuit()), [20, 30], "undeclared", "no_service_rating", id="no service rating"),
+        pytest.param(_snapshot(_circuit(rating=None, declared=False)), [20, 30], "declared", "not_published", id="no rating"),
+        pytest.param(_snapshot(_circuit(rating=None)), [20, 30], "declared", "not_arrived", id="rating not arrived"),
+        pytest.param(_snapshot(_circuit(), main=None), [20, 30], "declared", "not_arrived", id="service not arrived"),
+        pytest.param(_snapshot(_circuit()), [20, 30], "unknown", "not_arrived", id="service declaration not known"),
+        pytest.param(_snapshot(_circuit(tabs=())), [20, 30], "declared", "not_arrived", id="space not arrived"),
+        pytest.param(_snapshot(_circuit(), main=40), [20, 30], "declared", "above_service_rating", id="above service"),
+        pytest.param(_snapshot(_circuit()), [30, 20], "declared", "first_not_panel", id="first not the panel's"),
+        pytest.param(_snapshot(_circuit(tabs=(7, 9))), [20, 30], "declared", "not_one_space", id="two spaces"),
+    ],
+)
+def test_admit_refuses_by_the_rule_each_with_its_reason(
+    snapshot: SpanPanelSnapshot, ratings: list[int], service: Declaration, reason: str
+) -> None:
+    circuit_id = "circuit-9" if reason == "circuit_unknown" else CIRCUIT_ID
+    admission = _admit(snapshot, ratings, service, circuit_id)
+    assert isinstance(admission, Refused)
+    assert admission.reason == reason
+
+
+def test_admit_names_the_panels_rating_and_the_service_rating_its_refusals_quote() -> None:
+    assert _admit(_snapshot(_circuit()), [30, 20]) == Refused("first_not_panel", PANEL_A, SERVICE_A)
+    assert _admit(_snapshot(_circuit(), main=40), [20, 30]) == Refused("above_service_rating", PANEL_A, 40.0)

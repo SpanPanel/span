@@ -460,6 +460,9 @@
     "package_ratings_no_service_rating": {
       "message": "Le panneau ne publie pas de calibre de service ; les calibres copiés depuis l'application SPAN ne peuvent donc pas être vérifiés par rapport à celui-ci."
     },
+    "package_ratings_not_arrived": {
+      "message": "Le panneau n'a pas fini d'indiquer le calibre de ce circuit, son emplacement de disjoncteur ou son calibre de service, par rapport auxquels les calibres copiés sont vérifiés. Réessayez dans un instant."
+    },
     "package_ratings_panel_describes_breakers": {
       "message": "Ce panneau publie chaque circuit d'un disjoncteur multicharge avec son propre calibre, et la surveillance du courant juge les circuits qui partagent un compteur par rapport à ces calibres ; il n'y a donc aucun calibre à copier depuis l'application SPAN."
     },

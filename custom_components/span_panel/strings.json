@@ -586,6 +586,9 @@
     "package_ratings_no_service_rating": {
       "message": "The panel does not publish a service rating, so ratings copied from the SPAN app cannot be checked against it."
     },
+    "package_ratings_not_arrived": {
+      "message": "The panel has not finished reporting this circuit's rating, its breaker space or its service rating, which copied ratings are checked against. Try again in a moment."
+    },
     "package_ratings_panel_describes_breakers": {
       "message": "This panel publishes each circuit of a multi-load breaker with its own rating, and current monitoring judges circuits that share a meter against those ratings, so there are no ratings to copy from the SPAN app."
     },

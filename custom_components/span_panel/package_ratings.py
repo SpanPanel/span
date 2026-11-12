@@ -25,6 +25,10 @@ match wins:
    the package that was copied.
 5. Otherwise the entry applies: the circuit is judged against its capacity.
 
+Ratings a user enters are judged by the same rule before they are stored
+(`admit`), so an entry the user sets is one that applies, and each way it would
+not becomes a refusal with its own reason.
+
 "Not declared" differs from "not arrived": a retained value can land after its
 description, after a restart, a reconnect or a bridge rebuild. Read as "not
 published", that moment would delete an entry and tell the user about a change
@@ -41,7 +45,7 @@ not know how labels are built.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final, Literal, TypeIs, get_args
 
@@ -201,16 +205,19 @@ type Verdict = ChangeReason | Literal["pending", "applies"]
 
 def judge(
     circuit: SpanCircuitSnapshot | None,
-    stored: StoredPackage,
+    ratings_a: PackageRatings,
+    space: int | None,
     service: Declaration,
     service_a: float | None,
     *,
     describes_breakers: bool,
 ) -> Verdict:
-    """Rules 2 to 5 of the module for one entry, first match winning.
+    """Rules 2 to 5 of the module for one package, first match winning.
 
-    `resolve` and `reconcile` read an entry through this, and so does the set
-    service before it stores one, so an entry the user sets is one that applies.
+    `space` is the space a stored entry was copied for, or None for ratings
+    being entered (`admit`), which take the circuit's one space. `resolve` and
+    `reconcile` read a stored entry through this, and `admit` the ratings a user
+    enters, so an entry the user sets is one that applies.
     """
     # First, since each holds panel-wide whatever else the snapshot says.
     if describes_breakers:
@@ -222,14 +229,14 @@ def judge(
     if circuit.breaker_rating_declared is False:
         return "rating_undeclared"
     panel = circuit.breaker_rating_a
-    capacity = _capacity_a(circuit.tabs, stored.ratings_a)
+    capacity = _capacity_a(circuit.tabs, ratings_a)
     if panel is None or service == "unknown" or service_a is None or capacity is None:
         return "pending"
     if capacity > service_a:
         return "above_service_rating"
-    if stored.ratings_a[0] != panel:
+    if ratings_a[0] != panel:
         return "panel_rating_changed"
-    if circuit.tabs != [stored.space]:
+    if len(circuit.tabs) != 1 or (space is not None and circuit.tabs[0] != space):
         return "spaces_changed"
     return "applies"
 
@@ -259,7 +266,14 @@ def resolve(
     panel = circuit.breaker_rating_a
     if stored is None:
         return MonitoringRating(panel, panel, False, None)
-    verdict = judge(circuit, stored, service, service_a, describes_breakers=describes_breakers)
+    verdict = judge(
+        circuit,
+        stored.ratings_a,
+        stored.space,
+        service,
+        service_a,
+        describes_breakers=describes_breakers,
+    )
     if is_change_reason(verdict):
         return MonitoringRating(panel, panel, False, None)
     if verdict == "pending":
@@ -290,7 +304,14 @@ def reconcile(
         circuit = snapshot.circuits.get(circuit_id)
         if circuit is not None:
             stored = replace(stored, label=label_of(circuit, circuit_id))
-        verdict = judge(circuit, stored, service, service_a, describes_breakers=describes_breakers)
+        verdict = judge(
+            circuit,
+            stored.ratings_a,
+            stored.space,
+            service,
+            service_a,
+            describes_breakers=describes_breakers,
+        )
         if is_change_reason(verdict):
             panel = circuit.breaker_rating_a if circuit is not None else None
             changes.append(
@@ -300,3 +321,88 @@ def reconcile(
             kept[circuit_id] = stored
 
     return Reconciled(kept, tuple(changes))
+
+
+type Refusal = Literal[
+    "circuit_unknown",
+    "panel_describes_breakers",
+    "not_published",
+    "not_arrived",
+    "no_service_rating",
+    "not_one_space",
+    "not_two",
+    "first_not_panel",
+    "above_service_rating",
+]
+"""Why ratings a user enters are refused; each has its own message, `package_ratings_<refusal>`."""
+
+_REFUSALS: Final[Mapping[ChangeReason | Literal["pending"], Refusal]] = {
+    "panel_describes_breakers": "panel_describes_breakers",
+    "service_rating_undeclared": "no_service_rating",
+    "circuit_removed": "circuit_unknown",
+    "rating_undeclared": "not_published",
+    # A value declared and not yet sent, or a declaration not yet known: the
+    # user can try again in a moment, where a stored entry would wait.
+    "pending": "not_arrived",
+    "above_service_rating": "above_service_rating",
+    "panel_rating_changed": "first_not_panel",
+    "spaces_changed": "not_one_space",
+}
+"""What each reason the rule would remove a stored entry for means for ratings being entered."""
+
+
+@dataclass(frozen=True, slots=True)
+class Refused:
+    """Ratings a user entered that the rule will not store, and why."""
+
+    reason: Refusal
+    panel_a: float | None
+    """The rating the panel publishes for the circuit, which a refusal of the first rating names."""
+    service_a: float | None
+    """The service rating, which a refusal of a capacity above it names."""
+
+
+type Admission = StoredPackage | Literal["clear"] | Refused
+"""What the rule makes of ratings a user enters: an entry to store, a clear, or a refusal."""
+
+
+def admit(
+    snapshot: SpanPanelSnapshot,
+    circuit_id: str,
+    ratings_a: Sequence[int],
+    service: Declaration,
+    label_of: Callable[[SpanCircuitSnapshot, str], str],
+) -> Admission:
+    """Judge ratings a user enters for one circuit, in the SPAN app's order, by the rule a stored entry is read by.
+
+    A single rating is a lone breaker's package, which has nothing to add up: it
+    is the clear, wherever the circuit is on the panel and the clear service
+    would act, refused only where the panel publishes a different rating for the
+    circuit. A package otherwise holds two ratings. Those are judged by `judge`
+    as a stored entry is, against the circuit's one space, so a package is
+    stored only where it applies, and each verdict that would remove a stored
+    entry is the refusal it means here (`_REFUSALS`).
+    """
+    service_a = service_rating_a(snapshot)
+    circuit = snapshot.circuits.get(circuit_id)
+    if circuit is None:
+        return Refused("circuit_unknown", None, service_a)
+    panel = circuit.breaker_rating_a
+    if len(ratings_a) == 1:
+        if panel is not None and ratings_a[0] != panel:
+            return Refused("first_not_panel", panel, service_a)
+        return "clear"
+    if len(ratings_a) != 2:
+        return Refused("not_two", panel, service_a)
+    ratings: PackageRatings = (ratings_a[0], ratings_a[1])
+    verdict = judge(
+        circuit,
+        ratings,
+        None,
+        service,
+        service_a,
+        describes_breakers=panel_describes_breakers(snapshot),
+    )
+    if verdict == "applies":
+        return StoredPackage(ratings, circuit.tabs[0], label_of(circuit, circuit_id))
+    return Refused(_REFUSALS[verdict], panel, service_a)
