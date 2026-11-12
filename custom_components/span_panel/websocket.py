@@ -296,19 +296,27 @@ async def handle_panel_topology(
 
 
 class MeterGroupRecord(TypedDict):
-    """One shared meter in the topology: its members, and the capacity it is judged against.
+    """One shared meter in the topology: its members, and what it is rated and judged against.
 
-    `breaker_rating_a` is the group's capacity over the ratings the panel
-    publishes, by `current_monitor.meter_capacity_a`, and null where unknown. A
-    member's own `breaker_rating_a` stays that circuit's rating.
+    `breaker_rating_a` is the capacity of the ratings the panel published and
+    `monitoring_rating_a` the capacity of the ratings its members are judged
+    against, both by `current_monitor.meter_capacity_a`, and null where unknown.
+    `monitoring_rating_user_set` is whether any member's monitoring rating applies.
     """
 
     members: list[str]
     breaker_rating_a: float | None
+    monitoring_rating_a: float | None
+    monitoring_rating_user_set: bool
 
 
 def _meter_group_record(point: MonitoredCircuit) -> MeterGroupRecord:
-    return MeterGroupRecord(members=list(point.members), breaker_rating_a=point.panel_rating_a)
+    return MeterGroupRecord(
+        members=list(point.members),
+        breaker_rating_a=point.panel_rating_a,
+        monitoring_rating_a=point.rating_a,
+        monitoring_rating_user_set=point.rating_user_set,
+    )
 
 
 def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:

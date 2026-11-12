@@ -1506,21 +1506,27 @@
       "members": [
         "circuit-52",
         "circuit-53"
-      ]
+      ],
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false
     },
     "circuit-54": {
       "breaker_rating_a": 40.0,
       "members": [
         "circuit-54",
         "circuit-55"
-      ]
+      ],
+      "monitoring_rating_a": 40.0,
+      "monitoring_rating_user_set": false
     },
     "circuit-56": {
       "breaker_rating_a": 25.0,
       "members": [
         "circuit-56",
         "circuit-57"
-      ]
+      ],
+      "monitoring_rating_a": 25.0,
+      "monitoring_rating_user_set": false
     }
   },
   "sub_devices": {

@@ -192,7 +192,9 @@ def test_a_shared_meter_is_rated_by_its_heaviest_space(
     """The panel reports a two-pole meter's larger leg, so the group can carry what its heaviest space can."""
     snapshot = _breaker(*members)
 
-    assert monitored_circuits(snapshot, panel_ratings(snapshot))[members[0][0]].rating_a == capacity
+    point = monitored_circuits(snapshot, panel_ratings(snapshot))[members[0][0]]
+
+    assert (point.rating_a, point.panel_rating_a) == (capacity, capacity)
 
 
 def test_a_tandem_quad_with_an_unrated_member_has_no_rating() -> None:
@@ -201,11 +203,27 @@ def test_a_tandem_quad_with_an_unrated_member_has_no_rating() -> None:
     assert monitored_circuits(snapshot, panel_ratings(snapshot))["tq-1"].rating_a is None
 
 
+def test_the_judged_capacity_follows_the_same_rule_as_the_panels() -> None:
+    """Each space adds the ratings its members are judged against; the panel's capacity adds theirs."""
+    snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], 25.0), ("tq-3", [34, 36], 30.0))
+    judged = {"tq-1": 20.0, "tq-2": 25.0, "tq-3": 40.0}
+
+    def ratings(circuit_id: str) -> MonitoringRating:
+        panel = snapshot.circuits[circuit_id].breaker_rating_a
+        return MonitoringRating(judged[circuit_id], panel, circuit_id == "tq-3")
+
+    point = monitored_circuits(snapshot, ratings)["tq-2"]
+
+    assert (point.rating_a, point.panel_rating_a, point.rating_user_set) == (65.0, 55.0, True)
+
+
 def test_a_member_listing_no_space_leaves_the_group_unrated() -> None:
     """Its load cannot be placed on a leg, so no capacity is claimed for the group."""
     snapshot = _breaker(("t-1", [44], 15.0), ("t-2", [], 10.0))
 
-    assert monitored_circuits(snapshot, panel_ratings(snapshot))["t-1"].rating_a is None
+    point = monitored_circuits(snapshot, panel_ratings(snapshot))["t-1"]
+
+    assert (point.rating_a, point.panel_rating_a) == (None, None)
 
 
 def test_the_monitor_alerts_on_the_group_under_its_first_member() -> None:
@@ -306,8 +324,18 @@ async def test_topology_publishes_each_groups_capacity_under_its_key(hass: HomeA
     topology = await _topology_of(hass, SNAPSHOT)
 
     assert topology["shared_meter_groups"] == {
-        "circuit-52": {"members": ["circuit-52", "circuit-53"], "breaker_rating_a": 30.0},
-        "circuit-56": {"members": ["circuit-56", "circuit-57"], "breaker_rating_a": 25.0},
+        "circuit-52": {
+            "members": ["circuit-52", "circuit-53"],
+            "breaker_rating_a": 30.0,
+            "monitoring_rating_a": 30.0,
+            "monitoring_rating_user_set": False,
+        },
+        "circuit-56": {
+            "members": ["circuit-56", "circuit-57"],
+            "breaker_rating_a": 25.0,
+            "monitoring_rating_a": 25.0,
+            "monitoring_rating_user_set": False,
+        },
     }
 
 
@@ -319,7 +347,12 @@ async def test_topology_rates_a_tandem_quad_by_its_heavier_leg(hass: HomeAssista
 
     groups = topology["shared_meter_groups"]
     assert isinstance(groups, dict)
-    assert groups["tq-1"] == {"members": ["tq-1", "tq-2", "tq-3"], "breaker_rating_a": 55.0}
+    assert groups["tq-1"] == {
+        "members": ["tq-1", "tq-2", "tq-3"],
+        "breaker_rating_a": 55.0,
+        "monitoring_rating_a": 55.0,
+        "monitoring_rating_user_set": False,
+    }
     rows = topology["circuits"]
     assert isinstance(rows, dict)
     assert [rows[cid]["breaker_rating_a"] for cid in ("tq-1", "tq-2", "tq-3")] == [15.0, 25.0, 30.0]

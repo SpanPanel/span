@@ -92,23 +92,23 @@ section, thresholds and utilization use the monitoring rating instead of the pan
 
 - **Event bus** — With the HA event bus selected, each alert fires a `span_panel_current_alert` event for automations. Its data:
 
-  | Key                          | Description                                                                                                    |
-  | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
-  | `alert_source`               | `circuit` or `mains`                                                                                           |
-  | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                     |
-  | `alert_name`                 | Circuit or mains friendly name                                                                                 |
-  | `alert_type`                 | `spike` or `continuous_overload`                                                                               |
-  | `current_a`                  | Current draw in amps                                                                                           |
-  | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, their sum, and null if any has none   |
-  | `monitoring_rating_a`        | The rating the alert judged against: the circuit's monitoring rating where one is set, else the panel's rating |
-  | `monitoring_rating_user_set` | Whether `monitoring_rating_a` is a monitoring rating you set                                                   |
-  | `threshold_pct`              | Configured threshold percentage                                                                                |
-  | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                   |
-  | `panel_serial`               | The panel's serial number                                                                                      |
-  | `local_time`                 | Local time of the alert                                                                                        |
-  | `window_duration_s`          | Seconds spent over the continuous threshold (continuous overloads; the test event carries a sample)            |
-  | `over_threshold_since`       | When the circuit went over the continuous threshold, as an ISO 8601 time (continuous overloads only)           |
-  | `test`                       | Present, and true, only on the event the test notification fires                                               |
+  | Key                          | Description                                                                                                                                |
+  | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `alert_source`               | `circuit` or `mains`                                                                                                                       |
+  | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                                                 |
+  | `alert_name`                 | Circuit or mains friendly name                                                                                                             |
+  | `alert_type`                 | `spike` or `continuous_overload`                                                                                                           |
+  | `current_a`                  | Current draw in amps                                                                                                                       |
+  | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, the group's capacity over those ratings, and null if any has none |
+  | `monitoring_rating_a`        | The rating the alert judged against: the circuit's monitoring rating where one is set, else the panel's rating                             |
+  | `monitoring_rating_user_set` | Whether `monitoring_rating_a` is a monitoring rating you set                                                                               |
+  | `threshold_pct`              | Configured threshold percentage                                                                                                            |
+  | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                                               |
+  | `panel_serial`               | The panel's serial number                                                                                                                  |
+  | `local_time`                 | Local time of the alert                                                                                                                    |
+  | `window_duration_s`          | Seconds spent over the continuous threshold (continuous overloads; the test event carries a sample)                                        |
+  | `over_threshold_since`       | When the circuit went over the continuous threshold, as an ISO 8601 time (continuous overloads only)                                       |
+  | `test`                       | Present, and true, only on the event the test notification fires                                                                           |
 
   A monitoring rating never changes `breaker_rating_a`, which is the panel's rating, as the Breaker Rating sensor shows. The rating the `{breaker_rating_a}`
   text placeholder carries is `monitoring_rating_a` here. For the mains both are its rating, and `monitoring_rating_user_set` is false.

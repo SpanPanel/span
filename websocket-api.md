@@ -237,10 +237,12 @@ the group's record in `shared_meter_groups`.
 
 #### Shared Meter Group Object
 
-| Field              | Type       | Description                                                                                      |
-| ------------------ | ---------- | ------------------------------------------------------------------------------------------------ |
-| `members`          | string[]   | The group's circuit ids, the key first                                                           |
-| `breaker_rating_a` | float/null | The group's capacity over its members' panel ratings (null while any member's rating is unknown) |
+| Field                        | Type       | Description                                                                                                            |
+| ---------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `members`                    | string[]   | The group's circuit ids, the key first                                                                                 |
+| `breaker_rating_a`           | float/null | The group's capacity over the ratings the panel publishes (null while any member's is unknown)                         |
+| `monitoring_rating_a`        | float/null | The group's capacity over the ratings its members are judged against: what current monitoring judges the meter against |
+| `monitoring_rating_user_set` | bool       | Whether any member's monitoring rating applies                                                                         |
 
 Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_group": "b1c2d3e4f5a6"`, and the topology answers:
 
@@ -249,7 +251,9 @@ Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_
   "shared_meter_groups": {
     "b1c2d3e4f5a6": {
       "members": ["b1c2d3e4f5a6", "c2d3e4f5a6b1"],
-      "breaker_rating_a": 30
+      "breaker_rating_a": 30,
+      "monitoring_rating_a": 30,
+      "monitoring_rating_user_set": false
     }
   }
 }
@@ -258,8 +262,8 @@ Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_
 A group's capacity is what its heaviest space can carry: for each space, the ratings of the members that list it are added, and the largest total is the
 capacity, because the panel reports a two-pole meter's current as the larger of its two legs. A tandem or a quad comes to the sum of its ratings; a tandem-quad
 comes to its two-pole rating plus the larger of its single-pole ones. A member listing no space leaves the capacity null. `get_monitoring_status` reports the
-same capacity as `breaker_rating_a` on each member's entry, and the card reads it here rather than adding the members' ratings up. Each circuit's own
-`breaker_rating_a` stays that circuit's rating.
+same capacities on each member's entry, and the card reads them here rather than adding the members' ratings up. Each circuit's own `breaker_rating_a` stays
+that circuit's rating.
 
 Each circuit entry of `get_monitoring_status` also names the point it is judged as: `basis` is `circuit` for a circuit judged alone and `group` for circuits
 that share a meter, and `point_id` is the id of the circuit the point is keyed by, the group's key for a shared meter. Every member of a group carries the
