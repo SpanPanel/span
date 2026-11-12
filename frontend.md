@@ -54,8 +54,8 @@ top of the panel header) → **List View Columns**.
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
-circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit on a MAIN 32 has a monitoring rating, set in its Monitoring
-section, thresholds and utilization use the monitoring rating instead of the panel's breaker rating.
+circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit on a MAIN 32 holds a tandem whose ratings you copied from
+the SPAN app in its Monitoring section, thresholds and utilization use both breakers together instead of the panel's breaker rating.
 
 ### Global Settings
 
@@ -121,45 +121,50 @@ values.
 
 ![Monitoring Configuration](images/monitoring.png)
 
-### Setting a Monitoring Rating
+### Copying a Tandem's Ratings from the SPAN App
 
 Current monitoring divides a circuit's current by its breaker rating. A MAIN 32 publishes a tandem breaker, which puts two breakers in one space, as one circuit
-with one current reading and the rating of one half, so the same current looks like an overload. A monitoring rating tells current monitoring what to judge the
-circuit against instead.
+with one current reading and the rating of its first breaker, so the current of both looks like an overload of one. The SPAN app shows the whole package, such
+as "20-20A" or "20-30A". Copy the other breaker's rating from it, and current monitoring judges the space against both breakers together.
 
-On panels other than MAIN 32 a monitoring rating is not offered: the Monitoring section shows no field for it and the services refuse one. Those panels publish
-each circuit of a multi-load breaker as its own circuit, with its own rating, and name the circuits that share its meter, so current monitoring already judges
-them together (see [Circuits That Share a Meter or Relay](README.md#circuits-that-share-a-meter-or-relay)).
+On panels other than MAIN 32 nothing needs copying: the Monitoring section shows no field for it and the services refuse one. Those panels publish each circuit
+of a multi-load breaker as its own circuit, with its own rating, and name the circuits that share its meter, so current monitoring already judges them together
+(see [Circuits That Share a Meter or Relay](README.md#circuits-that-share-a-meter-or-relay)).
 
-Set it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit, or with the
-`span_panel.set_circuit_monitoring_rating` and `span_panel.clear_circuit_monitoring_rating` services. It is a whole number of amps, from 1 up to the panel's
-service rating, and only a circuit the panel publishes a breaker rating for can be given one. Enter the most current the measured wire can carry; for a tandem
-in one space, that is the sum of its breakers.
+Copy it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit. **Breaker ratings from
+the SPAN app** shows the rating the panel publishes, which is the package's first, and asks for the other breaker in this space exactly as the SPAN app shows
+the circuit: for 20-30A, enter 30. The `span_panel.set_circuit_package_ratings` service takes the whole package in the app's order, `[20, 30]`, and
+`span_panel.clear_circuit_package_ratings` removes it. Each rating is a whole number of amps, the first must be the panel's, and both together cannot exceed the
+panel's service rating. Only a circuit in one breaker space that the panel publishes a rating for takes a copy.
 
-Entering the panel's own rating clears the monitoring rating, as does the reset beside it, and the circuit is judged against the panel's rating again. Turning
-monitoring off keeps the monitoring rating, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
+**Remove copied ratings** beside the field removes the copy, and the circuit is judged against the panel's rating again; the service does the same when given
+the panel's rating alone. Turning monitoring off keeps the copy, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
 
-Current monitoring then judges the circuit against the monitoring rating, so its thresholds, utilization and alert text all use it, and the Monitoring views
-show it as "set by you" with the panel's rating beside it. The `{breaker_rating_a}` alert placeholder keeps its name and carries that rating. Nothing else
-changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the panel's rating, and
-energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the rating
-judged against, and `monitoring_rating_user_set` beside it.
+Current monitoring then judges the space against both breakers together, so its thresholds, utilization and alert text all use that sum, and the Monitoring
+views mark it: "Judged against 40 A: 20-20 from your SPAN app (the panel publishes 20 A)". The `{breaker_rating_a}` alert placeholder keeps its name and carries
+that sum. Nothing else changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the
+panel's rating, and energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add
+`monitoring_rating_a`, the rating judged against, `monitoring_rating_user_set` beside it, and `package_ratings_a`, the ratings copied.
+
+Thresholds are percentages of the rating a circuit is judged against. If you raised a tandem's thresholds above 100% to quiet its alerts, they now apply to both
+breakers together, which can let a real overload pass: the Monitoring section warns of that and offers **Use global thresholds**. Copying changes no threshold
+by itself.
 
 For a circuit that spans two spaces, such as a 240 V breaker sharing a leg with a 120 V one, a MAIN 32 reports the average of the circuit's two legs. One leg
-can carry more than its breaker while the reading stays under the rating, and no monitoring rating can see that leg. The dashboard says so: turning monitoring
-off for that circuit is the safer choice.
+can carry more than its breaker while the reading stays under the rating, and no copied rating can show that leg, so the Monitoring section offers none there
+and says why: turning monitoring off for that circuit is the safer choice.
 
-A notification tells you when the panel overtakes a monitoring rating:
+A notification tells you when the integration removes ratings you copied:
 
-- the panel's rating for the circuit changed, and the monitoring rating still applies;
-- the panel's rating now matches the monitoring rating, which was removed;
-- the panel no longer reports a rating for the circuit, and the monitoring rating was removed;
-- the circuit is no longer on the panel, and the monitoring rating was removed;
-- the panel's service rating dropped below the monitoring rating, or the panel no longer publishes one, and the monitoring rating was removed;
-- the panel now publishes each circuit of a multi-load breaker with its own rating, and the monitoring rating was removed.
+- the rating the panel publishes for the circuit changed, so it is no longer the package's first;
+- the circuit's breaker spaces changed;
+- the panel no longer reports a rating for the circuit;
+- the circuit is no longer on the panel;
+- the two breakers together are above the panel's service rating, or the panel no longer publishes one;
+- the panel now publishes each circuit of a multi-load breaker with its own rating.
 
-Each line names the circuit, your monitoring rating, and the panel's rating before and, where it still reports one, after. A rating that changed and changed
-back before you looked is not reported.
+Each line names the circuit and the ratings you copied, and for a changed rating the panel's rating before and after. Where the package still applies, copy it
+again from the SPAN app.
 
 ## Adopted View
 

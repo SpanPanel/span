@@ -819,17 +819,18 @@ the integration shows one, such as "20A".
 **Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
 both loads against one breaker.
 
-**A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and set its monitoring rating to the sum of the two breakers (20-20A is
-40 A). The Breaker Rating sensor keeps showing the panel's rating. See [Setting a Monitoring Rating](frontend.md#setting-a-monitoring-rating).
+**A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and, in its Monitoring section, enter the other breaker's rating exactly
+as the SPAN app shows the circuit (for 20-30A, enter 30). Monitoring then judges the space against both breakers together; the Breaker Rating sensor keeps
+showing the panel's rating. See [Copying a Tandem's Ratings from the SPAN App](frontend.md#copying-a-tandems-ratings-from-the-span-app).
 
 **A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports the average of the circuit's two legs, so one leg can
 carry more than its breaker while the reading stays under the rating. Turn monitoring off for that circuit rather than rely on a rating, since no rating can see
-the heavier leg.
+the heavier leg; the dashboard offers no ratings to copy there.
 
-If the panel's rating for the circuit later changes, a notification says so.
+If the panel's rating for the circuit later changes, or the circuit moves to another space, the copied ratings are removed and a notification says so.
 
 Panels other than MAIN 32 publish each circuit of a multi-load breaker with its own rating and name the circuits that share its meter, so current monitoring
-already judges them together and offers no monitoring rating. See [Circuits That Share a Meter or Relay](#circuits-that-share-a-meter-or-relay).
+already judges them together and offers nothing to copy. See [Circuits That Share a Meter or Relay](#circuits-that-share-a-meter-or-relay).
 
 ### Debug logging
 
@@ -840,8 +841,8 @@ name, and a log attached to an issue would publish them.
 ### Diagnostics
 
 **Download diagnostics** on the integration's page includes the panel's device tree, every device and property it publishes, with serial numbers, device ids and
-site details masked. It also lists each monitoring rating you set, with the panel rating it was set against and whether it applies or is waiting on a rating the
-panel has not sent yet, and anything the panel changed under one that a notification reported and you have not yet dismissed.
+site details masked. It also lists the ratings you copied from the SPAN app for each circuit, with the space they were copied for and whether they apply or are
+waiting on a value the panel has not sent yet, and any the integration removed that a notification reported and you have not yet dismissed.
 
 ## Development
 
