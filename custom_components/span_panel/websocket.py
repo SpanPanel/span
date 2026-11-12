@@ -304,8 +304,9 @@ class MeterGroupRecord(TypedDict):
     `breaker_rating_a` is the capacity of the ratings the panel published and
     `monitoring_rating_a` the capacity of the ratings its members are judged
     against, both by `meter_capacity.meter_capacity_a`, and null where unknown.
-    `monitoring_rating_user_set` is whether any member is judged against a package
-    the user copied.
+    The two are equal and `monitoring_rating_user_set` is false: only a panel that
+    describes its breakers names shared meters, and none of its circuits holds a
+    package copied from the SPAN app.
     """
 
     members: list[str]

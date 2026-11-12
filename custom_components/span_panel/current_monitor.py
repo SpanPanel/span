@@ -106,14 +106,13 @@ class MonitoredCircuit:
 
     `rating_a` is the rating judged against and `panel_rating_a` the breaker rating the
     panel published, each None where a circuit, or the capacity of a group, is unknown.
-    For a group, both are capacities by the same rule: `rating_a` over the ratings its
-    members are judged against, `panel_rating_a` over the ratings the panel published.
+    For a group, both are capacities by the same rule, `rating_a` over the ratings its
+    members are judged against and `panel_rating_a` over the ratings the panel
+    published, and so equal: only a panel that describes its breakers names shared
+    meters, and none of its circuits holds a package (`panel_describes_breakers`).
     `package_ratings_a` is the package a user copied for a circuit, which its
-    `rating_a` is the capacity of; None for a group, which is judged by its
-    members' capacity and holds no one circuit's package (a panel that names
-    shared meters describes its breakers, so none of its circuits has one).
-    `rating_user_set` is whether any member is judged against a package the user
-    copied, whether or not the capacity is known.
+    `rating_a` is the capacity of; None for a group. `rating_user_set` is whether the
+    circuit is judged against a package the user copied, and so never true of a group.
     """
 
     point_id: str

@@ -226,13 +226,13 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `package_ratings_a`          | int[]/null  | The package's breaker ratings the user copied from the SPAN app, in its order, the first the panel's; kept while it waits on a value not yet arrived, null where there is none               |
 | `entities`                   | object      | Role-keyed map of entity IDs (see below)                                                                                                                                                     |
 
-`get_monitoring_status` reports the same four fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` is the group's capacity over its
-members' panel ratings and `monitoring_rating_a` its capacity over the ratings they are judged against, each null while unknown (see the Shared Meter Group
-Object), `monitoring_rating_user_set` is true when any member is judged against a copied package, and `package_ratings_a` is null, a package being one
-circuit's. The mains entry carries the four keys too: `breaker_rating_a` and `monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false
-and `package_ratings_a` null. `utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off (`monitoring_enabled` false), its
-entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement; `last_spike_alert` and `last_continuous_alert`
-stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window carried over from before.
+`get_monitoring_status` reports the same four fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` and `monitoring_rating_a` are
+both the group's capacity over its members' panel ratings, null while unknown (see the Shared Meter Group Object), `monitoring_rating_user_set` is false and
+`package_ratings_a` null: only a panel that describes its breakers names shared meters, and no circuit on such a panel holds a copied package. The mains entry
+carries the four keys too: `breaker_rating_a` and `monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false and `package_ratings_a` null.
+`utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off (`monitoring_enabled` false), its entry reports
+`utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement; `last_spike_alert` and `last_continuous_alert` stay, as
+history. Turning monitoring back on resumes the figures from the next reading, with no window carried over from before.
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys
@@ -240,12 +240,12 @@ the group's record in `shared_meter_groups`.
 
 #### Shared Meter Group Object
 
-| Field                        | Type       | Description                                                                                                            |
-| ---------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `members`                    | string[]   | The group's circuit ids, the key first                                                                                 |
-| `breaker_rating_a`           | float/null | The group's capacity over the ratings the panel publishes (null while any member's is unknown)                         |
-| `monitoring_rating_a`        | float/null | The group's capacity over the ratings its members are judged against: what current monitoring judges the meter against |
-| `monitoring_rating_user_set` | bool       | Whether any member is judged against a package copied from the SPAN app                                                |
+| Field                        | Type       | Description                                                                                                                   |
+| ---------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `members`                    | string[]   | The group's circuit ids, the key first                                                                                        |
+| `breaker_rating_a`           | float/null | The group's capacity over the ratings the panel publishes (null while any member's is unknown)                                |
+| `monitoring_rating_a`        | float/null | What current monitoring judges the meter against: the same capacity as `breaker_rating_a`, no member holding a copied package |
+| `monitoring_rating_user_set` | bool       | Always false: a panel that names shared meters describes its breakers, so no member holds a package copied from the SPAN app  |
 
 Two 15 A circuits on one tandem breaker, for example, each carry `"shared_meter_group": "b1c2d3e4f5a6"`, and the topology answers:
 
