@@ -11,7 +11,11 @@ import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntriesFlowManager, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntriesFlowManager,
+    ConfigEntryState,
+    ConfigFlowResult,
+)
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -2427,12 +2431,16 @@ def _announcement(http_port: int | None) -> ZeroconfServiceInfo:
 
 
 def _entry_at_the_shared_host(
-    hass: HomeAssistant, serial: str, http_port: int | None
+    hass: HomeAssistant,
+    serial: str,
+    http_port: int | None,
+    state: ConfigEntryState = ConfigEntryState.NOT_LOADED,
 ) -> MockConfigEntry:
     """Add an entry for `serial` at `SHARED_HOST`, storing `http_port` where it has one.
 
     `None` stores no HTTP port, which is how every entry on port 80 is written:
-    the key is only recorded when it differs from 80.
+    the key is only recorded when it differs from 80. `state` is the entry's
+    setup state, which decides whether it vouches for the port it stores.
     """
     data: dict[str, object] = {
         CONF_HOST: SHARED_HOST,
@@ -2450,6 +2458,7 @@ def _entry_at_the_shared_host(
         source=config_entries.SOURCE_USER,
         options={},
         unique_id=serial,
+        state=state,
     )
     entry.add_to_hass(hass)
     return entry
@@ -2515,26 +2524,31 @@ async def test_zeroconf_offers_a_second_panel_at_an_address_already_configured(
 
 
 @pytest.mark.parametrize(
-    ("configured_port", "announced_port"),
+    ("configured_port", "announced_port", "state"),
     [
-        # A real SPAN panel: nothing stored, nothing published.
-        (None, None),
+        # A real SPAN panel: nothing stored, nothing published -- loaded or not,
+        # exactly as before.
+        (None, None, ConfigEntryState.NOT_LOADED),
+        (None, None, ConfigEntryState.SETUP_RETRY),
         # A panel that publishes the default it already uses.
-        (None, 80),
-        # An emulated panel re-announcing on the port its entry stores.
-        (8081, 8081),
+        (None, 80, ConfigEntryState.NOT_LOADED),
+        # An emulated panel re-announcing on the port its loaded entry stores.
+        (8081, 8081, ConfigEntryState.LOADED),
     ],
 )
 @pytest.mark.asyncio
 async def test_zeroconf_does_not_probe_a_panel_configured_at_that_host_and_port(
-    hass: HomeAssistant, configured_port: int | None, announced_port: int | None
+    hass: HomeAssistant,
+    configured_port: int | None,
+    announced_port: int | None,
+    state: ConfigEntryState,
 ) -> None:
     """Every re-announcement of a configured panel must still end without a request.
 
     That is the only job of the check made before the probe. It must keep doing
     it for real panels, whose entries store no HTTP port at all.
     """
-    _entry_at_the_shared_host(hass, SERIAL_A, configured_port)
+    _entry_at_the_shared_host(hass, SERIAL_A, configured_port, state)
 
     with (
         patch(
@@ -2548,6 +2562,38 @@ async def test_zeroconf_does_not_probe_a_panel_configured_at_that_host_and_port(
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     detect.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "state",
+    [ConfigEntryState.NOT_LOADED, ConfigEntryState.SETUP_RETRY, ConfigEntryState.SETUP_ERROR],
+)
+@pytest.mark.asyncio
+async def test_zeroconf_probes_a_port_whose_entry_is_not_running(
+    hass: HomeAssistant, state: ConfigEntryState
+) -> None:
+    """A stored port vouches for nothing unless its entry is running there.
+
+    An emulator hands each panel the lowest free port on restart, so panels
+    shift onto ports their siblings stored, and a removed panel's leftover
+    entry keeps its port forever. Dropped as already configured, a panel
+    announcing on such a port was never probed, so the serial that would say
+    which panel it is was never read.
+    """
+    _entry_at_the_shared_host(hass, SERIAL_A, 8081, state)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await _discover(hass, 8081)
+
+    detect.assert_awaited_once()
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "confirm_discovery"
 
 
 @pytest.mark.asyncio

@@ -1183,6 +1183,52 @@ async def test_zeroconf_will_not_follow_new_ports_to_a_dead_tls_port(
     assert "does not chain" not in refusals[0]
 
 
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_zeroconf_follows_a_panel_onto_a_port_a_stale_entry_stores(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """A port another entry stores does not stop a panel moving onto it.
+
+    The emulator's restart hands out the lowest free ports again, so this panel
+    lands on the HTTP port a sibling stored -- here a removed panel's leftover
+    entry, which never runs and so never moves off it. Matched on that entry
+    before the probe, the announcement was dropped and this panel's entry never
+    followed. The leftover entry vouches for nothing it is not running, so the
+    announcement is probed, and the serial and the pin decide.
+    """
+    entry = _entry_at_loopback_on_ports(hass, panel.ca_pem, closed_port())
+    stale = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="SPAN Panel 2",
+        data={
+            CONF_HOST: PANEL_LOOPBACK,
+            CONF_ACCESS_TOKEN: "synthetic-token",
+            CONF_API_VERSION: "v2",
+            CONF_HTTP_PORT: MOVED_HTTP_PORT,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="sp3-synthetic-0002",
+    )
+    stale.add_to_hass(hass)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(
+            hass,
+            PANEL_LOOPBACK,
+            {"httpPort": str(MOVED_HTTP_PORT), "httpsPort": str(panel.port)},
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HTTP_PORT] == MOVED_HTTP_PORT
+    assert entry.data[CONF_HTTPS_PORT] == panel.port
+    assert stale.data[CONF_HTTP_PORT] == MOVED_HTTP_PORT
+
+
 @pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
 @pytest.mark.asyncio
 async def test_zeroconf_moving_a_real_panel_writes_no_port_into_its_entry(

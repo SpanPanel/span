@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
+    ConfigEntryState,
     ConfigFlowContext,
     ConfigFlowResult,
 )
@@ -556,18 +557,33 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         return {CONF_HOST: host, CONF_EBUS_BROKER_HOST: host}
 
     def _async_configured_at(self, host: str, http_port: int) -> bool:
-        """Whether an entry already reaches a panel at `host` on `http_port`.
+        """Whether an entry vouches that its panel answers at `host` on `http_port`.
 
-        Compared against what each entry stores, read the way the entry's own
-        transport reads it: an entry that stores no HTTP port is on 80, because
-        the key is written only when it differs -- which is how every real SPAN
-        panel, one to an address, is recorded.
+        A stored port vouches only while its entry is running there. Several
+        panels can share a host, and an emulator hands each the lowest free
+        port when it restarts, so panels shift onto ports their siblings
+        stored; a removed panel's leftover entry never runs and never moves off
+        its port at all. Matched on such an entry, the panel now on that port
+        was dropped before the probe that reads its serial, so its own entry
+        never followed it. So an entry storing a port matches only once it is
+        LOADED; anything else is probed, and the serial decides.
+
+        A real SPAN panel's entry stores no HTTP port -- the key is written only
+        where it is not 80 -- and one panel holds one address, so nothing shifts
+        onto its port. It matches on port 80 whether loaded or not, exactly as
+        it always has.
         """
-        return any(
-            entry.data.get(CONF_HOST) == host
-            and as_port(entry.data.get(CONF_HTTP_PORT), 80) == http_port
-            for entry in self._async_current_entries(include_ignore=False)
-        )
+        for entry in self._async_current_entries(include_ignore=False):
+            if entry.data.get(CONF_HOST) != host:
+                continue
+            stored_port = port_or_none(entry.data.get(CONF_HTTP_PORT))
+            if stored_port is None:
+                if http_port == 80:
+                    return True
+                continue
+            if stored_port == http_port and entry.state is ConfigEntryState.LOADED:
+                return True
+        return False
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery.
@@ -580,9 +596,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         on the host alone, the first panel configured at an address discarded
         every other panel's announcement there before its serial was ever read.
 
-        Neither check decides identity; both only save work. A panel that has
-        moved -- to a new host, or to new ports on the same one -- matches
-        neither, reaches the probe, and is caught by the serial check in
+        Neither check decides identity; both only save work, and the first takes
+        an entry's stored port as evidence only while that entry is running
+        there (see `_async_configured_at`). A panel that has moved -- to a new
+        host, or to new ports on the same one, a stale entry's included --
+        reaches the probe and is caught by the serial check in
         `ensure_not_already_configured`. There `_async_host_update` decides
         whether its entry may follow it: a pinned entry takes the new host and
         ports only once the announced HTTPS port, or the stored one where the
@@ -595,8 +613,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         discovered_http_port = _discovered_port(props, "httpPort", "httpport")
         http_port = 80 if discovered_http_port is None else discovered_http_port
 
-        # Do not probe a panel an entry already reaches at this host and port:
-        # every re-announcement of a configured panel ends here, request-free.
+        # Do not probe a panel an entry is running at this host and port: every
+        # re-announcement of a configured panel ends here, request-free.
         if self._async_configured_at(host, http_port):
             return self.async_abort(reason="already_configured")
 
