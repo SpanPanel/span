@@ -482,22 +482,58 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         return {CONF_HOST: host, CONF_EBUS_BROKER_HOST: host}
 
+    def _async_configured_at(self, host: str, http_port: int) -> bool:
+        """Whether an entry already reaches a panel at `host` on `http_port`.
+
+        Compared against what each entry stores, read the way the entry's own
+        transport reads it: an entry that stores no HTTP port is on 80, because
+        the key is written only when it differs -- which is how every real SPAN
+        panel, one to an address, is recorded.
+        """
+        return any(
+            entry.data.get(CONF_HOST) == host
+            and as_port(entry.data.get(CONF_HTTP_PORT), 80) == http_port
+            for entry in self._async_current_entries(include_ignore=False)
+        )
+
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
-        """Handle a flow initiated by zeroconf discovery."""
-        # Do not probe device if the host is already configured
-        self._async_abort_entries_match({CONF_HOST: discovery_info.host})
+        """Handle a flow initiated by zeroconf discovery.
+
+        A panel is identified by its serial, and the serial is only known once
+        the probe below has read it. Several panels can answer at one address on
+        different HTTP ports -- an emulator serves every panel it simulates from
+        the one machine, each advertising its own `httpPort` -- so the two
+        checks made before the probe key on the host *and* the HTTP port. Keyed
+        on the host alone, the first panel configured at an address discarded
+        every other panel's announcement there before its serial was ever read.
+
+        Neither check decides identity; both only save work. A panel that has
+        moved matches neither, reaches the probe, and is caught by the serial
+        check in `ensure_not_already_configured`, where `_async_host_update`
+        decides whether its entry may follow it.
+        """
+        host = discovery_info.host
+        # Read before the probe because the checks below need it. A malformed
+        # value is port 80, as an absent one is; see `_discovered_port`.
+        props = discovery_info.properties or {}
+        discovered_http_port = _discovered_port(props, "httpPort", "httpport")
+        http_port = 80 if discovered_http_port is None else discovered_http_port
+
+        # Do not probe a panel an entry already reaches at this host and port:
+        # every re-announcement of a configured panel ends here, request-free.
+        if self._async_configured_at(host, http_port):
+            return self.async_abort(reason="already_configured")
 
         # Do not probe device if it is not an ipv4 address
-        if not is_ipv4_address(discovery_info.host):
+        if not is_ipv4_address(host):
             return self.async_abort(reason="not_ipv4_address")
 
-        # Set a preliminary unique_id from the host to prevent duplicate
-        # in-progress discovery flows when mDNS fires repeatedly for the
-        # same IP. The default raise_on_progress=True causes subsequent
-        # flows for the same host to abort immediately with
-        # "already_in_progress". This is replaced with the serial number
-        # in ensure_not_already_configured() once the device is validated.
-        await self.async_set_unique_id(discovery_info.host)
+        # An interim unique_id, so that one panel announcing on several services
+        # at once runs one probe: the default raise_on_progress=True aborts every
+        # later flow for the same host and port with "already_in_progress".
+        # Replaced by the serial in ensure_not_already_configured() once the
+        # probe has read it.
+        await self.async_set_unique_id(f"{host}:{http_port}")
 
         # Detect whether this is a v2 panel based on zeroconf service type
         svc_type = getattr(discovery_info, "type", "") or ""
@@ -505,10 +541,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if is_v2_service:
             # v2 panels discovered via eBus / secure-mqtt service types
-            # Read optional httpPort from mDNS TXT records (non-standard port)
-            props = discovery_info.properties or {}
-            discovered_http_port = _discovered_port(props, "httpPort", "httpport")
-            http_port = 80 if discovered_http_port is None else discovered_http_port
             self._http_port = http_port
 
             # A panel that moved its HTTP port has usually moved its TLS port
@@ -521,14 +553,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 self._https_port_known = True
 
             detection = await detect_api_version(
-                discovery_info.host,
+                host,
                 port=http_port,
                 httpx_client=get_async_client(self.hass, verify_ssl=False),
             )
             if detection.api_version != "v2" or detection.status_info is None:
                 return self.async_abort(reason="not_span_panel")
             self.api_version = "v2"
-            self.host = discovery_info.host
+            self.host = host
             self.serial_number = detection.status_info.serial_number
             self._hardware_version = detection.status_info.hardware_version
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
@@ -536,7 +568,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 **self.context,
                 "title_placeholders": {
                     **self.context.get("title_placeholders", {}),
-                    CONF_HOST: discovery_info.host,
+                    CONF_HOST: host,
                 },
             }
             self._is_flow_setup = True
@@ -549,10 +581,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
         """Handle discovery from Home Assistant Supervisor (add-on).
 
-        Unlike zeroconf, several panels may be reachable on the same host IP
-        on different HTTP ports (for example the SPAN Panel Simulator add-on).
-        Deduplicate by panel serial, not by host, so each panel gets its own
-        config entry.
+        Several panels may be reachable on the same host IP on different HTTP
+        ports (for example the SPAN Panel Simulator add-on). Deduplicate by
+        panel serial, not by host, so each panel gets its own config entry.
 
         **The ports are deliberately not held to the pinned-address check** that
         `async_step_zeroconf` and the by-hand re-add both go through, in

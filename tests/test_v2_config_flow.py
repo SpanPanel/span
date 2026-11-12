@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 import dataclasses
 import ipaddress
@@ -2375,6 +2376,343 @@ async def test_zeroconf_end_to_end_entry_creation(hass: HomeAssistant) -> None:
         assert result5["type"] == FlowResultType.CREATE_ENTRY
         assert result5["data"][CONF_API_VERSION] == "v2"
         assert result5["data"][CONF_HOST] == "192.168.1.200"
+
+
+# ---------- zeroconf: several panels at one address ----------
+
+#: One machine serving several panels, each on its own HTTP port, as an
+#: emulator does. RFC 5737 TEST-NET-2, so nothing is ever dialled there: every
+#: probe in this section is a mock.
+SHARED_HOST = "198.51.100.26"
+SERIAL_A = "SPAN-SHARED-A"
+SERIAL_B = "SPAN-SHARED-B"
+
+
+def _announcement(http_port: int | None) -> ZeroconfServiceInfo:
+    """Return an `_ebus._tcp` announcement from `SHARED_HOST`, publishing `http_port`.
+
+    `None` publishes no `httpPort` at all, as a real SPAN panel does, which the
+    flow reads as port 80. Each port gets its own instance name, as each
+    advertised panel does.
+    """
+    address = ipaddress.IPv4Address(SHARED_HOST)
+    properties = {} if http_port is None else {"httpPort": str(http_port)}
+    return ZeroconfServiceInfo(
+        ip_address=address,
+        ip_addresses=[address],
+        hostname="span-panel.local.",
+        name=f"SPAN Panel {http_port or 80}._ebus._tcp.local.",
+        port=8883,
+        properties=properties,
+        type="_ebus._tcp.local.",
+    )
+
+
+def _entry_at_the_shared_host(
+    hass: HomeAssistant, serial: str, http_port: int | None
+) -> MockConfigEntry:
+    """Add an entry for `serial` at `SHARED_HOST`, storing `http_port` where it has one.
+
+    `None` stores no HTTP port, which is how every entry on port 80 is written:
+    the key is only recorded when it differs from 80.
+    """
+    data: dict[str, object] = {
+        CONF_HOST: SHARED_HOST,
+        CONF_ACCESS_TOKEN: "existing-token",
+        CONF_API_VERSION: "v2",
+    }
+    if http_port is not None:
+        data[CONF_HTTP_PORT] = http_port
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+        domain=DOMAIN,
+        title="Span Panel",
+        data=data,
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id=serial,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+def _status(serial: str) -> DetectionResult:
+    """Return the v2 status a panel with `serial` answers the probe with."""
+    return DetectionResult(
+        api_version="v2",
+        status_info=V2StatusInfo(serial_number=serial, firmware_version="2.0.0"),
+    )
+
+
+async def _discover(hass: HomeAssistant, http_port: int | None) -> ConfigFlowResult:
+    """Run one announcement from `SHARED_HOST` through the zeroconf step."""
+    return await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=_announcement(http_port),
+    )
+
+
+@pytest.mark.parametrize(
+    ("configured_port", "announced_port"),
+    [
+        # A real panel on 80 is configured, and a second panel shares its address.
+        (None, 8082),
+        # Two emulated panels on one machine.
+        (8081, 8082),
+        # The configured panel is the one on a moved port; the newcomer is on 80.
+        (8081, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_zeroconf_offers_a_second_panel_at_an_address_already_configured(
+    hass: HomeAssistant, configured_port: int | None, announced_port: int | None
+) -> None:
+    """A panel is its serial, not its address, so a second one there must reach the probe.
+
+    Keyed on the host alone, the first panel configured at an address discarded
+    every other panel's announcement there as already configured, before the
+    probe that reads the serial ever ran.
+    """
+    _entry_at_the_shared_host(hass, SERIAL_A, configured_port)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await _discover(hass, announced_port)
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "confirm_discovery"
+    detect.assert_awaited_once()
+    assert detect.await_args.args[0] == SHARED_HOST
+    assert detect.await_args.kwargs["port"] == (announced_port or 80)
+    # Identity is the serial the probe read, which is what dedups from here on.
+    flow = hass.config_entries.flow.async_get(result["flow_id"])
+    assert flow["context"]["unique_id"] == SERIAL_B
+
+
+@pytest.mark.parametrize(
+    ("configured_port", "announced_port"),
+    [
+        # A real SPAN panel: nothing stored, nothing published.
+        (None, None),
+        # A panel that publishes the default it already uses.
+        (None, 80),
+        # An emulated panel re-announcing on the port its entry stores.
+        (8081, 8081),
+    ],
+)
+@pytest.mark.asyncio
+async def test_zeroconf_does_not_probe_a_panel_configured_at_that_host_and_port(
+    hass: HomeAssistant, configured_port: int | None, announced_port: int | None
+) -> None:
+    """Every re-announcement of a configured panel must still end without a request.
+
+    That is the only job of the check made before the probe. It must keep doing
+    it for real panels, whose entries store no HTTP port at all.
+    """
+    _entry_at_the_shared_host(hass, SERIAL_A, configured_port)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_A)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await _discover(hass, announced_port)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    detect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_recognises_a_configured_panel_on_a_new_port_by_its_serial(
+    hass: HomeAssistant,
+) -> None:
+    """A configured panel announcing another port is probed, and is still not offered twice.
+
+    The host and port no longer match its entry, so nothing short of the serial
+    can say it is the same panel. The serial check is what aborts it.
+    """
+    entry = _entry_at_the_shared_host(hass, SERIAL_A, 8081)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_A)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await _discover(hass, 8083)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    detect.assert_awaited_once()
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert entry.data[CONF_HOST] == SHARED_HOST
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_probes_two_panels_at_one_address_at_the_same_time(
+    hass: HomeAssistant,
+) -> None:
+    """Two panels announcing together must not be mistaken for one announcing twice.
+
+    The flow holds an interim id while it probes, so that repeated
+    announcements of one panel do not start a probe each. Keyed on the host
+    alone, the second panel at the address was aborted as already in progress
+    behind the first, and was not seen again until it next re-announced.
+    """
+    first_probe_started = asyncio.Event()
+    release_first_probe = asyncio.Event()
+
+    async def _detect(host: str, *, port: int, httpx_client: object) -> DetectionResult:
+        if port == 8081:
+            first_probe_started.set()
+            await release_first_probe.wait()
+            return _status(SERIAL_A)
+        return _status(SERIAL_B)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(side_effect=_detect),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        first = hass.async_create_task(_discover(hass, 8081))
+        await first_probe_started.wait()
+
+        second = await _discover(hass, 8082)
+
+        release_first_probe.set()
+        first_result = await first
+
+    assert second["type"] == FlowResultType.FORM, second
+    assert second["step_id"] == "confirm_discovery"
+    assert first_result["type"] == FlowResultType.FORM, first_result
+    assert first_result["step_id"] == "confirm_discovery"
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_still_probes_one_panel_once_however_it_announces(
+    hass: HomeAssistant,
+) -> None:
+    """The interim id must keep doing its job for a real panel announcing on several services.
+
+    A SPAN panel announces `_ebus._tcp` and `_secure-mqtt._tcp` from the same
+    address within moments of each other, neither publishing an HTTP port. The
+    second must wait on the first's probe rather than start one of its own.
+    """
+    first_probe_started = asyncio.Event()
+    release_first_probe = asyncio.Event()
+
+    async def _detect(host: str, *, port: int, httpx_client: object) -> DetectionResult:
+        first_probe_started.set()
+        await release_first_probe.wait()
+        return _status(SERIAL_A)
+
+    # Different discovery data, so Home Assistant's own duplicate-discovery
+    # check does not catch it first: only the interim id can.
+    secure_mqtt = dataclasses.replace(
+        _announcement(None),
+        name="SPAN Panel._secure-mqtt._tcp.local.",
+        type="_secure-mqtt._tcp.local.",
+    )
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(side_effect=_detect),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        first = hass.async_create_task(_discover(hass, None))
+        await first_probe_started.wait()
+
+        second = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=secure_mqtt,
+        )
+
+        release_first_probe.set()
+        await first
+
+    assert second["type"] == FlowResultType.ABORT
+    assert second["reason"] == "already_in_progress"
+    detect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
+    hass: HomeAssistant,
+) -> None:
+    """The second panel at an address is set up on its own port, and recognised afterwards.
+
+    The entry has to record the port it was discovered on: that stored port is
+    what lets its next announcement end without a probe, and what tells it
+    apart from the panel beside it.
+    """
+    _entry_at_the_shared_host(hass, SERIAL_A, 8081)
+    auth = dataclasses.replace(MOCK_V2_AUTH, serial_number=SERIAL_B)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=auth,
+        ),
+        # The entry is created, not run: what is under test is what it records.
+        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)),
+    ):
+        discovered = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=dataclasses.replace(
+                _announcement(8082), properties={"httpPort": "8082", "httpsPort": "9082"}
+            ),
+        )
+        assert discovered.get("step_id") == "confirm_discovery", discovered
+        menu = await _submit_host_and_pin(hass, discovered["flow_id"], {})
+        picked = await hass.config_entries.flow.async_configure(
+            menu["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        named = await hass.config_entries.flow.async_configure(
+            picked["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        created = await hass.config_entries.flow.async_configure(
+            named["flow_id"], {"entity_naming_pattern": "friendly_names"}
+        )
+
+    assert created["type"] == FlowResultType.CREATE_ENTRY, created
+    assert created["result"].unique_id == SERIAL_B
+    assert created["data"][CONF_HOST] == SHARED_HOST
+    assert created["data"][CONF_HTTP_PORT] == 8082
+    assert created["data"][CONF_HTTPS_PORT] == 9082
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        again = await _discover(hass, 8082)
+
+    assert again["type"] == FlowResultType.ABORT
+    assert again["reason"] == "already_configured"
+    detect.assert_not_awaited()
 
 
 # ---------- reauth: proximity ----------
