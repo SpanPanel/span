@@ -331,9 +331,45 @@ async def test_a_dead_https_port_typed_at_setup_is_not_called_a_certificate_mism
         )
 
     assert result["type"] == FlowResultType.FORM, result
-    assert result["step_id"] == "panel_ca"
     assert result["errors"] == {"base": "https_port_unreachable"}
     assert result["description_placeholders"] == {"https_port": str(dead_port)}
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_dead_https_port_typed_at_setup_is_asked_for_again(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The user typed the port, so the user gets the field back to correct it.
+
+    Shown on the CA step instead, submitting would only probe the same port
+    again: that form has no field, and nothing else in the flow would ever ask.
+    The field keeps what was typed, so the user can see which number failed.
+    """
+    dead_port = closed_port()
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_LOOPBACK, CONF_HTTP_PORT: 8080}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HTTPS_PORT: dead_port}
+        )
+
+        assert result["type"] == FlowResultType.FORM, result
+        assert result["step_id"] == "panel_https_port"
+        assert result["errors"] == {"base": "https_port_unreachable"}
+        field = next(key for key in result["data_schema"].schema if key == CONF_HTTPS_PORT)
+        assert field.default() == dead_port
+
+        corrected = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HTTPS_PORT: panel.port}
+        )
+
+    assert corrected["type"] == FlowResultType.MENU, corrected
+    assert corrected["step_id"] == "choose_v2_auth"
 
 
 @pytest.mark.usefixtures("socket_enabled")

@@ -1267,9 +1267,42 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         add-on allocates that port per panel and reallocates it across restarts,
         so the only correct answer is the one it just gave.
         """
-        if self._http_port == 80 or self._https_port_known:
-            return await self.async_step_panel_ca()
-        return await self.async_step_panel_https_port()
+        if self._https_port_is_the_users():
+            return await self.async_step_panel_https_port()
+        return await self.async_step_panel_ca()
+
+    def _https_port_is_the_users(self) -> bool:
+        """Whether the HTTPS port this flow dials is one the user typed.
+
+        The one condition both the step that asks for the port and the step
+        that reports a failure on it read, so they cannot disagree about whose
+        number it is: asked for exactly where the HTTP port moved and nothing
+        authoritative named the TLS one.
+        """
+        return self._http_port != 80 and not self._https_port_known
+
+    def _async_show_https_port_form(
+        self, error: str | None = None, placeholders: Mapping[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """Show the HTTPS port form, prefilled with the port this flow would dial.
+
+        That is the default the first time, and on a return the port that just
+        failed, so the user sees which number to correct rather than a default
+        they never entered.
+        """
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HTTPS_PORT, default=self._https_port): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=65535)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="panel_https_port",
+            data_schema=schema,
+            errors={"base": error} if error else None,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_panel_https_port(
         self, user_input: dict[str, Any] | None = None
@@ -1281,22 +1314,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         fails each setup with nothing the user can do but reconfigure. Refuse
         it while the person who typed it is present.
         """
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_HTTPS_PORT, default=DEFAULT_HTTPS_PORT): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=65535)
-                ),
-            }
-        )
         if user_input is None:
-            return self.async_show_form(step_id="panel_https_port", data_schema=schema)
+            return self._async_show_https_port_form()
         port = int(user_input[CONF_HTTPS_PORT])
         if port == 80:
-            return self.async_show_form(
-                step_id="panel_https_port",
-                data_schema=schema,
-                errors={"base": "https_port_is_plaintext"},
-            )
+            return self._async_show_https_port_form("https_port_is_plaintext")
         self._https_port = port
         return await self.async_step_panel_ca()
 
@@ -1346,9 +1368,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 self._https_port,
                 self.host,
             )
-            return self._async_show_ca_error(
-                "https_port_unreachable", {"https_port": str(self._https_port)}
-            )
+            placeholders = {"https_port": str(self._https_port)}
+            if self._https_port_is_the_users():
+                # The user typed the number, so the field they typed it in is
+                # where it can be corrected. The CA form has no field: submitting
+                # it would only dial the same port again.
+                return self._async_show_https_port_form("https_port_unreachable", placeholders)
+            return self._async_show_ca_error("https_port_unreachable", placeholders)
         if verdict is not LeafVerdict.TRUSTED:
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
