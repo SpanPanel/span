@@ -20,6 +20,7 @@ re-commissioned in place gains or loses the attributes with its relay.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -96,6 +97,21 @@ def _republishing(device_id: str, **topics: str) -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
+def _without_a_relay(device_id: str) -> SpanPanelSnapshot:
+    """Return the capture with one circuit's `switch` node gone, declaration and topics both.
+
+    A circuit that still occupies its breaker spaces and declares no relay at
+    all: neither controllable nor locked.
+    """
+    tree = schema_one_tree()
+    for topic in [topic for topic in tree[device_id] if topic.startswith("switch/")]:
+        del tree[device_id][topic]
+    description = json.loads(tree[device_id]["$description"])
+    del description["nodes"]["switch"]
+    tree[device_id]["$description"] = json.dumps(description)
+    return schema_one_snapshot(tree)
+
+
 def test_the_capture_publishes_both_policies_on_a_locked_relay() -> None:
     """Guard the premise of the omission tests.
 
@@ -169,6 +185,26 @@ def test_the_rule_follows_the_relay_on_every_update() -> None:
     locked = controllable.extra_state_attributes or {}
     assert not RELAY_POLICIES & locked.keys(), locked
     assert locked["always_on"] is True
+
+
+def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
+    """Load-shed and PCS need a relay to act on, and this circuit declares none.
+
+    Pins the field the omission reads. With no relay there is nothing to be
+    locked, so `always_on` is false here, and a rule reading it would show
+    both policies. The circuit still publishes them: its `load-shed` and `pcs`
+    nodes are untouched.
+    """
+    snapshot = _without_a_relay(CONTROLLABLE_CIRCUIT)
+    circuit = snapshot.circuits[CONTROLLABLE_CIRCUIT]
+    assert circuit.always_on is False
+    assert circuit.is_user_controllable is False
+    assert circuit.measures_outside_panel is False
+    assert circuit.pcs_managed is not None
+
+    attributes = _attributes(snapshot, CONTROLLABLE_CIRCUIT)
+
+    assert not RELAY_POLICIES & attributes.keys(), attributes
 
 
 def test_a_flat_always_on_circuit_reports_no_shed_priority() -> None:
