@@ -255,6 +255,27 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         if voltage is not None:
             attributes["voltage"] = voltage
 
+        # Load-shed and the PCS are policies that act on the circuit's relay, and
+        # the eBus catalogs make each "meaningful only on a circuit that also
+        # publishes a controllable `switch`". A locked relay still carries a
+        # stored shed priority and a PCS participation on the wire, and the
+        # panel acts on neither: SpanPanel/span#351 is five circuits
+        # commissioned always on, one published `OFF_GRID`, and all five stayed
+        # powered through an off-grid test. So neither policy is republished
+        # where the relay cannot be moved.
+        #
+        # `is_user_controllable` is the field that answers that question on
+        # both adapters: schema_1 reads it from `switch/relay-controllable`, and
+        # false where no `switch` is declared at all; flat derives it as `not
+        # always-on`. It is also what `circuit_has_a_breaker_switch` and
+        # `circuit_has_a_priority_select` withhold the two controls on, so the
+        # attribute and the control cannot disagree. `always_on` is narrower --
+        # a relay that exists and is locked -- and on schema_1 is false for a
+        # circuit declaring no relay, where both policies are as meaningless.
+        # Read from the live snapshot on every update, so a circuit
+        # re-commissioned in place gains or loses them with its relay.
+        relay_policies_apply = circuit.is_user_controllable
+
         # A breaker's relay and shedding facts. A meter outside the panel has no
         # relay and is never shed, so it carries none of them rather than
         # defaults that would make it read as a breaker.
@@ -262,7 +283,8 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
             attributes["always_on"] = circuit.always_on
             attributes["relay_state"] = circuit.relay_state
             attributes["relay_requester"] = circuit.relay_requester
-            attributes["shed_priority"] = circuit.priority
+            if relay_policies_apply:
+                attributes["shed_priority"] = circuit.priority
             attributes["is_sheddable"] = circuit.is_sheddable
 
         # This circuit's participation in the enclosure's Power Control System,
@@ -280,10 +302,11 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         # circuit and any v1.0 circuit outside a PCS. Both properties are `MAY`,
         # so absence is conformant firmware; an attribute present and empty would
         # read as a reading that failed, and `False` / `0` would each be a claim
-        # the panel never made.
-        if circuit.pcs_managed is not None:
+        # the panel never made. Omitted too where no controllable relay exists
+        # for the PCS to act on, for the reason given with `relay_policies_apply`.
+        if relay_policies_apply and circuit.pcs_managed is not None:
             attributes["pcs_managed"] = circuit.pcs_managed
-        if circuit.pcs_priority is not None:
+        if relay_policies_apply and circuit.pcs_priority is not None:
             attributes["pcs_priority"] = circuit.pcs_priority
 
         # The protections the breaker provides, where it says: a breaker that
