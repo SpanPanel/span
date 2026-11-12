@@ -6,8 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **On MAIN 32, a circuit's monitoring rating can be set in the dashboard**, so current monitoring judges a tandem or other multi-load breaker against the
-  capacity the user gives instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
+- **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app into the dashboard**, so current monitoring judges that space against both
+  breakers together instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
 
 ### Fixed
 
