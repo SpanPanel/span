@@ -258,11 +258,14 @@ class LeafVerdict(StrEnum):
     - `UNTRUSTED` — something answered and its certificate does not chain to the
       anchor. The interception case, and the only one worth alarming a user
       about.
-    - `UNREACHABLE` — nothing answered at all. Distinct from `UNTRUSTED`
-      because it had been collapsed into it, so an unplugged cable was reported
-      to users as "the certificate this panel serves is not signed by the
-      authority it published" — an accusation of interception for a network
-      timeout.
+    - `UNREACHABLE` — no TLS connection could be made, so no certificate was
+      presented: nothing listening, nothing answering in time, or something
+      that answered without completing a handshake -- a plaintext service, a
+      proxy resetting it. Not "nothing answered", which the last of those is
+      not. Distinct from `UNTRUSTED` because it had been collapsed into it, so
+      an unplugged cable was reported to users as "the certificate this panel
+      serves is not signed by the authority it published" — an accusation of
+      interception for a network timeout.
     """
 
     TRUSTED = "trusted"
@@ -390,13 +393,14 @@ class PanelLeafHost:
     when no candidate's does. `verdict` is TRUSTED exactly when `reached` is
     set.
 
-    Otherwise `verdict` is UNREACHABLE only when no candidate answered at all,
-    and the verdict of the first candidate that did answer when one did. Both
-    halves of that rule are about one thing: a refused or silent TLS port
-    presents no certificate, so it must never come back as a certificate the
-    anchor rejects -- that is the verdict a caller reports as "not signed by the
-    authority it published" -- while a certificate that was presented and
-    failed says more than a candidate that presented nothing.
+    Otherwise `verdict` is UNREACHABLE only when no candidate presented a
+    certificate at all -- no TLS connection could be made to any of them -- and
+    the verdict of the first candidate that did present one when one did. Both
+    halves of that rule are about one thing: a TLS port that is refused,
+    silent or not TLS presents no certificate, so it must never come back as a
+    certificate the anchor rejects -- that is the verdict a caller reports as
+    "not signed by the authority it published" -- while a certificate that was
+    presented and failed says more than a candidate that presented nothing.
     """
 
     reached: str | None
@@ -411,7 +415,7 @@ async def async_panel_leaf_host(
     The single implementation of "which address does this panel answer on".
     `host` itself when the certificate it serves already names it, the resolved
     address when only that works, and no address when neither does -- with the
-    verdict then saying whether anything answered at all; see `PanelLeafHost`.
+    verdict then saying whether any certificate was presented; see `PanelLeafHost`.
 
     The name is tried first, always: the panel's leaf names the addresses it
     knows itself by, and where it already names the host there is nothing to
@@ -465,7 +469,7 @@ async def async_ca_signs_panel_leaf(
 
     For callers that only need the yes or no; `async_panel_leaf_host` carries
     the address the panel was actually reached on, why there is more than one
-    candidate, and -- for a no -- whether anything answered at all.
+    candidate, and -- for a no -- whether any certificate was presented.
     """
     return (await async_panel_leaf_host(hass, host, tls_port, ca_pem)).reached is not None
 

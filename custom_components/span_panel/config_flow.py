@@ -1336,12 +1336,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         verdict = await self._async_choose_bootstrap_host(ca_pem, self._https_port)
         if verdict is LeafVerdict.UNREACHABLE:
             # The CA fetch over HTTP just answered, so the panel is there: what
-            # did not answer is the TLS port. No certificate was presented, so
-            # none failed, and saying one did would accuse the network of
-            # interception over a port number.
+            # failed is a TLS connection on the HTTPS port. No certificate was
+            # presented, so none failed, and saying one did would accuse the
+            # network of interception over a port number.
             _LOGGER.warning(
-                "Nothing answered on HTTPS port %s at %s, so the CA the panel published "
-                "could not be checked against the certificate it serves; refusing to pin it",
+                "No TLS connection could be made on HTTPS port %s at %s, so the CA the panel "
+                "published could not be checked against the certificate it serves; refusing "
+                "to pin it",
                 self._https_port,
                 self.host,
             )

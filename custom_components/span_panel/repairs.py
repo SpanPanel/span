@@ -120,14 +120,14 @@ class PanelCAChangedRepairFlow(RepairsFlow):
         mqtts_port = as_port(entry.data.get(CONF_EBUS_BROKER_PORT), DEFAULT_MQTTS_PORT)
         choice = await async_panel_leaf_host(self.hass, host, mqtts_port, ca_pem)
         if choice.verdict is LeafVerdict.UNREACHABLE:
-            # Nothing was presented, so nothing failed: this is a broker that is
-            # not answering, not a CA that signs nothing the panel serves, and
-            # saying otherwise would accuse the network of interception when
-            # the broker simply did not answer.
+            # No certificate was presented, so none failed: this is a broker
+            # port that no TLS connection could be made to, not a CA that signs
+            # nothing the panel serves, and saying otherwise would accuse the
+            # network of interception over a port that is down or not TLS.
             _LOGGER.warning(
-                "Nothing answered on SPAN panel %s's broker at %s:%s, so the CA it "
-                "published (SHA-256 %s) could not be checked against the certificate it "
-                "serves and has not been offered. The pin in place is SHA-256 %s and has "
+                "No TLS connection could be made to SPAN panel %s's broker at %s:%s, so the "
+                "CA it published (SHA-256 %s) could not be checked against the certificate "
+                "it serves and has not been offered. The pin in place is SHA-256 %s and has "
                 "not been touched",
                 entry.title,
                 host,

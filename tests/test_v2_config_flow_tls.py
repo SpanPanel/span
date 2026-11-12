@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 import contextlib
 import ipaddress
+import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -29,6 +31,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 
+from custom_components.span_panel.config_flow_validation import LeafVerdict, async_leaf_verdict
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_PORT,
@@ -50,11 +53,21 @@ from .tls_panel import (
     closed_port,
     issue_ca,
     issue_leaf,
+    plaintext_listener,
     resolving_to_loopback,
     unrelated_ca_pem,
 )
 
 PASSPHRASE = "hunter2-synthetic"
+
+STRINGS = Path(__file__).parent.parent / "custom_components" / "span_panel" / "strings.json"
+
+
+def _config_error_text(key: str) -> str:
+    """The English text of one config-flow error, as `strings.json` states it."""
+    text = json.loads(STRINGS.read_text(encoding="utf-8"))["config"]["error"][key]
+    assert isinstance(text, str)
+    return text
 
 
 @pytest.fixture
@@ -321,6 +334,52 @@ async def test_a_dead_https_port_typed_at_setup_is_not_called_a_certificate_mism
     assert result["step_id"] == "panel_ca"
     assert result["errors"] == {"base": "https_port_unreachable"}
     assert result["description_placeholders"] == {"https_port": str(dead_port)}
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_plaintext_listener_is_a_tls_port_that_cannot_be_reached(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The premise of the wording below: something answers, and no TLS connection results.
+
+    The leaf probe reports a handshake that fails for any reason but
+    verification as UNREACHABLE, a plaintext reply included. So whatever is
+    said for UNREACHABLE has to be true of a port that did answer.
+    """
+    with plaintext_listener() as port:
+        assert await async_leaf_verdict(PANEL_LOOPBACK, port, panel.ca_pem) is (
+            LeafVerdict.UNREACHABLE
+        )
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_plaintext_https_port_is_reported_as_no_tls_connection(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The HTTPS port typed is the panel's HTTP one: it answers, and not with TLS.
+
+    The message shown has to be true of that, so it cannot claim that nothing
+    answered -- something did, in plaintext.
+    """
+    with _plaintext_bootstrap_stubbed(panel), plaintext_listener() as plaintext_port:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_LOOPBACK, CONF_HTTP_PORT: 8080}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HTTPS_PORT: plaintext_port}
+        )
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["errors"] == {"base": "https_port_unreachable"}
+    assert result["description_placeholders"] == {"https_port": str(plaintext_port)}
+    assert _config_error_text("https_port_unreachable").startswith(
+        "No TLS connection could be made on HTTPS port {https_port}"
+    )
 
 
 @pytest.mark.usefixtures("socket_enabled")

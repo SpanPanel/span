@@ -231,3 +231,30 @@ class Panel:
             self._listener.shutdown()
             self._listener.server_close()
             self._listener = None
+
+
+class _PlaintextListener(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """Serve the panel's status document over plain HTTP, with no TLS at all."""
+
+    daemon_threads = True
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """Stay quiet: a TLS client hangs up as soon as the reply is not a handshake."""
+
+
+@contextlib.contextmanager
+def plaintext_listener() -> Iterator[int]:
+    """Listen on a loopback port that answers, but in plaintext, and yield the port.
+
+    What a TLS client meets when the HTTPS port it was given is the panel's
+    HTTP one, or anything else that is not TLS: something answers, and no
+    handshake completes. A failure to reach a TLS service, not silence -- which
+    is the case a message saying "nothing answered" would describe wrongly.
+    """
+    listener = _PlaintextListener((PANEL_LOOPBACK, 0), PanelStatusHandler)
+    threading.Thread(target=listener.serve_forever, daemon=True).start()
+    try:
+        yield listener.server_port
+    finally:
+        listener.shutdown()
+        listener.server_close()
