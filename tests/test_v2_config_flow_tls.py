@@ -301,6 +301,78 @@ async def test_fresh_install_still_refuses_a_leaf_the_ca_does_not_sign(
         )
 
     assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "ca_leaf_mismatch"}
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_an_untrusted_https_port_typed_at_setup_is_asked_for_again(
+    hass: HomeAssistant, panel: Panel, tmp_path: Any
+) -> None:
+    """A certificate the panel's CA does not sign, on a port the user typed, is theirs to correct.
+
+    The message already says to check the HTTPS port: the likeliest cause is a
+    port that reaches some other TLS service. So the field comes back with the
+    port that failed, and the panel's real port carries on into authentication.
+    """
+    stranger = Panel(tmp_path)
+    stranger.present([x509.IPAddress(ipaddress.ip_address(PANEL_LOOPBACK))])
+    try:
+        with _plaintext_bootstrap_stubbed(panel):
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN, context={"source": config_entries.SOURCE_USER}
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_HOST: PANEL_LOOPBACK, CONF_HTTP_PORT: 8080}
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_HTTPS_PORT: stranger.port}
+            )
+
+            assert result["type"] == FlowResultType.FORM, result
+            assert result["step_id"] == "panel_https_port"
+            assert result["errors"] == {"base": "ca_leaf_mismatch"}
+            field = next(key for key in result["data_schema"].schema if key == CONF_HTTPS_PORT)
+            assert field.default() == stranger.port
+
+            corrected = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_HTTPS_PORT: panel.port}
+            )
+    finally:
+        stranger.close()
+
+    assert corrected["type"] == FlowResultType.MENU, corrected
+    assert corrected["step_id"] == "choose_v2_auth"
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_an_untrusted_https_port_a_panel_published_stays_on_the_ca_step(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Nobody typed a published port, so there is no field to hand back."""
+    stranger_cert, stranger_key = issue_leaf(
+        *issue_ca(), [x509.IPAddress(ipaddress.ip_address(PANEL_LOOPBACK))]
+    )
+    panel.present_pem(stranger_cert, stranger_key)
+    address = ipaddress.IPv4Address(PANEL_LOOPBACK)
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=ZeroconfServiceInfo(
+                ip_address=address,
+                ip_addresses=[address],
+                hostname="span-panel.local.",
+                name="SPAN Panel._ebus._tcp.local.",
+                port=8883,
+                properties={"httpPort": "8080", "httpsPort": str(panel.port)},
+                type="_ebus._tcp.local.",
+            ),
+        )
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] == FlowResultType.FORM, result
     assert result["step_id"] == "panel_ca"
     assert result["errors"] == {"base": "ca_leaf_mismatch"}
 

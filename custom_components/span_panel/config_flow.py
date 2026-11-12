@@ -1397,6 +1397,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 self.host,
                 self._https_port,
             )
+            if self._https_port_is_the_users():
+                # The message says to check the HTTPS port, and a typed port
+                # reaching some other TLS service is the likeliest cause, so the
+                # user gets back the field to check it in.
+                return self._async_show_https_port_form("ca_leaf_mismatch")
             return self._async_show_ca_error("ca_leaf_mismatch")
 
         try:
