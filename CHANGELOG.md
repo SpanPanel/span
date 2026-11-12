@@ -11,6 +11,12 @@ All notable changes to this project will be documented in this file.
 - **The panel view draws a tandem-quad across both of its spaces**, where it could draw it over one space and show the other as empty.
 - **Current monitoring judges a tandem-quad against what its heavier leg can carry**, the two-pole breaker's rating plus the larger single-pole one, instead of
   all three ratings added together.
+- **The dashboard colors and counts a circuit's utilization against that circuit's own monitoring thresholds**, so one set above 100% no longer shows as an
+  alert below them.
+- **Circuits that share a meter are treated as one group across the dashboard**: list rows and Favorites judge them against the group's capacity and draw every
+  expanded circuit's chart, the side panel shows every breaker's rating and the group's capacity, and the Monitoring summary counts the group once.
+- **Current charts draw their limit lines at the circuit's own monitoring thresholds**, with the axis fitted to the highest line and reading, instead of at 80%
+  and 100% of the breaker rating.
 
 ## [2.2.0] - 11/2026
 
