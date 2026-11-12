@@ -2672,6 +2672,40 @@ async def test_zeroconf_still_probes_one_panel_once_however_it_announces(
     detect.assert_awaited_once()
 
 
+@pytest.mark.parametrize(
+    ("announced_port", "shown_as"),
+    [
+        # A real panel: one to an address, shown exactly as before.
+        (None, SHARED_HOST),
+        (8081, f"{SHARED_HOST}:8081"),
+        (8082, f"{SHARED_HOST}:8082"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_zeroconf_shows_a_panel_by_its_port_where_that_is_not_80(
+    hass: HomeAssistant, announced_port: int | None, shown_as: str
+) -> None:
+    """Two panels sharing an address must not be offered under the same name.
+
+    The discovery card and the confirmation both named only the host, so every
+    panel an emulator served from one machine read "Span Panel (<host>)" and
+    nothing said which was which.
+    """
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(return_value=_status(SERIAL_B)),
+        ),
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+    ):
+        result = await _discover(hass, announced_port)
+
+    assert result["step_id"] == "confirm_discovery", result
+    assert result["description_placeholders"] == {"host": shown_as}
+    flow = hass.config_entries.flow.async_get(result["flow_id"])
+    assert flow["context"]["title_placeholders"] == {CONF_HOST: shown_as}
+
+
 @pytest.mark.asyncio
 async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
     hass: HomeAssistant,
@@ -3122,6 +3156,38 @@ async def test_hassio_discovery_routes_to_confirm(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "confirm_discovery"
+
+
+@pytest.mark.parametrize(
+    ("host", "shown_as"),
+    [
+        ("192.168.1.50", "192.168.1.50:9090"),
+        # A literal with colons of its own is bracketed, or the port is lost in it.
+        ("fd00::50", "[fd00::50]:9090"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_hassio_confirmation_names_the_add_on_port(
+    hass: HomeAssistant, host: str, shown_as: str
+) -> None:
+    """The confirmation is shared with zeroconf and follows the same rule.
+
+    The card already tells add-on panels apart by serial; the confirmation named
+    only the add-on's host, which every panel it serves shares.
+    """
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=MOCK_V2_DETECTION_SIM,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "host": host}),
+        )
+
+    assert result["description_placeholders"] == {"host": shown_as}
+    flow = hass.config_entries.flow.async_get(result["flow_id"])
+    assert flow["context"]["title_placeholders"] == {CONF_HOST: MOCK_HASSIO_CONFIG["serial"]}
 
 
 @pytest.mark.asyncio

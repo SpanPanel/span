@@ -644,7 +644,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 **self.context,
                 "title_placeholders": {
                     **self.context.get("title_placeholders", {}),
-                    CONF_HOST: host,
+                    CONF_HOST: self._discovered_address(),
                 },
             }
             self._is_flow_setup = True
@@ -881,6 +881,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return ["auth_passphrase"]
         return ["auth_passphrase", "auth_proximity"]
 
+    def _discovered_address(self) -> str:
+        """Return the address a discovered panel is shown at: its host, and its port unless 80.
+
+        Several panels can answer at one host on different HTTP ports, and a
+        discovery card or confirmation naming only the host reads the same for
+        every one of them. Port 80 -- every real SPAN panel -- is left off, so
+        those read exactly as they did. An IPv6 literal is bracketed, as it has
+        to be beside a port.
+        """
+        host = self.host or ""
+        if self._http_port == 80:
+            return host
+        if ":" in host:
+            host = f"[{host}]"
+        return f"{host}:{self._http_port}"
+
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -890,11 +906,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Prompt the user for confirmation
         if user_input is None:
             self._set_confirm_only()
-            host = self.host if self.host is not None else ""
             return self.async_show_form(
                 step_id="confirm_discovery",
                 description_placeholders={
-                    "host": host,
+                    "host": self._discovered_address(),
                 },
             )
 
