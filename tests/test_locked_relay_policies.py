@@ -207,6 +207,20 @@ def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
     assert not RELAY_POLICIES & attributes.keys(), attributes
 
 
+def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
+    """Nor does it report a relay it does not have.
+
+    `always_on`, `relay_state`, `relay_requester` and `is_sheddable` are facts
+    about a relay. With none declared they could only be the adapter's defaults
+    -- not locked, state UNKNOWN, requester UNKNOWN, never shed -- which read as
+    a relay whose state is unknown. The circuit's other attributes stay.
+    """
+    attributes = _attributes(_without_a_relay(CONTROLLABLE_CIRCUIT), CONTROLLABLE_CIRCUIT)
+
+    assert not RELAY_FACTS & attributes.keys(), attributes
+    assert "tabs" in attributes
+
+
 def test_a_flat_always_on_circuit_reports_no_shed_priority() -> None:
     """Flat firmware says the same thing through `circuit/always-on`.
 

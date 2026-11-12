@@ -15,6 +15,7 @@ from .coordinator import SpanPanelCoordinator
 from .counter_plausibility import exceeds_lifetime_bound
 from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
+    circuit_has_a_relay,
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
     construct_shared_with_attributes,
@@ -280,10 +281,13 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         # re-commissioned in place gains or loses them with its relay.
         relay_policies_apply = circuit.is_user_controllable
 
-        # A breaker's relay and shedding facts. A meter outside the panel has no
-        # relay and is never shed, so it carries none of them rather than
-        # defaults that would make it read as a breaker.
-        if not circuit.measures_outside_panel:
+        # A breaker's relay and shedding facts, where there is a relay to state
+        # them about. A meter outside the panel has none, and nor does a hosted
+        # circuit that declares no `switch`; either carries none of them rather
+        # than the adapter's defaults -- not locked, state and requester
+        # UNKNOWN, never shed -- which would read as a relay that is there and
+        # has not reported.
+        if not circuit.measures_outside_panel and circuit_has_a_relay(circuit):
             attributes["always_on"] = circuit.always_on
             attributes["relay_state"] = circuit.relay_state
             attributes["relay_requester"] = circuit.relay_requester
