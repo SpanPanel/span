@@ -671,7 +671,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "A entidade do sensor de potência do circuito."
+          "description": "O circuito: o seu sensor de corrente, qualquer outra das suas entidades ou o seu identificador de circuito."
         },
         "continuous_threshold_pct": {
           "name": "Limiar contínuo (%)",
@@ -705,7 +705,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "A entidade do sensor de potência do circuito."
+          "description": "O circuito: o seu sensor de corrente, qualquer outra das suas entidades ou o seu identificador de circuito."
         },
         "config_entry_id": {
           "name": "Entrada de configuração",

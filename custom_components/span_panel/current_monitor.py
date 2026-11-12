@@ -392,10 +392,11 @@ class CurrentMonitor:
         return entity_id if entity_id is not None else circuit_id
 
     def resolve_entity_to_circuit_id(self, entity_id: str, circuit_ids: Collection[str]) -> str:
-        """Resolve a power sensor entity_id to its internal circuit_id.
+        """Resolve one of the circuit's entities to its internal circuit_id.
 
-        Accepts either an entity_id (sensor.span_panel_kitchen_power) or
-        a raw circuit_id for backwards compatibility. The circuit is the one of
+        Accepts any of this integration's entities for the circuit, such as its
+        current sensor (sensor.span_panel_kitchen_current), or a raw circuit_id
+        for backwards compatibility. The circuit is the one of
         `circuit_ids` that the entity's unique_id names; an id is opaque, so it is
         found among them rather than by its shape.
 

@@ -671,7 +671,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "L'entité capteur de puissance du circuit."
+          "description": "Le circuit : son capteur de courant, toute autre de ses entités ou son identifiant de circuit."
         },
         "continuous_threshold_pct": {
           "name": "Seuil continu (%)",
@@ -705,7 +705,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "L'entité capteur de puissance du circuit."
+          "description": "Le circuit : son capteur de courant, toute autre de ses entités ou son identifiant de circuit."
         },
         "config_entry_id": {
           "name": "Entrée de configuration",

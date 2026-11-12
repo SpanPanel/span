@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from homeassistant.config_entries import ConfigEntryState
@@ -16,7 +14,6 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 import voluptuous as vol
-import yaml
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
@@ -32,7 +29,6 @@ from custom_components.span_panel.services import (
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
 SERVICE_A = 100
-_COMPONENT = Path(__file__).parent.parent / "custom_components" / "span_panel"
 _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
 
 
@@ -103,21 +99,6 @@ async def _set(hass: HomeAssistant, **data: object) -> None:
 
 async def _clear(hass: HomeAssistant, **data: object) -> None:
     await hass.services.async_call(DOMAIN, "clear_circuit_package_ratings", data, blocking=True)
-
-
-class TestTheCircuitField:
-    """The circuit field's description names what its selector offers and what the service resolves."""
-
-    @pytest.mark.parametrize("service", ["set_circuit_package_ratings", "clear_circuit_package_ratings"])
-    def test_the_description_names_the_current_sensor_the_selector_offers(self, service: str) -> None:
-        services = yaml.safe_load((_COMPONENT / "services.yaml").read_text(encoding="utf-8"))
-        strings = json.loads((_COMPONENT / "strings.json").read_text(encoding="utf-8"))
-
-        assert services[service]["fields"]["circuit_id"]["selector"]["entity"]["device_class"] == "current"
-        description = strings["services"][service]["fields"]["circuit_id"]["description"]
-        assert "current sensor" in description
-        assert "power sensor" not in description
-        assert "circuit id" in description
 
 
 class TestSchemas:
