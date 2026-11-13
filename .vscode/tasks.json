@@ -125,7 +125,7 @@
     {
       "label": "Fix markdown formatting",
       "type": "shell",
-      "command": "/Users/bflood/projects/scripts/fix-markdown.sh",
+      "command": "${workspaceFolder}/scripts/fix-markdown.sh",
       "args": [
         "${workspaceFolder}"
       ],
@@ -140,7 +140,7 @@
     {
       "label": "Format and Lint Markdown",
       "type": "shell",
-      "command": "/Users/bflood/projects/scripts/fix-markdown.sh",
+      "command": "${workspaceFolder}/scripts/fix-markdown.sh",
       "args": [
         "${workspaceFolder}"
       ],
