@@ -305,6 +305,19 @@ def test_a_circuit_publishing_an_empty_shared_meter_list_describes_the_breakers(
     assert panel_describes_breakers(_sharing(_snapshot(_circuit()), ()))
 
 
+@pytest.mark.parametrize("flag", [None, False])
+@pytest.mark.parametrize(
+    ("shared_with", "describes"),
+    [(("circuit-9",), True), ((), True), (None, False)],
+)
+def test_a_flag_that_is_not_true_leaves_it_to_the_circuits(
+    flag: bool | None, shared_with: tuple[str, ...] | None, describes: bool
+) -> None:
+    """`publishes_shared_meters` None, where the adapter did not say, or False: a circuit publishing the list decides."""
+    snapshot = _snapshot(_circuit()) if shared_with is None else _sharing(_snapshot(_circuit()), shared_with)
+    assert panel_describes_breakers(replace(snapshot, publishes_shared_meters=flag)) is describes
+
+
 def _describing(snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
     """The same panel, on a model that declares `meter/shared-with-device-ids`."""
     return replace(snapshot, publishes_shared_meters=True)
