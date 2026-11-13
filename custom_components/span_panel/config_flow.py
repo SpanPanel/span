@@ -612,10 +612,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Whether this is a real panel's announcement from an address an entry already has.
 
         The one shape in which an address can stand in for a serial. A real
-        SPAN panel's entry stores no HTTP port -- the key is written only where
-        it is not 80 -- and one panel holds one address, so an announcement on
-        80 from that host is that panel. It matches whether the entry is loaded
-        or not, exactly as it always has.
+        SPAN panel's entry stores no HTTP port -- setup writes the key only
+        where it is not 80 -- and one panel holds one address, so an
+        announcement on 80 from that host is that panel. It matches whether the
+        entry is loaded or not, exactly as it always has.
+
+        An entry that stores a port, an explicit 80 included, is not that shape
+        and is not matched: the Supervisor route always writes the port, and an
+        entry that followed its panel back to 80 keeps the key. Its
+        announcements are simply probed, which costs a request and never drops
+        a panel.
 
         A stored port is never such evidence. Several panels can share a host,
         and an emulator hands each the lowest free port when it restarts, so

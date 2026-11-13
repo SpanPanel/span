@@ -2529,6 +2529,7 @@ async def test_zeroconf_offers_a_second_panel_at_an_address_already_configured(
         # A real SPAN panel: nothing stored, nothing published -- loaded or not,
         # exactly as before.
         (None, None, ConfigEntryState.NOT_LOADED),
+        (None, None, ConfigEntryState.LOADED),
         (None, None, ConfigEntryState.SETUP_RETRY),
         # A panel that publishes the default it already uses.
         (None, 80, ConfigEntryState.NOT_LOADED),
