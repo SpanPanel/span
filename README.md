@@ -811,6 +811,27 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **The Adopted tab is missing from the dashboard**                            | The dashboard offers By Activity, By Area and Monitoring, but neither**Adopted** nor **By Panel**.                                                                                                                                                                                                                                                                                                                                  | The panel dropdown at the top of the dashboard is on**Favorites**, which merges every configured panel into one workspace rather than being a panel itself, so the tabs that only mean something for a single panel are not offered there. Switch the dropdown to a panel and both come back; the selection is remembered per browser. Adopted is also administrator-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **A control reports `unconfirmed`**                                          | The logbook or the`span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                      | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                                                                                                      |
 
+### Constant high-current alerts on a tandem or multi-load breaker
+
+**Symptom:** on a MAIN 32, a circuit raises current alerts again and again. In the SPAN app its rating reads as two values, such as "20-20A" or "20-30A", while
+the integration shows one, such as "20A".
+
+**Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
+both loads against one breaker.
+
+**A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and, in its Monitoring section, enter the other breaker's rating exactly
+as the SPAN app shows the circuit (for 20-30A, enter 30). Monitoring then judges the space against both breakers together; the Breaker Rating sensor keeps
+showing the panel's rating. See [Copying a Tandem's Ratings from the SPAN App](frontend.md#copying-a-tandems-ratings-from-the-span-app).
+
+**A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports the average of the circuit's two legs, so one leg can
+carry more than its breaker while the reading stays under the rating. Turn monitoring off for that circuit rather than rely on a rating, since no rating can see
+the heavier leg; the dashboard offers no ratings to copy there.
+
+If the panel's rating for the circuit later changes, or the circuit moves to another space, the copied ratings are removed and a notification says so.
+
+Panels other than MAIN 32 publish each circuit of a multi-load breaker with its own rating and name the circuits that share its meter, so current monitoring
+already judges them together and offers nothing to copy. See [Circuits That Share a Meter or Relay](#circuits-that-share-a-meter-or-relay).
+
 ### Debug logging
 
 To collect debug logs, use **Enable debug logging** on the integration's page (**Settings → Devices & Services → Span Panel**), which covers this integration
@@ -820,7 +841,8 @@ name, and a log attached to an issue would publish them.
 ### Diagnostics
 
 **Download diagnostics** on the integration's page includes the panel's device tree, every device and property it publishes, with serial numbers, device ids and
-site details masked.
+site details masked. It also lists the ratings you copied from the SPAN app for each circuit, with the space they were copied for and whether they apply or are
+waiting on a value the panel has not sent yet, and any the integration removed that a notification reported and you have not yet dismissed.
 
 ## Development
 

@@ -35,6 +35,7 @@ from .const import (
     VALID_GRAPH_HORIZONS,
 )
 from .current_monitor import CurrentMonitor
+from .entity_resolver import resolve_circuit_id
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
 from .hardware_guard import async_read_hardware_version, registers_by_passphrase_only
@@ -241,6 +242,44 @@ def _build_clear_mains_threshold_schema() -> vol.Schema:
     )
 
 
+def _breaker_rating_a(value: object) -> int:
+    """Validate one breaker rating as the SPAN app shows it: whole amps, at least 1.
+
+    A bool is refused although Python counts it an int: `true` is no rating, and
+    stored as one it would no longer read back as a number.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise vol.Invalid("expected a whole number of amps")
+    if value < 1:
+        raise vol.Invalid("a breaker rating is at least 1 A")
+    return value
+
+
+def _build_set_circuit_package_ratings_schema() -> vol.Schema:
+    """Build schema for set_circuit_package_ratings service.
+
+    Each rating is checked here; how many there are, and how they relate to the
+    panel's, is the manager's to judge, since each refusal has its own message.
+    """
+    return vol.Schema(
+        {
+            vol.Required("circuit_id"): str,
+            vol.Required("package_ratings_a"): [_breaker_rating_a],
+            vol.Optional("config_entry_id"): str,
+        }
+    )
+
+
+def _build_clear_circuit_package_ratings_schema() -> vol.Schema:
+    """Build schema for clear_circuit_package_ratings service."""
+    return vol.Schema(
+        {
+            vol.Required("circuit_id"): str,
+            vol.Optional("config_entry_id"): str,
+        }
+    )
+
+
 def _build_set_global_monitoring_schema() -> vol.Schema:
     """Build schema for set_global_monitoring service."""
     return vol.Schema(
@@ -369,7 +408,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         runtime_data, entry = result
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
-        monitor = CurrentMonitor(hass, entry)
+        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.package_rating_manager)
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
         # Seed the monitor with the coordinator's latest snapshot so that
@@ -506,6 +545,64 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         "test_notification",
         async_handle_test_notification,
         schema=vol.Schema({vol.Optional("config_entry_id"): str}),
+    )
+
+
+def _async_register_package_rating_services(hass: HomeAssistant) -> None:
+    """Register the services that set and clear the package ratings copied from the SPAN app for a circuit.
+
+    Neither touches current monitoring: monitoring merely reads the rating the
+    entry gives, so both work whether monitoring is on or off.
+    """
+
+    def _get_runtime_data(call: ServiceCall, target: str) -> SpanPanelRuntimeData:
+        """Find the runtime data of the panel `target` belongs to.
+
+        The panel is `_threshold_panel_entry_id`'s choice, as for the threshold
+        services: an entity belongs to one panel, and a raw circuit id goes to the
+        panel the call names, or else the first loaded.
+        """
+        panel_entry_id = _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            runtime_data = loaded_runtime_data(entry)
+            if runtime_data is None:
+                continue
+            if panel_entry_id is None or entry.entry_id == panel_entry_id:
+                return runtime_data
+        _raise_if_entitys_panel_not_loaded(hass, target, panel_entry_id)
+        raise ServiceValidationError(
+            "No SPAN panel is loaded.",
+            translation_domain=DOMAIN,
+            translation_key="package_ratings_panel_not_loaded",
+        )
+
+    async def async_handle_set_circuit_package_ratings(call: ServiceCall) -> None:
+        target = call.data["circuit_id"]
+        runtime_data = _get_runtime_data(call, target)
+        snapshot = runtime_data.coordinator.data
+        circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
+        runtime_data.coordinator.package_rating_manager.set_package_ratings(
+            circuit_id, snapshot, call.data["package_ratings_a"]
+        )
+
+    async def async_handle_clear_circuit_package_ratings(call: ServiceCall) -> None:
+        target = call.data["circuit_id"]
+        runtime_data = _get_runtime_data(call, target)
+        snapshot = runtime_data.coordinator.data
+        circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
+        runtime_data.coordinator.package_rating_manager.clear_package_ratings(circuit_id, snapshot)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_circuit_package_ratings",
+        async_handle_set_circuit_package_ratings,
+        schema=_build_set_circuit_package_ratings_schema(),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "clear_circuit_package_ratings",
+        async_handle_clear_circuit_package_ratings,
+        schema=_build_clear_circuit_package_ratings_schema(),
     )
 
 

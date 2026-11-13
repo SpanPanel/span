@@ -8,8 +8,10 @@ id is composed by Home Assistant from the base `naming.py` supplies.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import TYPE_CHECKING
 
+from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN
@@ -24,10 +26,11 @@ from .id_builder import (
     build_select_unique_id,
     build_switch_unique_id,
     construct_synthetic_unique_id,
+    match_circuit_id,
 )
 
 if TYPE_CHECKING:
-    from homeassistant.helpers import entity_registry as er
+    from homeassistant.core import HomeAssistant
 
     from .coordinator import SpanPanelCoordinator
 
@@ -44,6 +47,23 @@ def entity_id_in_entry(
     entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
     entry = registry.async_get(entity_id) if entity_id is not None else None
     return entity_id if entry is not None and entry.config_entry_id == entry_id else None
+
+
+def resolve_circuit_id(hass: HomeAssistant, entity_or_id: str, circuit_ids: Collection[str]) -> str:
+    """Resolve one of this integration's entities, or a raw circuit id, to a circuit id.
+
+    The circuit is the one of `circuit_ids` that the entity's unique_id names; an
+    id is opaque, so it is found among them rather than by its shape. Only this
+    integration's entities are read: another integration's unique_id could hold a
+    segment equal to a short opaque id. Anything else is taken to be a circuit id
+    already, which keeps a call that names the id itself working.
+    """
+    entry = er.async_get(hass).async_get(entity_or_id)
+    if entry is not None and entry.platform == DOMAIN and entry.unique_id:
+        circuit_id = match_circuit_id(entry.unique_id, circuit_ids)
+        if circuit_id is not None:
+            return circuit_id
+    return entity_or_id
 
 
 def resolve_evse_display_suffix(

@@ -15,5 +15,16 @@
   "extension_overflow": {
     "title": "Painel SPAN: algumas leituras do fabricante não foram adicionadas",
     "body": "Um dispositivo do seu painel declara mais leituras do fabricante do que esta integração adiciona para um único dispositivo ({limit}). As restantes ficaram de fora: {devices}.\n\nNada do que já tem é afetado e nada está avariado. As leituras que ficaram de fora continuam listadas na transferência de diagnósticos desta integração, que é o que deve anexar se quiser que sejam apresentadas."
+  },
+  "package_ratings_changed": {
+    "title": "Capacidades copiadas da aplicação SPAN removidas do Painel SPAN",
+    "intro": "O painel alterou algo de que dependem capacidades que copiou da aplicação SPAN, por isso essas capacidades foram removidas. Para rever um circuito, abra-o no painel de controlo do Span Panel: as capacidades estão na secção **Monitoramento** do circuito, apresentada enquanto a monitorização estiver ativada para esse circuito.",
+    "panel_rating_changed": "**{circuit}**: a capacidade que o seu painel publica para este circuito mudou de {before} A para {after} A, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas.",
+    "spaces_changed": "**{circuit}**: os espaços de disjuntor deste circuito mudaram, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas.",
+    "rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade para este circuito, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas.",
+    "circuit_removed": "**{circuit}**: este circuito já não está no painel, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas.",
+    "above_service_rating": "**{circuit}**: as capacidades {package} que copiou da aplicação SPAN somam mais do que a capacidade de serviço do painel, de {service} A, por isso foram removidas.",
+    "service_rating_undeclared": "**{circuit}**: o painel já não reporta uma capacidade de serviço, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas.",
+    "panel_describes_breakers": "**{circuit}**: o painel passou a publicar cada circuito de um disjuntor de várias cargas com a sua própria capacidade, que a monitorização de corrente usa, por isso as capacidades {package} que copiou da aplicação SPAN foram removidas."
   }
 }

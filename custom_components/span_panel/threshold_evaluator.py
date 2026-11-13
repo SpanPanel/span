@@ -40,11 +40,17 @@ type MonitoringSettings = dict[str, MonitoringValue]
 
 @dataclass
 class AlertEvent:
-    """Describes an alert to be dispatched."""
+    """Describes an alert to be dispatched.
+
+    `monitoring_rating_a` is the rating the point was judged against: for a circuit
+    both breakers of a package the user copied from the SPAN app where it applies,
+    else its panel rating; for a mains leg the service rating. It is not the breaker
+    rating, which the caller adds.
+    """
 
     alert_type: str  # "spike" or "continuous_overload"
     current_a: float
-    breaker_rating_a: float
+    monitoring_rating_a: float
     threshold_pct: int
     utilization_pct: float
     window_duration_s: int | None = None
@@ -121,7 +127,7 @@ def check_spike(
     return AlertEvent(
         alert_type="spike",
         current_a=current,
-        breaker_rating_a=rating,
+        monitoring_rating_a=rating,
         threshold_pct=threshold_pct,
         utilization_pct=utilization,
     )
@@ -166,7 +172,7 @@ def check_continuous(
     return AlertEvent(
         alert_type="continuous_overload",
         current_a=current,
-        breaker_rating_a=rating,
+        monitoring_rating_a=rating,
         threshold_pct=threshold_pct,
         utilization_pct=utilization,
         window_duration_s=int(elapsed.total_seconds()),

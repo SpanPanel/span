@@ -454,6 +454,36 @@
     "adopted_control_not_delivered": {
       "message": "La escritura de {property} en {device} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el valor no ha cambiado ni cambiará más tarde."
     },
+    "package_ratings_not_published": {
+      "message": "El panel no publica una capacidad de interruptor para este circuito, por lo que no se pueden copiar capacidades de la app de SPAN para él."
+    },
+    "package_ratings_no_service_rating": {
+      "message": "El panel no publica una capacidad de servicio, por lo que las capacidades copiadas de la app de SPAN no se pueden comprobar con ella."
+    },
+    "package_ratings_not_arrived": {
+      "message": "El panel no ha informado la capacidad de este circuito, su espacio de interruptor o su capacidad de servicio, con los que se comprueban las capacidades copiadas, por lo que no se pueden comprobar."
+    },
+    "package_ratings_panel_describes_breakers": {
+      "message": "Este panel publica cada circuito de un interruptor de varias cargas con su propia capacidad, y el monitoreo de corriente juzga los circuitos que comparten un medidor según esas capacidades, por lo que no hay capacidades que copiar de la app de SPAN."
+    },
+    "package_ratings_not_one_space": {
+      "message": "Solo se pueden copiar capacidades de la app de SPAN para un circuito que ocupa un único espacio de interruptor."
+    },
+    "package_ratings_not_two": {
+      "message": "Introduce ambas capacidades en el orden en que las muestra la app de SPAN, como [20, 30] para 20-30A, o solo la capacidad del panel para borrarlas."
+    },
+    "package_ratings_first_not_panel": {
+      "message": "La primera capacidad debe ser los {panel_rating} A que el panel publica para este circuito. Introduce las capacidades en el orden en que las muestra la app de SPAN."
+    },
+    "package_ratings_above_service_rating": {
+      "message": "Las capacidades copiadas de la app de SPAN suman más que la capacidad de servicio del panel, de {service_rating} A."
+    },
+    "package_ratings_circuit_unknown": {
+      "message": "Este panel no tiene ningún circuito con ese identificador."
+    },
+    "package_ratings_panel_not_loaded": {
+      "message": "No hay ningún SPAN Panel cargado, por lo que no se pueden copiar ni borrar capacidades."
+    },
     "circuit_priority_failed": {
       "message": "Se rechazó el cambio de prioridad para {circuit}: {reason}. No se envió nada al panel, por lo que la prioridad no ha cambiado."
     },
@@ -641,7 +671,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "La entidad del sensor de potencia del circuito."
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
         },
         "continuous_threshold_pct": {
           "name": "Umbral continuo (%)",
@@ -675,7 +705,39 @@
       "fields": {
         "circuit_id": {
           "name": "Circuito",
-          "description": "La entidad del sensor de potencia del circuito."
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
+    },
+    "set_circuit_package_ratings": {
+      "name": "Establecer capacidades del paquete del circuito",
+      "description": "Copiar de la app de SPAN las capacidades de un interruptor tándem, en el orden en que las muestra (20-30A es [20, 30]), para que el monitoreo de corriente juzgue el espacio del circuito según ambos interruptores juntos. La primera debe ser la capacidad que el panel publica para el circuito, y solo la capacidad del panel las borra. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se ofrece para un circuito en un único espacio de interruptor, con ambos interruptores juntos sin superar la capacidad de servicio del panel, y no en un panel que publica cada circuito de un interruptor de varias cargas con su propia capacidad.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
+        },
+        "package_ratings_a": {
+          "name": "Capacidades del paquete (A)",
+          "description": "Las capacidades de los interruptores tal como la app de SPAN muestra este circuito, de la primera a la última, en amperios enteros: [20, 30] para 20-30A. La primera es la capacidad que publica el panel."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
+    },
+    "clear_circuit_package_ratings": {
+      "name": "Borrar capacidades del paquete del circuito",
+      "description": "Eliminar las capacidades copiadas de la app de SPAN para un circuito, de modo que el monitoreo de corriente lo juzgue según la capacidad de interruptor que publica el panel.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "El circuito: su sensor de corriente, cualquier otra de sus entidades o su identificador de circuito."
         },
         "config_entry_id": {
           "name": "Entrada de configuración",

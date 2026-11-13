@@ -26,6 +26,7 @@ from .helpers import (
     shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
+from .package_ratings import package_ratings_payload, panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -160,9 +161,12 @@ async def handle_panel_topology(
 
     # What each shared meter is judged against, from the monitor's own points so
     # the capacity rule runs in one place; the card reads it and adds nothing up.
+    points = monitored_circuits(
+        snapshot, lambda cid: coordinator.package_rating_manager.resolve(cid, snapshot)
+    )
     meter_groups = {
         point.point_id: _meter_group_record(point)
-        for point in monitored_circuits(snapshot).values()
+        for point in points.values()
         if point.basis == "group"
     }
 
@@ -173,6 +177,7 @@ async def handle_panel_topology(
             continue
 
         tabs = sorted(circuit.tabs) if circuit.tabs else []
+        rating = coordinator.package_rating_manager.resolve(circuit_id, snapshot)
         circuits[circuit_id] = {
             "tabs": tabs,
             # A meter without a breaker space publishes no name; it carries the
@@ -198,7 +203,13 @@ async def handle_panel_topology(
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
+            # The breaker's rating is the panel's fact. What current monitoring judges
+            # the circuit against rides beside it, with the package ratings a user
+            # copied from the SPAN app where those are what it is judged against.
             "breaker_rating_a": circuit.breaker_rating_a,
+            "monitoring_rating_a": rating.judged_a,
+            "monitoring_rating_user_set": rating.user_set,
+            "package_ratings_a": package_ratings_payload(rating.package_ratings_a),
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
@@ -274,6 +285,11 @@ async def handle_panel_topology(
             "config_entry_id": config_entry_id,
             "device_name": device_entry.name,
             "panel_entities": panel_entities,
+            # Whether `set_circuit_package_ratings` takes ratings on this panel at
+            # all. False where the panel describes its multi-load breakers: current
+            # monitoring then judges every circuit by the panel's ratings. Each
+            # circuit must also list a single space, which the card reads off it.
+            "monitoring_rating_offered": not panel_describes_breakers(snapshot),
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,
@@ -283,19 +299,29 @@ async def handle_panel_topology(
 
 
 class MeterGroupRecord(TypedDict):
-    """One shared meter in the topology: its members, and the capacity it is judged against.
+    """One shared meter in the topology: its members, and what it is rated and judged against.
 
-    `breaker_rating_a` is the group's capacity over the ratings the panel
-    publishes, by `current_monitor.meter_capacity_a`, and null where unknown. A
-    member's own `breaker_rating_a` stays that circuit's rating.
+    `breaker_rating_a` is the capacity of the ratings the panel published and
+    `monitoring_rating_a` the capacity of the ratings its members are judged
+    against, both by `meter_capacity.meter_capacity_a`, and null where unknown.
+    The two are equal and `monitoring_rating_user_set` is false: only a panel that
+    describes its breakers names shared meters, and none of its circuits holds a
+    package copied from the SPAN app.
     """
 
     members: list[str]
     breaker_rating_a: float | None
+    monitoring_rating_a: float | None
+    monitoring_rating_user_set: bool
 
 
 def _meter_group_record(point: MonitoredCircuit) -> MeterGroupRecord:
-    return MeterGroupRecord(members=list(point.members), breaker_rating_a=point.rating_a)
+    return MeterGroupRecord(
+        members=list(point.members),
+        breaker_rating_a=point.panel_rating_a,
+        monitoring_rating_a=point.rating_a,
+        monitoring_rating_user_set=point.rating_user_set,
+    )
 
 
 def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:

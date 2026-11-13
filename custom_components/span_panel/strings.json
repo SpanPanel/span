@@ -579,6 +579,36 @@
     },
     "unvalidated_hardware_no_model": {
       "message": "Hardware version {version} with an unknown model has not been validated with this release."
+    },
+    "package_ratings_not_published": {
+      "message": "The panel does not publish a breaker rating for this circuit, so ratings cannot be copied from the SPAN app for it."
+    },
+    "package_ratings_no_service_rating": {
+      "message": "The panel does not publish a service rating, so ratings copied from the SPAN app cannot be checked against it."
+    },
+    "package_ratings_not_arrived": {
+      "message": "The panel has not reported this circuit's rating, its breaker space or its service rating, which copied ratings are checked against, so they cannot be checked."
+    },
+    "package_ratings_panel_describes_breakers": {
+      "message": "This panel publishes each circuit of a multi-load breaker with its own rating, and current monitoring judges circuits that share a meter against those ratings, so there are no ratings to copy from the SPAN app."
+    },
+    "package_ratings_not_one_space": {
+      "message": "Ratings can be copied from the SPAN app only for a circuit in a single breaker space."
+    },
+    "package_ratings_not_two": {
+      "message": "Enter both ratings in the order the SPAN app shows them, such as [20, 30] for 20-30A, or the panel's rating alone to clear them."
+    },
+    "package_ratings_first_not_panel": {
+      "message": "The first rating must be the {panel_rating} A the panel publishes for this circuit. Enter the ratings in the order the SPAN app shows them."
+    },
+    "package_ratings_above_service_rating": {
+      "message": "The ratings copied from the SPAN app add up to more than the panel's service rating of {service_rating} A."
+    },
+    "package_ratings_circuit_unknown": {
+      "message": "This panel has no circuit with that id."
+    },
+    "package_ratings_panel_not_loaded": {
+      "message": "No SPAN Panel is loaded, so no ratings can be copied or cleared."
     }
   },
   "options": {
@@ -641,7 +671,7 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "The circuit power sensor entity."
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
         },
         "continuous_threshold_pct": {
           "name": "Continuous threshold (%)",
@@ -675,7 +705,39 @@
       "fields": {
         "circuit_id": {
           "name": "Circuit",
-          "description": "The circuit power sensor entity."
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
+    },
+    "set_circuit_package_ratings": {
+      "name": "Set circuit package ratings",
+      "description": "Copy a tandem breaker's ratings from the SPAN app, in the order it shows them (20-30A is [20, 30]), so current monitoring judges the circuit's space against both breakers together. The first must be the rating the panel publishes for the circuit, and the panel's rating alone clears them. The Breaker Rating sensor keeps showing the panel's rating. Offered only for a circuit in one breaker space, with both breakers together no more than the panel's service rating, and not on a panel that publishes each circuit of a multi-load breaker with its own rating.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
+        },
+        "package_ratings_a": {
+          "name": "Package ratings (A)",
+          "description": "The breaker ratings exactly as the SPAN app shows this circuit, first to last, in whole amps: [20, 30] for 20-30A. The first is the rating the panel publishes."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
+    },
+    "clear_circuit_package_ratings": {
+      "name": "Clear circuit package ratings",
+      "description": "Remove the ratings copied from the SPAN app for a circuit, so current monitoring judges it against the breaker rating the panel publishes.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit",
+          "description": "The circuit: its current sensor, any other of its entities, or its circuit id."
         },
         "config_entry_id": {
           "name": "Config entry",

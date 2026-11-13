@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.0] - unreleased
 
+### Added
+
+- **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app into the dashboard**, so current monitoring judges that space against both
+  breakers together instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
+
 ### Fixed
 
 - **On panels other than MAIN 32, the Solar device and PV Power are created again wherever the panel publishes a PV power figure, 0 W included**, so solar the

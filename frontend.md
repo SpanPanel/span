@@ -54,7 +54,8 @@ top of the panel header) → **List View Columns**.
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
-circuit's breaker rating, then delivers notifications through configurable channels.
+circuit's breaker rating, then delivers notifications through configurable channels. Where a circuit on a MAIN 32 holds a tandem whose ratings you copied from
+the SPAN app in its Monitoring section, thresholds and utilization use both breakers together instead of the panel's breaker rating.
 
 ### Global Settings
 
@@ -74,17 +75,44 @@ circuit's breaker rating, then delivers notifications through configurable chann
 - **Priority** — Notification priority level (controls iOS interruption level and Android notification channel)
 - **Title/Message Templates** — Customizable templates with the following variables:
 
-  | Variable             | Description                     | Example                     |
-  | -------------------- | ------------------------------- | --------------------------- |
-  | `{name}`             | Circuit or mains friendly name  | Kitchen Oven                |
-  | `{entity_id}`        | HA entity ID                    | sensor.kitchen_oven_current |
-  | `{alert_type}`       | Alert category                  | spike, continuous_overload  |
-  | `{current_a}`        | Current draw in amps            | 18.3                        |
-  | `{breaker_rating_a}` | Breaker rating in amps          | 20                          |
-  | `{threshold_pct}`    | Configured threshold percentage | 80                          |
-  | `{utilization_pct}`  | Actual utilization percentage   | 91.5                        |
-  | `{window_m}`         | Window duration in minutes      | 5                           |
-  | `{local_time}`       | Local time of the alert         | 2:15 PM                     |
+  | Variable             | Description                                  | Example                     |
+  | -------------------- | -------------------------------------------- | --------------------------- |
+  | `{name}`             | Circuit or mains friendly name               | Kitchen Oven                |
+  | `{entity_id}`        | HA entity ID                                 | sensor.kitchen_oven_current |
+  | `{alert_type}`       | Alert category                               | spike, continuous_overload  |
+  | `{current_a}`        | Current draw in amps                         | 18.3                        |
+  | `{breaker_rating_a}` | Rating in amps the circuit is judged against | 20                          |
+  | `{threshold_pct}`    | Configured threshold percentage              | 80                          |
+  | `{utilization_pct}`  | Actual utilization percentage                | 91.5                        |
+  | `{window_m}`         | Window duration in minutes                   | 5                           |
+  | `{local_time}`       | Local time of the alert                      | 2:15 PM                     |
+
+  `{breaker_rating_a}` keeps its name so existing templates still work, but it carries the rating the circuit is judged against: both breakers of a tandem whose
+  ratings you copied from the SPAN app, else the breaker rating the panel publishes.
+
+- **Event bus** — With the HA event bus selected, each alert fires a `span_panel_current_alert` event for automations. Its data:
+
+  | Key                          | Description                                                                                                                                |
+  | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `alert_source`               | `circuit` or `mains`                                                                                                                       |
+  | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                                                 |
+  | `alert_name`                 | Circuit or mains friendly name                                                                                                             |
+  | `alert_type`                 | `spike` or `continuous_overload`                                                                                                           |
+  | `current_a`                  | Current draw in amps                                                                                                                       |
+  | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, the group's capacity over those ratings, and null if any has none |
+  | `monitoring_rating_a`        | The rating the alert judged against: both breakers of a tandem whose ratings you copied from the SPAN app, else the panel's rating         |
+  | `monitoring_rating_user_set` | Whether `monitoring_rating_a` comes from ratings you copied                                                                                |
+  | `package_ratings_a`          | The ratings you copied from the SPAN app, such as `[20, 30]`; null where there are none, and for a shared meter and the mains              |
+  | `threshold_pct`              | Configured threshold percentage                                                                                                            |
+  | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                                               |
+  | `panel_serial`               | The panel's serial number                                                                                                                  |
+  | `local_time`                 | Local time of the alert                                                                                                                    |
+  | `window_duration_s`          | Seconds spent over the continuous threshold (continuous overloads; the test event carries a sample)                                        |
+  | `over_threshold_since`       | When the circuit went over the continuous threshold, as an ISO 8601 time (continuous overloads only)                                       |
+  | `test`                       | Present, and true, only on the event the test notification fires                                                                           |
+
+  Copied ratings never change `breaker_rating_a`, which is the panel's rating, as the Breaker Rating sensor shows. The rating the `{breaker_rating_a}` text
+  placeholder carries is `monitoring_rating_a` here. For the mains both are its rating, `monitoring_rating_user_set` is false and `package_ratings_a` null.
 
 ### Monitored Points
 
@@ -92,6 +120,52 @@ Each circuit can be individually enabled or disabled for monitoring, with per-ci
 values.
 
 ![Monitoring Configuration](images/monitoring.png)
+
+### Copying a Tandem's Ratings from the SPAN App
+
+Current monitoring divides a circuit's current by its breaker rating. A MAIN 32 publishes a tandem breaker, which puts two breakers in one space, as one circuit
+with one current reading and the rating of its first breaker, so the current of both looks like an overload of one. The SPAN app shows the whole package, such
+as "20-20A" or "20-30A". Copy the other breaker's rating from it, and current monitoring judges the space against both breakers together.
+
+On panels other than MAIN 32 nothing needs copying: the Monitoring section shows no field for it and the services refuse one. Those panels publish each circuit
+of a multi-load breaker as its own circuit, with its own rating, and name the circuits that share its meter, so current monitoring already judges them together
+(see [Circuits That Share a Meter or Relay](README.md#circuits-that-share-a-meter-or-relay)).
+
+Copy it in the circuit's side panel, opened from its gear icon, in the **Monitoring** section while monitoring is on for that circuit. **Breaker ratings from
+the SPAN app** shows the rating the panel publishes, which is the package's first, and asks for the other breaker in this space exactly as the SPAN app shows
+the circuit: for 20-30A, enter 30, then press Enter or leave the field; nothing is saved while you type. The `span_panel.set_circuit_package_ratings` service
+takes the whole package in the app's order, `[20, 30]`, and `span_panel.clear_circuit_package_ratings` removes it. Each rating is a whole number of amps, the
+first must be the panel's, and both together cannot exceed the panel's service rating. Only a circuit in one breaker space that the panel publishes a rating for
+takes a copy.
+
+**Remove copied ratings** beside the field removes the copy, and the circuit is judged against the panel's rating again; the service does the same when given
+the panel's rating alone. Turning monitoring off keeps the copy, and it applies again when monitoring is turned back on. Resetting thresholds leaves it alone.
+
+Current monitoring then judges the space against both breakers together, so its thresholds, utilization and alert text all use that sum, and the Monitoring
+views mark it: "Judged against 40 A: 20-20 from your SPAN app (the panel publishes 20 A)". The `{breaker_rating_a}` alert placeholder keeps its name and carries
+that sum. Nothing else changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the
+panel's rating, and energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add
+`monitoring_rating_a`, the rating judged against, `monitoring_rating_user_set` beside it, and `package_ratings_a`, the ratings copied.
+
+Thresholds are percentages of the rating a circuit is judged against. If you raised a tandem's thresholds above 100% to quiet its alerts, they now apply to both
+breakers together, which can let a real overload pass: the Monitoring section warns of that and offers **Use global thresholds**. Where the thresholds above
+100% are the global ones, it says so and points to **Global Settings** on the Monitoring tab instead. Copying changes no threshold by itself.
+
+For a circuit that spans two spaces, such as a 240 V breaker sharing a leg with a 120 V one, a MAIN 32 reports the average of the circuit's two legs. One leg
+can carry more than its breaker while the reading stays under the rating, and no copied rating can show that leg, so the Monitoring section offers none there
+and says why: turning monitoring off for that circuit is the safer choice.
+
+A notification tells you when the integration removes ratings you copied:
+
+- the rating the panel publishes for the circuit changed, so it is no longer the package's first;
+- the circuit's breaker spaces changed;
+- the panel no longer reports a rating for the circuit;
+- the circuit is no longer on the panel;
+- the two breakers together are above the panel's service rating, or the panel no longer publishes one;
+- the panel now publishes each circuit of a multi-load breaker with its own rating.
+
+Each line names the circuit and the ratings you copied, and for a changed rating the panel's rating before and after. Where the package still applies, copy it
+again from the SPAN app.
 
 ## Adopted View
 

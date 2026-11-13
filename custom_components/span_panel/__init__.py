@@ -111,6 +111,7 @@ from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
+from .package_rating_manager import async_forget_package_ratings
 from .pv_binding import async_forget_pv_binding, async_resolve_pv_binding
 
 # Re-exported: the types themselves live in a leaf module (see `runtime.py`), but
@@ -132,9 +133,12 @@ from .services import (  # noqa: F401
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
     _async_register_monitoring_services,
+    _async_register_package_rating_services,
     _async_register_services,
+    _build_clear_circuit_package_ratings_schema,
     _build_clear_circuit_threshold_schema,
     _build_clear_mains_threshold_schema,
+    _build_set_circuit_package_ratings_schema,
     _build_set_circuit_threshold_schema,
     _build_set_global_monitoring_schema,
     _build_set_mains_threshold_schema,
@@ -182,6 +186,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
+    _async_register_package_rating_services(hass)
     _async_register_favorites_services(hass)
     _async_register_credential_services(hass)
 
@@ -697,6 +702,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             entry.async_on_unload(lambda: client.set_control_interceptor(None))
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
+            # Before the first refresh, so the copied package ratings are in memory
+            # when the first snapshot is judged.
+            await coordinator.package_rating_manager.async_load()
             await coordinator.async_config_entry_first_refresh()
 
             # Before streaming starts and before any platform is forwarded, so a
@@ -705,12 +713,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # dispatch and closes the client -- before the error leaves setup.
             _async_enforce_hardware_verdict(hass, entry, hardware_version, coordinator.data.model)
 
+            # The first reconcile deletes every package whose circuit id the snapshot
+            # lacks, so a device-id migration, when one exists, must run immediately
+            # before this. It also needs the notices restored above.
+            coordinator.package_rating_manager.begin(coordinator.data, client.field_metadata)
+
             await coordinator.async_setup_streaming()
 
             if entry.options.get(
                 ENABLE_CURRENT_MONITORING, False
             ) or await CurrentMonitor.async_is_enabled(hass, entry):
-                monitor = CurrentMonitor(hass, entry)
+                monitor = CurrentMonitor(hass, entry, coordinator.package_rating_manager)
                 await monitor.async_start()
                 coordinator.current_monitor = monitor
 
@@ -850,7 +863,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     The curation overlay goes for the same reason. Its keys are wire addresses
     rather than registry ids, so a store left behind is one the next entry for
     the same panel would load and apply, re-asserting metadata the user is no
-    longer here to have asked for.
+    longer here to have asked for. The copied package ratings go for that
+    reason too: they are keyed by wire circuit ids.
     """
     async_clear_schema_issues(hass, entry)
     # The CA family too, for the same reason — and the two persistent ones most
@@ -864,6 +878,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)
+    await async_forget_package_ratings(hass, entry)
     await async_forget(hass, entry)
 
 

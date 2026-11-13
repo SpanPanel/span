@@ -341,6 +341,33 @@ def async_raise_on_change(
 
 
 @callback
+def is_standing(hass: HomeAssistant, entry: ConfigEntry, notice_id: str) -> bool:
+    """Whether this entry's notice is on screen, raised and not yet dismissed.
+
+    For a caller that accumulates into a notice while it stands and starts afresh
+    once the user has dismissed it. False for an entry with no live view, which is
+    the same answer: nothing is on screen to add to.
+    """
+    notices = hass.data.get(_DATA, {}).get(entry.entry_id)
+    return notices is not None and notice_id in notices.standing
+
+
+@callback
+def async_withdraw(hass: HomeAssistant, entry: ConfigEntry, notice_id: str) -> None:
+    """Take a notice down because nothing it reported still holds.
+
+    For a caller whose notice lists what the user has not yet dealt with, when
+    the user deals with the last of it before reading the notice: left standing,
+    the notice would report what, as things stand, is no longer so.
+
+    Dismissing the notification is enough: `_on_change` observes the removal and
+    drops the standing record, as for a dismissal by the user, and leaves the
+    announcement record alone. Quiet when the notice is not on screen.
+    """
+    async_dismiss(hass, _notification_id(entry, notice_id))
+
+
+@callback
 def _on_change(
     hass: HomeAssistant,
     entry: ConfigEntry,

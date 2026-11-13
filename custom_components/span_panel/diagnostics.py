@@ -475,6 +475,11 @@ async def async_get_config_entry_diagnostics(
         # count in the Energy dashboard for what it is.
         "shared_meter_groups": shared_meter_groups(snapshot.circuits),
         "shared_relay_groups": shared_relay_groups(snapshot.circuits),
+        # The package ratings the user copied from the SPAN app, keyed by circuit
+        # id as `circuits` is, with the space each was copied for, and the ones
+        # the rule removed that the notice still lists, none once it is
+        # dismissed. Labels are circuit names, which `circuits` already carries.
+        "package_ratings": coordinator.package_rating_manager.diagnostics(snapshot),
         # Counter readings beyond what the circuit's breaker could ever have
         # passed: shown as published, never used as the dip baseline.
         "implausible_counters": [asdict(row) for row in implausible_counters(snapshot)],

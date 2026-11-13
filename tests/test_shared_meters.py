@@ -11,6 +11,7 @@ is ever added up: every member already reports the one meter's values.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Final
 from unittest.mock import MagicMock, patch
@@ -22,6 +23,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.package_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.current_monitor import CurrentMonitor, monitored_circuits
@@ -130,8 +132,18 @@ def test_each_members_power_sensor_and_switch_carry_its_peers() -> None:
     assert "relay_shared_with" not in lone
 
 
+def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], MonitoringRating]:
+    """Resolve every circuit to the rating its panel published: no user has copied a package."""
+
+    def resolve(circuit_id: str) -> MonitoringRating:
+        rating = snapshot.circuits[circuit_id].breaker_rating_a
+        return MonitoringRating(rating, rating, False, None)
+
+    return resolve
+
+
 def test_a_shared_meter_is_one_monitored_point_rated_by_its_members_sum() -> None:
-    points = monitored_circuits(SNAPSHOT)
+    points = monitored_circuits(SNAPSHOT, panel_ratings(SNAPSHOT))
 
     assert points["circuit-52"] is points["circuit-53"]
     assert (points["circuit-52"].point_id, points["circuit-52"].rating_a) == ("circuit-52", 30.0)
@@ -144,7 +156,7 @@ def test_a_group_with_an_unrated_member_has_no_rating() -> None:
     """A partial sum would understate the group, so it is not judged at all."""
     unrated = _panel(PAIR_A[0], replace(PAIR_A[1], breaker_rating_a=None))
 
-    assert monitored_circuits(unrated)["circuit-52"].rating_a is None
+    assert monitored_circuits(unrated, panel_ratings(unrated))["circuit-52"].rating_a is None
 
 
 def _breaker(*members: tuple[str, list[int], float | None]) -> SpanPanelSnapshot:
@@ -180,20 +192,39 @@ def test_a_shared_meter_is_rated_by_its_heaviest_space(
     """The panel reports a two-pole meter's larger leg, so the group can carry what its heaviest space can."""
     snapshot = _breaker(*members)
 
-    assert monitored_circuits(snapshot)[members[0][0]].rating_a == capacity
+    point = monitored_circuits(snapshot, panel_ratings(snapshot))[members[0][0]]
+
+    assert (point.rating_a, point.panel_rating_a) == (capacity, capacity)
 
 
 def test_a_tandem_quad_with_an_unrated_member_has_no_rating() -> None:
     snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], None), ("tq-3", [34, 36], 30.0))
 
-    assert monitored_circuits(snapshot)["tq-1"].rating_a is None
+    assert monitored_circuits(snapshot, panel_ratings(snapshot))["tq-1"].rating_a is None
+
+
+def test_the_judged_capacity_follows_the_same_rule_as_the_panels() -> None:
+    """Each space adds the ratings its members are judged against; the panel's capacity adds theirs."""
+    snapshot = _breaker(("tq-1", [34], 15.0), ("tq-2", [36], 25.0), ("tq-3", [34, 36], 30.0))
+    judged = {"tq-1": 20.0, "tq-2": 25.0, "tq-3": 40.0}
+
+    def ratings(circuit_id: str) -> MonitoringRating:
+        panel = snapshot.circuits[circuit_id].breaker_rating_a
+        package = (20, 20) if circuit_id == "tq-3" else None
+        return MonitoringRating(judged[circuit_id], panel, package is not None, package)
+
+    point = monitored_circuits(snapshot, ratings)["tq-2"]
+
+    assert (point.rating_a, point.panel_rating_a, point.rating_user_set) == (65.0, 55.0, True)
 
 
 def test_a_member_listing_no_space_leaves_the_group_unrated() -> None:
     """Its load cannot be placed on a leg, so no capacity is claimed for the group."""
     snapshot = _breaker(("t-1", [44], 15.0), ("t-2", [], 10.0))
 
-    assert monitored_circuits(snapshot)["t-1"].rating_a is None
+    point = monitored_circuits(snapshot, panel_ratings(snapshot))["t-1"]
+
+    assert (point.rating_a, point.panel_rating_a) == (None, None)
 
 
 def test_the_monitor_alerts_on_the_group_under_its_first_member() -> None:
@@ -294,8 +325,18 @@ async def test_topology_publishes_each_groups_capacity_under_its_key(hass: HomeA
     topology = await _topology_of(hass, SNAPSHOT)
 
     assert topology["shared_meter_groups"] == {
-        "circuit-52": {"members": ["circuit-52", "circuit-53"], "breaker_rating_a": 30.0},
-        "circuit-56": {"members": ["circuit-56", "circuit-57"], "breaker_rating_a": 25.0},
+        "circuit-52": {
+            "members": ["circuit-52", "circuit-53"],
+            "breaker_rating_a": 30.0,
+            "monitoring_rating_a": 30.0,
+            "monitoring_rating_user_set": False,
+        },
+        "circuit-56": {
+            "members": ["circuit-56", "circuit-57"],
+            "breaker_rating_a": 25.0,
+            "monitoring_rating_a": 25.0,
+            "monitoring_rating_user_set": False,
+        },
     }
 
 
@@ -307,7 +348,12 @@ async def test_topology_rates_a_tandem_quad_by_its_heavier_leg(hass: HomeAssista
 
     groups = topology["shared_meter_groups"]
     assert isinstance(groups, dict)
-    assert groups["tq-1"] == {"members": ["tq-1", "tq-2", "tq-3"], "breaker_rating_a": 55.0}
+    assert groups["tq-1"] == {
+        "members": ["tq-1", "tq-2", "tq-3"],
+        "breaker_rating_a": 55.0,
+        "monitoring_rating_a": 55.0,
+        "monitoring_rating_user_set": False,
+    }
     rows = topology["circuits"]
     assert isinstance(rows, dict)
     assert [rows[cid]["breaker_rating_a"] for cid in ("tq-1", "tq-2", "tq-3")] == [15.0, 25.0, 30.0]

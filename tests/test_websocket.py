@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.package_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
@@ -55,7 +56,16 @@ def _make_coordinator(snapshot):
     """Create a mock coordinator wrapping a snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
+    # No circuit has a copied package: each reports the rating its panel published.
+    coordinator.package_rating_manager.resolve.side_effect = _panel_rating
     return coordinator
+
+
+def _panel_rating(circuit_id, snapshot):
+    """Resolve a circuit to the rating its panel published, as a manager holding no package does."""
+    circuit = snapshot.circuits.get(circuit_id)
+    rating = circuit.breaker_rating_a if circuit else None
+    return MonitoringRating(rating, rating, False, None)
 
 
 def _register_panel_device(
@@ -816,12 +826,71 @@ class TestHandlePanelTopology:
             "relay_state_target",
             "is_user_controllable",
             "breaker_rating_a",
+            "monitoring_rating_a",
+            "monitoring_rating_user_set",
+            "package_ratings_a",
             "always_on",
             "priority",
             "priority_target",
             "is_never_backup",
             "entities",
         }
+
+    @pytest.mark.asyncio
+    async def test_topology_keeps_the_panel_breaker_rating_beside_what_the_package_gives(
+        self, hass: HomeAssistant
+    ):
+        """`breaker_rating_a` is the panel's; what monitoring judges against, and the copied package, ride beside it."""
+        kitchen = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_kitchen", name="Kitchen", tabs=[5], breaker_rating_a=20
+        )
+        bedroom = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_bedroom", name="Bedroom", tabs=[15], breaker_rating_a=15
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number="sp3-test-001",
+            circuits={"uuid_kitchen": kitchen, "uuid_bedroom": bedroom},
+        )
+        coordinator = _make_coordinator(snapshot)
+
+        def resolve(circuit_id, snap):
+            if circuit_id == "uuid_kitchen":
+                return MonitoringRating(50.0, 20.0, True, (20, 30))
+            return _panel_rating(circuit_id, snap)
+
+        coordinator.package_rating_manager.resolve.side_effect = resolve
+        entry = MockConfigEntry(
+            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-test-001"
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator,
+            panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
+        )
+        device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        circuits = connection.send_result.call_args[0][1]["circuits"]
+        kitchen_data = circuits["uuid_kitchen"]
+        assert kitchen_data["breaker_rating_a"] == 20
+        assert kitchen_data["monitoring_rating_a"] == 50.0
+        assert kitchen_data["monitoring_rating_user_set"] is True
+        assert kitchen_data["package_ratings_a"] == [20, 30]
+        bedroom_data = circuits["uuid_bedroom"]
+        assert bedroom_data["breaker_rating_a"] == 15
+        assert bedroom_data["monitoring_rating_a"] == 15
+        assert bedroom_data["monitoring_rating_user_set"] is False
+        assert bedroom_data["package_ratings_a"] is None
+        for row in (kitchen_data, bedroom_data):
+            assert "panel_breaker_rating_a" not in row
+            assert "breaker_rating_user_set" not in row
 
     @pytest.mark.asyncio
     async def test_topology_reports_priority_settability_apart_from_the_relay(

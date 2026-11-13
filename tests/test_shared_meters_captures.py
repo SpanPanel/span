@@ -21,6 +21,7 @@ from custom_components.span_panel.id_builder import build_circuit_unique_id, bui
 
 from .captures_replay import CAPTURES, Capture, snapshot
 from .test_expected_entities import _install, _topology
+from .test_shared_meters import panel_ratings
 
 WITH_GROUPS = [c for c in CAPTURES if shared_meter_groups(snapshot(c.tree()).circuits)]
 
@@ -77,7 +78,7 @@ async def test_every_member_keeps_its_entities_and_names_its_peers(
 @pytest.mark.parametrize("captured", WITH_GROUPS, ids=[c.name for c in WITH_GROUPS])
 def test_a_shared_meter_is_rated_by_its_members_sum(captured: Capture) -> None:
     replayed = snapshot(captured.tree())
-    points = monitored_circuits(replayed)
+    points = monitored_circuits(replayed, panel_ratings(replayed))
 
     for key, members in shared_meter_groups(replayed.circuits).items():
         ratings = [replayed.circuits[member].breaker_rating_a for member in members]

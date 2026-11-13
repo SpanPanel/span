@@ -15,5 +15,16 @@
   "extension_overflow": {
     "title": "SPAN Panel: some vendor readings were not added",
     "body": "A device on your panel declares more vendor readings than this integration will add for one device ({limit}). The rest were left out: {devices}.\n\nNothing you already have is affected, and nothing is broken. The readings that were left out are still listed in this integration's diagnostics download, which is what to attach if you want them surfaced."
+  },
+  "package_ratings_changed": {
+    "title": "SPAN Panel ratings copied from the SPAN app removed",
+    "intro": "The panel changed something that ratings you copied from the SPAN app depend on, so those ratings were removed. To review a circuit, open it in the Span Panel dashboard: the ratings are in the circuit's **Monitoring** section, shown while monitoring is on for that circuit.",
+    "panel_rating_changed": "**{circuit}**: the rating your panel publishes for this circuit changed from {before} A to {after} A, so the {package} ratings you copied from the SPAN app were removed.",
+    "spaces_changed": "**{circuit}**: this circuit's breaker spaces changed, so the {package} ratings you copied from the SPAN app were removed.",
+    "rating_undeclared": "**{circuit}**: the panel no longer reports a rating for this circuit, so the {package} ratings you copied from the SPAN app were removed.",
+    "circuit_removed": "**{circuit}**: this circuit is no longer on the panel, so the {package} ratings you copied from the SPAN app were removed.",
+    "above_service_rating": "**{circuit}**: the {package} ratings you copied from the SPAN app add up to more than the panel's service rating of {service} A, so they were removed.",
+    "service_rating_undeclared": "**{circuit}**: the panel no longer reports a service rating, so the {package} ratings you copied from the SPAN app were removed.",
+    "panel_describes_breakers": "**{circuit}**: the panel now publishes each circuit of a multi-load breaker with its own rating, which current monitoring uses, so the {package} ratings you copied from the SPAN app were removed."
   }
 }

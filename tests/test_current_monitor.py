@@ -22,6 +22,7 @@ from custom_components.span_panel.const import (
 from homeassistant.core import CoreState
 from homeassistant.exceptions import ServiceValidationError
 
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.options import (
@@ -58,7 +59,7 @@ def _make_monitor(hass, options=None, entry_id="test_entry"):
     entry = MagicMock()
     entry.entry_id = entry_id
     entry.options = options
-    return CurrentMonitor(hass, entry)
+    return CurrentMonitor(hass, entry, PackageRatingManager(hass, entry))
 
 
 def _run_coro(coro):
@@ -606,9 +607,11 @@ def _panel_with_a_fresh_monitor(
     entry = MagicMock()
     entry.entry_id = entry_id
     entry.options = _make_options(**{SPIKE_THRESHOLD_PCT: 100})
-    monitor = CurrentMonitor(hass, entry)
+    ratings = PackageRatingManager(hass, entry)
+    monitor = CurrentMonitor(hass, entry, ratings)
     coordinator = MagicMock()
     coordinator.data = snapshot
+    coordinator.package_rating_manager = ratings
     coordinator.current_monitor = monitor
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -921,6 +924,8 @@ class TestNotificationDispatch:
         assert event_data["alert_name"] == "Kitchen"
         assert event_data["current_a"] == 20.0
         assert event_data["breaker_rating_a"] == 20.0
+        assert event_data["monitoring_rating_a"] == 20.0
+        assert event_data["monitoring_rating_user_set"] is False
         assert event_data["utilization_pct"] == 100.0
         assert event_data["panel_serial"] == "ABC123"
 
@@ -985,7 +990,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,
@@ -1004,7 +1009,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=18.4,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=80,
             utilization_pct=92.0,
             window_duration_s=900,
@@ -1027,7 +1032,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,
@@ -1044,7 +1049,7 @@ class TestNotificationDispatch:
             alert_name="Kitchen",
             alert_id="sensor.kitchen_current",
             current_a=22.1,
-            breaker_rating_a=20.0,
+            monitoring_rating_a=20.0,
             threshold_pct=100,
             utilization_pct=110.5,
             window_duration_s=None,
