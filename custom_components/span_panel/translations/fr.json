@@ -21,6 +21,7 @@
       "fqdn_registration_failed": "Impossible d'enregistrer le nom de domaine auprès du panneau ou le certificat TLS n'a pas été mis à jour à temps.",
       "host_required": "L'hôte est requis",
       "https_port_is_plaintext": "Le port 80 est le port HTTP en clair. Saisissez le port sur lequel le panneau sert TLS — 443 sauf si quelque chose l'a déplacé.",
+      "https_port_unreachable": "Aucune connexion TLS n'a pu être établie sur le port HTTPS {https_port} ; il n'y avait donc aucun certificat à vérifier auprès de l'autorité publiée par le panneau. Vérifiez que le panneau sert TLS sur ce port — 443 sauf si quelque chose l'a déplacé —, puis réessayez.",
       "invalid_auth": "Authentification invalide",
       "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
       "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
@@ -940,7 +941,8 @@
         "abort": {
           "entry_gone": "Ce SPAN Panel n'est plus configuré.",
           "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez.",
-          "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez."
+          "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+          "broker_port_unreachable": "Aucune connexion TLS n'a pu être établie sur le port {broker_port} du broker du panneau ; l'autorité qu'il a publiée n'a donc pas pu être vérifiée auprès du certificat qu'il présente, elle ne vous a pas été proposée et rien n'a été modifié. Vérifiez que le panneau est joignable et sous tension, puis réessayez."
         }
       }
     },
@@ -956,7 +958,8 @@
         "abort": {
           "entry_gone": "Ce SPAN Panel n'est plus configuré.",
           "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez.",
-          "ca_leaf_mismatch": "Le certificat servi par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez."
+          "ca_leaf_mismatch": "Le certificat servi par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+          "broker_port_unreachable": "Aucune connexion TLS n'a pu être établie sur le port {broker_port} du broker du panneau ; l'autorité qu'il a publiée n'a donc pas pu être vérifiée auprès du certificat qu'il présente, elle ne vous a pas été proposée et rien n'a été modifié. Vérifiez que le panneau est joignable et sous tension, puis réessayez."
         }
       }
     },

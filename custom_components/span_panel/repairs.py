@@ -24,9 +24,10 @@ import voluptuous as vol
 
 from .ca_repairs import CA_CHANGED_ISSUE_PREFIX, CA_UNUSABLE_ISSUE_PREFIX
 from .config_flow_validation import (
+    LeafVerdict,
     as_port,
-    async_ca_signs_panel_leaf,
     async_fetch_panel_ca,
+    async_panel_leaf_host,
     pem_fingerprint_or_reason,
 )
 from .const import (
@@ -117,7 +118,28 @@ class PanelCAChangedRepairFlow(RepairsFlow):
         # anchors and the one this repair exists to restore. Verifying somewhere
         # else would be answering a question nobody asked.
         mqtts_port = as_port(entry.data.get(CONF_EBUS_BROKER_PORT), DEFAULT_MQTTS_PORT)
-        if not await async_ca_signs_panel_leaf(self.hass, host, mqtts_port, ca_pem):
+        choice = await async_panel_leaf_host(self.hass, host, mqtts_port, ca_pem)
+        if choice.verdict is LeafVerdict.UNREACHABLE:
+            # No certificate was presented, so none failed: this is a broker
+            # port that no TLS connection could be made to, not a CA that signs
+            # nothing the panel serves, and saying otherwise would accuse the
+            # network of interception over a port that is down or not TLS.
+            _LOGGER.warning(
+                "No TLS connection could be made to SPAN panel %s's broker at %s:%s, so the "
+                "CA it published (SHA-256 %s) could not be checked against the certificate "
+                "it serves and has not been offered. The pin in place is SHA-256 %s and has "
+                "not been touched",
+                entry.title,
+                host,
+                mqtts_port,
+                fingerprint,
+                pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM)),
+            )
+            return self.async_abort(
+                reason="broker_port_unreachable",
+                description_placeholders={"broker_port": str(mqtts_port)},
+            )
+        if choice.verdict is not LeafVerdict.TRUSTED:
             _LOGGER.warning(
                 "SPAN panel %s published a CA (SHA-256 %s) that does not sign the "
                 "certificate served by its broker at %s:%s; refusing to offer it. The "

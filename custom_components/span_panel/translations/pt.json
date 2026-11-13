@@ -21,6 +21,7 @@
       "fqdn_registration_failed": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo.",
       "host_required": "O anfitrião é necessário",
       "https_port_is_plaintext": "A porta 80 é a porta HTTP sem cifra. Introduza a porta em que o painel serve TLS — 443 a menos que algo a tenha movido.",
+      "https_port_unreachable": "Não foi possível estabelecer uma ligação TLS na porta HTTPS {https_port}, pelo que não havia nenhum certificado para verificar face à autoridade que o painel publicou. Verifique se o painel serve TLS nessa porta — 443 a menos que algo a tenha movido — e tente novamente.",
       "invalid_auth": "Autenticação inválida",
       "panel_not_ready": "O painel ainda não está pronto para registar o Home Assistant, normalmente porque ainda está a arrancar. Aguarde um momento e tente novamente.",
       "passphrase_unavailable": "O painel não consegue emitir credenciais porque a sua frase-passe ainda não está disponível. Isto não significa que tenha sido introduzida uma frase-passe incorreta. Aguarde alguns minutos e tente novamente.",
@@ -940,7 +941,8 @@
         "abort": {
           "entry_gone": "Esse SPAN Panel já não está configurado.",
           "ca_unreadable": "Não foi possível ler a autoridade de certificação do painel. Verifique se o painel está acessível e tente novamente.",
-          "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou, pelo que essa autoridade não foi proposta para aceitação e nada foi alterado. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente."
+          "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou, pelo que essa autoridade não foi proposta para aceitação e nada foi alterado. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente.",
+          "broker_port_unreachable": "Não foi possível estabelecer uma ligação TLS na porta {broker_port} do broker do painel, pelo que a autoridade que publicou não pôde ser verificada face ao certificado que serve; essa autoridade não foi proposta para aceitação e nada foi alterado. Verifique se o painel está acessível e ligado e tente novamente."
         }
       }
     },
@@ -956,7 +958,8 @@
         "abort": {
           "entry_gone": "Esse SPAN Panel já não está configurado.",
           "ca_unreadable": "Não foi possível ler a autoridade de certificação do painel. Verifique se o painel está acessível e tente novamente.",
-          "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou, pelo que essa autoridade não lhe foi oferecida para aceitar e nada foi alterado. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente."
+          "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou, pelo que essa autoridade não lhe foi oferecida para aceitar e nada foi alterado. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente.",
+          "broker_port_unreachable": "Não foi possível estabelecer uma ligação TLS na porta {broker_port} do broker do painel, pelo que a autoridade que publicou não pôde ser verificada face ao certificado que serve; essa autoridade não foi proposta para aceitação e nada foi alterado. Verifique se o painel está acessível e ligado e tente novamente."
         }
       }
     },

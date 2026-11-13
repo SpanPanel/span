@@ -20,6 +20,7 @@ from custom_components.span_panel.ca_repairs import (
     async_raise_ca_changed,
     ca_changed_issue_id,
 )
+from custom_components.span_panel.config_flow_validation import LeafVerdict, PanelLeafHost
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_HTTP_PORT,
@@ -231,8 +232,8 @@ async def test_the_fix_flow_re_pins_only_on_an_explicit_confirmation(
         # Stood down here and exercised for real in `test_panel_ca_pinning_tls`;
         # this test is about what an explicit confirmation does and does not do.
         patch(
-            "custom_components.span_panel.repairs.async_ca_signs_panel_leaf",
-            new=AsyncMock(return_value=True),
+            "custom_components.span_panel.repairs.async_panel_leaf_host",
+            new=AsyncMock(return_value=PanelLeafHost("192.168.1.100", LeafVerdict.TRUSTED)),
         ),
     ):
         shown = await flow.async_step_init()

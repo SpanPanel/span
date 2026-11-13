@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import ipaddress
+import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -46,6 +48,8 @@ from .tls_panel import (
     PANEL_SERIAL,
     PANEL_SHORTNAME,
     Panel,
+    closed_port,
+    plaintext_listener,
     resolving_to_loopback,
     unrelated_ca_pem,
 )
@@ -217,6 +221,73 @@ async def test_the_repair_refuses_a_ca_that_signs_nothing_the_panel_serves(
     assert result["type"] == "abort"
     assert result["reason"] == "ca_leaf_mismatch"
     assert entry.data[CONF_PANEL_CA_PEM] == panel.ca_pem
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_the_repair_does_not_call_a_silent_broker_a_certificate_mismatch(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Nothing answering on the broker's port is not a certificate the CA fails to sign.
+
+    No certificate was presented, so none can have failed: the repair says that
+    nothing answered and on which port, offers nothing, and leaves the pin alone.
+    It used to report the panel's certificate as unsigned by its own authority.
+    """
+    standing_pin = unrelated_ca_pem()
+    dead_port = closed_port()
+    entry = _entry(
+        hass, panel, **{CONF_PANEL_CA_PEM: standing_pin, CONF_EBUS_BROKER_PORT: dead_port}
+    )
+    flow = PanelCAChangedRepairFlow(entry.entry_id)
+    flow.hass = hass
+
+    with patch(
+        "custom_components.span_panel.repairs.async_fetch_panel_ca",
+        new=AsyncMock(return_value=panel.ca_pem),
+    ):
+        result = await flow.async_step_init()
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "broker_port_unreachable"
+    assert result["description_placeholders"] == {"broker_port": str(dead_port)}
+    assert entry.data[CONF_PANEL_CA_PEM] == standing_pin
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("issue", ["panel_ca_changed", "panel_ca_unusable"])
+async def test_the_repair_reports_a_plaintext_broker_port_as_no_tls_connection(
+    hass: HomeAssistant, panel: Panel, issue: str
+) -> None:
+    """Something answers on the broker's port, and not with TLS.
+
+    Reported as the same verdict as silence, so the message both repairs show
+    for it has to be true of a port that answered: no TLS connection could be
+    made, rather than that nothing answered.
+    """
+    standing_pin = unrelated_ca_pem()
+    with plaintext_listener() as plaintext_port:
+        entry = _entry(
+            hass, panel, **{CONF_PANEL_CA_PEM: standing_pin, CONF_EBUS_BROKER_PORT: plaintext_port}
+        )
+        flow = PanelCAChangedRepairFlow(entry.entry_id)
+        flow.hass = hass
+        with patch(
+            "custom_components.span_panel.repairs.async_fetch_panel_ca",
+            new=AsyncMock(return_value=panel.ca_pem),
+        ):
+            result = await flow.async_step_init()
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "broker_port_unreachable"
+    assert result["description_placeholders"] == {"broker_port": str(plaintext_port)}
+    assert entry.data[CONF_PANEL_CA_PEM] == standing_pin
+    strings = Path(__file__).parent.parent / "custom_components" / "span_panel" / "strings.json"
+    text = json.loads(strings.read_text(encoding="utf-8"))["issues"][issue]["fix_flow"]["abort"][
+        "broker_port_unreachable"
+    ]
+    assert text.startswith("No TLS connection could be made on the panel's broker port")
 
 
 @pytest.mark.usefixtures("socket_enabled")

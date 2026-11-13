@@ -986,8 +986,9 @@ the FQDN asynchronously, so the flow polls for the name to appear in the SAN rat
 
 ## The Supervisor discovery path is unguarded on ports
 
-A pinned entry only follows a discovered host when that host serves a certificate the entry's anchor validates — `async_step_zeroconf` and the by-hand re-add
-both go through that check, because the serial they match on comes from an unauthenticated endpoint anything on the LAN can answer.
+A pinned entry only follows a discovered host, or new ports on the host it has, when the HTTPS port it would use there serves a certificate the entry's anchor
+validates — `async_step_zeroconf` and the by-hand re-add both go through that check, because the serial they match on comes from an unauthenticated endpoint
+anything on the LAN can answer.
 
 `async_step_hassio` deliberately does not hold its **ports** to that check. A Supervisor discovery arrives over the authenticated Supervisor API from an add-on
 the user installed, and add-ons legitimately reallocate their own ports across restarts, so holding the ports to the stored values would freeze the entry

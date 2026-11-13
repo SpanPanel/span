@@ -17,6 +17,12 @@ All notable changes to this project will be documented in this file.
   expanded circuit's chart, the side panel shows every breaker's rating and the group's capacity, and the Monitoring summary counts the group once.
 - **Current charts draw their limit lines at the circuit's own monitoring thresholds**, with the axis fitted to the highest line and reading, instead of at 80%
   and 100% of the breaker rating.
+- **Discovery finds every panel that shares an address on its own HTTP port**, where only the first one set up at that address was found and the rest were
+  ignored as already configured.
+- **Setup says when no TLS connection could be made on the HTTPS port entered** and asks for the port again, instead of reporting that the panel's certificate
+  is not signed by the authority it published, and the certificate repair likewise says when none could be made on the panel's broker port.
+- **A discovered panel's entry follows it to new ports on the same address** once its pinned certificate authority validates the panel's HTTPS port there, and
+  panels that share an address are offered under their host and port.
 
 ## [2.2.0] - 11/2026
 

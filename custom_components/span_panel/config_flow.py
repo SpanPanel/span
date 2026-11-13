@@ -153,6 +153,10 @@ def _discovered_port(record: Mapping[str, Any], *names: str) -> int | None:
     unpublished rather than raising, because a malformed TXT record must not be
     the reason a panel cannot be set up.
 
+    A number that is not a port -- outside 1 to 65535 -- is unreadable too. It
+    would otherwise reach the probe, and from an announcement that matches an
+    unpinned entry it would be stored, where nothing checks it again.
+
     None is distinct from a published value that happens to equal the default:
     only None leaves the flow free to ask the user.
     """
@@ -161,11 +165,31 @@ def _discovered_port(record: Mapping[str, Any], *names: str) -> int | None:
         if raw is None or raw == "":
             continue
         try:
-            return int(raw)
+            port = int(raw)
         except (TypeError, ValueError):
             _LOGGER.debug("Discovery record carried an unreadable %s: %r", name, raw)
             return None
+        if not 1 <= port <= 65535:
+            _LOGGER.debug("Discovery record carried %s %r, which is not a port", name, raw)
+            return None
+        return port
     return None
+
+
+def _discovered_tls_port(record: Mapping[str, Any], *names: str) -> int | None:
+    """Read a TLS port out of a discovery record, or None when it names no usable one.
+
+    `_discovered_port`, and 80 refused as well: it is the plaintext port, which
+    the library refuses under a pin, and the HTTPS port form refuses from a
+    user for the same reason. An announcement carries no more authority than a
+    user typing it, so a published 80 is read as no port published, and the
+    flow falls back exactly as it does for one that names none.
+    """
+    port = _discovered_port(record, *names)
+    if port == 80:
+        _LOGGER.debug("Discovery record named the plaintext port 80 as its TLS port")
+        return None
+    return port
 
 
 class TriggerFlowType(enum.Enum):
@@ -275,7 +299,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             raise ConfigFlowError("Reached a panel REST call with no transport pinned")
         return self._rest_transport
 
-    async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> bool:
+    async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> LeafVerdict:
         """Settle which address the panel is dialled by, and whether it can be at all.
 
         Which addresses are tried, and in what order, is `async_panel_leaf_host`
@@ -286,26 +310,28 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         exactly that, so every later step about to persist `self.host` can read
         it as "the anchor would reject this" and refuse.
 
-        Returns False when nothing answers under the published CA, which is a
-        leaf mismatch and is fatal to the step that called it.
+        Returns TRUSTED when an address was settled on. Anything else is fatal
+        to the step that called it, and says why: UNREACHABLE when no TLS
+        connection could be made on `tls_port`, so no certificate was presented
+        and none failed, and otherwise the verdict on the certificate that was.
         """
         self._bootstrap_host = None
         host = self.host
         if not host:
-            return False
+            return LeafVerdict.UNREACHABLE
 
-        reached = await async_panel_leaf_host(self.hass, host, tls_port, ca_pem)
-        if reached is None:
-            return False
-        if reached != host:
-            self._bootstrap_host = reached
+        choice = await async_panel_leaf_host(self.hass, host, tls_port, ca_pem)
+        if choice.reached is None:
+            return choice.verdict
+        if choice.reached != host:
+            self._bootstrap_host = choice.reached
             _LOGGER.debug(
                 "The certificate this panel serves does not name %s; reaching it "
                 "at %s until it does",
                 host,
-                reached,
+                choice.reached,
             )
-        return True
+        return LeafVerdict.TRUSTED
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -323,16 +349,37 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
         self._abort_if_unique_id_configured(updates=await self._async_host_update())
 
+    def _found_at(self, entry: config_entries.ConfigEntry) -> dict[str, Any]:
+        """Return where this flow found the panel, as the entry-data keys that would move.
+
+        The host always, which is the update this abort has always carried. A
+        port only where it differs from the one the entry already uses, read
+        the way the entry's own transport reads it, so an entry is rewritten
+        only by an actual move: every real panel's entry stores no HTTP port,
+        and adding an explicit 80 to each on its next move would change data
+        that nothing moved. The HTTPS port only where something authoritative
+        named one -- an announcement's `httpsPort`; this flow's default is not a
+        statement about where the panel serves.
+        """
+        updates: dict[str, Any] = {CONF_HOST: self.host}
+        if self._http_port != as_port(entry.data.get(CONF_HTTP_PORT), 80):
+            updates[CONF_HTTP_PORT] = self._http_port
+        stored_tls_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+        if self._https_port_known and self._https_port != stored_tls_port:
+            updates[CONF_HTTPS_PORT] = self._https_port
+        return updates
+
     async def _async_host_update(self) -> dict[str, Any] | None:
-        """Return the host update the already-configured abort should carry, or None.
+        """Return the update the already-configured abort should carry, or None.
 
         The abort that follows is also how an entry follows its panel: a new
-        DHCP lease, a re-announcement on the new address, and the entry is
-        rewritten to point at it. Both routes into this reach it before anything
-        has been authenticated — an `_ebus._tcp` record is whatever the LAN
-        chose to broadcast, and the serial that matched came from the candidate
-        host's own unauthenticated `/api/v2/status` — so on its own, "claims to
-        be this serial" is a claim anything on the network can make.
+        DHCP lease, or ports an emulator reallocated on restart, a
+        re-announcement from where it now answers, and the entry is rewritten
+        to point there. Both routes into this reach it before anything has been
+        authenticated — an `_ebus._tcp` record is whatever the LAN chose to
+        broadcast, and the serial that matched came from the candidate's own
+        unauthenticated `/api/v2/status` — so on its own, "claims to be this
+        serial" is a claim anything on the network can make.
 
         A pinned entry has a better question available: does the candidate serve
         a certificate this entry's own anchor validates? Nothing but the panel
@@ -345,16 +392,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         registered — leaves the entry unable to reach its own panel with no flow
         left to correct it.
 
-        Verified as the host would be *stored*, against the port the entry
-        already uses. The address fallback that `_async_choose_bootstrap_host`
-        applies is deliberately not repeated: that one exists to dial a panel
-        while a name is unverified, and accepting a name here because its
-        address validates would persist exactly the host that fallback refuses
-        to write.
+        Verified as the entry would be *stored*: the host it would hold, on the
+        HTTPS port it would use -- the one the announcement published, or else
+        the one it already has. A host or HTTPS port that moves is therefore
+        verified where it moves to, the check a host move has always faced.
+        An HTTP port that moves alone is authorised by the TLS port the entry
+        already uses, which is not moving: the pin then proves the panel still
+        holds this host, and the new HTTP port rests on the serial the probe
+        read there. That is less than proof that the port is the panel's, and
+        it is enough for what a pinned entry uses it for: plaintext CA reads,
+        none of which can change what the entry trusts, because each is held
+        against the certificate the panel serves or the pinned fingerprint.
+        The address fallback that
+        `_async_choose_bootstrap_host` applies is deliberately not repeated:
+        that one exists to dial a panel while a name is unverified, and
+        accepting a name here because its address validates would persist
+        exactly the host that fallback refuses to write.
 
-        An entry with no anchor keeps the behaviour it shipped with. There is no
-        pin to protect and no check to make, so refusing the move would cost an
-        unpinned install its panel and buy nothing.
+        An entry with no anchor keeps the behaviour it shipped with, and follows
+        a port as it follows a host. There is no pin to protect and no check to
+        make, so refusing the move would cost an unpinned install its panel and
+        buy nothing.
         """
         host = self.host
         if not host or self.unique_id is None:
@@ -364,36 +422,104 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         if entry is None:
             return {CONF_HOST: host}
+        updates = self._found_at(entry)
+        if updates.keys() == {CONF_HOST} and entry.data.get(CONF_HOST) == host:
+            # Found exactly where the entry already points: nothing would move,
+            # so there is no move for the pin to authorise.
+            return updates
         ca_pem = entry.data.get(CONF_PANEL_CA_PEM)
         if not ca_pem:
-            return {CONF_HOST: host}
+            return updates
 
-        tls_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
-        try:
-            chains = await async_leaf_chains_to_ca(host, tls_port, str(ca_pem))
-        except Exception:
-            # `async_leaf_chains_to_ca` answers False for every failure it
-            # anticipates, so reaching here at all is unexpected. Caught broadly
-            # rather than left to propagate because the two outcomes are not
-            # symmetric: an escaped error inside a discovery flow is an
-            # unhandled traceback, and what it would abandon is the one check
-            # standing between an unauthenticated claim and a pinned entry's
-            # host. Anything unrecognised is a refusal.
-            _LOGGER.exception("Could not verify %s against the pinned authority", host)
-            chains = False
-        if chains:
-            return {CONF_HOST: host}
-
-        _LOGGER.warning(
-            "Refusing to move the entry for panel %s to %s: the certificate served there on "
-            "port %s does not chain to the authority this entry is pinned to (SHA-256 %s). "
-            "If the panel really has moved, use Reconfigure to move this entry",
-            self.unique_id,
-            host,
-            tls_port,
-            pem_fingerprint_or_reason(ca_pem),
+        tls_port = as_port(
+            updates.get(CONF_HTTPS_PORT, entry.data.get(CONF_HTTPS_PORT)), DEFAULT_HTTPS_PORT
         )
+        verdict: LeafVerdict | None
+        try:
+            verdict = await async_leaf_verdict(host, tls_port, str(ca_pem))
+        except Exception:
+            # `async_leaf_verdict` answers for every failure it anticipates, so
+            # reaching here at all is unexpected. Caught broadly rather than
+            # left to propagate because the two outcomes are not symmetric: an
+            # escaped error inside a discovery flow is an unhandled traceback,
+            # and what it would abandon is the one check standing between an
+            # unauthenticated claim and a pinned entry's address. Anything
+            # unrecognised is a refusal -- and no verdict: None, so the refusal
+            # claims nothing the check did not establish.
+            _LOGGER.exception("Could not verify %s against the pinned authority", host)
+            verdict = None
+        if verdict is LeafVerdict.TRUSTED:
+            return updates
+
+        self._log_refused_move(entry, updates, tls_port, verdict)
         return None
+
+    def _log_refused_move(
+        self,
+        entry: config_entries.ConfigEntry,
+        updates: Mapping[str, Any],
+        tls_port: int,
+        verdict: LeafVerdict | None,
+    ) -> None:
+        """Say, at WARNING, which move a pinned entry refused and what the check found.
+
+        `verdict` is None where the check itself failed and found nothing; the
+        refusal then says only that the certificate could not be checked, and
+        the traceback logged beside it says why.
+
+        Worded for what actually moved and for what the check found. A panel
+        whose ports moved on the host the entry already has was reported as a
+        refused move *to that host*, which describes nothing that happened; a
+        TLS port no connection could be made to, and a certificate the pinned
+        authority signs but that names another address, were both reported as
+        a certificate that does not chain, which accuses the network of
+        interception in two cases where nothing was intercepted.
+
+        Each refusal names its remedy. Reconfigure sets a pinned entry's host
+        and HTTPS port, which is what the panel's own connections use.
+        """
+        host = updates[CONF_HOST]
+        fingerprint = pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM))
+        if verdict is None:
+            found = (
+                f"the certificate {host} serves on port {tls_port} could not be checked against "
+                f"the authority this entry is pinned to (SHA-256 {fingerprint})"
+            )
+        elif verdict is LeafVerdict.UNREACHABLE:
+            found = f"no TLS connection could be made to {host} on port {tls_port}"
+        elif verdict is LeafVerdict.NAME_MISMATCH:
+            found = (
+                f"the certificate {host} serves on port {tls_port} is signed by the authority "
+                f"this entry is pinned to (SHA-256 {fingerprint}) but does not name {host}"
+            )
+        else:
+            found = (
+                f"the certificate {host} serves on port {tls_port} does not chain to the "
+                f"authority this entry is pinned to (SHA-256 {fingerprint})"
+            )
+        if host != entry.data.get(CONF_HOST):
+            _LOGGER.warning(
+                "Refusing to move the entry for panel %s to %s: %s. If the panel really has "
+                "moved, use Reconfigure to move this entry",
+                self.unique_id,
+                host,
+                found,
+            )
+            return
+        moved = " and ".join(
+            f"{label} {updates[key]}"
+            for key, label in ((CONF_HTTP_PORT, "HTTP port"), (CONF_HTTPS_PORT, "HTTPS port"))
+            if key in updates
+        )
+        _LOGGER.warning(
+            "Refusing to follow panel %s to %s on %s, the host its entry already has: %s. "
+            "The entry keeps the ports it has; if the panel's TLS port really has moved, use "
+            "Reconfigure to set it",
+            self.unique_id,
+            moved,
+            host,
+            found,
+        )
 
     async def _async_hassio_host_update(self, host: str, port: int, serial: str) -> dict[str, Any]:
         """Return the host keys a Supervisor discovery should carry, usually none.
@@ -482,22 +608,87 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         return {CONF_HOST: host, CONF_EBUS_BROKER_HOST: host}
 
+    def _async_real_panel_configured_at(self, host: str, http_port: int) -> bool:
+        """Whether this is a real panel's announcement from an address an entry already has.
+
+        The one shape in which an address can stand in for a serial. A real
+        SPAN panel's entry stores no HTTP port -- setup writes the key only
+        where it is not 80 -- and one panel holds one address, so an
+        announcement on 80 from that host is that panel. It matches whether the
+        entry is loaded or not, exactly as it always has.
+
+        An entry that stores a port, an explicit 80 included, is not that shape
+        and is not matched: the Supervisor route always writes the port, and an
+        entry that followed its panel back to 80 keeps the key. Its
+        announcements are simply probed, which costs a request and never drops
+        a panel.
+
+        A stored port is never such evidence. Several panels can share a host,
+        and an emulator hands each the lowest free port when it restarts, so
+        panels shift onto ports their siblings stored, and a removed panel's
+        leftover entry keeps its port forever. Whether the entry is loaded
+        says nothing either: it stays loaded when its panel moves or vanishes,
+        because the coordinator only marks the panel offline. Matched on a
+        stored port, the panel now on it was dropped before the probe that
+        reads its serial, and two panels that traded ports each blocked the
+        other for good. So an announcement on any port an entry stores is
+        probed, and the serial decides, at the cost of one request per such
+        announcement.
+        """
+        if http_port != 80:
+            return False
+        return any(
+            entry.data.get(CONF_HOST) == host
+            and port_or_none(entry.data.get(CONF_HTTP_PORT)) is None
+            for entry in self._async_current_entries(include_ignore=False)
+        )
+
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
-        """Handle a flow initiated by zeroconf discovery."""
-        # Do not probe device if the host is already configured
-        self._async_abort_entries_match({CONF_HOST: discovery_info.host})
+        """Handle a flow initiated by zeroconf discovery.
+
+        A panel is identified by its serial, and the serial is only known once
+        the probe below has read it. Several panels can answer at one address on
+        different HTTP ports -- an emulator serves every panel it simulates from
+        the one machine, each advertising its own `httpPort` -- so nothing
+        before the probe may conclude an announcement is a configured panel,
+        except where only one panel can be: a real SPAN panel, alone at its
+        address on port 80 (see `_async_real_panel_configured_at`). Keyed on the
+        host alone, the first panel configured at an address discarded every
+        other panel's announcement there; keyed on a stored port, panels that
+        traded ports discarded each other's, before either serial was read.
+
+        Neither check made before the probe decides identity; both only save
+        work, the second by keeping one probe per host and port in flight.
+        Every other announcement, a moved panel's included, reaches the probe
+        and is caught by the serial check in `ensure_not_already_configured`.
+        There `_async_host_update` decides whether its entry may follow it: a
+        pinned entry takes the new host and ports only once the HTTPS port it
+        would use -- the announced one, or the stored one where the
+        announcement publishes none -- serves a certificate its anchor
+        validates.
+        """
+        host = discovery_info.host
+        # Read before the probe because the checks below need it. A malformed
+        # value is port 80, as an absent one is; see `_discovered_port`.
+        props = discovery_info.properties or {}
+        discovered_http_port = _discovered_port(props, "httpPort", "httpport")
+        http_port = 80 if discovered_http_port is None else discovered_http_port
+
+        # Do not probe a real panel re-announcing from the address its entry
+        # has: every such announcement ends here, request-free.
+        if self._async_real_panel_configured_at(host, http_port):
+            return self.async_abort(reason="already_configured")
 
         # Do not probe device if it is not an ipv4 address
-        if not is_ipv4_address(discovery_info.host):
+        if not is_ipv4_address(host):
             return self.async_abort(reason="not_ipv4_address")
 
-        # Set a preliminary unique_id from the host to prevent duplicate
-        # in-progress discovery flows when mDNS fires repeatedly for the
-        # same IP. The default raise_on_progress=True causes subsequent
-        # flows for the same host to abort immediately with
-        # "already_in_progress". This is replaced with the serial number
-        # in ensure_not_already_configured() once the device is validated.
-        await self.async_set_unique_id(discovery_info.host)
+        # An interim unique_id, so that one panel announcing on several services
+        # at once runs one probe: the default raise_on_progress=True aborts every
+        # later flow for the same host and port with "already_in_progress".
+        # Replaced by the serial in ensure_not_already_configured() once the
+        # probe has read it.
+        await self.async_set_unique_id(f"{host}:{http_port}")
 
         # Detect whether this is a v2 panel based on zeroconf service type
         svc_type = getattr(discovery_info, "type", "") or ""
@@ -505,30 +696,26 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if is_v2_service:
             # v2 panels discovered via eBus / secure-mqtt service types
-            # Read optional httpPort from mDNS TXT records (non-standard port)
-            props = discovery_info.properties or {}
-            discovered_http_port = _discovered_port(props, "httpPort", "httpport")
-            http_port = 80 if discovered_http_port is None else discovered_http_port
             self._http_port = http_port
 
             # A panel that moved its HTTP port has usually moved its TLS port
             # too, and it is the only party that knows where. Taking the
             # published value here is what keeps the reverse-proxy question off
             # the screen of a user whose panel already answered it.
-            https_port = _discovered_port(props, "httpsPort", "httpsport")
+            https_port = _discovered_tls_port(props, "httpsPort", "httpsport")
             if https_port is not None:
                 self._https_port = https_port
                 self._https_port_known = True
 
             detection = await detect_api_version(
-                discovery_info.host,
+                host,
                 port=http_port,
                 httpx_client=get_async_client(self.hass, verify_ssl=False),
             )
             if detection.api_version != "v2" or detection.status_info is None:
                 return self.async_abort(reason="not_span_panel")
             self.api_version = "v2"
-            self.host = discovery_info.host
+            self.host = host
             self.serial_number = detection.status_info.serial_number
             self._hardware_version = detection.status_info.hardware_version
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
@@ -536,7 +723,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 **self.context,
                 "title_placeholders": {
                     **self.context.get("title_placeholders", {}),
-                    CONF_HOST: discovery_info.host,
+                    CONF_HOST: self._discovered_address(),
                 },
             }
             self._is_flow_setup = True
@@ -549,10 +736,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
         """Handle discovery from Home Assistant Supervisor (add-on).
 
-        Unlike zeroconf, several panels may be reachable on the same host IP
-        on different HTTP ports (for example the SPAN Panel Simulator add-on).
-        Deduplicate by panel serial, not by host, so each panel gets its own
-        config entry.
+        Several panels may be reachable on the same host IP on different HTTP
+        ports (for example the SPAN Panel Simulator add-on). Deduplicate by
+        panel serial, not by host, so each panel gets its own config entry.
 
         **The ports are deliberately not held to the pinned-address check** that
         `async_step_zeroconf` and the by-hand re-add both go through, in
@@ -584,7 +770,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Nobody else can tell the flow what it is, so being told is the
         # difference between a silent setup and a prompt for a number the user
         # would have to go read out of the add-on log.
-        https_port = _discovered_port(config, "https_port", "httpsPort")
+        https_port = _discovered_tls_port(config, "https_port", "httpsPort")
         if https_port is not None:
             self._https_port = https_port
             self._https_port_known = True
@@ -774,6 +960,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return ["auth_passphrase"]
         return ["auth_passphrase", "auth_proximity"]
 
+    def _discovered_address(self) -> str:
+        """Return the address a discovered panel is shown at: its host, and its port unless 80.
+
+        Several panels can answer at one host on different HTTP ports, and a
+        discovery card or confirmation naming only the host reads the same for
+        every one of them. Port 80 -- every real SPAN panel -- is left off, so
+        those read exactly as they did. An IPv6 literal is bracketed, as it has
+        to be beside a port.
+        """
+        host = self.host or ""
+        if self._http_port == 80:
+            return host
+        if ":" in host:
+            host = f"[{host}]"
+        return f"{host}:{self._http_port}"
+
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -783,11 +985,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Prompt the user for confirmation
         if user_input is None:
             self._set_confirm_only()
-            host = self.host if self.host is not None else ""
             return self.async_show_form(
                 step_id="confirm_discovery",
                 description_placeholders={
-                    "host": host,
+                    "host": self._discovered_address(),
                 },
             )
 
@@ -1160,9 +1361,42 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         add-on allocates that port per panel and reallocates it across restarts,
         so the only correct answer is the one it just gave.
         """
-        if self._http_port == 80 or self._https_port_known:
-            return await self.async_step_panel_ca()
-        return await self.async_step_panel_https_port()
+        if self._https_port_is_the_users():
+            return await self.async_step_panel_https_port()
+        return await self.async_step_panel_ca()
+
+    def _https_port_is_the_users(self) -> bool:
+        """Whether the HTTPS port this flow dials is one the user typed.
+
+        The one condition both the step that asks for the port and the step
+        that reports a failure on it read, so they cannot disagree about whose
+        number it is: asked for exactly where the HTTP port moved and nothing
+        authoritative named the TLS one.
+        """
+        return self._http_port != 80 and not self._https_port_known
+
+    def _async_show_https_port_form(
+        self, error: str | None = None, placeholders: Mapping[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """Show the HTTPS port form, prefilled with the port this flow would dial.
+
+        That is the default the first time, and on a return the port that just
+        failed, so the user sees which number to correct rather than a default
+        they never entered.
+        """
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HTTPS_PORT, default=self._https_port): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=65535)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="panel_https_port",
+            data_schema=schema,
+            errors={"base": error} if error else None,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_panel_https_port(
         self, user_input: dict[str, Any] | None = None
@@ -1174,22 +1408,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         fails each setup with nothing the user can do but reconfigure. Refuse
         it while the person who typed it is present.
         """
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_HTTPS_PORT, default=DEFAULT_HTTPS_PORT): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=65535)
-                ),
-            }
-        )
         if user_input is None:
-            return self.async_show_form(step_id="panel_https_port", data_schema=schema)
+            return self._async_show_https_port_form()
         port = int(user_input[CONF_HTTPS_PORT])
         if port == 80:
-            return self.async_show_form(
-                step_id="panel_https_port",
-                data_schema=schema,
-                errors={"base": "https_port_is_plaintext"},
-            )
+            return self._async_show_https_port_form("https_port_is_plaintext")
         self._https_port = port
         return await self.async_step_panel_ca()
 
@@ -1226,13 +1449,38 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # user is never asked to accept a value that already failed. Hostname
         # verification stays on throughout -- what the chooser varies is the
         # address the panel is dialled by, never whether the name is checked.
-        if not await self._async_choose_bootstrap_host(ca_pem, self._https_port):
+        verdict = await self._async_choose_bootstrap_host(ca_pem, self._https_port)
+        if verdict is LeafVerdict.UNREACHABLE:
+            # The CA fetch over HTTP just answered, so the panel is there: what
+            # failed is a TLS connection on the HTTPS port. No certificate was
+            # presented, so none failed, and saying one did would accuse the
+            # network of interception over a port number.
+            _LOGGER.warning(
+                "No TLS connection could be made on HTTPS port %s at %s, so the CA the panel "
+                "published could not be checked against the certificate it serves; refusing "
+                "to pin it",
+                self._https_port,
+                self.host,
+            )
+            placeholders = {"https_port": str(self._https_port)}
+            if self._https_port_is_the_users():
+                # The user typed the number, so the field they typed it in is
+                # where it can be corrected. The CA form has no field: submitting
+                # it would only dial the same port again.
+                return self._async_show_https_port_form("https_port_unreachable", placeholders)
+            return self._async_show_ca_error("https_port_unreachable", placeholders)
+        if verdict is not LeafVerdict.TRUSTED:
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
                 "panel published; refusing to pin it",
                 self.host,
                 self._https_port,
             )
+            if self._https_port_is_the_users():
+                # The message says to check the HTTPS port, and a typed port
+                # reaching some other TLS service is the likeliest cause, so the
+                # user gets back the field to check it in.
+                return self._async_show_https_port_form("ca_leaf_mismatch")
             return self._async_show_ca_error("ca_leaf_mismatch")
 
         try:
@@ -1249,7 +1497,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._panel_ca_pem = ca_pem
         return await self._async_adopt_anchor_and_authenticate()
 
-    def _async_show_ca_error(self, reason: str) -> ConfigFlowResult:
+    def _async_show_ca_error(
+        self, reason: str, placeholders: Mapping[str, str] | None = None
+    ) -> ConfigFlowResult:
         """Re-show the CA step with an actionable error.
 
         Deliberately not a way past. There is no "carry on unpinned" option here,
@@ -1265,6 +1515,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             step_id="panel_ca",
             data_schema=vol.Schema({}),
             errors={"base": reason},
+            description_placeholders=placeholders,
         )
 
     async def _async_adopt_anchor_and_authenticate(self) -> ConfigFlowResult:
@@ -1576,7 +1827,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._leaf_names_host = True
         pinned_pem = self._rest_transport.ca_pem
         if pinned_pem is not None:
-            if await self._async_choose_bootstrap_host(pinned_pem, self._rest_transport.port):
+            chosen = await self._async_choose_bootstrap_host(pinned_pem, self._rest_transport.port)
+            if chosen is LeafVerdict.TRUSTED:
                 # Something under the pin both validates and names itself. The
                 # host is storable only when that something was the host: a
                 # substituted address reaches the panel but says nothing about
@@ -1586,6 +1838,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 # Nothing the anchor both validates and names, which used to end
                 # the flow here. Three different things produce that, and only
                 # one of them is the panel being absent.
+                #
+                # Asked of the host itself rather than taken from the chooser,
+                # which may be reporting on the address the host resolves to:
+                # NAME_MISMATCH below unlocks a transport with the name binding
+                # dropped, and only the host the user asked to store may earn it.
                 verdict = await async_leaf_verdict(host, self._rest_transport.port, pinned_pem)
                 if verdict is LeafVerdict.UNREACHABLE:
                     return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")

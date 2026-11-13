@@ -15,9 +15,12 @@ from span_panel_api.exceptions import (
 )
 
 from custom_components.span_panel.config_flow_validation import (
+    LeafVerdict,
+    PanelLeafHost,
     PanelRestTransport,
     async_download_ca_or_none,
     async_leaf_chains_to_ca,
+    async_panel_leaf_host,
     async_resolve_host,
     check_fqdn_tls_ready,
     is_fqdn,
@@ -532,3 +535,109 @@ async def test_leaf_check_survives_a_name_that_cannot_be_idna_encoded() -> None:
         ),
     ):
         assert await async_leaf_chains_to_ca(overlong, 443, "pem") is False
+
+
+# ---------- which address reaches the panel, and why none did ----------
+
+PANEL_ADDRESS = "192.168.1.100"
+PANEL_NAME = "spanpanel"
+
+
+@pytest.mark.parametrize(
+    ("host", "resolved", "verdicts", "expected"),
+    [
+        # The certificate names the host it was asked for.
+        (
+            PANEL_ADDRESS,
+            None,
+            {PANEL_ADDRESS: LeafVerdict.TRUSTED},
+            PanelLeafHost(PANEL_ADDRESS, LeafVerdict.TRUSTED),
+        ),
+        # It names only the address the name resolves to.
+        (
+            PANEL_NAME,
+            PANEL_ADDRESS,
+            {PANEL_NAME: LeafVerdict.NAME_MISMATCH, PANEL_ADDRESS: LeafVerdict.TRUSTED},
+            PanelLeafHost(PANEL_ADDRESS, LeafVerdict.TRUSTED),
+        ),
+        # Nothing answers at an address.
+        (
+            PANEL_ADDRESS,
+            None,
+            {PANEL_ADDRESS: LeafVerdict.UNREACHABLE},
+            PanelLeafHost(None, LeafVerdict.UNREACHABLE),
+        ),
+        # Nothing answers at a name, nor at the address it resolves to.
+        (
+            PANEL_NAME,
+            PANEL_ADDRESS,
+            {PANEL_NAME: LeafVerdict.UNREACHABLE, PANEL_ADDRESS: LeafVerdict.UNREACHABLE},
+            PanelLeafHost(None, LeafVerdict.UNREACHABLE),
+        ),
+        # A name that does not resolve has only itself to try.
+        (
+            PANEL_NAME,
+            None,
+            {PANEL_NAME: LeafVerdict.UNREACHABLE},
+            PanelLeafHost(None, LeafVerdict.UNREACHABLE),
+        ),
+        # No host at all reaches nothing.
+        ("", None, {}, PanelLeafHost(None, LeafVerdict.UNREACHABLE)),
+        # Something answered, with a certificate the anchor does not sign.
+        (
+            PANEL_ADDRESS,
+            None,
+            {PANEL_ADDRESS: LeafVerdict.UNTRUSTED},
+            PanelLeafHost(None, LeafVerdict.UNTRUSTED),
+        ),
+        # A certificate that was presented outranks a candidate that presented
+        # none, whichever of the two answered.
+        (
+            PANEL_NAME,
+            PANEL_ADDRESS,
+            {PANEL_NAME: LeafVerdict.UNREACHABLE, PANEL_ADDRESS: LeafVerdict.UNTRUSTED},
+            PanelLeafHost(None, LeafVerdict.UNTRUSTED),
+        ),
+        (
+            PANEL_NAME,
+            PANEL_ADDRESS,
+            {PANEL_NAME: LeafVerdict.UNTRUSTED, PANEL_ADDRESS: LeafVerdict.UNREACHABLE},
+            PanelLeafHost(None, LeafVerdict.UNTRUSTED),
+        ),
+        # The panel answered at both, naming neither.
+        (
+            PANEL_NAME,
+            PANEL_ADDRESS,
+            {PANEL_NAME: LeafVerdict.NAME_MISMATCH, PANEL_ADDRESS: LeafVerdict.NAME_MISMATCH},
+            PanelLeafHost(None, LeafVerdict.NAME_MISMATCH),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_the_leaf_host_says_why_no_address_reached_the_panel(
+    host: str,
+    resolved: str | None,
+    verdicts: dict[str, LeafVerdict],
+    expected: PanelLeafHost,
+) -> None:
+    """Nothing answering is told apart from a certificate that failed.
+
+    A refused or silent TLS port presents no certificate, so it must never come
+    back as one the anchor rejects; that is the verdict a caller reports as
+    "not signed by the authority it published".
+    """
+
+    async def _verdict(candidate: str, _tls_port: int, _ca_pem: str) -> LeafVerdict:
+        return verdicts[candidate]
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.async_leaf_verdict",
+            new=AsyncMock(side_effect=_verdict),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.async_resolve_host",
+            new=AsyncMock(return_value=resolved),
+        ),
+    ):
+        assert await async_panel_leaf_host(MagicMock(), host, 443, "pem") == expected

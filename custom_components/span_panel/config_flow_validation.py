@@ -258,11 +258,14 @@ class LeafVerdict(StrEnum):
     - `UNTRUSTED` — something answered and its certificate does not chain to the
       anchor. The interception case, and the only one worth alarming a user
       about.
-    - `UNREACHABLE` — nothing answered at all. Distinct from `UNTRUSTED`
-      because it had been collapsed into it, so an unplugged cable was reported
-      to users as "the certificate this panel serves is not signed by the
-      authority it published" — an accusation of interception for a network
-      timeout.
+    - `UNREACHABLE` — no TLS connection could be made, so no certificate was
+      presented: nothing listening, nothing answering in time, or something
+      that answered without completing a handshake -- a plaintext service, a
+      proxy resetting it. Not "nothing answered", which the last of those is
+      not. Distinct from `UNTRUSTED` because it had been collapsed into it, so
+      an unplugged cable was reported to users as "the certificate this panel
+      serves is not signed by the authority it published" — an accusation of
+      interception for a network timeout.
     """
 
     TRUSTED = "trusted"
@@ -381,14 +384,38 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
     return await async_leaf_verdict(host, tls_port, ca_pem) is LeafVerdict.TRUSTED
 
 
+@dataclass(frozen=True, slots=True)
+class PanelLeafHost:
+    """Which address reached the panel under an anchor, and why none did when none did.
+
+    `reached` is the candidate whose certificate both chains to the anchor and
+    names it -- the host asked about, or the address it resolves to -- and None
+    when no candidate's does. `verdict` is TRUSTED exactly when `reached` is
+    set.
+
+    Otherwise `verdict` is UNREACHABLE only when no candidate presented a
+    certificate at all -- no TLS connection could be made to any of them -- and
+    the verdict of the first candidate that did present one when one did. Both
+    halves of that rule are about one thing: a TLS port that is refused,
+    silent or not TLS presents no certificate, so it must never come back as a
+    certificate the anchor rejects -- that is the verdict a caller reports as
+    "not signed by the authority it published" -- while a certificate that was
+    presented and failed says more than a candidate that presented nothing.
+    """
+
+    reached: str | None
+    verdict: LeafVerdict
+
+
 async def async_panel_leaf_host(
     hass: HomeAssistant, host: str, tls_port: int, ca_pem: str
-) -> str | None:
-    """Return the address that reaches the panel at `host` under `ca_pem`, or None.
+) -> PanelLeafHost:
+    """Return which address reaches the panel at `host` under `ca_pem`, or why none does.
 
     The single implementation of "which address does this panel answer on".
     `host` itself when the certificate it serves already names it, the resolved
-    address when only that works, and None when neither does.
+    address when only that works, and no address when neither does -- with the
+    verdict then saying whether any certificate was presented; see `PanelLeafHost`.
 
     The name is tried first, always: the panel's leaf names the addresses it
     knows itself by, and where it already names the host there is nothing to
@@ -409,20 +436,22 @@ async def async_panel_leaf_host(
     host the anchor rejects.
     """
     if not host:
-        return None
-    if await async_leaf_chains_to_ca(host, tls_port, ca_pem):
-        return host
+        return PanelLeafHost(None, LeafVerdict.UNREACHABLE)
+    verdict = await async_leaf_verdict(host, tls_port, ca_pem)
+    if verdict is LeafVerdict.TRUSTED:
+        return PanelLeafHost(host, verdict)
     if is_ip_literal(host):
-        return None
+        return PanelLeafHost(None, verdict)
     resolved = await async_resolve_host(hass, host)
     if resolved is None:
         _LOGGER.debug("Could not resolve %s to an address; only the name is tried", host)
-        return None
+        return PanelLeafHost(None, verdict)
     if resolved == host:
-        return None
-    if await async_leaf_chains_to_ca(resolved, tls_port, ca_pem):
-        return resolved
-    return None
+        return PanelLeafHost(None, verdict)
+    fallback = await async_leaf_verdict(resolved, tls_port, ca_pem)
+    if fallback is LeafVerdict.TRUSTED:
+        return PanelLeafHost(resolved, fallback)
+    return PanelLeafHost(None, fallback if verdict is LeafVerdict.UNREACHABLE else verdict)
 
 
 async def async_ca_signs_panel_leaf(
@@ -438,11 +467,11 @@ async def async_ca_signs_panel_leaf(
     change diagnosis finds the fetched CA and the pinned one identical and has
     no change to report, and the entry retries forever with no repair to offer.
 
-    For callers that only need the verdict; `async_panel_leaf_host` carries the
-    address the panel was actually reached on, and why there is more than one
-    candidate.
+    For callers that only need the yes or no; `async_panel_leaf_host` carries
+    the address the panel was actually reached on, why there is more than one
+    candidate, and -- for a no -- whether any certificate was presented.
     """
-    return await async_panel_leaf_host(hass, host, tls_port, ca_pem) is not None
+    return (await async_panel_leaf_host(hass, host, tls_port, ca_pem)).reached is not None
 
 
 async def validate_v2_proximity(
