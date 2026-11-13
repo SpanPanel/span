@@ -55,9 +55,15 @@ def test_the_flat_key_is_the_one_the_library_dispatches_absence_to() -> None:
 
 async def test_read_classifies_flat_and_parent_child() -> None:
     with patch(_GET_HOMIE_SCHEMA, AsyncMock(return_value=_schema(None))):
-        assert await async_read_schema("192.0.2.10", port=80, httpx_client=None) == "flat"
+        assert (
+            await async_read_schema("192.0.2.10", port=80, httpx_client=None, ssl_context=None)
+            == "flat"
+        )
     with patch(_GET_HOMIE_SCHEMA, AsyncMock(return_value=_schema("1.0"))):
-        assert await async_read_schema("192.0.2.10", port=80, httpx_client=None) == "parent_child"
+        assert (
+            await async_read_schema("192.0.2.10", port=80, httpx_client=None, ssl_context=None)
+            == "parent_child"
+        )
 
 
 async def test_read_forwards_a_plaintext_transport() -> None:
@@ -65,7 +71,7 @@ async def test_read_forwards_a_plaintext_transport() -> None:
     read = AsyncMock(return_value=_schema("1.0"))
     try:
         with patch(_GET_HOMIE_SCHEMA, read):
-            await async_read_schema("192.0.2.10", port=80, httpx_client=client)
+            await async_read_schema("192.0.2.10", port=80, httpx_client=client, ssl_context=None)
     finally:
         await client.aclose()
     read.assert_awaited_once_with("192.0.2.10", port=80, httpx_client=client, ssl_context=None)
@@ -90,7 +96,10 @@ async def test_read_forwards_a_pinned_transport() -> None:
 )
 async def test_read_is_unread_on_failure(failure: Exception) -> None:
     with patch(_GET_HOMIE_SCHEMA, AsyncMock(side_effect=failure)):
-        assert await async_read_schema("192.0.2.10", port=80, httpx_client=None) == "unread"
+        assert (
+            await async_read_schema("192.0.2.10", port=80, httpx_client=None, ssl_context=None)
+            == "unread"
+        )
 
 
 @pytest.mark.parametrize(

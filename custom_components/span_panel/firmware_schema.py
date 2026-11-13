@@ -82,7 +82,7 @@ async def async_read_schema(
     *,
     port: int,
     httpx_client: httpx.AsyncClient | None,
-    ssl_context: ssl.SSLContext | None = None,
+    ssl_context: ssl.SSLContext | None,
 ) -> SchemaRead:
     """Read the panel's Homie schema and classify it, or answer "unread" when it cannot be had.
 
@@ -97,6 +97,11 @@ async def async_read_schema(
     use. A None `httpx_client` lets the library build a client of its own, which
     it always does under an `ssl_context`, because httpx fixes its trust store at
     construction.
+
+    No argument has a default, so every caller states its whole transport. A
+    pinned caller that left the context out would send plaintext to the HTTPS
+    port, fail, and answer "unread". The check would then be skipped on every
+    pinned entry, with nothing to show it.
     """
     try:
         async with asyncio.timeout(SCHEMA_READ_TIMEOUT_S):
