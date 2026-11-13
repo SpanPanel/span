@@ -206,9 +206,11 @@ def package_ratings_form(
 ) -> PackageRatingsForm | None:
     """Return which form a copy of the circuit's package takes, or None where none can be entered.
 
-    The one answer every reader draws a copy's field from, so the services and
-    every view agree on which circuits take one. None where the panel describes
-    its multi-load breakers (`panel_describes_breakers`), where the circuit is a
+    Every view draws a copy's field from this answer. The services do not call
+    it: they go through `admit`, which applies the same helpers
+    (`panel_describes_breakers`, `_holds`), so a circuit offered no field is one
+    whose copy the services refuse. None where the panel describes its
+    multi-load breakers (`panel_describes_breakers`), where the circuit is a
     meter outside the panel, with no breaker, where it has no rating for a
     copy's first to match, or where it lists no space or more than two. Read
     from the panel's structure, never from a circuit's name or its readings.
@@ -248,7 +250,11 @@ def _capacity_a(spaces: Collection[int], ratings_a: Iterable[int]) -> float | No
 
 
 type Verdict = ChangeReason | JudgedState
-"""What the rule says of one entry: why it is removed, that it waits on a value, or that it applies."""
+"""What the rule says of one entry.
+
+Why it is removed, that it waits on a value, that it applies, or that it is
+kept on averaged legs.
+"""
 
 
 def _panel_wide(service: Declaration, *, describes_breakers: bool) -> ChangeReason | None:

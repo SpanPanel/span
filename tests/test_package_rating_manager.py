@@ -20,8 +20,16 @@ from span_panel_api import FieldMetadata, SpanPanelSnapshot
 from custom_components.span_panel import async_remove_entry
 from custom_components.span_panel.const import DOMAIN, EVENT_PACKAGE_RATINGS_CHANGED
 from custom_components.span_panel.notices import async_restore, is_standing, read_translations
-from custom_components.span_panel.package_rating_manager import PackageRatingManager
-from custom_components.span_panel.package_ratings import ChangeReason, MonitoringRating
+from custom_components.span_panel.package_rating_manager import (
+    PackageRatingManager,
+    _load_package,
+    _store_for,
+)
+from custom_components.span_panel.package_ratings import (
+    ChangeReason,
+    MonitoringRating,
+    StoredPackage,
+)
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -139,10 +147,15 @@ async def test_copied_ratings_are_saved_and_loaded_by_the_next_manager(
 
     stored = hass_storage[_store_key(entry)]
     assert isinstance(stored, dict)
-    assert stored["version"] == 1
+    assert (stored["version"], stored["minor_version"]) == (1, 2)
     assert stored["data"] == {
         "packages": {
-            "circuit-2": {"package_ratings_a": [20, 30], "space": 2, "label": "Name of circuit-2"}
+            "circuit-2": {
+                "package_ratings_a": [20, 30],
+                "space": 2,
+                "spaces": [2],
+                "label": "Name of circuit-2",
+            }
         },
         "unacknowledged": {},
     }
@@ -167,13 +180,26 @@ async def test_copied_ratings_are_saved_and_loaded_by_the_next_manager(
         pytest.param({"package_ratings_a": [10, 15.5], "space": 3, "label": "Bad"}, id="a fractional rating"),
         pytest.param({"package_ratings_a": [10, 10], "label": "Bad"}, id="no space"),
         pytest.param({"package_ratings_a": [10, 10], "space": True, "label": "Bad"}, id="a bool space"),
+        pytest.param({"package_ratings_a": [10, 10], "space": 0, "label": "Bad"}, id="a zero space"),
+        pytest.param(
+            {"package_ratings_a": [10, 10], "spaces": [3, 0], "label": "Bad"}, id="malformed spaces and no space"
+        ),
+        pytest.param(
+            {"package_ratings_a": [10, 10], "space": "3", "spaces": "3", "label": "Bad"},
+            id="malformed spaces and a malformed space",
+        ),
         pytest.param({"package_ratings_a": [10, 10], "space": 3}, id="no label"),
+        pytest.param({"package_ratings_a": [10, 10], "space": 3, "spaces": [3]}, id="spaces and no label"),
         pytest.param({"rating_a": 20, "panel_a_at_set": 10.0, "label": "Bad"}, id="a row of an older shape"),
         pytest.param("nonsense", id="not a row"),
     ],
 )
 async def test_a_malformed_row_is_dropped_and_the_rest_load(
-    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object], bad: object
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+    bad: object,
 ) -> None:
     hass_storage[_store_key(entry)] = {
         "version": 1,
@@ -191,6 +217,91 @@ async def test_a_malformed_row_is_dropped_and_the_rest_load(
     manager.begin(snapshot, _DECLARED)
     assert manager.resolve("circuit-1", snapshot).user_set
     assert manager.resolve("circuit-3", snapshot) == MonitoringRating(10.0, 10.0, False, None, None)
+    assert "Dropping malformed package ratings for circuit-3" in caplog.text
+
+
+async def test_the_store_is_minor_version_2(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Major version 1 still, so 2.3.0b1, whose store has no migration, loads it rather than failing setup."""
+    store = _store_for(hass, entry)
+    assert (store.version, store.minor_version) == (1, 2)
+
+
+async def test_a_minor_version_1_row_loads_as_one_space(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_storage: dict[str, object]
+) -> None:
+    """A row written before a package could span two spaces has only `space`, and HA hands it over as stored."""
+    row: dict[str, object] = {"package_ratings_a": [20, 20], "space": 7, "label": "x"}
+    assert _load_package(row) == StoredPackage((20, 20), (7,), "x")
+
+    hass_storage[_store_key(entry)] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": _store_key(entry),
+        "data": {"packages": {"circuit-7": row}, "unacknowledged": {}},
+    }
+    manager = PackageRatingManager(hass, entry)
+    await manager.async_load()
+    await manager.async_save()
+
+    stored = hass_storage[_store_key(entry)]
+    assert isinstance(stored, dict)
+    assert stored["minor_version"] == 2
+    assert (await _stored(hass, entry))["packages"] == {
+        "circuit-7": {"package_ratings_a": [20, 20], "space": 7, "spaces": [7], "label": "x"}
+    }
+
+
+@pytest.mark.parametrize(
+    "spaces",
+    [
+        pytest.param(None, id="null"),
+        pytest.param("7", id="not a list"),
+        pytest.param([], id="no space"),
+        pytest.param([7, 9, 11], id="three spaces"),
+        pytest.param([7, True], id="a bool space"),
+        pytest.param([7, 0], id="a zero space"),
+        pytest.param([7.5], id="a fractional space"),
+        pytest.param([7, 7], id="the same space twice"),
+    ],
+)
+def test_a_row_whose_spaces_are_malformed_loads_from_its_space(spaces: object) -> None:
+    """Every row keeps `space`, so one whose `spaces` is not what was written still has the space it was copied for."""
+    row = {"package_ratings_a": [20, 20], "space": 7, "spaces": spaces, "label": "x"}
+    assert _load_package(row) == StoredPackage((20, 20), (7,), "x")
+
+
+def test_a_row_reads_its_spaces_in_order_of_space() -> None:
+    """An entry is compared with the circuit's spaces in order of space, so it is read in that order too."""
+    row = {"package_ratings_a": [20, 20], "space": 20, "spaces": [20, 18], "label": "x"}
+    assert _load_package(row) == StoredPackage((20, 20), (18, 20), "x")
+
+
+async def test_a_saved_row_keeps_space_for_a_rollback_to_b1(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """2.3.0b1 reads only `space`, through a plain `Store(hass, 1, key)` as `_stored` does, so every row keeps its first space."""
+    snapshot = _snapshot({"circuit-18": 20.0}, tabs={"circuit-18": [20, 18]})
+    manager = await _begun(hass, entry, snapshot)
+
+    manager.set_package_ratings("circuit-18", snapshot, [20, 20])
+    await hass.async_block_till_done()
+
+    row = (await _stored(hass, entry))["packages"]["circuit-18"]
+    assert isinstance(row, dict)
+    assert row["space"] == 18
+    assert row["spaces"] == [18, 20]
+
+
+async def test_a_two_space_entry_survives_a_restart(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Read back as the two spaces it was copied for, it is kept on averaged legs, not removed as spaces changed."""
+    snapshot = _snapshot({"circuit-18": 20.0}, tabs={"circuit-18": [18, 20]})
+    manager = await _begun(hass, entry, snapshot)
+    manager.set_package_ratings("circuit-18", snapshot, [20, 30])
+    await hass.async_block_till_done()
+
+    reloaded = await _begun(hass, entry, snapshot)
+
+    assert reloaded.resolve("circuit-18", snapshot) == MonitoringRating(20.0, 20.0, False, (20, 30), "averaged_legs")
+    assert not is_standing(hass, entry, _NOTICE)
+    assert list((await _stored(hass, entry))["packages"]) == ["circuit-18"]
 
 
 async def test_a_store_without_packages_loads_as_empty(
@@ -711,7 +822,7 @@ async def test_an_unknown_declaration_is_read_on_each_snapshot_until_it_is_known
 # -- Diagnostics -----------------------------------------------------------------
 
 
-async def test_diagnostics_show_each_entry_its_space_and_what_the_rule_makes_of_it(
+async def test_diagnostics_show_each_entry_its_spaces_and_what_the_rule_makes_of_it(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     ratings = {"circuit-2": 20.0, "circuit-3": 15.0}
@@ -729,7 +840,7 @@ async def test_diagnostics_show_each_entry_its_space_and_what_the_rule_makes_of_
             "circuit-2": {
                 "label": "Name of circuit-2",
                 "package_ratings_a": [20, 20],
-                "space": 2,
+                "spaces": [2],
                 "state": "pending",
             }
         },
@@ -745,6 +856,29 @@ async def test_diagnostics_show_each_entry_its_space_and_what_the_rule_makes_of_
         },
     }
     assert manager.diagnostics(_snapshot())["packages"]["circuit-2"]["state"] == "applies"
+
+
+async def test_diagnostics_show_spaces_and_averaged_legs(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """A two-space entry is kept and never applied; the download says so rather than calling it pending."""
+    snapshot = _snapshot({"circuit-18": 20.0}, tabs={"circuit-18": [20, 18]})
+    manager = await _begun(hass, entry, snapshot)
+    manager.set_package_ratings("circuit-18", snapshot, [20, 20])
+    await hass.async_block_till_done()
+
+    row = manager.diagnostics(snapshot)["packages"]["circuit-18"]
+
+    assert row["spaces"] == [18, 20]
+    assert row["state"] == "averaged_legs"
+
+
+async def test_diagnostics_give_no_state_to_an_entry_the_rule_would_remove(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Against a snapshot not yet reconciled the rule may remove an entry; it neither applies nor waits."""
+    manager = await _begun(hass, entry)
+    manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
+
+    assert manager.diagnostics(_snapshot({"circuit-2": 30.0}))["packages"]["circuit-2"]["state"] is None
 
 
 async def test_diagnostics_list_a_removal_only_while_its_notice_stands(

@@ -677,14 +677,15 @@ def _rated_panel(dryer_a: float | None, oven_a: float) -> SpanPanelSnapshot:
             circuit_id: SpanCircuitSnapshotFactory.create(
                 circuit_id=circuit_id,
                 name=name,
-                tabs=[space],
+                tabs=spaces,
                 breaker_rating_a=rating,
                 breaker_rating_declared=True,
             )
-            for circuit_id, name, space, rating in (
-                ("uuid_kitchen", "Kitchen", 3, 20.0),
-                ("uuid_dryer", "Dryer", 5, dryer_a),
-                ("uuid_oven", "Oven", 7, oven_a),
+            for circuit_id, name, spaces, rating in (
+                ("uuid_kitchen", "Kitchen", [3], 20.0),
+                ("uuid_dryer", "Dryer", [5], dryer_a),
+                ("uuid_oven", "Oven", [7], oven_a),
+                ("uuid_heater", "Heater", [11, 9], 30.0),
             )
         },
         main_breaker_rating_a=100,
@@ -694,7 +695,7 @@ def _rated_panel(dryer_a: float | None, oven_a: float) -> SpanPanelSnapshot:
 async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_not_yet_seen(
     hass: HomeAssistant,
 ) -> None:
-    """Keyed by circuit id as the circuits block is: each copy, the space it was copied for, and whether it applies."""
+    """Keyed by circuit id as the circuits block is: each copy, the spaces it was copied for, and whether it applies."""
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="sp3-diag-rating")
     entry.add_to_hass(hass)
     await async_restore(hass, entry)  # as setup does, so the notice the removal raises stands
@@ -705,7 +706,9 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     manager.set_package_ratings("uuid_kitchen", before, [20, 20])
     manager.set_package_ratings("uuid_dryer", before, [30, 15])
     manager.set_package_ratings("uuid_oven", before, [40, 20])
+    manager.set_package_ratings("uuid_heater", before, [30, 20])
     # The dryer's rating is declared and has not arrived again; the oven's panel rating moved, removing its copy.
+    # The heater's copy, across two spaces, is kept on averaged legs.
     now = _rated_panel(dryer_a=None, oven_a=45.0)
     manager.reconcile(now, lambda: None)
     await hass.async_block_till_done()
@@ -732,8 +735,14 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
         "panel_describes_breakers": False,
         "service_rating_declaration": "declared",
         "packages": {
-            "uuid_kitchen": {"label": "Kitchen", "package_ratings_a": [20, 20], "space": 3, "state": "applies"},
-            "uuid_dryer": {"label": "Dryer", "package_ratings_a": [30, 15], "space": 5, "state": "pending"},
+            "uuid_kitchen": {"label": "Kitchen", "package_ratings_a": [20, 20], "spaces": [3], "state": "applies"},
+            "uuid_dryer": {"label": "Dryer", "package_ratings_a": [30, 15], "spaces": [5], "state": "pending"},
+            "uuid_heater": {
+                "label": "Heater",
+                "package_ratings_a": [30, 20],
+                "spaces": [9, 11],
+                "state": "averaged_legs",
+            },
         },
         "unacknowledged": {
             "uuid_oven": {
