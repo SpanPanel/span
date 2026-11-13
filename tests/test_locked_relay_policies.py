@@ -223,6 +223,7 @@ def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
     assert "tabs" in attributes
 
 
+@pytest.mark.spec_only
 @pytest.mark.parametrize("circuit_id", [CONTROLLABLE_CIRCUIT, LOCKED_CIRCUIT])
 def test_a_relay_that_has_not_reported_is_still_a_relay(circuit_id: str) -> None:
     """Whether a circuit has a relay is the declaration's to say, not the reading's.
