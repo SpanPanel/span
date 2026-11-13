@@ -196,7 +196,7 @@ class TestSet:
             (_snapshot(), "circuit-9", [20, 30], "package_ratings_circuit_unknown"),
             (_snapshot({"circuit-2": None}), "circuit-2", [20, 30], "package_ratings_not_arrived"),
             (_snapshot(), "circuit-2", [20, SERVICE_A], "package_ratings_above_service_rating"),
-            (_snapshot(tabs=[2, 4]), "circuit-2", [20, 30], "package_ratings_not_one_space"),
+            (_snapshot(tabs=[2, 4, 6]), "circuit-2", [20, 30], "package_ratings_spaces"),
             (_snapshot(), "circuit-2", [20, 20, 20], "package_ratings_not_two"),
             (_snapshot(), "circuit-2", [30, 20], "package_ratings_first_not_panel"),
             (

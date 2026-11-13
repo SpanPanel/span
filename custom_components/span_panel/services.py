@@ -46,6 +46,7 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
+from .package_ratings import panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 
 _LOGGER = logging.getLogger(__name__)
@@ -464,6 +465,12 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
             return {"enabled": False}
         status: JsonObjectType = monitor.get_monitoring_status()
         status["enabled"] = True
+        # Whether the panel takes copied package ratings, as the topology root says,
+        # so the Monitoring tab, which reads only this status, need not fetch the
+        # topology for it. Not offered while the coordinator has no snapshot to say.
+        snapshot = runtime_data.coordinator.data
+        offered = snapshot is not None and not panel_describes_breakers(snapshot)
+        status["monitoring_rating_offered"] = offered
         # `MonitoringSettings` is `dict[str, int | bool | str]`, which `dict` is
         # invariant in, so it needs widening rather than casting to sit in a
         # JSON response. `get_global_settings` builds a fresh dict per call, so

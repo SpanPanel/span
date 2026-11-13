@@ -23,6 +23,7 @@ env/
 # Coverage files
 .coverage
 .coverage.*
+coverage.xml
 coverage_output.log
 .local_coverage_data
 htmlcov/

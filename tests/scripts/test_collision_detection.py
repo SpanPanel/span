@@ -38,8 +38,8 @@ def test_registry_collision_detection():
     def async_get_entity_id(domain, platform, unique_id):
         """Simulate registry lookup - returns original entity_ids."""
         lookup_table = {
-            "span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_power": "sensor.span_panel_circuit_2_power",
-            "span_nj-2316-005k6_11a47a0f69d54e12b7200f730c2ffda1_power": "sensor.span_panel_circuit_4_power",
+            "span_sim-main32-0001_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001_power": "sensor.span_panel_circuit_2_power",
+            "span_sim-main32-0001_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0002_power": "sensor.span_panel_circuit_4_power",
         }
 
         result = lookup_table.get(unique_id)
@@ -96,8 +96,8 @@ def test_registry_collision_detection():
     print("-" * 60)
 
     # Test the migration mode lookup behavior
-    result1 = registry.async_get_entity_id("sensor", "span_panel", "span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_power")
-    result2 = registry.async_get_entity_id("sensor", "span_panel", "span_nj-2316-005k6_11a47a0f69d54e12b7200f730c2ffda1_power")
+    result1 = registry.async_get_entity_id("sensor", "span_panel", "span_sim-main32-0001_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001_power")
+    result2 = registry.async_get_entity_id("sensor", "span_panel", "span_sim-main32-0001_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0002_power")
 
     print(f"✅ Migration lookup test passed: Found {result1} and {result2}")
 

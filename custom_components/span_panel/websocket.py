@@ -26,7 +26,11 @@ from .helpers import (
     shared_relay_groups,
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
-from .package_ratings import package_ratings_payload, panel_describes_breakers
+from .package_ratings import (
+    circuit_package_ratings_form,
+    package_ratings_payload,
+    panel_describes_breakers,
+)
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
 from .util import classify_sub_device_identifier, pv_device_ref
@@ -170,6 +174,11 @@ async def handle_panel_topology(
         if point.basis == "group"
     }
 
+    # Whether the panel describes its multi-load breakers, asked once: it says
+    # whether the panel takes package ratings at all, and no circuit's form is
+    # named where it does not.
+    describes_breakers = panel_describes_breakers(snapshot)
+
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
@@ -205,11 +214,19 @@ async def handle_panel_topology(
             "is_user_controllable": circuit.is_user_controllable,
             # The breaker's rating is the panel's fact. What current monitoring judges
             # the circuit against rides beside it, with the package ratings a user
-            # copied from the SPAN app where those are what it is judged against.
+            # copied from the SPAN app while they are kept and what that copy is:
+            # applied, waiting on a value, or kept on averaged legs and not applied.
             "breaker_rating_a": circuit.breaker_rating_a,
             "monitoring_rating_a": rating.judged_a,
             "monitoring_rating_user_set": rating.user_set,
             "package_ratings_a": package_ratings_payload(rating.package_ratings_a),
+            # Which form a copy of the circuit's package takes, null where none can
+            # be entered, so the card draws a field where the rule offers one and
+            # never decides that by rules of its own.
+            "package_ratings_form": circuit_package_ratings_form(
+                circuit, describes_breakers=describes_breakers
+            ),
+            "package_ratings_state": rating.state,
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
             "priority": circuit.priority,
@@ -288,8 +305,9 @@ async def handle_panel_topology(
             # Whether `set_circuit_package_ratings` takes ratings on this panel at
             # all. False where the panel describes its multi-load breakers: current
             # monitoring then judges every circuit by the panel's ratings. Each
-            # circuit must also list a single space, which the card reads off it.
-            "monitoring_rating_offered": not panel_describes_breakers(snapshot),
+            # circuit's `package_ratings_form` says whether it takes a copy, and in
+            # which form.
+            "monitoring_rating_offered": not describes_breakers,
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,

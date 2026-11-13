@@ -35,7 +35,7 @@ from custom_components.span_panel.id_builder import (
 from custom_components.span_panel.naming import ENTITY_ID_SUFFIX_FORMS
 
 SERIAL = "sp3-001"
-CIRCUIT = "0dad2f16cd514812ae1807b0457d473e"
+CIRCUIT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001"
 
 _CIRCUIT_SUFFIXES = {
     "instantPowerW": "power",

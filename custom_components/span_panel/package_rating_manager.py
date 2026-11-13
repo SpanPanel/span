@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 import logging
-from typing import TYPE_CHECKING, Final, Literal, TypedDict
+from typing import TYPE_CHECKING, Final, TypedDict
 
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
@@ -48,6 +48,15 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 _STORAGE_VERSION: Final = 1
+_STORAGE_MINOR_VERSION: Final = 2
+"""Minor version 2 writes each entry's `spaces` beside its `space`.
+
+No migration is defined. Where the major version matches, HA's `Store` then
+hands over the data as stored, whichever minor version wrote it, and the
+loader reads a row without `spaces` as one space. A new major version would
+instead make 2.3.0b1 fail setup after a rollback: its store, version 1 with no
+migration, cannot read a higher major version.
+"""
 _STORAGE_KEY_PREFIX: Final = "span_panel_package_ratings"
 
 _NOTICE_ID: Final = "package_ratings_changed"
@@ -57,8 +66,18 @@ type FieldMetadataSource = Callable[[], Mapping[str, FieldMetadata] | None]
 
 
 class _StoredPackageRow(TypedDict):
+    """One entry as written to disk.
+
+    `spaces` are the spaces it was copied for, in order of space. `space`, the
+    first of them, is all a row of minor version 1 says of its spaces, and every
+    row keeps it: 2.3.0b1 reads only `space`, so after a rollback it still loads
+    the store, and removes a two-space entry as one whose spaces changed,
+    telling the user.
+    """
+
     package_ratings_a: list[int]
     space: int
+    spaces: list[int]
     label: str
 
 
@@ -81,16 +100,20 @@ class StoredPackages(TypedDict):
 class PackageDiagnosticsRow(TypedDict):
     """One stored entry, as the diagnostics download shows it.
 
-    `state` is what the rule makes of it against the current snapshot: it
-    `applies`, or it is `pending`, kept while a declared panel or service rating,
-    or the circuit's space, has not arrived, or while the service rating's
-    declaration is not known.
+    `spaces` are the spaces it was copied for, in order of space. `state` is
+    what the rule makes of it against the current snapshot: it `applies`; it is
+    `pending`, kept while a declared panel or service rating, or the circuit's
+    space, has not arrived, or while the service rating's declaration is not
+    known; or it is `averaged_legs`, kept across two spaces and never applied,
+    since the panel reports the average of the circuit's two legs. It is None
+    where the rule would remove the entry, which only a snapshot not yet
+    reconciled can show: the reconcile removes it.
     """
 
     label: str
     package_ratings_a: list[int]
-    space: int
-    state: Literal["applies", "pending"]
+    spaces: list[int]
+    state: JudgedState | None
 
 
 class PackageRatingsDiagnostics(TypedDict):
@@ -131,16 +154,43 @@ def _package(value: object) -> PackageRatings | None:
     return (first, other)
 
 
+def _space(value: object) -> int | None:
+    """Read a breaker space, a whole number of at least 1, or None where it is not that."""
+    space = _integer(value)
+    return space if space is not None and space >= 1 else None
+
+
+def _spaces(value: object) -> tuple[int, ...] | None:
+    """Read a package's one or two different spaces, in order of space, or None where it is not that."""
+    if not isinstance(value, list) or len(value) not in (1, 2):
+        return None
+    spaces: list[int] = []
+    for item in value:
+        space = _space(item)
+        if space is None or space in spaces:
+            return None
+        spaces.append(space)
+    return tuple(sorted(spaces))
+
+
 def _load_package(row: object) -> StoredPackage | None:
-    """Read one entry off disk, or None where the row is not what was written."""
+    """Read one entry off disk, or None where the row is not what was written.
+
+    Its spaces are `spaces`, and otherwise the `space` every row keeps: a row of
+    minor version 1, written before a package could span two spaces, has only
+    that, and one whose `spaces` is not what was written still has its first.
+    """
     if not isinstance(row, dict):
         return None
     ratings = _package(row.get("package_ratings_a"))
-    space = _integer(row.get("space"))
+    spaces = _spaces(row.get("spaces"))
+    if spaces is None:
+        space = _space(row.get("space"))
+        spaces = None if space is None else (space,)
     label: object = row.get("label")
-    if ratings is None or space is None or not isinstance(label, str):
+    if ratings is None or spaces is None or not isinstance(label, str):
         return None
-    return StoredPackage(ratings, space, label)
+    return StoredPackage(ratings, spaces, label)
 
 
 def _load_packages(stored: object) -> dict[str, StoredPackage]:
@@ -242,9 +292,10 @@ class PackageRatingManager:
 
         Each entry's state comes from `resolve`, the call every reader makes, so
         the download says what monitoring is doing with it. After a reconcile a
-        stored entry either applies or waits on a value that has not arrived;
-        any other outcome has already removed it. The removals are the notice's
-        lines while it is on screen (`_unseen`), and none once it is dismissed.
+        stored entry applies, waits on a value that has not arrived, or is kept
+        on averaged legs; any other outcome has already removed it. The removals
+        are the notice's lines while it is on screen (`_unseen`), and none once
+        it is dismissed.
         """
         return PackageRatingsDiagnostics(
             panel_describes_breakers=panel_describes_breakers(snapshot),
@@ -253,8 +304,8 @@ class PackageRatingManager:
                 circuit_id: PackageDiagnosticsRow(
                     label=stored.label,
                     package_ratings_a=list(stored.ratings_a),
-                    space=stored.space,
-                    state="applies" if self.resolve(circuit_id, snapshot).user_set else "pending",
+                    spaces=list(stored.spaces),
+                    state=self.resolve(circuit_id, snapshot).state,
                 )
                 for circuit_id, stored in self._packages.items()
             },
@@ -345,8 +396,9 @@ class PackageRatingManager:
         """Store the ratings a user copied from the SPAN app for one circuit, in the app's order.
 
         What the rule makes of them is `admit`'s to say: an entry, stored only
-        where it applies; a clear, for the panel's rating alone; or a refusal,
-        raised as a ServiceValidationError with its own key.
+        where it applies or, across two spaces, is kept on averaged legs; a
+        clear, for the panel's rating alone; or a refusal, raised as a
+        ServiceValidationError with its own key.
         """
         admission = admit(snapshot, circuit_id, ratings_a, self._service, construct_circuit_label)
         if isinstance(admission, Refused):
@@ -357,7 +409,11 @@ class PackageRatingManager:
         if self._packages.get(circuit_id) == admission:
             return
         self._packages[circuit_id] = admission
-        self._states[circuit_id] = "applies"  # admit stores only what applies
+        # What the entry is, as a reconcile records it. admit stores only what
+        # the rule keeps, so it applies or, across two spaces, is kept on
+        # averaged legs; the rule says which.
+        if (state := self.resolve(circuit_id, snapshot).state) is not None:
+            self._states[circuit_id] = state
         self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
@@ -461,7 +517,8 @@ class PackageRatingManager:
                 packages={
                     circuit_id: _StoredPackageRow(
                         package_ratings_a=list(stored.ratings_a),
-                        space=stored.space,
+                        space=stored.spaces[0],
+                        spaces=list(stored.spaces),
                         label=stored.label,
                     )
                     for circuit_id, stored in self._packages.items()
@@ -476,7 +533,12 @@ class PackageRatingManager:
 
 def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredPackages]:
     """Return the store holding one panel's entries and unacknowledged removals."""
-    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+    return Store(
+        hass,
+        _STORAGE_VERSION,
+        f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
+        minor_version=_STORAGE_MINOR_VERSION,
+    )
 
 
 async def async_forget_package_ratings(hass: HomeAssistant, entry: ConfigEntry) -> None:

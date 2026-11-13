@@ -10,13 +10,13 @@ configurations with preserved entity IDs.
 
 ### Available Test Data
 
-Located in `/Users/bflood/projects/HA/span/tests/migration_storage/1_0_10/`:
+Located in `tests/migration_storage/1_0_10/`:
 
-- **`core.config_entries`**: Contains one SPAN Panel config entry (`01K2JBCXNSB9Q489RMG3XTMTJE`) with device identifier `nj-2316-005k6`
+- **`core.config_entries`**: Contains one SPAN Panel config entry (`01AAAAAAAAAAAAAAAAAAAAAAAA`) with device identifier `sim-main32-0001`
 - **`core.entity_registry`**: Contains live entity registry with:
-  - Panel sensors (e.g., `span_nj-2316-005k6_instantGridPowerW`)
-  - Circuit sensors (22 circuits with power sensors using format `span_nj-2316-005k6_{circuit_id}_instantPowerW`)
-  - Energy sensors with dotted notation (e.g., `span_nj-2316-005k6_mainMeterEnergy.producedEnergyWh`)
+  - Panel sensors (e.g., `span_sim-main32-0001_instantGridPowerW`)
+  - Circuit sensors (22 circuits with power sensors using format `span_sim-main32-0001_{circuit_id}_instantPowerW`)
+  - Energy sensors with dotted notation (e.g., `span_sim-main32-0001_mainMeterEnergy.producedEnergyWh`)
   - Solar and battery configuration enabled in config entry options
 - **`core.device_registry`**: Device registry data for the SPAN Panel device
 
@@ -75,9 +75,9 @@ Create a minimal Home Assistant environment that:
 1. Load entity registry from test storage
 2. Run unique_id normalization for the SPAN Panel config entry
 3. Verify transformations:
-   - `span_nj-2316-005k6_mainMeterEnergy.producedEnergyWh` → `span_nj-2316-005k6_main_meter_produced_energy`
-   - `span_nj-2316-005k6_feedthroughEnergy.producedEnergyWh` → `span_nj-2316-005k6_feed_through_produced_energy`
-   - Circuit power sensors: `span_nj-2316-005k6_{circuit_id}_instantPowerW` → `span_nj-2316-005k6_{circuit_id}_power`
+   - `span_sim-main32-0001_mainMeterEnergy.producedEnergyWh` → `span_sim-main32-0001_main_meter_produced_energy`
+   - `span_sim-main32-0001_feedthroughEnergy.producedEnergyWh` → `span_sim-main32-0001_feed_through_produced_energy`
+   - Circuit power sensors: `span_sim-main32-0001_{circuit_id}_instantPowerW` → `span_sim-main32-0001_{circuit_id}_power`
 
 **Expected Outcome**: All sensor unique_ids normalized to helper format while preserving entity_ids
 
@@ -104,7 +104,7 @@ Create a minimal Home Assistant environment that:
    - Generates YAML for the actual device configuration
 
 2. Mock the SPAN Panel coordinator and data:
-   - Use real device identifier (`nj-2316-005k6`)
+   - Use the test data's device identifier (`sim-main32-0001`)
    - Create realistic panel data matching the entity count
    - Generate circuit data for all 22 circuits found in registry
 
@@ -139,7 +139,7 @@ async def generate_migration_yaml():
     mock_hass = create_mock_hass_with_registries(test_storage)
 
     # Load actual config entry
-    config_entry = load_test_config_entry()  # 01K2JBCXNSB9Q489RMG3XTMTJE
+    config_entry = load_test_config_entry()  # 01AAAAAAAAAAAAAAAAAAAAAAAA
 
     # Set migration mode flag
     mock_hass.data[DOMAIN] = {config_entry.entry_id: {"migration_mode": True}}

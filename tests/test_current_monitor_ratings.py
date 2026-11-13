@@ -22,6 +22,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
+from custom_components.span_panel import current_monitor
 from custom_components.span_panel.alert_dispatcher import dispatch_test_alert
 from custom_components.span_panel.const import DOMAIN, EVENT_CURRENT_ALERT
 from custom_components.span_panel.curation import CurationOverlay
@@ -40,6 +41,7 @@ from custom_components.span_panel.services import (
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import count_panel_describes_breakers
 
 SERVICE_A: Final = 100
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
@@ -53,6 +55,10 @@ def _circuit(circuit_id: str, rating: float | None, current_a: float) -> SpanCir
         breaker_rating_declared=True,
         current_a=current_a,
     )
+
+
+def _in_spaces(circuit: SpanCircuitSnapshot, *spaces: int) -> SpanCircuitSnapshot:
+    return replace(circuit, tabs=list(spaces))
 
 
 def _panel(*circuits: SpanCircuitSnapshot) -> SpanPanelSnapshot:
@@ -128,7 +134,7 @@ class TestAlerts:
         await hass.async_block_till_done()
 
         assert [a.data["alert_type"] for a in alerts] == ["continuous_overload"]
-        assert _ratings_in(alerts[0].data) == (20.0, 20.0, False, None)
+        assert _ratings_in(alerts[0].data) == (20.0, 20.0, False, None, None)
 
     async def test_the_same_circuit_does_not_alert_with_a_20_30_package_copied(
         self, hass: HomeAssistant
@@ -185,7 +191,7 @@ class TestAlerts:
             _run_past_the_window(monitor, snapshot, "circuit-2")
             await hass.async_block_till_done()
 
-        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 50.0, True, [20, 30])]
+        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 50.0, True, [20, 30], "applies")]
         assert alerts[0].data["utilization_pct"] == 90.0
         message = dispatched.call_args.args[3]
         assert "90.0% of 50A rating" in message
@@ -207,7 +213,7 @@ class TestAlerts:
         _run_past_the_window(monitor, snapshot, "circuit-52")
         await hass.async_block_till_done()
 
-        assert [_ratings_in(a.data) for a in alerts] == [(30.0, 30.0, False, None)]
+        assert [_ratings_in(a.data) for a in alerts] == [(30.0, 30.0, False, None, None)]
 
     async def test_a_mains_alert_carries_the_service_rating_twice_never_user_set(
         self, hass: HomeAssistant
@@ -226,7 +232,7 @@ class TestAlerts:
 
         mains = [a.data for a in alerts if a.data["alert_source"] == "mains"]
         assert [_ratings_in(data) for data in mains] == [
-            (float(SERVICE_A), float(SERVICE_A), False, None)
+            (float(SERVICE_A), float(SERVICE_A), False, None, None)
         ]
 
     async def test_spike_alerts_carry_the_same_ratings(self, hass: HomeAssistant) -> None:
@@ -243,29 +249,45 @@ class TestAlerts:
         assert {
             a.data["alert_source"]: (a.data["alert_type"], *_ratings_in(a.data)) for a in alerts
         } == {
-            "circuit": ("spike", 20.0, 50.0, True, [20, 30]),
-            "mains": ("spike", float(SERVICE_A), float(SERVICE_A), False, None),
+            "circuit": ("spike", 20.0, 50.0, True, [20, 30], "applies"),
+            "mains": ("spike", float(SERVICE_A), float(SERVICE_A), False, None, None),
         }
+
+    async def test_an_alert_on_a_package_across_two_spaces_says_it_is_on_averaged_legs(
+        self, hass: HomeAssistant
+    ) -> None:
+        """30 A on a 20 A two-space circuit holding a 20-30 copy: judged against 20 A, the copy kept beside it."""
+        snapshot = _panel(_in_spaces(_circuit("circuit-18", 20.0, 30.0), 18, 20))
+        monitor, manager = await _monitor(hass, snapshot)
+        manager.set_package_ratings("circuit-18", snapshot, [20, 30])
+        alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
+
+        _run_past_the_window(monitor, snapshot, "circuit-18")
+        await hass.async_block_till_done()
+
+        assert [a.data["alert_type"] for a in alerts] == ["continuous_overload"]
+        assert _ratings_in(alerts[0].data) == (20.0, 20.0, False, [20, 30], "averaged_legs")
 
     async def test_the_test_notification_has_the_same_payload_shape(
         self, hass: HomeAssistant
     ) -> None:
-        """An automation written against the test event reads the same four keys."""
+        """An automation written against the test event reads the same five keys."""
         alerts = async_capture_events(hass, EVENT_CURRENT_ALERT)
 
         dispatch_test_alert(hass, {NOTIFY_TARGETS: "event_bus"})
         await hass.async_block_till_done()
 
-        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 20.0, False, None)]
+        assert [_ratings_in(a.data) for a in alerts] == [(20.0, 20.0, False, None, None)]
 
 
-def _ratings_in(payload: Mapping[str, object]) -> tuple[object, object, object, object]:
-    """Return an alert payload's panel rating, the rating it judged against, whether the user set that, and the copy."""
+def _ratings_in(payload: Mapping[str, object]) -> tuple[object, object, object, object, object]:
+    """Return an alert payload's panel rating, the rating it judged against, whether the user set that, the copy and its state."""
     return (
         payload["breaker_rating_a"],
         payload["monitoring_rating_a"],
         payload["monitoring_rating_user_set"],
         payload["package_ratings_a"],
+        payload["package_ratings_state"],
     )
 
 
@@ -318,8 +340,61 @@ class TestStatus:
         assert entry["monitoring_rating_a"] == float(SERVICE_A)
         assert entry["monitoring_rating_user_set"] is False
         assert entry["package_ratings_a"] is None
+        assert entry["package_ratings_form"] is None
+        assert entry["package_ratings_state"] is None
         assert "panel_breaker_rating_a" not in entry
         assert "breaker_rating_user_set" not in entry
+
+    async def test_each_circuit_entry_says_which_form_its_copy_takes_and_what_it_is(
+        self, hass: HomeAssistant
+    ) -> None:
+        """As the topology says: a 20-20 tandem applies, a 20-30 package across two spaces is on averaged legs.
+
+        A circuit with no copy still says its form, so the Monitoring tab can draw
+        the field, and has no state.
+        """
+        snapshot = _panel(
+            _in_spaces(_circuit("circuit-31", 20.0, 10.0), 31),
+            _in_spaces(_circuit("circuit-18", 20.0, 10.0), 18, 20),
+            _in_spaces(_circuit("circuit-5", 15.0, 10.0), 5),
+        )
+        monitor, manager = await _monitor(hass, snapshot)
+        manager.set_package_ratings("circuit-31", snapshot, [20, 20])
+        manager.set_package_ratings("circuit-18", snapshot, [20, 30])
+        monitor.process_snapshot(snapshot)
+
+        circuits = monitor.get_monitoring_status()["circuits"]
+
+        assert {
+            circuit_id: (entry["package_ratings_form"], entry["package_ratings_state"])
+            for circuit_id, entry in circuits.items()
+        } == {
+            "circuit-31": ("one_space", "applies"),
+            "circuit-18": ("two_spaces", "averaged_legs"),
+            "circuit-5": ("one_space", None),
+        }
+        assert circuits["circuit-18"]["monitoring_rating_a"] == 20.0
+        assert circuits["circuit-18"]["package_ratings_a"] == [20, 30]
+
+    async def test_the_status_asks_once_whether_the_panel_describes_its_breakers(
+        self, hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One answer serves every circuit entry's form, however many circuits the panel has."""
+        snapshot = _panel(
+            _in_spaces(_circuit("circuit-31", 20.0, 10.0), 31),
+            _in_spaces(_circuit("circuit-18", 20.0, 10.0), 18, 20),
+            _in_spaces(_circuit("circuit-5", 15.0, 10.0), 5),
+        )
+        monitor, _manager = await _monitor(hass, snapshot)
+        monitor.process_snapshot(snapshot)
+        asked = count_panel_describes_breakers(monkeypatch, current_monitor)
+
+        circuits = monitor.get_monitoring_status()["circuits"]
+
+        forms = {entry["package_ratings_form"] for entry in circuits.values()}
+        assert forms == {"one_space", "two_spaces"}
+        assert len(asked) == 1
+        assert asked[0] is snapshot
 
 
 class TestSharedMeters:
@@ -347,6 +422,9 @@ class TestSharedMeters:
             assert status[member]["monitoring_rating_a"] == 30.0
             assert status[member]["monitoring_rating_user_set"] is False
             assert status[member]["package_ratings_a"] is None
+            # A group's entry is the shared meter's judgement, which takes no copy.
+            assert status[member]["package_ratings_form"] is None
+            assert status[member]["package_ratings_state"] is None
 
     async def test_a_group_with_an_unrated_member_has_no_capacity_and_is_not_user_set(
         self, hass: HomeAssistant

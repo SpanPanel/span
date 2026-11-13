@@ -466,8 +466,8 @@
     "package_ratings_panel_describes_breakers": {
       "message": "Ce panneau publie chaque circuit d'un disjoncteur multicharge avec son propre calibre, et la surveillance du courant juge les circuits qui partagent un compteur par rapport à ces calibres ; il n'y a donc aucun calibre à copier depuis l'application SPAN."
     },
-    "package_ratings_not_one_space": {
-      "message": "Des calibres ne peuvent être copiés depuis l'application SPAN que pour un circuit occupant un seul emplacement de disjoncteur."
+    "package_ratings_spaces": {
+      "message": "Des calibres ne peuvent être copiés depuis l'application SPAN que pour un circuit occupant un ou deux emplacements de disjoncteur."
     },
     "package_ratings_not_two": {
       "message": "Saisissez les deux calibres dans l'ordre où l'application SPAN les affiche, par exemple [20, 30] pour 20-30A, ou le seul calibre du panneau pour les effacer."
@@ -715,7 +715,7 @@
     },
     "set_circuit_package_ratings": {
       "name": "Définir les calibres du bloc du circuit",
-      "description": "Copier depuis l'application SPAN les calibres d'un disjoncteur tandem, dans l'ordre où elle les affiche (20-30A donne [20, 30]), afin que la surveillance du courant juge l'emplacement du circuit par rapport aux deux disjoncteurs ensemble. Le premier doit être le calibre que le panneau publie pour le circuit, et le seul calibre du panneau les efface. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Proposé uniquement pour un circuit occupant un seul emplacement de disjoncteur, les deux disjoncteurs ensemble ne dépassant pas le calibre de service du panneau, et pas sur un panneau qui publie chaque circuit d'un disjoncteur multicharge avec son propre calibre.",
+      "description": "Copier depuis l'application SPAN les calibres d'un disjoncteur tandem, dans l'ordre où elle les affiche (20-30A donne [20, 30]), afin que la surveillance du courant juge l'emplacement du circuit par rapport aux deux disjoncteurs ensemble. Le premier doit être le calibre que le panneau publie pour le circuit, et le seul calibre du panneau les efface. Le capteur Calibre du disjoncteur continue d'afficher le calibre du panneau. Proposé uniquement pour un circuit occupant un ou deux emplacements de disjoncteur, les deux disjoncteurs ensemble ne dépassant pas le calibre de service du panneau, et pas sur un panneau qui publie chaque circuit d'un disjoncteur multicharge avec son propre calibre. Une copie pour un circuit occupant deux emplacements est conservée mais pas appliquée, car le panneau n'indique que la moyenne des deux phases de ce circuit, ce qui peut masquer une phase surchargée.",
       "fields": {
         "circuit_id": {
           "name": "Circuit",
@@ -723,7 +723,7 @@
         },
         "package_ratings_a": {
           "name": "Calibres du bloc (A)",
-          "description": "Les calibres des disjoncteurs tels que l'application SPAN affiche ce circuit, du premier au dernier, en ampères entiers : [20, 30] pour 20-30A. Le premier est le calibre que publie le panneau."
+          "description": "Les calibres des disjoncteurs tels que l'application SPAN affiche ce circuit, du premier au dernier, en ampères entiers : [20, 30] pour 20-30A. Le premier est le calibre que publie le panneau. Un circuit occupant un ou deux emplacements de disjoncteur accepte une copie ; celle d'un circuit occupant deux emplacements est conservée mais pas appliquée, car le panneau n'indique que la moyenne de ses deux phases."
         },
         "config_entry_id": {
           "name": "Entrée de configuration",
