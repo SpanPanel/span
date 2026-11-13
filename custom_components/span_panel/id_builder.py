@@ -408,7 +408,7 @@ def construct_circuit_unique_id(
         Unique ID like "span_{serial}_{circuit_id}_{consistent_suffix}"
 
     Examples:
-        span_abc123_0dad2f16cd514812ae1807b0457d473e_power
+        span_abc123_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001_power
         span_abc123_circuit_15_energy_produced
 
     """
@@ -445,7 +445,7 @@ def construct_switch_unique_id(snapshot: SpanPanelSnapshot, circuit_id: str) -> 
         Unique ID like "span_{serial}_relay_{circuit_id}"
 
     Examples:
-        span_abc123_relay_0dad2f16cd514812ae1807b0457d473e
+        span_abc123_relay_aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001
 
     """
     return build_switch_unique_id(snapshot.serial_number, circuit_id)

@@ -959,7 +959,7 @@ async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
         for circuit_id in ("unmapped_tab_5", "unmapped_tab_32")
         for key in _UNMAPPED_TAB_KEYS
     ]
-    circuit = "0dad2f16cd514812ae1807b0457d473e"
+    circuit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaa0001"
     kept = {
         registry.async_get_or_create(
             "sensor", DOMAIN, unique_id, config_entry=owner

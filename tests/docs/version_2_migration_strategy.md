@@ -10,9 +10,9 @@ configurations with preserved entity IDs.
 
 ### Available Test Data
 
-Located in `/Users/bflood/projects/HA/span/tests/migration_storage/1_0_10/`:
+Located in `tests/migration_storage/1_0_10/`:
 
-- **`core.config_entries`**: Contains one SPAN Panel config entry (`01K2JBCXNSB9Q489RMG3XTMTJE`) with device identifier `sim-main32-0001`
+- **`core.config_entries`**: Contains one SPAN Panel config entry (`01AAAAAAAAAAAAAAAAAAAAAAAA`) with device identifier `sim-main32-0001`
 - **`core.entity_registry`**: Contains live entity registry with:
   - Panel sensors (e.g., `span_sim-main32-0001_instantGridPowerW`)
   - Circuit sensors (22 circuits with power sensors using format `span_sim-main32-0001_{circuit_id}_instantPowerW`)
@@ -139,7 +139,7 @@ async def generate_migration_yaml():
     mock_hass = create_mock_hass_with_registries(test_storage)
 
     # Load actual config entry
-    config_entry = load_test_config_entry()  # 01K2JBCXNSB9Q489RMG3XTMTJE
+    config_entry = load_test_config_entry()  # 01AAAAAAAAAAAAAAAAAAAAAAAA
 
     # Set migration mode flag
     mock_hass.data[DOMAIN] = {config_entry.entry_id: {"migration_mode": True}}
