@@ -3,13 +3,18 @@
 from collections.abc import Awaitable, Callable
 import datetime
 import inspect
+from types import ModuleType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import SpanPanelSnapshot
+
+from custom_components.span_panel import package_ratings
 
 type WebSocketHandler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
 """A websocket command's own coroutine, as a test awaits it with a mock connection."""
@@ -24,6 +29,28 @@ def unwrap_websocket_command(command: Callable[..., object]) -> WebSocketHandler
     """
     handler: WebSocketHandler = inspect.unwrap(command, stop=inspect.iscoroutinefunction)
     return handler
+
+
+def count_panel_describes_breakers(
+    monkeypatch: pytest.MonkeyPatch, *modules: ModuleType
+) -> list[SpanPanelSnapshot]:
+    """Record each snapshot `panel_describes_breakers` is asked of, through `package_ratings` and each of `modules`.
+
+    The helper is looked up where it is called, so it is replaced in its own
+    module, whose other helpers ask through it, and in each module that imports
+    it. One of `modules` that does not import it gains the counting helper,
+    which nothing there calls.
+    """
+    asked: list[SpanPanelSnapshot] = []
+    describes = package_ratings.panel_describes_breakers
+
+    def counting(snapshot: SpanPanelSnapshot) -> bool:
+        asked.append(snapshot)
+        return describes(snapshot)
+
+    for module in (package_ratings, *modules):
+        monkeypatch.setattr(module, "panel_describes_breakers", counting, raising=False)
+    return asked
 
 
 def make_span_panel_entry(

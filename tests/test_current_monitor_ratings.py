@@ -22,6 +22,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
+from custom_components.span_panel import current_monitor
 from custom_components.span_panel.alert_dispatcher import dispatch_test_alert
 from custom_components.span_panel.const import DOMAIN, EVENT_CURRENT_ALERT
 from custom_components.span_panel.curation import CurationOverlay
@@ -40,6 +41,7 @@ from custom_components.span_panel.services import (
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import count_panel_describes_breakers
 
 SERVICE_A: Final = 100
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
@@ -373,6 +375,26 @@ class TestStatus:
         }
         assert circuits["circuit-18"]["monitoring_rating_a"] == 20.0
         assert circuits["circuit-18"]["package_ratings_a"] == [20, 30]
+
+    async def test_the_status_asks_once_whether_the_panel_describes_its_breakers(
+        self, hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One answer serves every circuit entry's form, however many circuits the panel has."""
+        snapshot = _panel(
+            _in_spaces(_circuit("circuit-31", 20.0, 10.0), 31),
+            _in_spaces(_circuit("circuit-18", 20.0, 10.0), 18, 20),
+            _in_spaces(_circuit("circuit-5", 15.0, 10.0), 5),
+        )
+        monitor, _manager = await _monitor(hass, snapshot)
+        monitor.process_snapshot(snapshot)
+        asked = count_panel_describes_breakers(monkeypatch, current_monitor)
+
+        circuits = monitor.get_monitoring_status()["circuits"]
+
+        forms = {entry["package_ratings_form"] for entry in circuits.values()}
+        assert forms == {"one_space", "two_spaces"}
+        assert len(asked) == 1
+        assert asked[0] is snapshot
 
 
 class TestSharedMeters:

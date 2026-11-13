@@ -206,17 +206,35 @@ def package_ratings_form(
 ) -> PackageRatingsForm | None:
     """Return which form a copy of the circuit's package takes, or None where none can be entered.
 
-    Every view draws a copy's field from this answer. The services do not call
-    it: they go through `admit`, which applies the same helpers
-    (`panel_describes_breakers`, `_holds`), so a circuit offered no field is one
-    whose copy the services refuse. None where the panel describes its
-    multi-load breakers (`panel_describes_breakers`), where the circuit is a
-    meter outside the panel, with no breaker, where it has no rating for a
-    copy's first to match, or where it lists no space or more than two. Read
-    from the panel's structure, never from a circuit's name or its readings.
+    `circuit_package_ratings_form`, with the snapshot asked whether the panel
+    describes its multi-load breakers. A caller that asks for every circuit
+    asks the panel once and calls that.
+    """
+    return circuit_package_ratings_form(
+        circuit, describes_breakers=panel_describes_breakers(snapshot)
+    )
+
+
+def circuit_package_ratings_form(
+    circuit: SpanCircuitSnapshot, *, describes_breakers: bool
+) -> PackageRatingsForm | None:
+    """Return which form a copy of the circuit's package takes, or None where none can be entered.
+
+    `describes_breakers` is the panel's answer to `panel_describes_breakers`.
+    Every view draws a copy's field from this answer. None where the panel
+    describes its multi-load breakers, where the circuit is a meter outside the
+    panel, with no breaker, where it has no rating for a copy's first to match,
+    or where it lists no space or more than two. Read from the panel's
+    structure, never from a circuit's name or its readings.
+
+    The services do not call it. They judge a package a user enters by `admit`,
+    which applies the same `panel_describes_breakers` and `_holds`, and refuses
+    a circuit whose rating is not published or not yet arrived, or which lists
+    no space. `admit` never asks `measures_outside_panel`: it refuses a meter
+    outside the panel only because such a meter lists no space.
     """
     if (
-        panel_describes_breakers(snapshot)
+        describes_breakers
         or circuit.measures_outside_panel
         or circuit.breaker_rating_a is None
         or not _holds(circuit, None)

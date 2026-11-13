@@ -21,6 +21,7 @@ from custom_components.span_panel.package_ratings import (
     Refused,
     StoredPackage,
     admit,
+    circuit_package_ratings_form,
     is_change_reason,
     package_ratings_form,
     panel_describes_breakers,
@@ -514,6 +515,28 @@ def test_package_ratings_form_none_for_a_meter_outside_the_panel() -> None:
     """A meter outside the panel has no breaker, so there is no package to copy whatever it lists."""
     circuit = replace(_circuit(), measures_outside_panel=True)
     assert package_ratings_form(_snapshot(circuit), circuit) is None
+
+
+@pytest.mark.parametrize(
+    "circuit",
+    [
+        pytest.param(_circuit(), id="one space"),
+        pytest.param(_circuit(tabs=TWO), id="two spaces"),
+        pytest.param(_circuit(rating=None), id="no rating"),
+        pytest.param(_circuit(tabs=()), id="no space"),
+        pytest.param(replace(_circuit(), measures_outside_panel=True), id="outside the panel"),
+    ],
+)
+def test_circuit_package_ratings_form_is_the_rule_for_the_panel_answered_once(circuit: SpanCircuitSnapshot) -> None:
+    """Given whether the panel describes its breakers, a circuit's form is the one `package_ratings_form` gives.
+
+    A caller that asks for every circuit asks the panel once; on a panel that
+    describes its breakers no circuit takes a copy.
+    """
+    for snapshot in (_snapshot(circuit), _describing(_snapshot(circuit))):
+        describes = panel_describes_breakers(snapshot)
+        assert circuit_package_ratings_form(circuit, describes_breakers=describes) == package_ratings_form(snapshot, circuit)
+    assert circuit_package_ratings_form(circuit, describes_breakers=True) is None
 
 
 def test_every_reason_the_rule_removes_an_entry_for_is_a_refusal_for_entered_ratings() -> None:

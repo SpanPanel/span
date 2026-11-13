@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel import SpanPanelRuntimeData, websocket
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
@@ -35,7 +35,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
-from .helpers import unwrap_websocket_command
+from .helpers import count_panel_describes_breakers, unwrap_websocket_command
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -105,6 +105,13 @@ async def _topology_circuits(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, copies: Mapping[str, list[int]]
 ) -> dict[str, dict[str, object]]:
     """Answer the topology for a panel whose real `PackageRatingManager` holds `copies`."""
+    return await _ask_topology(hass, await _panel_holding(hass, snapshot, copies))
+
+
+async def _panel_holding(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, copies: Mapping[str, list[int]]
+) -> dr.DeviceEntry:
+    """Load a panel whose real `PackageRatingManager` holds `copies`, and return its device."""
     entry = MockConfigEntry(
         domain=DOMAIN, data={}, entry_id="span_entry", unique_id=snapshot.serial_number
     )
@@ -125,7 +132,13 @@ async def _topology_circuits(
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
     )
-    device = _register_panel_device(hass, "span_entry", serial=snapshot.serial_number)
+    return _register_panel_device(hass, "span_entry", serial=snapshot.serial_number)
+
+
+async def _ask_topology(
+    hass: HomeAssistant, device: dr.DeviceEntry
+) -> dict[str, dict[str, object]]:
+    """Answer the topology for the panel `device` is, and return its circuits."""
     connection = _make_mock_connection()
 
     await _handle_panel_topology_inner(
@@ -1003,6 +1016,21 @@ class TestHandlePanelTopology:
         for circuit_id, row in circuits.items():
             assert row["package_ratings_form"] is None, circuit_id
             assert row["package_ratings_state"] is None, circuit_id
+
+    @pytest.mark.asyncio
+    async def test_topology_asks_once_whether_the_panel_describes_its_breakers(
+        self, hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One answer serves every circuit's form and the panel's offer, however many circuits it has."""
+        snapshot = _tandem_and_package_panel(publishes_shared_meters=None)
+        device = await _panel_holding(hass, snapshot, {})
+        asked = count_panel_describes_breakers(monkeypatch, websocket)
+
+        circuits = await _ask_topology(hass, device)
+
+        assert len(circuits) == 3
+        assert len(asked) == 1
+        assert asked[0] is snapshot
 
     @pytest.mark.asyncio
     async def test_topology_reports_priority_settability_apart_from_the_relay(

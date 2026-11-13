@@ -45,7 +45,12 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-from .package_ratings import package_ratings_form, package_ratings_payload, service_rating_a
+from .package_ratings import (
+    circuit_package_ratings_form,
+    package_ratings_payload,
+    panel_describes_breakers,
+    service_rating_a,
+)
 from .threshold_evaluator import (
     MonitoringSettings,
     check_continuous,
@@ -463,6 +468,9 @@ class CurrentMonitor:
                 cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
             }
         points = self._points(snapshot) if snapshot else {}
+        # Asked once for every circuit's form: no circuit takes a copy on a panel
+        # that describes its multi-load breakers.
+        describes_breakers = snapshot is not None and panel_describes_breakers(snapshot)
 
         for cid in all_circuit_ids:
             circuit = snapshot.circuits.get(cid) if snapshot else None
@@ -493,11 +501,8 @@ class CurrentMonitor:
             # says it by. None on a shared meter's entry, which is the group's
             # judgement and takes no copy, and for a circuit no longer on the panel.
             form = (
-                package_ratings_form(snapshot, circuit)
-                if snapshot is not None
-                and circuit is not None
-                and point is not None
-                and point.basis == "circuit"
+                circuit_package_ratings_form(circuit, describes_breakers=describes_breakers)
+                if circuit is not None and point is not None and point.basis == "circuit"
                 else None
             )
 

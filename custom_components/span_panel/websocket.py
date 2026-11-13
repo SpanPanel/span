@@ -27,7 +27,7 @@ from .helpers import (
 )
 from .id_builder import build_binary_sensor_unique_id, match_circuit_id
 from .package_ratings import (
-    package_ratings_form,
+    circuit_package_ratings_form,
     package_ratings_payload,
     panel_describes_breakers,
 )
@@ -174,6 +174,11 @@ async def handle_panel_topology(
         if point.basis == "group"
     }
 
+    # Whether the panel describes its multi-load breakers, asked once: it says
+    # whether the panel takes package ratings at all, and no circuit's form is
+    # named where it does not.
+    describes_breakers = panel_describes_breakers(snapshot)
+
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
     for circuit_id, circuit in snapshot.circuits.items():
@@ -218,7 +223,9 @@ async def handle_panel_topology(
             # Which form a copy of the circuit's package takes, null where none can
             # be entered, so the card draws a field where the rule offers one and
             # never decides that by rules of its own.
-            "package_ratings_form": package_ratings_form(snapshot, circuit),
+            "package_ratings_form": circuit_package_ratings_form(
+                circuit, describes_breakers=describes_breakers
+            ),
             "package_ratings_state": rating.state,
             # Backup facts belong to a breaker; a meter outside the panel has none.
             "always_on": None if circuit.measures_outside_panel else circuit.always_on,
@@ -300,7 +307,7 @@ async def handle_panel_topology(
             # monitoring then judges every circuit by the panel's ratings. Each
             # circuit's `package_ratings_form` says whether it takes a copy, and in
             # which form.
-            "monitoring_rating_offered": not panel_describes_breakers(snapshot),
+            "monitoring_rating_offered": not describes_breakers,
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,
