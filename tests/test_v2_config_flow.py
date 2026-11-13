@@ -2939,11 +2939,15 @@ async def test_re_adding_a_panel_where_its_entry_points_makes_no_tls_probe(
 
 
 @pytest.mark.asyncio
-async def test_a_pin_check_that_raises_refuses_the_move(hass: HomeAssistant) -> None:
+async def test_a_pin_check_that_raises_refuses_the_move(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
     """An unexpected failure in the one check guarding a pinned entry's address is a refusal.
 
     Trusting on an error would let anything that makes the check raise move the
-    entry wherever an unauthenticated announcement points.
+    entry wherever an unauthenticated announcement points. The refusal says
+    the certificate could not be checked, which is all that is known; the
+    traceback is logged beside it.
     """
     entry = _pinned_entry_at_the_shared_host(hass)
 
@@ -2963,6 +2967,18 @@ async def test_a_pin_check_that_raises_refuses_the_move(hass: HomeAssistant) -> 
     assert result["type"] == FlowResultType.ABORT, result
     assert result["reason"] == "already_configured"
     assert CONF_HTTP_PORT not in entry.data
+    refusals = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.span_panel.config_flow"
+        and record.levelname == "WARNING"
+    ]
+    assert len(refusals) == 1, refusals
+    assert "could not be checked against the authority this entry is pinned to" in refusals[0]
+    assert "does not chain" not in refusals[0]
+    assert any(
+        record.levelname == "ERROR" and record.exc_info is not None for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

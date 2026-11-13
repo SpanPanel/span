@@ -434,6 +434,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         tls_port = as_port(
             updates.get(CONF_HTTPS_PORT, entry.data.get(CONF_HTTPS_PORT)), DEFAULT_HTTPS_PORT
         )
+        verdict: LeafVerdict | None
         try:
             verdict = await async_leaf_verdict(host, tls_port, str(ca_pem))
         except Exception:
@@ -443,9 +444,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # escaped error inside a discovery flow is an unhandled traceback,
             # and what it would abandon is the one check standing between an
             # unauthenticated claim and a pinned entry's address. Anything
-            # unrecognised is a refusal.
+            # unrecognised is a refusal -- and no verdict: None, so the refusal
+            # claims nothing the check did not establish.
             _LOGGER.exception("Could not verify %s against the pinned authority", host)
-            verdict = LeafVerdict.UNTRUSTED
+            verdict = None
         if verdict is LeafVerdict.TRUSTED:
             return updates
 
@@ -457,9 +459,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         entry: config_entries.ConfigEntry,
         updates: Mapping[str, Any],
         tls_port: int,
-        verdict: LeafVerdict,
+        verdict: LeafVerdict | None,
     ) -> None:
         """Say, at WARNING, which move a pinned entry refused and what the check found.
+
+        `verdict` is None where the check itself failed and found nothing; the
+        refusal then says only that the certificate could not be checked, and
+        the traceback logged beside it says why.
 
         Worded for what actually moved and for what the check found. A panel
         whose ports moved on the host the entry already has was reported as a
@@ -474,7 +480,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """
         host = updates[CONF_HOST]
         fingerprint = pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM))
-        if verdict is LeafVerdict.UNREACHABLE:
+        if verdict is None:
+            found = (
+                f"the certificate {host} serves on port {tls_port} could not be checked against "
+                f"the authority this entry is pinned to (SHA-256 {fingerprint})"
+            )
+        elif verdict is LeafVerdict.UNREACHABLE:
             found = f"no TLS connection could be made to {host} on port {tls_port}"
         elif verdict is LeafVerdict.NAME_MISMATCH:
             found = (
