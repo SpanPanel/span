@@ -84,6 +84,7 @@ __all__ = [
     "build_switch_unique_id_for_entry",
     "circuit_has_a_breaker_switch",
     "circuit_has_a_priority_select",
+    "circuit_has_a_relay",
     "construct_binary_sensor_unique_id",
     "construct_circuit_identifier_from_tabs",
     "construct_circuit_label",
@@ -124,6 +125,26 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def circuit_has_a_relay(circuit: SpanCircuitSnapshot) -> bool:
+    """Whether the circuit declares a relay at all, controllable or locked.
+
+    The snapshot carries no flag of its own for this; the two it does carry
+    answer it between them on both adapters. schema_1 sets `always_on` only
+    where a `switch` is declared and is not controllable, and reads
+    `is_user_controllable` from `switch/relay-controllable`, defaulting it to
+    whether a `switch` is declared. So both are false where no `switch` node is
+    declared, with one exception the adapter does not rule out: it reads a
+    `relay-controllable` value before it consults the declaration, so a value
+    left retained from a `switch` the device has since stopped declaring still
+    answers. Flat derives `is_user_controllable` as `not always-on`, so one of
+    the two is always true: every flat circuit has a relay.
+
+    Read from the declaration, never from `relay_state`: an `UNKNOWN` relay
+    state is a relay that has not reported, not a relay that is not there.
+    """
+    return circuit.is_user_controllable or circuit.always_on
 
 
 def circuit_has_a_breaker_switch(circuit: SpanCircuitSnapshot) -> bool:

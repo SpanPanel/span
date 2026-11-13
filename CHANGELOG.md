@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.2.1] - 11/2026
+## [2.3.0] - unreleased
 
 ### Fixed
 
@@ -23,6 +23,8 @@ All notable changes to this project will be documented in this file.
   is not signed by the authority it published, and the certificate repair likewise says when none could be made on the panel's broker port.
 - **A discovered panel's entry follows it to new ports on the same address** once its pinned certificate authority validates the panel's HTTPS port there, and
   panels that share an address are offered under their host and port.
+- **A circuit whose relay is locked on no longer reports a shed priority or PCS participation**, which the panel publishes for it but never acts on, so a
+  circuit that stays on in an outage no longer claims it turns off.
 
 ## [2.2.0] - 11/2026
 

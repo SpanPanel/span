@@ -71,12 +71,16 @@ NODE = "pcs"
 IMPORT_LIMIT_KEY = "pcs_import_limit"
 BINDING_CONSTRAINT_KEY = "pcs_binding_constraint"
 
-# A circuit the capture reports as PCS-managed, and one it reports as not.
 _SOURCES = ("feed", "operator", "off-grid", "requested")
 """The catalog's four amps-native constraint classes, in the order it names them."""
 
+# Two circuits whose relays the panel can open, both PCS-managed and ranked
+# apart. The capture's one unmanaged circuit is also its one locked relay, which
+# carries no PCS attributes at all -- a policy on a relay nothing can move; see
+# `test_locked_relay_policies` -- so "unmanaged" is proven by republishing
+# rather than read off the capture.
 MANAGED_CIRCUIT = "0ab966b95f92a6a51ec548485aa85f54"
-UNMANAGED_CIRCUIT = "573066aaddd7b75114c4563ce3af18c4"
+SECOND_MANAGED_CIRCUIT = "62d0e03897b337b57101aae82f1e9ba2"
 
 # One republished value per panel property, every one different from the
 # captured value *and* from every sibling's. That distinctness is the whole
@@ -654,23 +658,23 @@ def test_the_pcs_appearing_is_a_capability_change() -> None:
 
 def test_the_capture_publishes_participation_on_two_disagreeing_circuits() -> None:
     """Guard the premise for the circuit tests: an attribute wired to a constant
-    would satisfy either circuit alone."""
-    assert _published("managed", MANAGED_CIRCUIT) == "true"
-    assert _published("managed", UNMANAGED_CIRCUIT) == "false"
-    assert _published("priority", MANAGED_CIRCUIT) != _published("priority", UNMANAGED_CIRCUIT)
+    would satisfy either circuit alone. Both relays are controllable, which is
+    what lets either carry the attributes at all."""
+    tree = schema_one_tree()
+    for circuit_id in (MANAGED_CIRCUIT, SECOND_MANAGED_CIRCUIT):
+        assert tree[circuit_id]["switch/relay-controllable"] == "true"
+        assert _published("managed", circuit_id) == "true"
+    assert _published("priority", MANAGED_CIRCUIT) != _published("priority", SECOND_MANAGED_CIRCUIT)
 
 
 def test_a_circuit_sensor_carries_its_pcs_participation() -> None:
     """Read against the capture rather than against literals, on both circuits."""
     snapshot = schema_one_snapshot()
 
-    managed = _circuit_attributes(snapshot, MANAGED_CIRCUIT)
-    unmanaged = _circuit_attributes(snapshot, UNMANAGED_CIRCUIT)
-
-    assert managed["pcs_managed"] is True
-    assert unmanaged["pcs_managed"] is False
-    assert managed["pcs_priority"] == int(_published("priority", MANAGED_CIRCUIT))
-    assert unmanaged["pcs_priority"] == int(_published("priority", UNMANAGED_CIRCUIT))
+    for circuit_id in (MANAGED_CIRCUIT, SECOND_MANAGED_CIRCUIT):
+        attributes = _circuit_attributes(snapshot, circuit_id)
+        assert attributes["pcs_managed"] is True
+        assert attributes["pcs_priority"] == int(_published("priority", circuit_id))
 
 
 def test_republishing_participation_moves_the_circuit_attributes() -> None:
@@ -684,9 +688,9 @@ def test_republishing_participation_moves_the_circuit_attributes() -> None:
     assert attributes["pcs_managed"] is False
     assert attributes["pcs_priority"] == 42
     # The other circuit is untouched, so a shared read would show here.
-    assert _circuit_attributes(snapshot, UNMANAGED_CIRCUIT)["pcs_priority"] == int(
-        _published("priority", UNMANAGED_CIRCUIT)
-    )
+    second = _circuit_attributes(snapshot, SECOND_MANAGED_CIRCUIT)
+    assert second["pcs_managed"] is True
+    assert second["pcs_priority"] == int(_published("priority", SECOND_MANAGED_CIRCUIT))
 
 
 def test_pcs_priority_is_not_the_shed_priority_beside_it() -> None:

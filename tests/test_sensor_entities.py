@@ -457,12 +457,16 @@ def test_bess_metadata_sensor_uses_device_override() -> None:
 
 
 def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> None:
-    """Circuit power/current sensors should expose circuit attributes."""
+    """Circuit power/current sensors should expose circuit attributes.
+
+    A circuit whose relay the panel can open, which is the only kind that carries
+    a shed priority; a locked one is `test_locked_relay_policies`.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="c1",
         name="Kitchen",
         tabs=[5, 6],
-        always_on=True,
+        always_on=False,
         relay_state="CLOSED",
         relay_requester="USER",
         priority="SOC_THRESHOLD",
@@ -477,7 +481,7 @@ def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> Non
     assert sensor.extra_state_attributes == {
         "tabs": "tabs [5:6]",
         "voltage": 240,
-        "always_on": True,
+        "always_on": False,
         "relay_state": "CLOSED",
         "relay_requester": "USER",
         "shed_priority": "SOC_THRESHOLD",
