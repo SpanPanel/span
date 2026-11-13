@@ -36,7 +36,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 ```json
 {
-  "serial": "nj-2316-005k6",
+  "serial": "sim-main32-0001",
   "firmware": "spanos2/r202603/05",
   "panel_size": 32,
   "device_id": "abc123def456",
@@ -418,7 +418,7 @@ Admin only, like every command here.
       "adopted_device": true,
       "rows": [
         {
-          "key": "nj-2316-005k6_adopted_generator-1/meter/active-power",
+          "key": "sim-main32-0001_adopted_generator-1/meter/active-power",
           "path": "meter/active-power",
           "platform": "sensor",
           "entity_id": "sensor.backup_generator_active_power",
@@ -501,7 +501,7 @@ Admin only, like every command here.
 {
   "type": "span_panel/adopted/curate",
   "device_id": "<ha_device_registry_id>",
-  "key": "nj-2316-005k6_adopted_generator-1/meter/active-power",
+  "key": "sim-main32-0001_adopted_generator-1/meter/active-power",
   "record": {
     "state_class": "measurement",
     "device_class": "power",
