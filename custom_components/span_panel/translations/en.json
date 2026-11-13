@@ -6,6 +6,7 @@
       "no_devices_found": "No devices found on the network",
       "no_host": "No host address was provided by the add-on.",
       "no_serial": "Could not determine the panel serial number.",
+      "panel_firmware_flat": "This panel is on spanos2 firmware, which publishes the older flat eBus schema. Update the panel's firmware, then add it again.",
       "reauth_successful": "Authentication successful.",
       "reconfigure_successful": "Host updated successfully.",
       "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
@@ -23,6 +24,7 @@
       "https_port_unreachable": "No TLS connection could be made on HTTPS port {https_port}, so there was no certificate to check against the authority the panel published. Check that the panel serves TLS on that port — 443 unless something moved it — then try again.",
       "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
+      "panel_firmware_flat": "This panel is on spanos2 firmware, which publishes the older flat eBus schema. Update the panel's firmware, then add it again.",
       "panel_not_ready": "The panel is not ready to register Home Assistant yet, usually because it is still starting up. Wait a moment, then try again.",
       "passphrase_unavailable": "The panel cannot issue credentials because its passphrase is not available yet. This does not mean a passphrase was entered incorrectly. Wait a few minutes, then try again.",
       "rate_limited": "The panel is limiting registration attempts. Try again in {retry_after} seconds.",
@@ -535,6 +537,9 @@
     "panel_connection_failed": {
       "message": "Failed to connect to the SPAN Panel at {host}."
     },
+    "panel_firmware_flat": {
+      "message": "SPAN panel {panel} is on spanos2 firmware, which publishes the older flat eBus schema; update the panel's firmware and it reconnects on its own"
+    },
     "panel_not_ready": {
       "message": "The SPAN Panel is not ready. Please check that the panel is online."
     },
@@ -1044,6 +1049,10 @@
     "unvalidated_hardware_no_model": {
       "title": "SPAN Panel hardware not validated with this release",
       "description": "Hardware version {version} with an unknown model has not been validated with this release. Setup has stopped, and no entities are created for this panel."
+    },
+    "panel_firmware_flat": {
+      "title": "SPAN panel firmware needs an update",
+      "description": "{panel} is on spanos2 firmware, which publishes the older flat eBus schema that this integration no longer supports. Update the panel's firmware; it reconnects on its own once updated."
     }
   }
 }
