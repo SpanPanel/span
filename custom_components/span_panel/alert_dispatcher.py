@@ -31,6 +31,8 @@ EVENT_BUS_TARGET = "event_bus"
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+    from .package_ratings import JudgedState
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -167,6 +169,7 @@ def dispatch_alert(
     monitoring_rating_a: float,
     monitoring_rating_user_set: bool,
     package_ratings_a: list[int] | None,
+    package_ratings_state: JudgedState | None,
     threshold_pct: int,
     utilization_pct: float,
     panel_serial: str,
@@ -176,12 +179,15 @@ def dispatch_alert(
     """Dispatch alert through all enabled notification channels.
 
     The event payload carries the ratings as `get_monitoring_status` does:
-    `breaker_rating_a` is the panel's rating (a shared meter's members' sum, None
-    if any is unknown), `monitoring_rating_a` the rating the alert judged against,
-    `monitoring_rating_user_set` whether that comes from a package the user copied, and
-    `package_ratings_a` the ratings the user copied from the SPAN app it is the
-    capacity of, None where there are none. A structured reader is never handed
-    the user's judgement as the breaker rating.
+    `breaker_rating_a` is the panel's rating (a shared meter's capacity over its
+    members' ratings, None if any is unknown), `monitoring_rating_a` the rating the
+    alert judged against, `monitoring_rating_user_set` whether that comes from a
+    package the user copied, `package_ratings_a` the ratings the user copied from
+    the SPAN app, and `package_ratings_state` what that copy is, both None where
+    there is none, as for a shared meter and the mains. A copy that applies is what
+    `monitoring_rating_a` is the capacity of; one kept on averaged legs is not
+    applied, and the alert judged the circuit against the panel's rating. A
+    structured reader is never handed the user's judgement as the breaker rating.
     The text's `{breaker_rating_a}` placeholder carries the judged value, so the
     message and its threshold agree.
     """
@@ -198,6 +204,7 @@ def dispatch_alert(
         "monitoring_rating_a": monitoring_rating_a,
         "monitoring_rating_user_set": monitoring_rating_user_set,
         "package_ratings_a": package_ratings_a,
+        "package_ratings_state": package_ratings_state,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
@@ -294,6 +301,7 @@ def dispatch_test_alert(
         "monitoring_rating_a": monitoring_rating_a,
         "monitoring_rating_user_set": False,
         "package_ratings_a": None,
+        "package_ratings_state": None,
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,

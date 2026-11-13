@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
+from typing import Final
 from unittest.mock import MagicMock
 
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
-from custom_components.span_panel.package_ratings import MonitoringRating
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
+from custom_components.span_panel.package_ratings import MonitoringRating
 from custom_components.span_panel.websocket import (
     _build_circuit_entity_map,
     _classify_sensor_role,
@@ -23,7 +26,7 @@ from custom_components.span_panel.websocket import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from span_panel_api import SpanCircuitSnapshot
+from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -66,6 +69,72 @@ def _panel_rating(circuit_id, snapshot):
     circuit = snapshot.circuits.get(circuit_id)
     rating = circuit.breaker_rating_a if circuit else None
     return MonitoringRating(rating, rating, False, None, None)
+
+
+_MAIN_BREAKER_DECLARED: Final = {
+    "panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")
+}
+
+
+def _tandem_and_package_panel(*, publishes_shared_meters: bool | None) -> SpanPanelSnapshot:
+    """Return a panel with a tandem in one space, a package across two and a plain breaker, all rated.
+
+    `publishes_shared_meters` None is a MAIN 32's shape, which declares no
+    shared meters; True is a panel that describes its multi-load breakers.
+    """
+    circuits = (
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_tandem", name="Synthetic Tandem", tabs=[31], breaker_rating_a=20
+        ),
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_package", name="Synthetic Package", tabs=[18, 20], breaker_rating_a=20
+        ),
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_plain", name="Synthetic Plain", tabs=[5], breaker_rating_a=15
+        ),
+    )
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number="sp3-forms-001",
+        circuits={circuit.circuit_id: circuit for circuit in circuits},
+        main_breaker_rating_a=100,
+    )
+    return replace(snapshot, publishes_shared_meters=publishes_shared_meters)
+
+
+async def _topology_circuits(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, copies: Mapping[str, list[int]]
+) -> dict[str, dict[str, object]]:
+    """Answer the topology for a panel whose real `PackageRatingManager` holds `copies`."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={}, entry_id="span_entry", unique_id=snapshot.serial_number
+    )
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    manager = PackageRatingManager(hass, entry)
+    await manager.async_load()
+    manager.begin(snapshot, _MAIN_BREAKER_DECLARED)
+    for circuit_id, ratings in copies.items():
+        manager.set_package_ratings(circuit_id, snapshot, ratings)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.package_rating_manager = manager
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    device = _register_panel_device(hass, "span_entry", serial=snapshot.serial_number)
+    connection = _make_mock_connection()
+
+    await _handle_panel_topology_inner(
+        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+    )
+
+    connection.send_error.assert_not_called()
+    circuits: dict[str, dict[str, object]] = connection.send_result.call_args.args[1]["circuits"]
+    return circuits
 
 
 def _register_panel_device(
@@ -829,6 +898,8 @@ class TestHandlePanelTopology:
             "monitoring_rating_a",
             "monitoring_rating_user_set",
             "package_ratings_a",
+            "package_ratings_form",
+            "package_ratings_state",
             "always_on",
             "priority",
             "priority_target",
@@ -891,6 +962,47 @@ class TestHandlePanelTopology:
         for row in (kitchen_data, bedroom_data):
             assert "panel_breaker_rating_a" not in row
             assert "breaker_rating_user_set" not in row
+
+    @pytest.mark.asyncio
+    async def test_topology_says_which_form_each_copy_takes_and_what_it_is(
+        self, hass: HomeAssistant
+    ) -> None:
+        """On a panel that does not name its shared meters, each rated circuit says the form its copy takes.
+
+        A 20-20 tandem copied for its one space applies. A 20-30 package across
+        two spaces is kept on averaged legs, judged against the panel's 20 A. A
+        circuit with no copy still says its form, so the card can draw the field,
+        and has no state.
+        """
+        snapshot = _tandem_and_package_panel(publishes_shared_meters=None)
+        circuits = await _topology_circuits(
+            hass, snapshot, {"uuid_tandem": [20, 20], "uuid_package": [20, 30]}
+        )
+
+        assert {
+            circuit_id: (row["package_ratings_form"], row["package_ratings_state"])
+            for circuit_id, row in circuits.items()
+        } == {
+            "uuid_tandem": ("one_space", "applies"),
+            "uuid_package": ("two_spaces", "averaged_legs"),
+            "uuid_plain": ("one_space", None),
+        }
+        assert circuits["uuid_tandem"]["monitoring_rating_a"] == 40.0
+        assert circuits["uuid_package"]["monitoring_rating_a"] == 20.0
+        assert circuits["uuid_package"]["monitoring_rating_user_set"] is False
+        assert circuits["uuid_package"]["package_ratings_a"] == [20, 30]
+
+    @pytest.mark.asyncio
+    async def test_topology_offers_no_form_on_a_panel_that_describes_its_breakers(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The same circuits on a panel that names its shared meters take no copy, so neither field is set."""
+        snapshot = _tandem_and_package_panel(publishes_shared_meters=True)
+        circuits = await _topology_circuits(hass, snapshot, {})
+
+        for circuit_id, row in circuits.items():
+            assert row["package_ratings_form"] is None, circuit_id
+            assert row["package_ratings_state"] is None, circuit_id
 
     @pytest.mark.asyncio
     async def test_topology_reports_priority_settability_apart_from_the_relay(

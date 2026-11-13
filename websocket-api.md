@@ -43,6 +43,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "panel_device_id": "abc123def456",
   "config_entry_id": "e5f6a7b8c9d0",
   "device_name": "SPAN Panel",
+  "monitoring_rating_offered": true,
   "circuits": {
     "a1b2c3d4e5f6": {
       "tabs": [5, 6],
@@ -60,6 +61,8 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "monitoring_rating_a": 30,
       "monitoring_rating_user_set": false,
       "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
       "always_on": false,
       "priority": "SOC_THRESHOLD",
       "priority_target": null,
@@ -91,6 +94,8 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       "monitoring_rating_a": 15,
       "monitoring_rating_user_set": false,
       "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
       "always_on": false,
       "priority": "NEVER",
       "priority_target": null,
@@ -223,16 +228,27 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `breaker_rating_a`           | float/null  | The breaker's rating as the panel publishes it (null if not reported); copied package ratings never change it                                                                                |
 | `monitoring_rating_a`        | float/null  | What current monitoring judges this circuit against: both breakers of the package the user copied from the SPAN app where it applies, else the panel's rating (null where nothing is judged) |
 | `monitoring_rating_user_set` | bool        | Whether the copied package applies, so `monitoring_rating_a` differs from `breaker_rating_a`                                                                                                 |
-| `package_ratings_a`          | int[]/null  | The package's breaker ratings the user copied from the SPAN app, in its order, the first the panel's; kept while it waits on a value not yet arrived, null where there is none               |
+| `package_ratings_a`          | int[]/null  | The package's breaker ratings the user copied from the SPAN app, in its order, the first the panel's; kept in every `package_ratings_state`, null where there is none                        |
+| `package_ratings_form`       | string/null | The form a copy of the circuit's package takes: `one_space` or `two_spaces`, for a circuit in one space or across two; null where none can be entered (see below)                            |
+| `package_ratings_state`      | string/null | What the stored copy is: `applies`, `pending` or `averaged_legs` (see below); null where there is none                                                                                       |
 | `entities`                   | object      | Role-keyed map of entity IDs (see below)                                                                                                                                                     |
 
-`get_monitoring_status` reports the same four fields on each circuit entry. For circuits that share a meter, `breaker_rating_a` and `monitoring_rating_a` are
-both the group's capacity over its members' panel ratings, null while unknown (see the Shared Meter Group Object), `monitoring_rating_user_set` is false and
-`package_ratings_a` null: only a panel that describes its breakers names shared meters, and no circuit on such a panel holds a copied package. The mains entry
-carries the four keys too: `breaker_rating_a` and `monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false and `package_ratings_a` null.
-`utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off (`monitoring_enabled` false), its entry reports
-`utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement; `last_spike_alert` and `last_continuous_alert` stay, as
-history. Turning monitoring back on resumes the figures from the next reading, with no window carried over from before.
+`package_ratings_form` is null where the panel describes its multi-load breakers, where the circuit is a meter outside the panel or publishes no rating, and
+where it lists no space or more than two. A consumer draws a field for a copy exactly where it is not null. `package_ratings_state` is `applies` while the copy
+is judged against both breakers, and `pending` while it waits on a value not yet arrived, with nothing judged. Where a copy for one space would apply, a copy
+across two spaces is `averaged_legs`: kept but never applied, because the panel reports the average of the circuit's two legs, which can hide an overloaded leg,
+so the circuit is judged against the panel's rating. A consumer reads what a copy is from `package_ratings_state`, never from the circuit's spaces.
+
+`get_monitoring_status` reports the same six fields, `breaker_rating_a` to `package_ratings_state`, on each circuit entry. For circuits that share a meter,
+`breaker_rating_a` and `monitoring_rating_a` are both the group's capacity over its members' panel ratings, null while unknown (see the Shared Meter Group
+Object), `monitoring_rating_user_set` is false and `package_ratings_a`, `package_ratings_form` and `package_ratings_state` null: only a panel that describes its
+breakers names shared meters, and no circuit on such a panel holds a copied package. The mains entry carries the six keys too: `breaker_rating_a` and
+`monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false and the other three null. While monitoring is enabled, the status root also
+carries `monitoring_rating_offered`, with the meaning it has at the top level here, so a consumer that reads only the status need not fetch the topology for it;
+it is false while the panel has sent no data yet. `utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off
+(`monitoring_enabled` false), its entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement;
+`last_spike_alert` and `last_continuous_alert` stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window carried
+over from before.
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys
@@ -354,8 +370,8 @@ is scoped to a single panel — circuits, sub-devices, and entity mappings from 
 ### `span_panel_package_ratings_changed`
 
 Fired on the Home Assistant event bus whenever the package ratings stored for a panel, or what they are judged as, change: a package is set or cleared, or a new
-snapshot removes one, makes one wait on a value not yet arrived, or lets it apply again. A consumer showing `monitoring_rating_a` or `package_ratings_a`
-re-fetches `span_panel/panel_topology` on receiving it.
+snapshot removes one or changes its `package_ratings_state`. A consumer showing `monitoring_rating_a`, `package_ratings_a` or `package_ratings_state` re-fetches
+`span_panel/panel_topology` on receiving it.
 
 | Field             | Type          | Description                                                             |
 | ----------------- | ------------- | ----------------------------------------------------------------------- |

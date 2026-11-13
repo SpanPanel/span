@@ -103,6 +103,7 @@ the SPAN app in its Monitoring section, thresholds and utilization use both brea
   | `monitoring_rating_a`        | The rating the alert judged against: both breakers of a tandem whose ratings you copied from the SPAN app, else the panel's rating         |
   | `monitoring_rating_user_set` | Whether `monitoring_rating_a` comes from ratings you copied                                                                                |
   | `package_ratings_a`          | The ratings you copied from the SPAN app, such as `[20, 30]`; null where there are none, and for a shared meter and the mains              |
+  | `package_ratings_state`      | `applies`, or `averaged_legs` where a copy across two spaces is kept but not applied; null where `package_ratings_a` is                    |
   | `threshold_pct`              | Configured threshold percentage                                                                                                            |
   | `utilization_pct`            | Actual utilization percentage, against `monitoring_rating_a`                                                                               |
   | `panel_serial`               | The panel's serial number                                                                                                                  |
@@ -112,7 +113,8 @@ the SPAN app in its Monitoring section, thresholds and utilization use both brea
   | `test`                       | Present, and true, only on the event the test notification fires                                                                           |
 
   Copied ratings never change `breaker_rating_a`, which is the panel's rating, as the Breaker Rating sensor shows. The rating the `{breaker_rating_a}` text
-  placeholder carries is `monitoring_rating_a` here. For the mains both are its rating, `monitoring_rating_user_set` is false and `package_ratings_a` null.
+  placeholder carries is `monitoring_rating_a` here. For the mains both are its rating, `monitoring_rating_user_set` is false and `package_ratings_a` and
+  `package_ratings_state` null.
 
 ### Monitored Points
 
@@ -145,7 +147,8 @@ Current monitoring then judges the space against both breakers together, so its 
 views mark it: "Judged against 40 A: 20-20 from your SPAN app (the panel publishes 20 A)". The `{breaker_rating_a}` alert placeholder keeps its name and carries
 that sum. Nothing else changes: the Breaker Rating sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports always show the
 panel's rating, and energy counter checks keep using it. The panel topology, the monitoring status and the `span_panel_current_alert` event add
-`monitoring_rating_a`, the rating judged against, `monitoring_rating_user_set` beside it, and `package_ratings_a`, the ratings copied.
+`monitoring_rating_a`, the rating judged against, `monitoring_rating_user_set` beside it, `package_ratings_a`, the ratings copied, and `package_ratings_state`,
+what the copy is.
 
 Thresholds are percentages of the rating a circuit is judged against. If you raised a tandem's thresholds above 100% to quiet its alerts, they now apply to both
 breakers together, which can let a real overload pass: the Monitoring section warns of that and offers **Use global thresholds**. Where the thresholds above
