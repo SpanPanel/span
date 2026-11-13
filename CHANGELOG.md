@@ -6,8 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app into the dashboard**, so current monitoring judges that space against both
-  breakers together instead of the single rating the panel publishes; the Breaker Rating sensor keeps showing the panel's rating.
+- **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app in the Monitoring tab or a circuit's side panel**, so current monitoring judges
+  that space against both breakers together; the Breaker Rating sensor keeps showing the panel's rating.
+- **On MAIN 32, a package across two spaces can be recorded the same way**, and since the panel reports only the average of its two legs, the dashboard
+  recommends turning monitoring off for that circuit instead of applying it.
 
 ### Fixed
 

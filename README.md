@@ -819,13 +819,14 @@ the integration shows one, such as "20A".
 **Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
 both loads against one breaker.
 
-**A tandem in one space:** turn on the circuit's monitoring in the Span Panel dashboard and, in its Monitoring section, enter the other breaker's rating exactly
-as the SPAN app shows the circuit (for 20-30A, enter 30). Monitoring then judges the space against both breakers together; the Breaker Rating sensor keeps
-showing the panel's rating. See [Copying a Tandem's Ratings from the SPAN App](frontend.md#copying-a-tandems-ratings-from-the-span-app).
+**A tandem in one space:** in the Span Panel dashboard, enter the second rating the SPAN app shows for the circuit (for 20-30A, enter 30) in the Monitoring
+tab's Rating column, where instructions above the table say what to copy, or in the circuit's Monitoring section, opened from its gear icon while its monitoring
+is on. Monitoring then judges the space against both breakers together; the Breaker Rating sensor keeps showing the panel's rating. See
+[Copying a Tandem's Ratings from the SPAN App](frontend.md#copying-a-tandems-ratings-from-the-span-app).
 
-**A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports the average of the circuit's two legs, so one leg can
-carry more than its breaker while the reading stays under the rating. Turn monitoring off for that circuit rather than rely on a rating, since no rating can see
-the heavier leg; the dashboard offers no ratings to copy there.
+**A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports only the average of the circuit's two legs, which can
+hide an overloaded leg. You can copy its ratings the same way, but the copy is kept without being applied, and the dashboard recommends turning monitoring off
+for that circuit, with a **Turn off monitoring** button.
 
 If the panel's rating for the circuit later changes, or the circuit moves to another space, the copied ratings are removed and a notification says so.
 
@@ -841,8 +842,9 @@ name, and a log attached to an issue would publish them.
 ### Diagnostics
 
 **Download diagnostics** on the integration's page includes the panel's device tree, every device and property it publishes, with serial numbers, device ids and
-site details masked. It also lists the ratings you copied from the SPAN app for each circuit, with the space they were copied for and whether they apply or are
-waiting on a value the panel has not sent yet, and any the integration removed that a notification reported and you have not yet dismissed.
+site details masked. It also lists the ratings you copied from the SPAN app for each circuit, with the spaces they were copied for and whether they apply, are
+waiting on a value the panel has not sent yet, or are kept without being applied on a circuit across two spaces, and any the integration removed that a
+notification reported and you have not yet dismissed.
 
 ## Development
 
