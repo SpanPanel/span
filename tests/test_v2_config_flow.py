@@ -2440,7 +2440,7 @@ def _entry_at_the_shared_host(
 
     `None` stores no HTTP port, which is how every entry on port 80 is written:
     the key is only recorded when it differs from 80. `state` is the entry's
-    setup state, which decides whether it vouches for the port it stores.
+    setup state, which the check before the probe must not take as evidence.
     """
     data: dict[str, object] = {
         CONF_HOST: SHARED_HOST,
@@ -2532,8 +2532,6 @@ async def test_zeroconf_offers_a_second_panel_at_an_address_already_configured(
         (None, None, ConfigEntryState.SETUP_RETRY),
         # A panel that publishes the default it already uses.
         (None, 80, ConfigEntryState.NOT_LOADED),
-        # An emulated panel re-announcing on the port its loaded entry stores.
-        (8081, 8081, ConfigEntryState.LOADED),
     ],
 )
 @pytest.mark.asyncio
@@ -2543,10 +2541,11 @@ async def test_zeroconf_does_not_probe_a_panel_configured_at_that_host_and_port(
     announced_port: int | None,
     state: ConfigEntryState,
 ) -> None:
-    """Every re-announcement of a configured panel must still end without a request.
+    """Every re-announcement of a real panel must still end without a request.
 
-    That is the only job of the check made before the probe. It must keep doing
-    it for real panels, whose entries store no HTTP port at all.
+    That is the only job of the check made before the probe, and real panels
+    -- one to an address, their entries storing no HTTP port -- are the only
+    shape it can be trusted for.
     """
     _entry_at_the_shared_host(hass, SERIAL_A, configured_port, state)
 
@@ -2566,19 +2565,25 @@ async def test_zeroconf_does_not_probe_a_panel_configured_at_that_host_and_port(
 
 @pytest.mark.parametrize(
     "state",
-    [ConfigEntryState.NOT_LOADED, ConfigEntryState.SETUP_RETRY, ConfigEntryState.SETUP_ERROR],
+    [
+        ConfigEntryState.LOADED,
+        ConfigEntryState.NOT_LOADED,
+        ConfigEntryState.SETUP_RETRY,
+        ConfigEntryState.SETUP_ERROR,
+    ],
 )
 @pytest.mark.asyncio
-async def test_zeroconf_probes_a_port_whose_entry_is_not_running(
+async def test_zeroconf_probes_a_port_an_entry_stores(
     hass: HomeAssistant, state: ConfigEntryState
 ) -> None:
-    """A stored port vouches for nothing unless its entry is running there.
+    """A stored port vouches for nothing, whatever state its entry is in.
 
     An emulator hands each panel the lowest free port on restart, so panels
     shift onto ports their siblings stored, and a removed panel's leftover
-    entry keeps its port forever. Dropped as already configured, a panel
-    announcing on such a port was never probed, so the serial that would say
-    which panel it is was never read.
+    entry keeps its port forever. A loaded entry is no better evidence: it
+    stays loaded when its panel moves or vanishes. Dropped as already
+    configured, a panel announcing on such a port was never probed, so the
+    serial that would say which panel it is was never read.
     """
     _entry_at_the_shared_host(hass, SERIAL_A, 8081, state)
 
@@ -2594,6 +2599,44 @@ async def test_zeroconf_probes_a_port_whose_entry_is_not_running(
     detect.assert_awaited_once()
     assert result["type"] == FlowResultType.FORM, result
     assert result["step_id"] == "confirm_discovery"
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_follows_two_running_panels_that_swap_ports(
+    hass: HomeAssistant,
+) -> None:
+    """Two loaded entries whose panels traded ports each follow their own panel.
+
+    Both entries stay loaded across the swap -- the coordinator only marks a
+    panel offline -- and each announcement arrives on a port the other entry
+    stores. Matched on that before the probe, both were dropped as already
+    configured and neither entry ever followed.
+    """
+    a = _entry_at_the_shared_host(hass, SERIAL_A, 8081, ConfigEntryState.LOADED)
+    b = _entry_at_the_shared_host(hass, SERIAL_B, 8082, ConfigEntryState.LOADED)
+    on_port = {8082: SERIAL_A, 8081: SERIAL_B}
+
+    async def _detect(host: str, *, port: int, httpx_client: object) -> DetectionResult:
+        return _status(on_port[port])
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            new=AsyncMock(side_effect=_detect),
+        ) as detect,
+        patch("custom_components.span_panel.config_flow.is_ipv4_address", return_value=True),
+        # Following a loaded entry reloads it; the entries here are records only.
+        patch.object(hass.config_entries, "async_schedule_reload") as reload,
+    ):
+        for port in (8082, 8081):
+            result = await _discover(hass, port)
+            assert result["type"] == FlowResultType.ABORT, result
+            assert result["reason"] == "already_configured"
+
+    assert detect.await_count == 2
+    assert a.data[CONF_HTTP_PORT] == 8082
+    assert b.data[CONF_HTTP_PORT] == 8081
+    assert {call.args[0] for call in reload.call_args_list} == {a.entry_id, b.entry_id}
 
 
 @pytest.mark.asyncio
@@ -2929,8 +2972,9 @@ async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
     """The second panel at an address is set up on its own port, and recognised afterwards.
 
     The entry has to record the port it was discovered on: that stored port is
-    what lets its next announcement end without a probe, and what tells it
-    apart from the panel beside it.
+    what tells it apart from the panel beside it. Its next announcement is
+    probed -- a stored port is no evidence of which panel answers there -- and
+    recognised by its serial, moving nothing and offering nothing twice.
     """
     _entry_at_the_shared_host(hass, SERIAL_A, 8081)
     auth = dataclasses.replace(MOCK_V2_AUTH, serial_number=SERIAL_B)
@@ -2984,7 +3028,10 @@ async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
 
     assert again["type"] == FlowResultType.ABORT
     assert again["reason"] == "already_configured"
-    detect.assert_not_awaited()
+    detect.assert_awaited_once()
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 2
+    assert created["result"].data[CONF_HTTP_PORT] == 8082
+    assert created["result"].data[CONF_HTTPS_PORT] == 9082
 
 
 # ---------- reauth: proximity ----------

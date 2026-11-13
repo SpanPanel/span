@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
-    ConfigEntryState,
     ConfigFlowContext,
     ConfigFlowResult,
 )
@@ -598,34 +597,34 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         return {CONF_HOST: host, CONF_EBUS_BROKER_HOST: host}
 
-    def _async_configured_at(self, host: str, http_port: int) -> bool:
-        """Whether an entry vouches that its panel answers at `host` on `http_port`.
+    def _async_real_panel_configured_at(self, host: str, http_port: int) -> bool:
+        """Whether this is a real panel's announcement from an address an entry already has.
 
-        A stored port vouches only while its entry is running there. Several
-        panels can share a host, and an emulator hands each the lowest free
-        port when it restarts, so panels shift onto ports their siblings
-        stored; a removed panel's leftover entry never runs and never moves off
-        its port at all. Matched on such an entry, the panel now on that port
-        was dropped before the probe that reads its serial, so its own entry
-        never followed it. So an entry storing a port matches only once it is
-        LOADED; anything else is probed, and the serial decides.
+        The one shape in which an address can stand in for a serial. A real
+        SPAN panel's entry stores no HTTP port -- the key is written only where
+        it is not 80 -- and one panel holds one address, so an announcement on
+        80 from that host is that panel. It matches whether the entry is loaded
+        or not, exactly as it always has.
 
-        A real SPAN panel's entry stores no HTTP port -- the key is written only
-        where it is not 80 -- and one panel holds one address, so nothing shifts
-        onto its port. It matches on port 80 whether loaded or not, exactly as
-        it always has.
+        A stored port is never such evidence. Several panels can share a host,
+        and an emulator hands each the lowest free port when it restarts, so
+        panels shift onto ports their siblings stored, and a removed panel's
+        leftover entry keeps its port forever. Whether the entry is loaded
+        says nothing either: it stays loaded when its panel moves or vanishes,
+        because the coordinator only marks the panel offline. Matched on a
+        stored port, the panel now on it was dropped before the probe that
+        reads its serial, and two panels that traded ports each blocked the
+        other for good. So an announcement on any port an entry stores is
+        probed, and the serial decides, at the cost of one request per such
+        announcement.
         """
-        for entry in self._async_current_entries(include_ignore=False):
-            if entry.data.get(CONF_HOST) != host:
-                continue
-            stored_port = port_or_none(entry.data.get(CONF_HTTP_PORT))
-            if stored_port is None:
-                if http_port == 80:
-                    return True
-                continue
-            if stored_port == http_port and entry.state is ConfigEntryState.LOADED:
-                return True
-        return False
+        if http_port != 80:
+            return False
+        return any(
+            entry.data.get(CONF_HOST) == host
+            and port_or_none(entry.data.get(CONF_HTTP_PORT)) is None
+            for entry in self._async_current_entries(include_ignore=False)
+        )
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery.
@@ -633,20 +632,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         A panel is identified by its serial, and the serial is only known once
         the probe below has read it. Several panels can answer at one address on
         different HTTP ports -- an emulator serves every panel it simulates from
-        the one machine, each advertising its own `httpPort` -- so the two
-        checks made before the probe key on the host *and* the HTTP port. Keyed
-        on the host alone, the first panel configured at an address discarded
-        every other panel's announcement there before its serial was ever read.
+        the one machine, each advertising its own `httpPort` -- so nothing
+        before the probe may conclude an announcement is a configured panel,
+        except where only one panel can be: a real SPAN panel, alone at its
+        address on port 80 (see `_async_real_panel_configured_at`). Keyed on the
+        host alone, the first panel configured at an address discarded every
+        other panel's announcement there; keyed on a stored port, panels that
+        traded ports discarded each other's, before either serial was read.
 
-        Neither check decides identity; both only save work, and the first takes
-        an entry's stored port as evidence only while that entry is running
-        there (see `_async_configured_at`). A panel that has moved -- to a new
-        host, or to new ports on the same one, a stale entry's included --
-        reaches the probe and is caught by the serial check in
-        `ensure_not_already_configured`. There `_async_host_update` decides
-        whether its entry may follow it: a pinned entry takes the new host and
-        ports only once the announced HTTPS port, or the stored one where the
-        announcement publishes none, serves a certificate its anchor validates.
+        Neither check made before the probe decides identity; both only save
+        work, the second by keeping one probe per host and port in flight.
+        Every other announcement, a moved panel's included, reaches the probe
+        and is caught by the serial check in `ensure_not_already_configured`.
+        There `_async_host_update` decides whether its entry may follow it: a
+        pinned entry takes the new host and ports only once the HTTPS port it
+        would use -- the announced one, or the stored one where the
+        announcement publishes none -- serves a certificate its anchor
+        validates.
         """
         host = discovery_info.host
         # Read before the probe because the checks below need it. A malformed
@@ -655,9 +657,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         discovered_http_port = _discovered_port(props, "httpPort", "httpport")
         http_port = 80 if discovered_http_port is None else discovered_http_port
 
-        # Do not probe a panel an entry is running at this host and port: every
-        # re-announcement of a configured panel ends here, request-free.
-        if self._async_configured_at(host, http_port):
+        # Do not probe a real panel re-announcing from the address its entry
+        # has: every such announcement ends here, request-free.
+        if self._async_real_panel_configured_at(host, http_port):
             return self.async_abort(reason="already_configured")
 
         # Do not probe device if it is not an ipv4 address

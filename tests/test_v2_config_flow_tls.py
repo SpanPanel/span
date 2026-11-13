@@ -1201,8 +1201,8 @@ async def test_zeroconf_follows_a_panel_onto_a_port_a_stale_entry_stores(
     lands on the HTTP port a sibling stored -- here a removed panel's leftover
     entry, which never runs and so never moves off it. Matched on that entry
     before the probe, the announcement was dropped and this panel's entry never
-    followed. The leftover entry vouches for nothing it is not running, so the
-    announcement is probed, and the serial and the pin decide.
+    followed. A stored port vouches for nothing, so the announcement is probed,
+    and the serial and the pin decide.
     """
     entry = _entry_at_loopback_on_ports(hass, panel.ca_pem, closed_port())
     stale = MockConfigEntry(
