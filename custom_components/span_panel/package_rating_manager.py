@@ -140,7 +140,7 @@ def _load_package(row: object) -> StoredPackage | None:
     label: object = row.get("label")
     if ratings is None or space is None or not isinstance(label, str):
         return None
-    return StoredPackage(ratings, space, label)
+    return StoredPackage(ratings, (space,), label)
 
 
 def _load_packages(stored: object) -> dict[str, StoredPackage]:
@@ -253,7 +253,7 @@ class PackageRatingManager:
                 circuit_id: PackageDiagnosticsRow(
                     label=stored.label,
                     package_ratings_a=list(stored.ratings_a),
-                    space=stored.space,
+                    space=stored.spaces[0],
                     state="applies" if self.resolve(circuit_id, snapshot).user_set else "pending",
                 )
                 for circuit_id, stored in self._packages.items()
@@ -357,7 +357,11 @@ class PackageRatingManager:
         if self._packages.get(circuit_id) == admission:
             return
         self._packages[circuit_id] = admission
-        self._states[circuit_id] = "applies"  # admit stores only what applies
+        # What the entry is, as a reconcile records it. admit stores only what
+        # the rule keeps, so it applies or, across two spaces, is kept on
+        # averaged legs; the rule says which.
+        if (state := self.resolve(circuit_id, snapshot).state) is not None:
+            self._states[circuit_id] = state
         self._forget(circuit_id)
         self._save()
         self._fire([circuit_id])
@@ -461,7 +465,7 @@ class PackageRatingManager:
                 packages={
                     circuit_id: _StoredPackageRow(
                         package_ratings_a=list(stored.ratings_a),
-                        space=stored.space,
+                        space=stored.spaces[0],
                         label=stored.label,
                     )
                     for circuit_id, stored in self._packages.items()

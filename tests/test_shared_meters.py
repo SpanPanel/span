@@ -137,7 +137,7 @@ def panel_ratings(snapshot: SpanPanelSnapshot) -> Callable[[str], MonitoringRati
 
     def resolve(circuit_id: str) -> MonitoringRating:
         rating = snapshot.circuits[circuit_id].breaker_rating_a
-        return MonitoringRating(rating, rating, False, None)
+        return MonitoringRating(rating, rating, False, None, None)
 
     return resolve
 
@@ -211,7 +211,9 @@ def test_the_judged_capacity_follows_the_same_rule_as_the_panels() -> None:
     def ratings(circuit_id: str) -> MonitoringRating:
         panel = snapshot.circuits[circuit_id].breaker_rating_a
         package = (20, 20) if circuit_id == "tq-3" else None
-        return MonitoringRating(judged[circuit_id], panel, package is not None, package)
+        return MonitoringRating(
+            judged[circuit_id], panel, package is not None, package, None if package is None else "applies"
+        )
 
     point = monitored_circuits(snapshot, ratings)["tq-2"]
 

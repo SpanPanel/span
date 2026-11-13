@@ -466,8 +466,8 @@
     "package_ratings_panel_describes_breakers": {
       "message": "Este painel publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade, e a monitorização de corrente avalia os circuitos que partilham um contador segundo essas capacidades, por isso não há capacidades a copiar da aplicação SPAN."
     },
-    "package_ratings_not_one_space": {
-      "message": "Só é possível copiar capacidades da aplicação SPAN para um circuito que ocupa um único espaço de disjuntor."
+    "package_ratings_spaces": {
+      "message": "Só é possível copiar capacidades da aplicação SPAN para um circuito que ocupa um ou dois espaços de disjuntor."
     },
     "package_ratings_not_two": {
       "message": "Introduza ambas as capacidades pela ordem em que a aplicação SPAN as mostra, como [20, 30] para 20-30A, ou apenas a capacidade do painel para as limpar."
@@ -715,7 +715,7 @@
     },
     "set_circuit_package_ratings": {
       "name": "Definir capacidades do pacote do circuito",
-      "description": "Copiar da aplicação SPAN as capacidades de um disjuntor tandem, pela ordem em que as mostra (20-30A é [20, 30]), para que a monitorização de corrente avalie o espaço do circuito pelos dois disjuntores em conjunto. A primeira tem de ser a capacidade que o painel publica para o circuito, e apenas a capacidade do painel limpa-as. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só é oferecido para um circuito num único espaço de disjuntor, com os dois disjuntores em conjunto não acima da capacidade de serviço do painel, e não num painel que publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade.",
+      "description": "Copiar da aplicação SPAN as capacidades de um disjuntor tandem, pela ordem em que as mostra (20-30A é [20, 30]), para que a monitorização de corrente avalie o espaço do circuito pelos dois disjuntores em conjunto. A primeira tem de ser a capacidade que o painel publica para o circuito, e apenas a capacidade do painel limpa-as. O sensor de capacidade do disjuntor continua a mostrar a capacidade do painel. Só é oferecido para um circuito que ocupa um ou dois espaços de disjuntor, com os dois disjuntores em conjunto não acima da capacidade de serviço do painel, e não num painel que publica cada circuito de um disjuntor de várias cargas com a sua própria capacidade. Uma cópia para um circuito que ocupa dois espaços é guardada mas não aplicada, porque o painel indica apenas a média das duas fases desse circuito, o que pode ocultar uma fase sobrecarregada.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
@@ -723,7 +723,7 @@
         },
         "package_ratings_a": {
           "name": "Capacidades do pacote (A)",
-          "description": "As capacidades dos disjuntores tal como a aplicação SPAN mostra este circuito, da primeira à última, em amperes inteiros: [20, 30] para 20-30A. A primeira é a capacidade que o painel publica."
+          "description": "As capacidades dos disjuntores tal como a aplicação SPAN mostra este circuito, da primeira à última, em amperes inteiros: [20, 30] para 20-30A. A primeira é a capacidade que o painel publica. Um circuito que ocupa um ou dois espaços de disjuntor aceita uma cópia; a de um circuito que ocupa dois espaços é guardada mas não aplicada, porque o painel indica apenas a média das suas duas fases."
         },
         "config_entry_id": {
           "name": "Entrada de configuração",

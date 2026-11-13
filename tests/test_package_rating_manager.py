@@ -151,9 +151,9 @@ async def test_copied_ratings_are_saved_and_loaded_by_the_next_manager(
     await reloaded.async_load()
     reloaded.reconcile(_snapshot(), _declared)  # inert; resolve uses the loaded entries
     # The declaration is unknown until `begin`, so the entry is pending: unrated, and kept.
-    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(None, 20.0, False, (20, 30))
+    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(None, 20.0, False, (20, 30), "pending")
     reloaded.begin(_snapshot(), _DECLARED)
-    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(50.0, 20.0, True, (20, 30))
+    assert reloaded.resolve("circuit-2", _snapshot()) == MonitoringRating(50.0, 20.0, True, (20, 30), "applies")
 
 
 @pytest.mark.parametrize(
@@ -190,7 +190,7 @@ async def test_a_malformed_row_is_dropped_and_the_rest_load(
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     assert manager.resolve("circuit-1", snapshot).user_set
-    assert manager.resolve("circuit-3", snapshot) == MonitoringRating(10.0, 10.0, False, None)
+    assert manager.resolve("circuit-3", snapshot) == MonitoringRating(10.0, 10.0, False, None, None)
 
 
 async def test_a_store_without_packages_loads_as_empty(
@@ -393,11 +393,27 @@ async def test_set_refuses_while_the_service_rating_declaration_is_not_known_as_
     assert _refused(manager, _snapshot(), [20, 20]).translation_key == "package_ratings_not_arrived"
 
 
-async def test_set_refuses_a_circuit_in_two_spaces(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """A two-space circuit's current is the average of its legs, which no copied package can be checked against."""
+async def test_set_refuses_a_circuit_in_more_than_two_spaces(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """A copy is for a package in one space or across two, so a circuit listing more takes none."""
+    snapshot = _snapshot(tabs={"circuit-2": [2, 4, 6]})
+    manager = await _begun(hass, entry, snapshot)
+    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_spaces"
+
+
+async def test_a_two_space_package_set_and_reconciled_unchanged_fires_once(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The set records what the entry is, kept on averaged legs, so the next reconcile finds nothing changed."""
     snapshot = _snapshot(tabs={"circuit-2": [2, 4]})
     manager = await _begun(hass, entry, snapshot)
-    assert _refused(manager, snapshot, [20, 20]).translation_key == "package_ratings_not_one_space"
+    events = _events(hass)
+
+    manager.set_package_ratings("circuit-2", snapshot, [20, 30])
+    manager.reconcile(snapshot, _declared)
+    await hass.async_block_till_done()
+
+    assert manager.resolve("circuit-2", snapshot) == MonitoringRating(20.0, 20.0, False, (20, 30), "averaged_legs")
+    assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]
 
 
 async def test_set_refuses_a_circuit_whose_space_has_not_arrived_as_not_arrived(
@@ -445,7 +461,7 @@ async def test_set_to_the_panels_rating_alone_clears(hass: HomeAssistant, entry:
     manager.set_package_ratings("circuit-2", _snapshot(), [20, 20])
     manager.set_package_ratings("circuit-2", _snapshot(), [20])
     await hass.async_block_till_done()
-    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(20.0, 20.0, False, None)
+    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(20.0, 20.0, False, None, None)
     assert (await _stored(hass, entry))["packages"] == {}
 
 
@@ -648,7 +664,7 @@ async def test_missing_metadata_after_a_known_declaration_changes_nothing(
     manager.reconcile(_snapshot(), _Metadata(None))
     await hass.async_block_till_done()
 
-    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(40.0, 20.0, True, (20, 20))
+    assert manager.resolve("circuit-2", _snapshot()) == MonitoringRating(40.0, 20.0, True, (20, 20), "applies")
     manager.set_package_ratings("circuit-2", _snapshot(), [20, 30])  # still bounded, not refused
     assert manager.resolve("circuit-2", _snapshot()).judged_a == 50.0
     assert [event.data["circuit_ids"] for event in events] == [["circuit-2"]]

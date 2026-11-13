@@ -19,15 +19,21 @@ match wins:
    nothing shows it as user-set and monitoring skips it. It applies again when
    the value arrives.
 4. The capacity is above the service rating, the panel's rating is no longer the
-   entry's first, or the circuit no longer lists just the space the entry was
-   copied for: deleted and the user told. A different first rating means the
-   panel was re-commissioned; a different space means the circuit no longer holds
-   the package that was copied.
-5. Otherwise the entry applies: the circuit is judged against its capacity.
+   entry's first, or the circuit no longer lists just the one or two spaces the
+   entry was copied for: deleted and the user told. A different first rating
+   means the panel was re-commissioned; different spaces mean the circuit no
+   longer holds the package that was copied. Spaces are compared in order of
+   space, since a circuit may list its two in either order.
+5. Otherwise an entry for one space applies: the circuit is judged against its
+   capacity. An entry for two spaces is kept, on averaged legs
+   (`"averaged_legs"`), and never applies: the panel reports such a circuit's
+   current as the average of its two legs, and judging that average against
+   the package can hide an overloaded leg. The circuit is judged against the
+   panel's rating, as though there were no entry.
 
 Ratings a user enters are judged by the same rule before they are stored
-(`admit`), so an entry the user sets is one that applies, and each way it would
-not becomes a refusal with its own reason.
+(`admit`), so an entry the user sets is one the rule keeps, and each way it
+would not becomes a refusal with its own reason.
 
 "Not declared" differs from "not arrived": a retained value can land after its
 description, after a restart, a reconnect or a bridge rebuild. Read as "not
@@ -59,11 +65,19 @@ type Declaration = Literal["declared", "undeclared", "unknown"]
 type PackageRatings = tuple[int, int]
 """A package's breaker ratings in the order the SPAN app shows them, the first the one the panel publishes.
 
-A space holds at most a tandem, so a package here has exactly two.
+A space holds at most a tandem, and a package across two spaces is copied the
+same way, so a package here has exactly two.
 """
 
-type JudgedState = Literal["applies", "pending"]
-"""What a kept entry is: in force, or waiting on a value not yet arrived, with no judged rating."""
+type JudgedState = Literal["applies", "pending", "averaged_legs"]
+"""What a kept entry is.
+
+In force; waiting on a value not yet arrived, with no judged rating; or kept on
+a circuit across two spaces, whose averaged legs it is never applied to (rule 5).
+"""
+
+type PackageRatingsForm = Literal["one_space", "two_spaces"]
+"""Which form a copy of a circuit's package takes: for its one space, or across its two."""
 
 type ChangeReason = Literal[
     "panel_rating_changed",
@@ -91,10 +105,13 @@ def is_change_reason(value: object) -> TypeIs[ChangeReason]:
 
 @dataclass(frozen=True, slots=True)
 class StoredPackage:
-    """An entry as stored: the copied ratings, the space they were copied for, and the circuit's last label."""
+    """An entry as stored: the copied ratings, the spaces they were copied for, and the circuit's last label.
+
+    `spaces` is in order of space (`_spaces`), as a stored entry is compared.
+    """
 
     ratings_a: PackageRatings
-    space: int
+    spaces: tuple[int, ...]
     label: str
 
 
@@ -102,14 +119,18 @@ class StoredPackage:
 class MonitoringRating:
     """A circuit's rating as readers see it, with the rating the panel published.
 
-    `package_ratings_a` is the entry while it stands, whether it applies or waits
-    on a value not yet arrived, and None where there is none or it is being deleted.
+    `package_ratings_a` is the entry while it stands, whether it applies, waits
+    on a value not yet arrived or is kept on averaged legs, and None where there
+    is none or it is being deleted. `state` says which of those it is, and is
+    None exactly where `package_ratings_a` is, so a reader need not work it out
+    from the other fields.
     """
 
     judged_a: float | None
     panel_a: float | None
     user_set: bool
     package_ratings_a: PackageRatings | None
+    state: JudgedState | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +154,7 @@ class Reconciled:
     packages: dict[str, StoredPackage]
     changes: tuple[RatingChange, ...]
     states: dict[str, JudgedState]
-    """For each entry kept, whether it applies or waits on a value not yet arrived."""
+    """For each entry kept, whether it applies, waits on a value not yet arrived, or is kept on averaged legs."""
 
 
 def package_ratings_payload(ratings: PackageRatings | None) -> list[int] | None:
@@ -178,6 +199,28 @@ def panel_describes_breakers(snapshot: SpanPanelSnapshot) -> bool:
     if snapshot.publishes_shared_meters is True:
         return True
     return any(circuit.meter_shared_with is not None for circuit in snapshot.circuits.values())
+
+
+def package_ratings_form(
+    snapshot: SpanPanelSnapshot, circuit: SpanCircuitSnapshot
+) -> PackageRatingsForm | None:
+    """Return which form a copy of the circuit's package takes, or None where none can be entered.
+
+    The one answer every reader draws a copy's field from, so the services and
+    every view agree on which circuits take one. None where the panel describes
+    its multi-load breakers (`panel_describes_breakers`), where the circuit is a
+    meter outside the panel, with no breaker, where it has no rating for a
+    copy's first to match, or where it lists no space or more than two. Read
+    from the panel's structure, never from a circuit's name or its readings.
+    """
+    if (
+        panel_describes_breakers(snapshot)
+        or circuit.measures_outside_panel
+        or circuit.breaker_rating_a is None
+        or not _holds(circuit, None)
+    ):
+        return None
+    return "one_space" if len(circuit.tabs) == 1 else "two_spaces"
 
 
 def service_rating_declaration(field_metadata: Mapping[str, FieldMetadata] | None) -> Declaration:
@@ -235,15 +278,24 @@ def _known(
     return panel, service_a
 
 
-def _in_one_space(circuit: SpanCircuitSnapshot, space: int | None) -> bool:
-    """Whether the circuit lists one space: `space` where given, else any one."""
-    return len(circuit.tabs) == 1 and (space is None or circuit.tabs[0] == space)
+def _spaces(circuit: SpanCircuitSnapshot) -> tuple[int, ...]:
+    """Return the circuit's spaces in order of space, as an entry stores and compares them.
+
+    A circuit may list its two spaces in either order, and the same two are the
+    same circuit, never one whose spaces changed.
+    """
+    return tuple(sorted(circuit.tabs))
+
+
+def _holds(circuit: SpanCircuitSnapshot, spaces: tuple[int, ...] | None) -> bool:
+    """Whether the circuit lists one or two spaces: `spaces` where given, else any one or two."""
+    return len(circuit.tabs) in (1, 2) and (spaces is None or _spaces(circuit) == spaces)
 
 
 def judge(
     circuit: SpanCircuitSnapshot | None,
     ratings_a: PackageRatings,
-    space: int | None,
+    spaces: tuple[int, ...] | None,
     service: Declaration,
     service_a: float | None,
     *,
@@ -251,10 +303,10 @@ def judge(
 ) -> Verdict:
     """Rules 2 to 5 of the module for one package, first match winning.
 
-    `space` is the space a stored entry was copied for, or None for ratings
-    being entered (`admit`), which take the circuit's one space. `resolve` and
-    `reconcile` read a stored entry through this, and `admit` the ratings a user
-    enters, so an entry the user sets is one that applies.
+    `spaces` are the spaces a stored entry was copied for, in order of space, or
+    None for ratings being entered (`admit`), which take the circuit's one or
+    two. `resolve` and `reconcile` read a stored entry through this, and `admit`
+    the ratings a user enters, so an entry the user sets is one the rule keeps.
     """
     # First, since each holds panel-wide whatever else the snapshot says.
     reason = _panel_wide(service, describes_breakers=describes_breakers)
@@ -273,9 +325,9 @@ def judge(
         return "above_service_rating"
     if ratings_a[0] != panel:
         return "panel_rating_changed"
-    if not _in_one_space(circuit, space):
+    if not _holds(circuit, spaces):
         return "spaces_changed"
-    return "applies"
+    return "averaged_legs" if len(circuit.tabs) == 2 else "applies"
 
 
 def resolve(
@@ -297,26 +349,32 @@ def resolve(
 
     An entry the rule removes never applies: it is being deleted, and the
     panel's own rating is what the circuit is judged against.
+
+    An entry kept on averaged legs never applies either (rule 5). The circuit is
+    judged against the panel's rating, as though there were no entry, while the
+    entry is still reported, so a reader can say why it does not apply.
     """
     if circuit is None:
-        return MonitoringRating(None, None, False, None)
+        return MonitoringRating(None, None, False, None, None)
     panel = circuit.breaker_rating_a
     if stored is None:
-        return MonitoringRating(panel, panel, False, None)
+        return MonitoringRating(panel, panel, False, None, None)
     verdict = judge(
         circuit,
         stored.ratings_a,
-        stored.space,
+        stored.spaces,
         service,
         service_a,
         describes_breakers=describes_breakers,
     )
     if is_change_reason(verdict):
-        return MonitoringRating(panel, panel, False, None)
+        return MonitoringRating(panel, panel, False, None, None)
     if verdict == "pending":
-        return MonitoringRating(None, panel, False, stored.ratings_a)
+        return MonitoringRating(None, panel, False, stored.ratings_a, "pending")
+    if verdict == "averaged_legs":
+        return MonitoringRating(panel, panel, False, stored.ratings_a, "averaged_legs")
     return MonitoringRating(
-        _capacity_a(circuit.tabs, stored.ratings_a), panel, True, stored.ratings_a
+        _capacity_a(circuit.tabs, stored.ratings_a), panel, True, stored.ratings_a, "applies"
     )
 
 
@@ -345,7 +403,7 @@ def reconcile(
         verdict = judge(
             circuit,
             stored.ratings_a,
-            stored.space,
+            stored.spaces,
             service,
             service_a,
             describes_breakers=describes_breakers,
@@ -368,7 +426,7 @@ type Refusal = Literal[
     "not_published",
     "not_arrived",
     "no_service_rating",
-    "not_one_space",
+    "spaces",
     "not_two",
     "first_not_panel",
     "above_service_rating",
@@ -385,7 +443,7 @@ _REFUSALS: Final[Mapping[ChangeReason | Literal["pending"], Refusal]] = {
     "pending": "not_arrived",
     "above_service_rating": "above_service_rating",
     "panel_rating_changed": "first_not_panel",
-    "spaces_changed": "not_one_space",
+    "spaces_changed": "spaces",
 }
 """What each reason the rule would remove a stored entry for means for ratings being entered."""
 
@@ -420,12 +478,13 @@ def admit(
     circuit. A package otherwise holds two ratings, and is refused for the first
     of these that holds: the circuit is not on the panel; the panel describes
     its breakers; the circuit's rating or the service rating is not published or
-    not yet arrived, or its space has not; the circuit is not in one space; the
-    list is not two ratings; the first is not the panel's; the two together are
-    above the service rating. The rule's own stages decide each, and `judge`, as
-    a stored entry is read, has the last word, so a package is stored only where
-    it applies; a verdict that would remove a stored entry is the refusal it
-    means here (`_REFUSALS`).
+    not yet arrived, or its space has not; the circuit is not in one or two
+    spaces; the list is not two ratings; the first is not the panel's; the two
+    together are above the service rating. The rule's own stages decide each,
+    and `judge`, as a stored entry is read, has the last word, so a package is
+    stored only where the rule keeps it: where it applies, or, across two
+    spaces, on averaged legs. A verdict that would remove a stored entry is the
+    refusal it means here (`_REFUSALS`).
     """
     service_a = service_rating_a(snapshot)
     circuit = snapshot.circuits.get(circuit_id)
@@ -444,7 +503,7 @@ def admit(
         return Refused(_REFUSALS["rating_undeclared"], panel, service_a)
     if _known(circuit, service, service_a) is None:
         return Refused(_REFUSALS["pending"], panel, service_a)
-    if not _in_one_space(circuit, None):
+    if not _holds(circuit, None):
         return Refused(_REFUSALS["spaces_changed"], panel, service_a)
     if len(ratings_a) != 2:
         return Refused("not_two", panel, service_a)
@@ -452,6 +511,6 @@ def admit(
     if ratings[0] != panel:
         return Refused(_REFUSALS["panel_rating_changed"], panel, service_a)
     verdict = judge(circuit, ratings, None, service, service_a, describes_breakers=describes)
-    if verdict == "applies":
-        return StoredPackage(ratings, circuit.tabs[0], label_of(circuit, circuit_id))
+    if verdict == "applies" or verdict == "averaged_legs":
+        return StoredPackage(ratings, _spaces(circuit), label_of(circuit, circuit_id))
     return Refused(_REFUSALS[verdict], panel, service_a)

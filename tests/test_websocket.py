@@ -65,7 +65,7 @@ def _panel_rating(circuit_id, snapshot):
     """Resolve a circuit to the rating its panel published, as a manager holding no package does."""
     circuit = snapshot.circuits.get(circuit_id)
     rating = circuit.breaker_rating_a if circuit else None
-    return MonitoringRating(rating, rating, False, None)
+    return MonitoringRating(rating, rating, False, None, None)
 
 
 def _register_panel_device(
@@ -855,7 +855,7 @@ class TestHandlePanelTopology:
 
         def resolve(circuit_id, snap):
             if circuit_id == "uuid_kitchen":
-                return MonitoringRating(50.0, 20.0, True, (20, 30))
+                return MonitoringRating(50.0, 20.0, True, (20, 30), "applies")
             return _panel_rating(circuit_id, snap)
 
         coordinator.package_rating_manager.resolve.side_effect = resolve

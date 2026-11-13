@@ -466,8 +466,8 @@
     "package_ratings_panel_describes_breakers": {
       "message": "Este panel publica cada circuito de un interruptor de varias cargas con su propia capacidad, y el monitoreo de corriente juzga los circuitos que comparten un medidor según esas capacidades, por lo que no hay capacidades que copiar de la app de SPAN."
     },
-    "package_ratings_not_one_space": {
-      "message": "Solo se pueden copiar capacidades de la app de SPAN para un circuito que ocupa un único espacio de interruptor."
+    "package_ratings_spaces": {
+      "message": "Solo se pueden copiar capacidades de la app de SPAN para un circuito que ocupa uno o dos espacios de interruptor."
     },
     "package_ratings_not_two": {
       "message": "Introduce ambas capacidades en el orden en que las muestra la app de SPAN, como [20, 30] para 20-30A, o solo la capacidad del panel para borrarlas."
@@ -715,7 +715,7 @@
     },
     "set_circuit_package_ratings": {
       "name": "Establecer capacidades del paquete del circuito",
-      "description": "Copiar de la app de SPAN las capacidades de un interruptor tándem, en el orden en que las muestra (20-30A es [20, 30]), para que el monitoreo de corriente juzgue el espacio del circuito según ambos interruptores juntos. La primera debe ser la capacidad que el panel publica para el circuito, y solo la capacidad del panel las borra. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se ofrece para un circuito en un único espacio de interruptor, con ambos interruptores juntos sin superar la capacidad de servicio del panel, y no en un panel que publica cada circuito de un interruptor de varias cargas con su propia capacidad.",
+      "description": "Copiar de la app de SPAN las capacidades de un interruptor tándem, en el orden en que las muestra (20-30A es [20, 30]), para que el monitoreo de corriente juzgue el espacio del circuito según ambos interruptores juntos. La primera debe ser la capacidad que el panel publica para el circuito, y solo la capacidad del panel las borra. El sensor de capacidad del interruptor sigue mostrando la capacidad del panel. Solo se ofrece para un circuito en uno o dos espacios de interruptor, con ambos interruptores juntos sin superar la capacidad de servicio del panel, y no en un panel que publica cada circuito de un interruptor de varias cargas con su propia capacidad. Una copia para un circuito que ocupa dos espacios se guarda pero no se aplica, porque el panel informa solo el promedio de las dos fases de ese circuito, lo que puede ocultar una fase sobrecargada.",
       "fields": {
         "circuit_id": {
           "name": "Circuito",
@@ -723,7 +723,7 @@
         },
         "package_ratings_a": {
           "name": "Capacidades del paquete (A)",
-          "description": "Las capacidades de los interruptores tal como la app de SPAN muestra este circuito, de la primera a la última, en amperios enteros: [20, 30] para 20-30A. La primera es la capacidad que publica el panel."
+          "description": "Las capacidades de los interruptores tal como la app de SPAN muestra este circuito, de la primera a la última, en amperios enteros: [20, 30] para 20-30A. La primera es la capacidad que publica el panel. Un circuito en uno o dos espacios de interruptor admite una copia; la de uno que ocupa dos espacios se guarda pero no se aplica, porque el panel informa solo el promedio de sus dos fases."
         },
         "config_entry_id": {
           "name": "Entrada de configuración",
