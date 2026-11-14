@@ -3,9 +3,9 @@
 The files here are committed source this repository owns, with one exception: the **historical `pyproject.toml` copies** (`pyproject_*.toml`) are this
 repository's own file at the two commits where the library path override went wrong, held to those commits by a guard.
 
-The schema-adapter payloads the conformance tests replay are **not** here. They are package data of `span-panel-api-schema-0` and `span-panel-api-schema-1`,
-read out of the installed wheels by `tests/adapter_fixtures.py`; the pin in `custom_components/span_panel/manifest.json` is what says which capture the suite
-replays, and bumping the pin is what moves it.
+The schema-adapter payload the conformance tests replay is **not** here. It is package data of `span-panel-api-schema-1`, read out of the installed wheel by
+`tests/adapter_fixtures.py`; the pin in `custom_components/span_panel/manifest.json` is what says which capture the suite replays, and bumping the pin is what
+moves it.
 
 Nor are the captured panels. They are the reference captures `ebus-panel-sim` ships as package data, read by `tests/captures_replay.py` through
 `ebus_panel_sim.load_reference_capture` under their handles; the test-only pin in `pyproject.toml`'s `dev` group says which release the suite replays.
