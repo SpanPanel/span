@@ -411,13 +411,10 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuits That Share a Meter or Relay
 
-Some circuits share one meter or one relay. Each keeps its own entities and names the circuits it shares with in `meter_shared_with` and `relay_shared_with`,
-which also appear on its Breaker switch. Circuits that share a meter report that one meter's readings, so their power and energy should not be added together.
-The panel view draws the group as one slot, and current monitoring judges it once, with an override on any member applying to the group.
-
-A group is judged against what its heaviest space can carry. For each space, the ratings of the members that list it are added, and the largest total is the
-group's capacity, because the panel reports a two-pole meter's current as the larger of its two legs. A tandem or a quad comes to the sum of its ratings; a
-tandem-quad comes to its two-pole rating plus the larger of its single-pole ones.
+Some circuits share one meter or one relay, as the breakers of a tandem, quad or tandem-quad do on SPAN panels other than the MAIN 32. Each keeps its own
+entities and names the circuits it shares with in `meter_shared_with` and `relay_shared_with`, which also appear on its Breaker switch. Circuits that share a
+meter report that one meter's readings, so their power and energy should not be added together. See [Tandem and Multi-Load Breakers](tandems.md) for how the
+panel view and current monitoring treat them, and for the MAIN 32.
 
 ### Remote Current Transformers
 
@@ -820,22 +817,12 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 **Symptom:** on a MAIN 32, a circuit raises current alerts again and again. In the SPAN app its rating reads as two values, such as "20-20A" or "20-30A", while
 the integration shows one, such as "20A".
 
-**Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and a single rating, so current monitoring compares the current of
-both loads against one breaker.
+**Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and only its first breaker's rating, so current monitoring compares
+the current of both breakers against one.
 
-**A tandem in one space:** in the Span Panel dashboard, enter the second rating the SPAN app shows for the circuit (for 20-30A, enter 30) in the Monitoring
-tab's Rating column, where instructions above the table say what to copy, or in the circuit's Monitoring section, opened from its gear icon while its monitoring
-is on. Monitoring then judges the space against both breakers together; the Breaker Rating sensor keeps showing the panel's rating. See
-[Copying a Tandem's Ratings from the SPAN App](frontend.md#copying-a-tandems-ratings-from-the-span-app).
-
-**A package across two spaces**, such as a 240 V breaker sharing a leg with a 120 V one: a MAIN 32 reports only the average of the circuit's two legs, which can
-hide an overloaded leg. You can copy its ratings the same way, but the copy is kept without being applied, and the dashboard recommends turning monitoring off
-for that circuit, with a **Turn off monitoring** button.
-
-If the panel's rating for the circuit later changes, or the circuit moves to another space, the copied ratings are removed and a notification says so.
-
-Panels other than MAIN 32 publish each circuit of a multi-load breaker with its own rating and name the circuits that share its meter, so current monitoring
-already judges them together and offers nothing to copy. See [Circuits That Share a Meter or Relay](#circuits-that-share-a-meter-or-relay).
+**Fix:** for a tandem in one space, copy the second rating the SPAN app shows into the Monitoring tab's Rating column or the circuit's side panel. For a quad or
+tandem-quad across two spaces, the dashboard recommends turning monitoring off instead. See [Tandem and Multi-Load Breakers](tandems.md) for examples and
+details.
 
 ### Debug logging
 
