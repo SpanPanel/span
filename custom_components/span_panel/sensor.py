@@ -464,8 +464,8 @@ def create_battery_sensors(
 ) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
     """Create battery sensors when BESS is commissioned.
 
-    Auto-detected from soe_percentage — only a commissioned BESS reports SoE.
-    All BESS sensors live on the BESS sub-device.
+    Detected by `has_bess`, where the battery's declaration decides. All BESS
+    sensors live on the BESS sub-device.
     """
     if not has_bess(snapshot):
         return []

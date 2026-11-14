@@ -37,30 +37,6 @@ from .field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
 _LOGGER = logging.getLogger(__name__)
 
 
-KNOWN_BAD_SCHEMA_UNITS: dict[str, str] = {
-    # SPAN firmware has declared the circuit `active-power` property as "kW"
-    # while publishing watts. Three things agree that the label, not the
-    # reading, is wrong: the sibling `lugs` device declares the same quantity
-    # as "W"; the library consumes the value unscaled, as watts; and the
-    # independent `span-hass` integration documents the same defect under
-    # "Known SPAN API Issue" and hardcodes the same override. Our
-    # `UnitOfPower.WATT` declaration is correct. Every parent/child capture
-    # this integration replays declares "W" on the circuit, so none of them
-    # reaches this entry.
-    "circuit.instant_power_w": "kW",
-}
-"""Schema unit declarations this integration knowingly ignores, by field path.
-
-Every entry is a firmware defect worked around deliberately — the panel labels a
-property with a unit it does not publish — never a sensor whose unit we gave up
-on checking. Without this, a panel running the affected firmware raises a
-mismatch its owner cannot act on and that reflects no real defect.
-
-The match is exact. If firmware later declares something OTHER than the value
-here for the same field, that is new information and is still reported.
-"""
-
-
 @dataclass(frozen=True, slots=True)
 class UnitMismatch:
     """A declared unit that disagrees with the schema's."""
@@ -196,9 +172,6 @@ def evaluate_field_metadata(
             continue
         schema_unit = str(entry.unit)
         if schema_unit == str(ha_unit):
-            continue
-        if KNOWN_BAD_SCHEMA_UNITS.get(field_path) == schema_unit:
-            # A firmware mislabel we already work around. See the constant.
             continue
         mismatches.append(UnitMismatch(field_path, str(ha_unit), schema_unit))
 

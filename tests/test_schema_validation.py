@@ -36,11 +36,7 @@ def test_absent_entry_is_not_degradation() -> None:
 
 
 def test_unit_mismatch_is_reported() -> None:
-    """Deliberately not `circuit.instant_power_w`/"kW".
-
-    That pair is the one entry in `KNOWN_BAD_SCHEMA_UNITS`, so it would prove the
-    exception rather than the check.
-    """
+    """A unit the schema declares that disagrees with the sensor's is a mismatch."""
     from homeassistant.components.sensor import SensorEntityDescription
     from homeassistant.const import UnitOfElectricPotential
 
@@ -239,8 +235,13 @@ def test_no_exempt_path_is_probed() -> None:
     assert findings.unresolved == frozenset()
 
 
-def test_known_bad_schema_unit_exception_is_narrow() -> None:
-    """Only the exact known-bad unit is excused; anything else is new information."""
+def test_a_circuit_power_declared_in_kilowatts_is_a_mismatch() -> None:
+    """No unit declaration is excused: a circuit meter declared "kW" is reported.
+
+    The integration reads circuit power as watts, and the parent/child circuit
+    declares "W". A panel that declares "kW" instead disagrees with that reading,
+    which is what the unit check exists to say.
+    """
     from homeassistant.components.sensor import SensorEntityDescription
     from homeassistant.const import UnitOfPower
 
@@ -248,10 +249,13 @@ def test_known_bad_schema_unit_exception_is_narrow() -> None:
         key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
     )
     findings = evaluate_field_metadata(
-        {"circuit.instant_power_w": FieldMetadata("MW", "float")},
+        {"circuit.instant_power_w": FieldMetadata("kW", "float")},
         sensor_defs={"circuit.instant_power_w": description},
     )
-    assert [m.schema_unit for m in findings.unit_mismatches] == ["MW"]
+
+    assert [(m.field_path, m.ha_unit, m.schema_unit) for m in findings.unit_mismatches] == [
+        ("circuit.instant_power_w", "W", "kW")
+    ]
 
 
 def test_absent_hardware_on_real_metadata_is_not_degradation() -> None:
@@ -305,25 +309,3 @@ def test_readers_of_the_same_field_path_agree_on_unit() -> None:
     for path, descriptions in colliding.items():
         units = {d.native_unit_of_measurement for d in descriptions}
         assert len(units) == 1, f"readers of {path} disagree on unit: {units}"
-
-
-def test_known_bad_schema_unit_exception_is_keyed_on_the_field_path() -> None:
-    """The other half of the pair: only `circuit.instant_power_w` is excused.
-
-    `test_known_bad_schema_unit_exception_is_narrow` pins the unit half — a
-    different unit on the same path is still reported. Without this, widening
-    the check to a unit-only membership test ("is kW ever known-bad?") would
-    pass the whole suite while silently excusing every field that declares kW.
-    """
-    from homeassistant.components.sensor import SensorEntityDescription
-    from homeassistant.const import UnitOfPower
-
-    description = SensorEntityDescription(
-        key="grid_power", native_unit_of_measurement=UnitOfPower.WATT
-    )
-    findings = evaluate_field_metadata(
-        {"panel.instant_grid_power_w": FieldMetadata("kW", "float")},
-        sensor_defs={"panel.instant_grid_power_w": description},
-    )
-    assert [m.field_path for m in findings.unit_mismatches] == ["panel.instant_grid_power_w"]
-    assert findings.unit_mismatches[0].schema_unit == "kW"

@@ -357,8 +357,9 @@ def test_the_capture_declares_a_serial_and_publishes_none() -> None:
     """
     assert _declared(SERIAL_TOPIC), "the inverter no longer declares a serial number"
     assert schema_one_tree()[PV_DEVICE].get(SERIAL_TOPIC) is None, (
-        "the capture now values PV info/serial-number; decision 3 says it stays unvalued "
-        "until the flat side's PV device id is confirmed"
+        "the capture now values PV info/serial-number, so the identifier decision's "
+        "premise has changed; the check that matters is "
+        "test_a_serial_arriving_on_the_wire_does_not_move_the_device"
     )
 
 

@@ -338,11 +338,7 @@ async def test_run_schema_validation_preserves_prior_findings(
 async def test_run_schema_validation_reads_metadata_through_the_protocol(
     hass: HomeAssistant,
 ) -> None:
-    """The unit cross-check must key sensor definitions by field path.
-
-    Not `circuit.instant_power_w`/"kW": that pair is in
-    `KNOWN_BAD_SCHEMA_UNITS`, so it would prove the exception, not the wiring.
-    """
+    """The unit cross-check must key sensor definitions by field path."""
     client = MagicMock(spec=SpanPanelClientProtocol)
     client.field_metadata = {"panel.l1_voltage": FieldMetadata("kV", "float")}
     coordinator = _create_coordinator(hass, client=client)

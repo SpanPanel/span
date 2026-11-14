@@ -68,8 +68,8 @@ def test_a_panel_without_a_mid_gets_no_mid_device() -> None:
 
 
 def test_presence_needs_no_sentinel() -> None:
-    """`snapshot.mid is not None`, unlike `has_bess`, which infers from soe_percentage
-    because the battery field is always present.
+    """`snapshot.mid is not None`: the library makes `mid` optional, so the field is the
+    presence, where the always-present battery field needs its `present` declaration.
     """
     assert has_mid(SpanPanelSnapshotFactory.create(mid=_mid())) is True
 

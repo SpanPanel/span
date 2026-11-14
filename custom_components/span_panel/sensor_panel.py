@@ -432,9 +432,11 @@ def _service_entrance_was_read(coordinator: SpanPanelCoordinator) -> bool:
 
     The test is whether the panel has answered and never what it answered.
     Suppressing `True` as "probably not a reading" would silence the real
-    reading a panel at the service entrance publishes. Nor does it ask which
-    adapter produced the snapshot, so a later schema generation that answers
-    the same question is not shut out.
+    reading a panel at the service entrance publishes. `is not None` alone
+    cannot tell an answer from the snapshot model's default, `True`; it holds
+    because the adapter always writes the field, from the lugs, when it builds
+    a snapshot. Nor does it ask which adapter produced the snapshot, so a later
+    schema generation that answers the same question is not shut out.
 
     **Why the value and not the field metadata**, which is how every other "did
     the adapter produce this" question in this integration is settled

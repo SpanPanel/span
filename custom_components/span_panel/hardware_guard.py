@@ -61,9 +61,10 @@ def hardware_verdict(hardware_version: str | None) -> HardwareVerdict:
 
     Firmware before r202639 publishes no `hardwareVersion`, so a parent/child panel
     on such firmware proceeds here. Whether a panel's schema is supported is a
-    separate question, and setup settles it first: a panel on the flat schema is
-    refused on its schema (`firmware_schema`) before its broker is dialled, so it
-    never reaches this verdict.
+    separate question, and setup settles it first, so a panel on the flat schema
+    never reaches this verdict. A schema read (`firmware_schema`) refuses it
+    before its broker is dialled; where that read could not be had, the connect
+    refuses it instead, still before this verdict is applied.
 
     Surrounding whitespace and the case of `UNKNOWN` are ignored, so a spelling
     the changelog did not show cannot alone make the terminal refusal.

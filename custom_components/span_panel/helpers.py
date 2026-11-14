@@ -540,12 +540,13 @@ def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
 def has_mid(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether a Microgrid Interconnect Device is published.
 
-    Unambiguous, unlike `has_bess`, which has to infer presence from
-    `soe_percentage is not None` because the battery field is always there. The library
-    makes `mid` optional precisely so presence needs no sentinel.
+    The library makes `mid` optional, so presence is the field itself: `None`
+    exactly where the panel declares no MID. The battery field is always on the
+    snapshot instead, which is why `has_bess` reads the battery's `present`
+    declaration.
 
-    False on a panel that declares no MID, which is an ordinary panel rather than
-    a degraded one, so every MID reader goes through this first.
+    A panel without a MID is an ordinary panel rather than a degraded one, so
+    every MID reader goes through this first.
     """
     return snapshot.mid is not None
 
