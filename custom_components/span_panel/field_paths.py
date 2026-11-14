@@ -318,9 +318,11 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # than from a property of its own, so there is no row, which is what
         # makes the description `NO_SOURCE_FIELD`.
         "panel.grid_islandable": Producibility.UNMAPPED,
-        # util.py builds the EVSE DeviceInfo from the first four, and
-        # entity_resolver.py names a charger after the circuit that
-        # `feed_circuit_id` resolves to. The identity strings carry no row for
+        # util.py builds the EVSE DeviceInfo from the first four. Two readers
+        # resolve the feed through `feed_circuit_id`: sensor.py keys each
+        # charger's DeviceInfo by it, which is what puts the feeding circuit's
+        # sensors on the charger's card, and entity_resolver.py names a charger
+        # after the circuit it resolves to. The identity strings carry no row for
         # the reason the `panel.*` and `mid.*` card reads above carry none, and
         # the feed is assembled from the feeding circuit's `connection` record
         # rather than read from a property of the charger.

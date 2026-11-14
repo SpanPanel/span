@@ -330,11 +330,13 @@ def test_the_ssid_moved_off_the_software_version_sensor() -> None:
 def test_the_ssid_is_a_declaration_now_rather_than_an_exemption() -> None:
     """The gate's own ratchet, asserted where a reader will find it.
 
-    Both adapters map `wifi_ssid`, so the path satisfies the producible gate and
-    `test_no_exempt_path_is_producible_by_both` refuses to let it stay exempt.
-    It is declared on the entity that reads it -- one entity, now that the read
-    has moved -- which is what lets a Repair name the entity a dead field takes
-    with it.
+    The adapter maps `status/wifi-ssid`, so the path satisfies the producible
+    gate and cannot stay exempt: re-exempted as `UNMAPPED` it fails
+    `test_every_exempt_path_matches_its_annotation`, and as `MAPPED_UNVALIDATED`
+    it fails `test_the_fields_kept_out_of_validation_are_the_ones_annotated_so`,
+    which admits only the reads named there with a reason. It is declared on the
+    entity that reads it -- one entity, now that the read has moved -- which is
+    what lets a Repair name the entity a dead field takes with it.
     """
     assert "panel.wifi_ssid" not in RESIDUAL_EXEMPT_PATHS
     assert "panel.wifi_ssid" in declared_field_paths()
