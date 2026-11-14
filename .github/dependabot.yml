@@ -46,7 +46,6 @@ updates:
       # Bumped by hand with each integration release, together with
       # manifest.json, so the manifest and the pip pins never drift.
       - dependency-name: "span-panel-api"
-      - dependency-name: "span-panel-api-schema-0"
       - dependency-name: "span-panel-api-schema-1"
       # Bumped by hand as a pair, as in #281: each harness release pins one
       # exact Home Assistant, often a beta, so the harness moves only to the

@@ -185,17 +185,21 @@ def test_the_commit_that_redirected_both_blocks_is_rejected() -> None:
     Reporting one at a time would have made correcting this a four-commit
     conversation with the hook, and it is the last one -- `extraPaths` -- that
     nobody was looking at.
+
+    Three are named below. The fourth is the flat adapter's, a package the
+    integration has since dropped and names only in the vendored copies, so it is
+    counted instead.
     """
     result = _run(_historical(BOTH_BLOCKS))
 
     assert result.returncode == 1, result.stdout or "the hook said nothing about 3cbf02a"
     for declaration in (
         f"span-panel-api = '{WORKTREE}'",
-        f"span-panel-api-schema-0 = '{WORKTREE}/packages/schema-0'",
         f"span-panel-api-schema-1 = '{WORKTREE}/packages/schema-1'",
         f"extraPaths = '{WORKTREE}/src'",
     ):
         assert declaration in result.stdout, f"the failure does not report {declaration}"
+    assert result.stdout.count(f" = '{WORKTREE}") == 4, "the failure does not report all four"
 
 
 def test_the_commit_that_left_the_type_checker_path_behind_is_rejected() -> None:

@@ -15,10 +15,11 @@ something, so the commit stops and the corrected files are re-staged.
 and so stopped at the first letter: `3.0.0b7` was seen as `3.0.0`, which matched
 nothing and silently rewrote nothing. Every version this project has ever shipped
 is a pre-release, so the hook has been inert for its whole life while reporting
-success on every commit. It also only ever looked for the bootstrap package --
-`span-panel-api-schema-0` starts with `span-panel-api`, so it entered the branch
-and then failed its own regex -- and it never knew about `requirements_test.txt`
-at all, which is how that file came to pin `b4` against a manifest requiring `b7`.
+success on every commit. It also only ever looked for the bootstrap package -- an
+adapter such as `span-panel-api-schema-1` starts with `span-panel-api`, so it
+entered the branch and then failed its own regex -- and it never knew about
+`requirements_test.txt` at all, which is how that file came to pin `b4` against a
+manifest requiring `b7`.
 
 The lesson is in the shape rather than the regex: nothing parsed, so nothing
 could report that it had not matched. This version parses the requirement, looks

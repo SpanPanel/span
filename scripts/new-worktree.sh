@@ -104,9 +104,9 @@ echo "Branch:         $branch, from $(git -C "$target" rev-parse --short HEAD), 
 
 if [[ -d "$target/../../span/span-panel-api-$name" ]]; then
     echo
-    echo "A library worktree of the same name exists. To test against it, install all three of"
-    echo "its distributions into this worktree's environment; the next \`uv sync\` undoes it:"
+    echo "A library worktree of the same name exists. To test against it, install the library"
+    echo "and its parent/child adapter from it into this worktree's environment; the next"
+    echo "\`uv sync\` undoes it:"
     echo "    uv pip install -e ../../span/span-panel-api-$name \\"
-    echo "                   -e ../../span/span-panel-api-$name/packages/schema-0 \\"
     echo "                   -e ../../span/span-panel-api-$name/packages/schema-1"
 fi
