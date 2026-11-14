@@ -113,7 +113,7 @@ class Producibility(Enum):
 
     Named for the two facts a reader needs before promoting one: that the row
     exists, which the conformance suite holds to the adapter, and that
-    validation does not act on it. No second adapter is involved in either.
+    validation does not act on it.
     """
 
 

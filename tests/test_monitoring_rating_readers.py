@@ -153,7 +153,6 @@ async def test_the_sensor_is_unknown_where_the_circuit_publishes_no_rating(
 async def test_the_rating_sensor_is_the_plain_circuit_sensor(hass: HomeAssistant) -> None:
     snap = _panel()
     coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
-    coordinator.client.schema_major = "schema_1"
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
 
     entities = create_circuit_sensors(coordinator, snap, entry)

@@ -62,7 +62,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -575,7 +575,7 @@ def test_the_activity_sensor_is_a_running_diagnostic() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Absence: no node, no PCS, a flat panel
+# Absence: no node, no PCS
 # ---------------------------------------------------------------------------
 
 
@@ -589,15 +589,6 @@ def test_the_capture_creates_all_three_entities() -> None:
 def test_a_panel_with_no_pcs_node_gets_no_entities() -> None:
     """The presence gate, from the tree end."""
     snapshot = _without_node()
-
-    assert has_pcs(snapshot) is False
-    assert _sensors(snapshot) == {}
-
-
-def test_a_flat_panel_gets_no_entities() -> None:
-    """The same absence by the other route: no flat panel declares the
-    capability, so the factory's default snapshot carries no PCS at all."""
-    snapshot = SpanPanelSnapshotFactory.create()
 
     assert has_pcs(snapshot) is False
     assert _sensors(snapshot) == {}
@@ -723,19 +714,6 @@ def test_a_circuit_outside_any_pcs_shows_neither_attribute() -> None:
     assert "pcs_priority" not in attributes
     # The circuit's own readings are unaffected.
     assert "shed_priority" in attributes
-
-
-def test_a_flat_circuit_shows_neither_attribute() -> None:
-    """No flat circuit declares a `pcs` node, so the attributes simply do not
-    appear rather than appearing empty."""
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", name="Kitchen")
-    snapshot = SpanPanelSnapshotFactory.create(circuits={circuit.circuit_id: circuit})
-
-    assert circuit.pcs_managed is None
-    attributes = _circuit_attributes(snapshot, circuit.circuit_id)
-
-    assert "pcs_managed" not in attributes
-    assert "pcs_priority" not in attributes
 
 
 # ---------------------------------------------------------------------------

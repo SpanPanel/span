@@ -127,6 +127,46 @@ def schema_one_snapshot(tree: dict[str, dict[str, str]] | None = None) -> SpanPa
     return tree_snapshot(schema_one_tree() if tree is None else tree, SCHEMA_ONE_PANEL)
 
 
+BESS_INVERTER = "bess-inverter"
+"""Device id of the inverter `add_grid_forming_inverter` hangs off the capture's BESS."""
+
+
+def add_grid_forming_inverter(tree: dict[str, dict[str, str]], *, capable: bool) -> None:
+    """Give the capture's BESS an inverter child that says whether it can form a grid.
+
+    The capture's BESS declares no inverter, so `grid_islandable` reads `None`
+    on it. BESS model 0.14 puts `grid-forming/capable` on the BESS's `inverter`
+    child, and the adapter answers the panel-level question from every inverter
+    it finds (`resolve_grid_islandable`), so this is the shape in which the
+    field is a reading. The BESS lists the new child, as a described tree would.
+    """
+    description = {
+        "homie": "5.0",
+        "version": 1,
+        "type": "energy.ebus.device.inverter",
+        "name": "Battery inverter",
+        "nodes": {
+            "grid-forming": {
+                "name": "grid-forming",
+                "type": "energy.ebus.capability.grid-forming",
+                "properties": {"capable": {"name": "Capable", "datatype": "boolean"}},
+            }
+        },
+        "children": [],
+        "root": SCHEMA_ONE_PANEL,
+        "parent": "bess",
+        "extensions": [],
+    }
+    tree[BESS_INVERTER] = {
+        "$description": json.dumps(description),
+        "$state": "ready",
+        "grid-forming/capable": "true" if capable else "false",
+    }
+    bess = json.loads(tree["bess"]["$description"])
+    bess["children"].append(BESS_INVERTER)
+    tree["bess"]["$description"] = json.dumps(bess)
+
+
 def tree_snapshot(tree: dict[str, dict[str, str]], panel_id: str) -> SpanPanelSnapshot:
     """Build a snapshot through the schema_1 mapper from any tree whose enclosure is `panel_id`.
 

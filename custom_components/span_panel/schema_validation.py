@@ -38,13 +38,15 @@ _LOGGER = logging.getLogger(__name__)
 
 
 KNOWN_BAD_SCHEMA_UNITS: dict[str, str] = {
-    # SPAN firmware declares the circuit `active-power` property as "kW" while
-    # publishing watts. Three things agree that the label, not the reading, is
-    # wrong: the sibling `lugs` device declares the same quantity as "W"; the
-    # library consumes the value unscaled ("active-power is in watts",
-    # span_panel_api_schema_0/consumer.py:244); and the independent `span-hass`
-    # integration documents the same defect under "Known SPAN API Issue" and
-    # hardcodes the same override. Our `UnitOfPower.WATT` declaration is correct.
+    # SPAN firmware has declared the circuit `active-power` property as "kW"
+    # while publishing watts. Three things agree that the label, not the
+    # reading, is wrong: the sibling `lugs` device declares the same quantity
+    # as "W"; the library consumes the value unscaled, as watts; and the
+    # independent `span-hass` integration documents the same defect under
+    # "Known SPAN API Issue" and hardcodes the same override. Our
+    # `UnitOfPower.WATT` declaration is correct. Every parent/child capture
+    # this integration replays declares "W" on the circuit, so none of them
+    # reaches this entry.
     "circuit.instant_power_w": "kW",
 }
 """Schema unit declarations this integration knowingly ignores, by field path.
@@ -120,8 +122,8 @@ class SchemaFindings:
 
     Defaulted because it is additive and because every other member is a
     finding about *our* declarations, which this is not: an adapter that emits
-    no discovered rows — the flat one does not — leaves this empty, and that is
-    a fact about the adapter rather than a clean bill of health.
+    no discovered rows leaves this empty, and that is a fact about the adapter
+    rather than a clean bill of health.
     """
 
 

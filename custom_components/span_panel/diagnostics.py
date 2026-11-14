@@ -181,7 +181,7 @@ class DeviceTreeBlock(TypedDict):
     """
 
     device_tree: MaskedTree | None
-    device_tree_unavailable: NotRequired[Literal["flat_data_model", "not_described"]]
+    device_tree_unavailable: NotRequired[Literal["not_described"]]
 
 
 def _device_tree(client: SpanMqttClient) -> DeviceTreeBlock:
@@ -193,17 +193,13 @@ def _device_tree(client: SpanMqttClient) -> DeviceTreeBlock:
     whole and never reads a wire value itself.
 
     The tree is the adapter's last view, so a panel that has gone offline still
-    reports it -- that is the report a maintainer most needs. `flat_data_model`
-    is a schema 0 panel, which publishes no device tree; `not_described` is a
-    parent/child panel whose root device has not described itself yet.
+    reports it -- that is the report a maintainer most needs. `not_described` is
+    a panel whose root device has not described itself yet.
     """
     tree = client.masked_tree()
     if tree is not None:
         return {"device_tree": tree}
-    reason: Literal["flat_data_model", "not_described"] = (
-        "flat_data_model" if client.schema_major == "schema_0" else "not_described"
-    )
-    return {"device_tree": None, "device_tree_unavailable": reason}
+    return {"device_tree": None, "device_tree_unavailable": "not_described"}
 
 
 class AdoptedDeviceRow(TypedDict):

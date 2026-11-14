@@ -54,7 +54,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     """Return redacted diagnostics with optional runtime sections populated."""
     snapshot = SpanPanelSnapshotFactory.create(
         serial_number="sp3-diag-001",
-        firmware_version="spanos2/r202603/05",
+        firmware_version="spanos3/r202639/03",
         panel_size=32,
         wifi_ssid="Span WiFi",
         eth0_link=True,
@@ -88,7 +88,6 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     # this unset would let the discovery block render as an empty report rather
     # than as the "no metadata yet" state it actually is.
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
 
     # Version 6 deliberately: an entry that has not yet been through the v7
@@ -122,7 +121,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
 
     assert result["panel"] == {
         "serial_number": "sp3-diag-001",
-        "firmware_version": "spanos2/r202603/05",
+        "firmware_version": "spanos3/r202639/03",
         "panel_size": 32,
         "lugs_at_service_entrance": True,
         "instant_grid_power_w": 2500.75,
@@ -168,7 +167,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     """Return empty optional sections when the snapshot lacks them."""
     snapshot = SimpleNamespace(
         serial_number="sp3-diag-002",
-        firmware_version="spanos2/r202603/06",
+        firmware_version="spanos3/r202633/02",
         panel_size=None,
         wifi_ssid=None,
         eth0_link=None,
@@ -205,7 +204,6 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.panel_offline = True
     coordinator.last_update_success = False
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
@@ -221,7 +219,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
 
     assert result["panel"] == {
         "serial_number": "sp3-diag-002",
-        "firmware_version": "spanos2/r202603/06",
+        "firmware_version": "spanos3/r202633/02",
         "panel_size": None,
         "lugs_at_service_entrance": True,
         "instant_grid_power_w": 0.0,
@@ -279,7 +277,6 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     # The real runtime data, not a namespace, for the reason the circuit double
     # above is the real model: a hand-rolled stand-in carrying only the fields
@@ -330,7 +327,6 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -367,7 +363,6 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     identity = pv_binding_for(snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
@@ -417,7 +412,6 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -446,7 +440,6 @@ async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnaps
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -538,7 +531,6 @@ def _reference_entry(
     snapshot: SpanPanelSnapshot,
     tree: dict[str, dict[str, str]] | None = None,
     *,
-    schema_major: str = "schema_1",
     panel_offline: bool = False,
 ) -> MockConfigEntry:
     """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it.
@@ -552,7 +544,6 @@ def _reference_entry(
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = schema_major
     coordinator.client.masked_tree.return_value = None if tree is None else _export(tree)
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
     entry.runtime_data = SpanPanelRuntimeData(
@@ -641,18 +632,8 @@ async def test_diagnostics_carry_the_masked_device_tree(hass: HomeAssistant) -> 
     assert "device_tree_unavailable" not in result
 
 
-async def test_diagnostics_say_a_flat_panel_has_no_tree(hass: HomeAssistant) -> None:
-    """A flat data model has no device tree to export, and the report says that is why."""
-    entry = _reference_entry(schema_one_snapshot(), schema_major="schema_0")
-
-    result = await async_get_config_entry_diagnostics(hass, entry)
-
-    assert result["device_tree"] is None
-    assert result["device_tree_unavailable"] == "flat_data_model"
-
-
 async def test_diagnostics_say_an_undescribed_panel_has_no_tree(hass: HomeAssistant) -> None:
-    """A parent/child panel that has not described its root yet has nothing to export."""
+    """A panel that has not described its root yet has nothing to export, and the report says why."""
     result = await async_get_config_entry_diagnostics(hass, _reference_entry(schema_one_snapshot()))
 
     assert result["device_tree"] is None
@@ -718,7 +699,6 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     coordinator.panel_offline = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     coordinator.package_rating_manager = manager
     entry.runtime_data = SpanPanelRuntimeData(

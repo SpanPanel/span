@@ -275,8 +275,7 @@ async def test_a_panel_publishing_no_identity_keeps_the_card_it_has_always_had(
 ) -> None:
     """The fallbacks are the compatibility guarantee, not a courtesy.
 
-    Flat firmware declares none of these three, so every existing installation
-    lands here. A panel that omits one must keep the row it has rather than
+    A panel that omits one of these three must keep the row it has rather than
     losing it -- and `hw_version`, which never had a string to fall back to, must
     be absent rather than blank: `DeviceInfo` omits a `None` and renders an empty
     string as a present-but-empty row.
@@ -293,10 +292,10 @@ async def test_a_panel_publishing_no_identity_keeps_the_card_it_has_always_had(
 def test_the_panel_identity_paths_are_enumerated_as_device_card_reads() -> None:
     """`snapshot_to_device_info` is not an entity, so its reads are exempt residuals.
 
-    Annotated `NEITHER` beside the `mid.*` device-card reads: flat declares none
-    of the three, and a schema_1 metadata row exists to carry a unit and a
-    datatype for a reading, which an identity string is not. Asserted here so the
-    three cannot quietly leave the inventory that is the only record of them.
+    Annotated `UNMAPPED` beside the `mid.*` device-card reads: a metadata row
+    exists to carry a unit and a datatype for a reading, which an identity string
+    is not. Asserted here so the three cannot quietly leave the inventory that is
+    the only record of them.
     """
     for path in ("panel.vendor_name", "panel.model", "panel.hardware_version"):
         assert path in RESIDUAL_EXEMPT_PATHS, path
@@ -539,13 +538,13 @@ def test_a_charger_publishing_no_part_number_reports_unknown_rather_than_a_defau
     assert states == {STATE_UNKNOWN, _published(EVSE, PART_NUMBER_TOPIC)}
 
 
-def test_the_part_number_is_a_plain_declaration_on_both_adapters() -> None:
+def test_the_part_number_is_a_plain_declaration() -> None:
     """The promotion this task's schema_1 metadata row demanded.
 
-    Flat has mapped `evse/part-number` all along; adding the v1.0 row made the
-    path producible by both, and a both-producible path is a declaration rather
-    than an exemption. Diagnostic and off by default, matching `bess_part_number`
-    -- build metadata is not something a user wants on a card by default.
+    Adding the v1.0 row made the path producible, and a producible path is a
+    declaration rather than an exemption. Diagnostic and off by default, matching
+    `bess_part_number` -- build metadata is not something a user wants on a card
+    by default.
     """
     (description,) = [d for d in EVSE_SENSORS if d.key == EVSE_PART_NUMBER_KEY]
 

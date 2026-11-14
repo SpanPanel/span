@@ -367,15 +367,6 @@ def test_a_panel_with_no_forecast_node_gets_no_sensors() -> None:
     assert create_shed_forecast_sensors(_coordinator(snapshot), snapshot) == []
 
 
-def test_a_flat_panel_gets_no_sensors() -> None:
-    """The same absence by the other route: flat firmware publishes no such
-    capability, so the factory's default snapshot carries none of the fields."""
-    snapshot = SpanPanelSnapshotFactory.create()
-
-    assert has_shed_forecast(snapshot) is False
-    assert create_shed_forecast_sensors(_coordinator(snapshot), snapshot) == []
-
-
 @pytest.mark.parametrize(
     ("dropped", "surviving"),
     [

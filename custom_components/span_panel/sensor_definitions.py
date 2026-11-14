@@ -818,12 +818,13 @@ MID_SENSORS: tuple[SpanMidSensorEntityDescription, ...] = (
 )
 """Sensors on the MID device.
 
-Only `grid-state` — utility-supply health, genuinely new in v1.0 with no flat
-equivalent, and the one non-metadata addition the MID brings.
+Only `grid-state` — utility-supply health, which no other entity reports, and the
+one non-metadata addition the MID brings.
 
 Islanding state and the grid-forming entity are deliberately *not* duplicated here.
-Both already reach a user through entities that predate v1.0 — `dsm_state` and
-`grid_forming_entity` on the panel — and those must keep their ids and their history.
+Both already reach a user through entities that predate the MID device — `dsm_state`
+and `grid_forming_entity` on the panel — and those must keep their ids and their
+history.
 Showing the same fact twice is not the benign cell of the absorb-or-surface policy;
 adding a fact nobody had is.
 """
@@ -963,7 +964,7 @@ for the same reason.
 
 **What is settled is that the sign did not regress.** `BATTERY_POWER_SENSOR`
 reads the same source with the same single negation, device and state class
-as the one released in 2.0.8, and both adapters pass `power_flow_battery`
+as the one released in 2.0.8, and the library passes `power_flow_battery`
 through untouched. Whatever a live panel showed then, it shows now -- except
 that an unpublished value now reads unknown where 2.0.8 reported 0 W. `bess_meter_power` was briefly withdrawn on the belief that it would
 disagree with its neighbor on real firmware; the capture showed the two wire
@@ -1370,10 +1371,10 @@ EVSE_SENSORS: tuple[
         value_fn=lambda e: e.lock_state or "unknown",
     ),
     # The charger's SKU, shaped like `bess_part_number`: build metadata, so
-    # diagnostic and off by default, and a plain `field_path` because both
-    # adapters map the property (`evse/part-number` on flat, `info/part-number`
-    # on v1.0). It was the one unread declaration whose promotion the producible
-    # gate could demand, and adding the schema_1 metadata row is what demanded it.
+    # diagnostic and off by default, and a plain `field_path` because the
+    # adapter maps the property, `info/part-number`. It was the one unread
+    # declaration whose promotion the producible gate could demand, and adding
+    # the schema_1 metadata row is what demanded it.
     SpanEvseSensorEntityDescription(
         key="evse_part_number",
         field_path="evse.part_number",

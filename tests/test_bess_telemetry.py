@@ -92,10 +92,10 @@ POWER_KEY = "meter_power"
 COMMS_KEY = "communication_state"
 ENCLOSURE_FLOW_KEY = BATTERY_POWER_SENSOR.key
 
-R202633_FIRMWARE = "spanos2/r202633/01"
+R202633_FIRMWARE = "spanos3/r202633/02"
 """A release that publishes the BESS meter charge-positive, the old frame."""
 
-R202639_FIRMWARE = "spanos2/r202639/03"
+R202639_FIRMWARE = "spanos3/r202639/03"
 """The first release that publishes the BESS meter discharge-positive, the capture's frame."""
 
 
@@ -583,7 +583,7 @@ def test_communication_state_is_not_the_connected_binary_sensor() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Absence: deleted property, dropped node, no BESS, flat panel
+# Absence: deleted property, dropped node, no BESS
 # ---------------------------------------------------------------------------
 
 
@@ -678,17 +678,6 @@ def test_no_bess_device_creates_no_battery_sensors_at_all() -> None:
     snapshot = _without_bess()
 
     assert create_battery_sensors(_coordinator(snapshot), snapshot) == []
-
-
-def test_a_flat_panel_gets_neither_sensor() -> None:
-    """The same absence by the other route: flat's BESS device class declares
-    neither property, so the factory's default snapshot carries neither field."""
-    snapshot = SpanPanelSnapshotFactory.create()
-
-    assert has_bess_telemetry(snapshot) is False
-    created = _sensors(snapshot)
-    assert POWER_KEY not in created
-    assert COMMS_KEY not in created
 
 
 def test_the_telemetry_appearing_is_a_capability_change() -> None:

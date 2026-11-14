@@ -52,12 +52,10 @@ from .options import (
 _LOGGER = logging.getLogger(__name__)
 
 RELAY_PROPERTY = "relay"
-"""The property id both schema adapters use for a circuit relay.
+"""The property id the adapter uses for a circuit relay.
 
-Flat spells the address `(serial, circuit_id, "relay")` and v1.0 spells it
-`(circuit_id, "switch", "relay")` — the device and node differ, the property does
-not. That is what makes it usable here without teaching this module either
-schema's topic grammar.
+The address is `(circuit_id, "switch", "relay")`, and matching on the property
+alone is what keeps this module from having to know the schema's topic grammar.
 """
 
 DEFAULT_RELAY_DEBOUNCE_SECONDS = 2.0

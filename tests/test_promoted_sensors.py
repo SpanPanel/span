@@ -12,6 +12,7 @@ Covers:
 
 # ruff: noqa: D102
 
+import pytest
 from span_panel_api import SpanPVSnapshot
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
@@ -40,6 +41,7 @@ from custom_components.span_panel.sensor_definitions import (
 from custom_components.span_panel.util import bess_device_info
 from homeassistant.helpers.entity import EntityCategory
 
+from .adapter_fixtures import add_grid_forming_inverter, schema_one_snapshot, schema_one_tree
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
@@ -161,30 +163,41 @@ class TestGridIslandableBinarySensor:
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
 
-    def test_absent_flat_property_falls_back_to_mid_presence(self):
-        """v1.0 publishes no `grid-islandable`, and that is not "unknown".
+    def test_no_inverter_answer_falls_back_to_mid_presence(self):
+        """No inverter saying whether it can form a grid is not "unknown".
 
-        `devices/bess.md` retires the panel-level boolean deliberately -- "there is no
+        `devices/bess.md` has no panel-level boolean, deliberately -- "there is no
         single 'islanded?' bit to reconcile" -- and nominates the capability set as the
         classifier: "a MID `grid` child means premises-segment backup ... neither means
-        no backup". So an absent property with no MID is a definite *no*, not a
-        missing reading.
+        no backup". So with no inverter answer, the MID decides, and no MID is a
+        definite *no*, not a missing reading.
 
-        This used to return None, which reached a user as the sensor going
-        `unavailable` with `restored: true` after a firmware upgrade -- indistinguishable
-        from a sensor that broke.
+        Returning None instead reached a user as the sensor going `unavailable` with
+        `restored: true` after a firmware upgrade -- indistinguishable from a sensor
+        that broke.
         """
-        snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None)
-        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
+        with_mid = schema_one_snapshot()
+        without_mid = schema_one_snapshot(schema_one_tree(without="bess-mid"))
+        assert with_mid.grid_islandable is None, "the capture declares no inverter"
+        assert without_mid.grid_islandable is None
 
-    def test_a_published_flat_value_still_wins(self):
-        """Flat firmware keeps answering for itself.
+        assert GRID_ISLANDABLE_SENSOR.value_fn(with_mid) is True
+        assert GRID_ISLANDABLE_SENSOR.value_fn(without_mid) is False
 
-        DUAL-SCHEMA: a flat panel publishes the property and has no MID, so reading MID
-        presence first would invert the answer for every panel not yet upgraded.
+    @pytest.mark.parametrize("capable", [True, False])
+    def test_a_published_inverter_answer_wins(self, capable: bool):
+        """The panel answering for itself outranks the integration's inference.
+
+        Asked on a capture with a MID, which the fallback would read as `True`, so
+        `capable=False` is the case that tells the two orders apart: reading MID
+        presence first would invert the panel's own answer.
         """
-        snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True)
-        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is True
+        tree = schema_one_tree()
+        add_grid_forming_inverter(tree, capable=capable)
+        snapshot = schema_one_snapshot(tree)
+        assert snapshot.mid is not None
+
+        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is capable
 
 
 # ---------------------------------------------------------------------------

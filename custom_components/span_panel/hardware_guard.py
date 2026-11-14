@@ -57,7 +57,13 @@ class HardwareVerdict(StrEnum):
 
 
 def hardware_verdict(hardware_version: str | None) -> HardwareVerdict:
-    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused.
+    """Judge the REST value: absent or empty proceeds, so its absence alone never refuses a panel.
+
+    Firmware before r202639 publishes no `hardwareVersion`, so a parent/child panel
+    on such firmware proceeds here. Whether a panel's schema is supported is a
+    separate question, and setup settles it first: a panel on the flat schema is
+    refused on its schema (`firmware_schema`) before its broker is dialled, so it
+    never reaches this verdict.
 
     Surrounding whitespace and the case of `UNKNOWN` are ignored, so a spelling
     the changelog did not show cannot alone make the terminal refusal.

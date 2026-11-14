@@ -35,7 +35,7 @@ from custom_components.span_panel.sensor import create_circuit_sensors
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .factories import pv_binding_for
 
 #: The capture's one circuit whose relay is locked: `switch/relay-controllable`
 #: is `false` and `switch/relay` carries no `$settable`. It still publishes a
@@ -242,26 +242,3 @@ def test_a_relay_that_has_not_reported_is_still_a_relay(circuit_id: str) -> None
 
     assert attributes.keys() >= RELAY_FACTS, attributes
     assert attributes["relay_state"] == "UNKNOWN"
-
-
-def test_a_flat_always_on_circuit_reports_no_shed_priority() -> None:
-    """Flat firmware says the same thing through `circuit/always-on`.
-
-    The flat adapter derives `is_user_controllable` as `not always-on`, so the
-    snapshot here is the one it builds for a circuit commissioned always on.
-    """
-    circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="48",
-        name="Sump",
-        always_on=True,
-        is_user_controllable=False,
-        is_sheddable=False,
-        priority="OFF_GRID",
-    )
-    snapshot = SpanPanelSnapshotFactory.create(circuits={circuit.circuit_id: circuit})
-
-    attributes = _attributes(snapshot, circuit.circuit_id)
-
-    assert "shed_priority" not in attributes
-    assert attributes["always_on"] is True
-    assert attributes["is_sheddable"] is False

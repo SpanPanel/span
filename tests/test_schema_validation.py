@@ -201,10 +201,7 @@ def test_real_adapter_metadata_produces_no_findings() -> None:
 def test_a_shed_forecast_field_can_be_unresolved() -> None:
     """The backup estimates are declarations, and are asked about like any other.
 
-    They were once outside the producible gate, which demanded a second adapter
-    that never published the capability, and had to be asked about through a
-    second set beside it. As declarations they need no such route: the row
-    still carries the adapter's three-way answer, so it can come back
+    The row carries the adapter's three-way answer, so it can come back
     `resolved=False` -- the panel declares the node and omits the property --
     and that is a Repair and an unavailable entity.
     """

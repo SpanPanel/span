@@ -55,7 +55,7 @@ _RETRY = {"en": "Try again", "es": "Vuelve a intentarlo", "fr": "Réessayez", "j
 
 @pytest.mark.parametrize("language", ("en", *_LANGUAGES))
 def test_the_not_arrived_refusal_promises_no_value(language: str) -> None:
-    """The panel may never send it: a flat schema that declares no rating, or a declared service rating that stays unset."""
+    """The panel may never send it: a panel that declares no service rating, or a declared one that stays unset."""
     path = _COMPONENT / ("strings.json" if language == "en" else f"translations/{language}.json")
     message = json.loads(path.read_text(encoding="utf-8"))["exceptions"]["package_ratings_not_arrived"]["message"]
     assert _RETRY[language] not in message

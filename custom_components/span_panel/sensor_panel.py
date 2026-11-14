@@ -44,19 +44,18 @@ def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
     """Return the forming device's readable name, when the library knows it.
 
     The state stays the source *class* — `GRID`, `BATTERY`, `PV` — because that is the
-    closed enum automations compare against and it must not change. v1.0 additionally
-    knows *which* device, which flat never did, and that belongs here: an attribute
-    refines a value already on screen without adding entity-list noise, and cannot break
-    an automation that never referenced it.
+    closed enum automations compare against and it must not change. The MID also names
+    *which* device, and that belongs here: an attribute refines a value already on
+    screen without adding entity-list noise, and cannot break an automation that never
+    referenced it.
 
     Deliberately the display name and not the wire id. `sim-40t-001-SIM-BESS-40T-001` is
     a Homie device id, not a Home Assistant one, and an opaque string on a dashboard is
     worse than none. The id stays in the snapshot for correlation and diagnostics.
 
-    DUAL-SCHEMA: `None` on any flat panel, which publishes no MID, so the attribute simply
-    does not appear there. The library field is always present now that the pin is
-    3.0.0b3 — the conditional is about what the *panel* publishes, not about which
-    library is installed, and the earlier `getattr` guarding the latter has gone.
+    `None` on a panel that declares no MID, so the attribute simply does not appear
+    there. The conditional is about what the *panel* publishes, not about which library
+    is installed.
     """
     mid = snapshot.mid
     if mid is None:
@@ -158,9 +157,8 @@ class SpanShedForecastSensor(
     """One of the two backup-planning estimates, with its refinements attached.
 
     Created only where the panel publishes the estimate this sensor reads, so a
-    panel with no `shed-forecast` node — every flat panel, and any v1.0 panel
-    whose firmware omits the capability — gets no entity rather than one stuck
-    at unknown. See `create_shed_forecast_sensors`.
+    panel with no `shed-forecast` node gets no entity rather than one stuck at
+    unknown. See `create_shed_forecast_sensors`.
     """
 
     # `_residual_field_paths` stays empty on purpose. The attribute reads below
@@ -237,8 +235,7 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
     """A reading from the enclosure's Power Control System.
 
     Created only where the panel declares a `pcs` node, so a panel that runs no
-    PCS — every flat panel, and any v1.0 firmware without the capability — gets
-    no entity rather than one stuck at unknown. See `create_pcs_sensors`.
+    PCS gets no entity rather than one stuck at unknown. See `create_pcs_sensors`.
     """
 
     # `_residual_field_paths` stays empty on purpose. The thirteen fields
@@ -419,60 +416,35 @@ This class backs four sensors -- grid, feedthrough, battery and PV -- and only
 the grid one reads a meter whose meaning depends on where the panel sits.
 """
 
-_SERVICE_ENTRANCE_ADAPTER = "schema_1"
-"""The adapter key whose mapper resolves `lugs_at_service_entrance`.
-
-`SpanMqttClient.schema_major` reports the running adapter's key, and only the
-parent/child one answers this question: it reads the upstream lugs' own
-`connection/fed-by-device-id` and sets the field from whether that property is
-there. The flat adapter contains no reference to the field at all.
-
-**Why this is asked of the adapter rather than of the field metadata**, which is
-how every other "did the adapter produce this" question in this integration is
-settled (`schema_validation`, `SpanPanelEntity._reads_an_unresolved_field`).
-That machinery rests on the adapter classifying absence, and here it cannot: a
-metadata row states a *reading's* unit and datatype, and the property behind
-this field is topology rather than a reading, so schema_1 lists it in
-`_CONSUMED_WITHOUT_A_ROW` and emits no row for it. Neither adapter publishes
-`panel.lugs_at_service_entrance`, so the metadata map is silent for both the
-panel that resolved the field and the panel that never looked -- exactly the
-distinction that has to be drawn.
-
-**Why the value alone cannot settle it.**
-`SpanPanelSnapshot.lugs_at_service_entrance` is `bool | None`, but its `None`
-means only that the parent/child lugs declare a feed they have not published
-yet. The flat adapter never writes the field, so a flat panel still reads the
-dataclass default, `True`, and `is not None` cannot tell that default from a
-reading. Until the library gives the flat schema a `None` of its own, the
-integration has to know which adapter is running -- which it knows nowhere
-else, deliberately.
-"""
-
 
 def _service_entrance_was_read(coordinator: SpanPanelCoordinator) -> bool:
-    """Whether `lugs_at_service_entrance` is a reading rather than a default.
+    """Whether `lugs_at_service_entrance` is a reading the panel has given.
 
-    The attribute exists to tell a topology from a fault, so publishing it where
-    the value came from a dataclass default answers a question the panel was
-    never asked -- and answers it `True`, which is exactly the "your two grid
-    figures agree" reading a user would act on. A flat panel with a BESS ahead
-    of its lugs is the changelog's own example of the topology this attribute is
-    for, and it is the one install that would be told the opposite.
+    The attribute exists to tell a topology from a fault, so it is published
+    only where the panel has answered. The adapter reads the answer from the
+    upstream lugs' own `connection/fed-by-device-id`, and sets `None` while
+    that property is declared and not yet published: the feed may still name a
+    device, and either answer would be a guess a user would act on.
 
-    Omission rather than a third value: nothing renders a missing attribute, so
-    a flat panel looks exactly as it did before the attribute existed, while an
-    `unknown` string would be a new row on a dashboard meaning "ignore me".
+    Omission rather than a third value: nothing renders a missing attribute,
+    while an `unknown` string would be a new row on a dashboard meaning "ignore
+    me".
 
-    The test is where the value came from and never what it is. Suppressing
-    `True` as "probably a default" would silence the real reading a panel at the
-    service entrance publishes, which is the same mistake in the other
-    direction. `None` is the parent/child adapter saying the lugs have not
-    answered yet, so it is omitted for the same reason a default is.
+    The test is whether the panel has answered and never what it answered.
+    Suppressing `True` as "probably not a reading" would silence the real
+    reading a panel at the service entrance publishes. Nor does it ask which
+    adapter produced the snapshot, so a later schema generation that answers
+    the same question is not shut out.
+
+    **Why the value and not the field metadata**, which is how every other "did
+    the adapter produce this" question in this integration is settled
+    (`schema_validation`, `SpanPanelEntity._reads_an_unresolved_field`). A
+    metadata row states a *reading's* unit and datatype, and the property behind
+    this field is topology rather than a reading, so the adapter lists it in
+    `_CONSUMED_WITHOUT_A_ROW` and emits no row for it. The metadata map is
+    therefore silent whether or not the lugs have answered.
     """
-    return (
-        coordinator.client.schema_major == _SERVICE_ENTRANCE_ADAPTER
-        and coordinator.data.lugs_at_service_entrance is not None
-    )
+    return coordinator.data.lugs_at_service_entrance is not None
 
 
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
@@ -489,9 +461,9 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     figures differ has no way to tell a topology from a fault, and the answer now
     sits on the sensor they are already looking at.
 
-    Published only where it is a reading -- see `_service_entrance_was_read`. An
-    answer to a question the panel was never asked is worse here than no answer,
-    because the value a consumer would get is the reassuring one.
+    Published only where it is a reading -- see `_service_entrance_was_read`. A
+    guess is worse here than no answer, because either value is one a user would
+    act on.
 
     An attribute rather than an entity, deliberately. Topology is static -- a
     panel's position in a chain does not change without an electrician -- so a

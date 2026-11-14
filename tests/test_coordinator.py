@@ -32,6 +32,7 @@ from span_panel_api.exceptions import (
 from span_panel_api.models import FieldMetadata
 from span_panel_api.protocol import SpanPanelClientProtocol
 
+from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.helpers import (
     adopted_capability_tokens,
@@ -229,6 +230,48 @@ async def test_async_setup_streaming_registers_callback_and_starts_client(
     assert coordinator._unregister_streaming is not None
     client.register_connection_callback.assert_called_once_with(coordinator._on_connection_change)
     assert coordinator._unregister_connection is not None
+
+
+@pytest.mark.parametrize(
+    ("previous", "current", "shown_as"),
+    [("1.0", "2.0", "2.0"), ("1.0", None, "absent")],
+    ids=["to-a-later-generation", "to-no-published-version"],
+)
+async def test_a_schema_generation_change_reloads_the_entry_and_says_so_in_the_log(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    previous: str,
+    current: str | None,
+    shown_as: str,
+) -> None:
+    """The reload is the response, because devices and entities are built at setup.
+
+    The library rebuilds its parser on its own, so values resolve again, but only
+    a reload rebuilds the device set from the new tree. The warning names both
+    data-model versions, whatever generation the panel moves to, and nothing is
+    raised beside it: the reload is the whole of what changes for the user.
+    """
+    coordinator = _create_coordinator(hass)
+    caplog.set_level(logging.WARNING, logger="custom_components.span_panel.coordinator")
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+        coordinator._on_schema_generation_change(previous, current)
+        await hass.async_block_till_done()
+
+    schedule_reload.assert_called_once_with("entry-123")
+    (warning,) = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.span_panel.coordinator"
+        and record.levelno == logging.WARNING
+    ]
+    assert f"{previous} -> {shown_as}" in warning
+    assert "flat" not in warning
+    assert not [
+        notification_id
+        for notification_id in hass.data.get("persistent_notification", {})
+        if DOMAIN in notification_id
+    ]
 
 
 async def test_on_snapshot_push_updates_state_and_runs_post_tasks(

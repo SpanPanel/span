@@ -23,6 +23,7 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.curation import CurationOverlay
 from homeassistant.core import HomeAssistant
 
+from .adapter_fixtures import add_grid_forming_inverter, schema_one_snapshot, schema_one_tree
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
@@ -133,20 +134,24 @@ def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery() -> None:
     assert entity.available is True, "and the entity must exist to give it"
 
 
-def test_grid_islandable_reads_the_flat_property_when_the_panel_publishes_one() -> None:
-    """Flat is unchanged, which is the constraint that matters until the fleet moves.
+def test_grid_islandable_reads_the_inverter_when_the_panel_publishes_one() -> None:
+    """A BESS inverter's `grid-forming/capable` is the answer, and MID presence is not consulted.
 
-    A flat panel publishes `core/grid-islandable`, so the value comes from the
-    panel exactly as it always has, and MID presence is never consulted.
+    The capture declares a MID, so the structural fallback would say `True`;
+    the inverter saying it cannot form a grid must win, because it is the panel
+    answering the question rather than the integration inferring one.
     """
-    snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True, mid=None)
+    tree = schema_one_tree()
+    add_grid_forming_inverter(tree, capable=False)
+    snapshot = schema_one_snapshot(tree)
+    assert snapshot.mid is not None, "the fallback would answer True on this capture"
     coordinator = _make_coordinator(snapshot)
     entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
     entity.async_write_ha_state = MagicMock()
 
     entity._handle_coordinator_update()
 
-    assert entity.is_on is True, "the published value wins over the structural fallback"
+    assert entity.is_on is False, "the published value wins over the structural fallback"
 
 
 def test_grid_islandable_sensor_uses_online_status_value() -> None:

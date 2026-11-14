@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from .current_monitor import CurrentMonitor
@@ -39,7 +39,6 @@ from .helpers import (
 )
 from .id_builder import build_circuit_unique_id
 from .leaf_repairs import async_clear_leaf_name_mismatch
-from .notices import async_raise, read_translations
 from .package_rating_manager import PackageRatingManager
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
@@ -56,34 +55,6 @@ class EnergyOffsetSource(Protocol):
 
 
 _LOGGER = logging.getLogger(__name__)
-
-_UPGRADE_NOTICE: Final = "panel_upgraded"
-"""Names both the notice id and its translation section.
-
-One symbol for both because they are the same notice: a rename that moved only
-one of them would leave a standing notice pointing at strings that no longer
-exist, and the notice cannot be re-derived once the upgrade is over.
-"""
-
-_UPGRADE_FALLBACK: Final[dict[str, str]] = {
-    "title": "SPAN Panel firmware upgraded",
-    "body": (
-        "Your SPAN Panel reported a new eBus data model (**{previous} \u2192 {current}**), "
-        "which happens after a firmware upgrade. The integration reloaded so its devices "
-        "and entities match what the panel now publishes.\n\n"
-        "Nothing you rely on has gone away, and no automation changes are required.\n\n"
-        "**DSM Grid State** keeps its entity ID and its history, and now reads the "
-        "islanding state the Microgrid Interconnect Device (MID) senses rather than "
-        "inferring it. **Grid Islandable** now reflects whether a MID is present.\n\n"
-        "Entities that were renamed or replaced by the upgrade may need to be removed "
-        "manually if they remain unavailable."
-    ),
-}
-"""English text, used when no translation file can be read.
-
-Shorter than the translated body on purpose: this is the copy nobody proofreads,
-and the paragraphs it drops are elaboration rather than the facts a user needs.
-"""
 
 
 # Suppress the noisy "Manually updated span_panel data" DEBUG message that
@@ -373,10 +344,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         The library rebuilds its parser on its own, which restores *reading* — values
         resolve again straight away. It cannot restore *topology*: devices and
         entities are created in `async_setup_entry` from the tree as it looked then.
-        v1.0 introduces a MID the flat tree has no equivalent for and re-keys the
-        EVSEs, so without a reload the panel reads correctly and still shows the old
-        device set. Observed exactly that on a live upgrade — data flowed, entities
-        did not appear, and a manual reload was needed.
+        A new generation can add devices and re-key the ones there were, so without
+        a reload the panel reads correctly and still shows the old device set. A
+        live upgrade showed exactly that — data flowed, entities did not appear,
+        and a manual reload was needed.
 
         Scheduled rather than awaited: this is called from the client's own callback
         fan-out, and reloading the entry tears down that client. `async_schedule_reload`
@@ -384,80 +355,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         down.
         """
         _LOGGER.warning(
-            "SPAN panel firmware upgraded its eBus schema generation: data-model-version "
-            "%s -> %s. Reloading the integration so devices and entities match the new "
-            "tree; the MID and any re-keyed chargers appear after the reload.",
-            previous or "absent (flat)",
-            current or "absent (flat)",
-        )
-        self.hass.async_create_task(
-            self._explain_the_upgrade(previous, current), "span_panel_upgrade_notice"
+            "SPAN panel changed its eBus schema generation: data-model-version %s -> %s. "
+            "Reloading the integration so devices and entities match the new tree.",
+            previous or "absent",
+            current or "absent",
         )
         self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
-
-    async def _explain_the_upgrade(self, previous: str | None, current: str | None) -> None:
-        """Tell the user what the new schema changed for them, once and durably.
-
-        Nothing they depend on goes away, which is worth saying plainly because a
-        firmware upgrade invites the opposite assumption.
-
-        `sensor.*_dsm_grid_state` keeps its entity id and its history and gets *more*
-        trustworthy. Under flat, `schema_0` derived it: the battery's `grid-state` when
-        one was commissioned, otherwise an inference from `dominant-power-source` and
-        whether any power was crossing the grid connection. Under v1.0 it reads the
-        islanding state the MID actually senses -- the heuristic v1.0 exists to retire,
-        retired.
-
-        `binary_sensor.*_grid_islandable` also survives. v1.0 publishes no panel-level
-        `grid-islandable`, on purpose: `devices/bess.md` reads backup capability from
-        the capability set, "a MID `grid` child means premises-segment backup", and
-        "there is no single 'islanded?' bit to reconcile". So it now reflects MID
-        presence, the classifier the spec nominates.
-
-        What is genuinely new is the MID device itself and its `grid-state`, the health
-        of the utility supply, which flat did not report at all.
-
-        **One notice, not two.** This used to be a hardcoded English notification
-        about the reload followed immediately by a translated Repair about the
-        consequences -- two rows in two different places for one event, which is
-        the same duplication that makes people stop reading either. They are now
-        one message, and it is translated.
-
-        **A notification, not a Repair.** The Repairs list is where defects go: it
-        stamped this with a severity and offered to ignore it, so an upgrade that
-        took nothing away arrived looking like a fault. The reason it was a Repair
-        was durability -- a plain notification dies with the process, and somebody
-        away when their panel upgraded would never have learned a device appeared.
-        `notices` supplies that durability directly, so the classification no
-        longer has to be paid for with a lie about severity.
-
-        Scheduled as a task because reading the translations is blocking file I/O
-        and the caller is the client's own synchronous callback fan-out. It races
-        the reload scheduled alongside it and is written to lose safely either
-        way; see `notices.async_restore`.
-        """
-        # Absent means flat, present means parent/child -- the migration guide's own
-        # detection rule.
-        #
-        # Guarding on the direction even though panel firmware does not roll back:
-        # once a panel is on v1.0 it stays there, so in the field this only ever fires
-        # one way. The reverse happens solely in the upgrade rehearsal, where the two
-        # simulators are swapped under a live client, and announcing a retirement
-        # there would be noise about a transition no user experiences.
-        if current is None:
-            return
-        text = await self.hass.async_add_executor_job(
-            read_translations, self.hass.config.language, _UPGRADE_NOTICE
-        )
-        async_raise(
-            self.hass,
-            self.config_entry,
-            _UPGRADE_NOTICE,
-            title=text.get("title") or _UPGRADE_FALLBACK["title"],
-            message=(text.get("body") or _UPGRADE_FALLBACK["body"]).format(
-                previous=previous or "flat", current=current
-            ),
-        )
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle a broker connection state edge from the MQTT client.

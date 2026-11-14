@@ -131,15 +131,13 @@ def circuit_has_a_relay(circuit: SpanCircuitSnapshot) -> bool:
     """Whether the circuit declares a relay at all, controllable or locked.
 
     The snapshot carries no flag of its own for this; the two it does carry
-    answer it between them on both adapters. schema_1 sets `always_on` only
-    where a `switch` is declared and is not controllable, and reads
-    `is_user_controllable` from `switch/relay-controllable`, defaulting it to
-    whether a `switch` is declared. So both are false where no `switch` node is
-    declared, with one exception the adapter does not rule out: it reads a
-    `relay-controllable` value before it consults the declaration, so a value
-    left retained from a `switch` the device has since stopped declaring still
-    answers. Flat derives `is_user_controllable` as `not always-on`, so one of
-    the two is always true: every flat circuit has a relay.
+    answer it between them. The adapter sets `always_on` only where a `switch`
+    is declared and is not controllable, and reads `is_user_controllable` from
+    `switch/relay-controllable`, defaulting it to whether a `switch` is
+    declared. So both are false where no `switch` node is declared, with one
+    exception the adapter does not rule out: it reads a `relay-controllable`
+    value before it consults the declaration, so a value left retained from a
+    `switch` the device has since stopped declaring still answers.
 
     Read from the declaration, never from `relay_state`: an `UNKNOWN` relay
     state is a relay that has not reported, not a relay that is not there.
@@ -339,11 +337,9 @@ def shared_relay_groups(circuits: Mapping[str, SpanCircuitSnapshot]) -> dict[str
 def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
     """Construct tabs attribute string from circuit data.
 
-    Names every position the breaker occupies, however many that is. v1.0
-    publishes them literally in ``info/spaces``; the flat schema published one
-    space plus a ``dipole`` flag and its adapter recovers the pair from that. So
-    this sees at most two positions on flat, and on v1.0 exactly what the panel
-    reported.
+    Names every position the breaker occupies, however many that is. The panel
+    publishes them literally in ``info/spaces``, so this sees exactly what the
+    panel reported.
 
     **Accepting more than two is defensive, not a fix for observed hardware.**
     SPAN has stated that its panels "are split-phase and publish only 1- or
@@ -432,10 +428,12 @@ def has_bess(snapshot: SpanPanelSnapshot) -> bool:
 
     Where the panel declares its devices, the declaration decides: a battery
     the tree describes is one, before any of its values arrive, so its sensors
-    exist and read unknown rather than appearing only once it reports. Where
-    it does not (`battery.present` is None, as on the flat schema), only
-    soe_percentage is a reliable signal — the power-flows node publishes
-    battery=0.0 even on panels without a commissioned BESS.
+    exist and read unknown rather than appearing only once it reports. The
+    adapter always says, True or False. A snapshot that does not
+    (`battery.present` is None, which the model allows) is unknown rather than
+    batteryless, so soe_percentage decides there: it is the one reliable
+    signal, because the power-flows node publishes battery=0.0 even on panels
+    without a commissioned BESS.
     """
     if snapshot.battery.present is not None:
         return snapshot.battery.present
@@ -546,13 +544,8 @@ def has_mid(snapshot: SpanPanelSnapshot) -> bool:
     `soe_percentage is not None` because the battery field is always there. The library
     makes `mid` optional precisely so presence needs no sentinel.
 
-    Always false on flat firmware, which publishes no MID at all.
-
-    DUAL-SCHEMA: this integration must serve flat and parent/child panels side by side until
-    every panel has hot-loaded v1.0. Grep this token to find every place that branches on
-    which schema a panel is publishing; when the flat path is finally retired, these are
-    the conditionals that become unconditional and the flat branches that get deleted.
-    Nothing here may *assume* parent/child before then.
+    False on a panel that declares no MID, which is an ordinary panel rather than
+    a degraded one, so every MID reader goes through this first.
     """
     return snapshot.mid is not None
 
@@ -569,11 +562,9 @@ def has_shed_forecast(snapshot: SpanPanelSnapshot) -> bool:
     and the per-sensor gate in `create_shed_forecast_sensors` is what decides
     which entities that firmware can actually support.
 
-    Always false on flat firmware, which publishes no such node at all.
-
-    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
-    version, so a panel that hot-loads parent/child mid-life gains the
-    capability, reloads, and the sensors appear.
+    Gated on what the snapshot carries rather than on a firmware version, so a
+    panel that gains the node mid-life reaches `detect_capabilities`, the
+    coordinator reloads, and the sensors appear.
     """
     return any(
         value is not None
@@ -592,8 +583,7 @@ def has_bess_telemetry(snapshot: SpanPanelSnapshot) -> bool:
 
     Presence of the BESS's own `meter` and `status` capability nodes, from
     presence of the fields they fill. A BESS may be commissioned and publish
-    neither: `has_bess` reads `soc/soc`, which is a different node, and every flat
-    panel's BESS has no such properties at all.
+    neither: `has_bess` reads `soc/soc`, which is a different node.
 
     Separate from `has_bess` rather than folded into it, because the two answer
     different questions and the wrong one is silently wrong. `has_bess` decides
@@ -601,8 +591,8 @@ def has_bess_telemetry(snapshot: SpanPanelSnapshot) -> bool:
     created. Merging them would either delete the metadata sensors from a BESS
     with no meter node or invent two permanently-unknown ones on it.
 
-    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
-    version, so a BESS that gains these nodes on a firmware upgrade reaches
+    Gated on what the snapshot carries rather than on a firmware version, so a
+    BESS that gains these nodes on a firmware upgrade reaches
     `detect_capabilities`, the coordinator reloads, and the sensors appear.
     """
     return snapshot.battery.power_w is not None or snapshot.battery.communication_state is not None
@@ -624,11 +614,9 @@ def has_pcs(snapshot: SpanPanelSnapshot) -> bool:
     which is the state most panels are in and the state a user most wants to
     see.
 
-    Always false on flat firmware, which publishes no such node at all.
-
-    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
-    version, so a panel that gains the node reaches `detect_capabilities`, the
-    coordinator reloads, and the entities appear.
+    Gated on what the snapshot carries rather than on a firmware version, so a
+    panel that gains the node reaches `detect_capabilities`, the coordinator
+    reloads, and the entities appear.
     """
     return snapshot.pcs is not None
 
@@ -666,12 +654,9 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     does that, because two chargers can be fed by two circuits of which only one
     publishes the record.
 
-    Always false on flat firmware, which publishes this only for the BESS, and
-    reaches `battery.connected` rather than either field here.
-
-    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
-    version, so a panel that starts publishing the record reaches
-    `detect_capabilities`, the coordinator reloads, and the sensors appear.
+    Gated on what the snapshot carries rather than on a firmware version, so a
+    panel that starts publishing the record reaches `detect_capabilities`, the
+    coordinator reloads, and the sensors appear.
     """
     # `snapshot.pv` is the lone inverter or the inverters together, so a record
     # on it is a record on some inverter here; reading the aggregate as well would

@@ -142,16 +142,17 @@ def _without_status(der: str) -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
-def _without_record(der: str) -> SpanPanelSnapshot:
-    """A snapshot whose feeding circuit publishes no connection record at all.
+def _without_records(*ders: str) -> SpanPanelSnapshot:
+    """A snapshot whose circuits feeding each named DER publish no connection record at all.
 
     What a circuit feeding an ordinary load looks like, applied to a circuit
     that used to feed a DER.
     """
     tree = schema_one_tree()
-    circuit = _feeding_circuit(tree, der)
-    del tree[circuit][FEEDS_ID_TOPIC]
-    del tree[circuit][FEEDS_STATUS_TOPIC]
+    for der in ders:
+        circuit = _feeding_circuit(tree, der)
+        del tree[circuit][FEEDS_ID_TOPIC]
+        del tree[circuit][FEEDS_STATUS_TOPIC]
     return schema_one_snapshot(tree)
 
 
@@ -383,7 +384,7 @@ async def test_a_charger_whose_circuit_publishes_no_record_gets_no_entity(
     that asked "does any DER have a record" would keep both, and the surviving
     one would report a link nothing publishes.
     """
-    snapshot = _without_record(EVSE)
+    snapshot = _without_records(EVSE)
     created = await _created(hass, snapshot)
 
     links = _evse_links_by_feed(created, snapshot)
@@ -409,15 +410,18 @@ async def test_the_circuits_that_feed_no_der_create_nothing(hass: HomeAssistant)
 async def test_a_panel_with_no_connection_records_creates_neither_sensor(
     hass: HomeAssistant,
 ) -> None:
-    """A flat panel, and any v1.0 panel whose circuits publish no record.
+    """A panel whose circuits feed its DER and publish no record for any of them.
 
-    The factory snapshot leaves both fields `None`, which is what every flat
-    panel produces: flat publishes `connected` on the BESS and on no other
-    device class.
+    The capture with every feeding circuit's record removed: the inverter and
+    both chargers are still there, so the gate is the record and never the
+    device.
     """
-    snapshot = SpanPanelSnapshotFactory.create()
+    snapshot = _without_records(PV, EVSE, EVSE_2)
+    assert snapshot.pv_inverters, "the inverter stays; only its record goes"
+    assert len(snapshot.evse) == 2, "the chargers stay; only their records go"
     created = await _created(hass, snapshot)
 
+    assert has_der_link_health(snapshot) is False
     assert [key for key in _keys(created) if key.endswith("_panel_link")] == []
 
 
@@ -521,7 +525,7 @@ def test_the_capability_gate_follows_the_record_and_reaches_the_reload() -> None
     """
     assert has_der_link_health(schema_one_snapshot()) is True
     assert has_der_link_health(SpanPanelSnapshotFactory.create()) is False
-    assert has_der_link_health(_without_record(PV)) is True, (
+    assert has_der_link_health(_without_records(PV)) is True, (
         "the chargers still publish records; the gate must not be all-or-nothing"
     )
 

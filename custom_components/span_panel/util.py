@@ -161,12 +161,12 @@ def snapshot_to_device_info(
     `info` node where it publishes them, and fall back to the strings this
     integration has always shown where it does not.
 
-    **The fallbacks are the point, not a courtesy.** Flat firmware declares none
-    of the three, so every existing installation lands on them; a panel that
-    omits one must keep the card it has rather than losing a row. `hw_version`
-    has no such string to fall back to and so is simply absent on flat --
-    `DeviceInfo` omits a `None` field, which is the difference between "this
-    panel does not report a revision" and "this panel reports a blank one".
+    **The fallbacks are the point, not a courtesy.** A panel that omits one of
+    the three must keep the card it has rather than losing a row. `hw_version`
+    has no such string to fall back to and so is simply absent where the panel
+    publishes none -- `DeviceInfo` omits a `None` field, which is the difference
+    between "this panel does not report a revision" and "this panel reports a
+    blank one".
     """
     configuration_url = f"http://{host}" if host else None
 
@@ -203,8 +203,7 @@ def bess_device_info(
         identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_BESS}")},
         name=name,
         manufacturer=battery.vendor_name or "Unknown",
-        # `model` is the human designation on both schemas now: v1.0 publishes it as
-        # `info/model` and schema_0 translates flat's `bess/product-name` into it.
+        # `model` is the human designation, which the BESS publishes as `info/model`.
         model=battery.model or "Battery Storage",
         serial_number=battery.serial_number,
         sw_version=battery.software_version,
@@ -227,8 +226,6 @@ def mid_device_info(
     keeps the integration's model in step with the library's rather than folding a
     device's properties onto the panel.
 
-    Purely additive: no flat panel publishes a MID, so nothing a user has today changes.
-
     Linked to the panel, matching BESS and EVSE, even though the wire tree makes the
     MID a child of the BESS. Home Assistant's device graph is about what a user navigates,
     and every SPAN sub-device hangs off the panel there; mirroring the Homie parentage
@@ -245,10 +242,10 @@ def mid_device_info(
         # so `or ""` here would invent a row for a panel that published nothing. The
         # library preserves that distinction for the same reason.
         #
-        # Unguarded on schema, deliberately: r202633 documents both on the MID's `info`
-        # node, and flat publishes no MID at all, so `has_mid` keeps every caller of this
-        # builder off a flat panel. A conditional here would be unreachable code implying
-        # a case that cannot arise.
+        # Read without a schema or version gate, deliberately: r202633 documents both
+        # on the MID's `info` node, and `has_mid` keeps every caller of this builder
+        # off a panel that declares no MID. A conditional here would be unreachable
+        # code implying a case that cannot arise.
         sw_version=mid.software_version,
         hw_version=mid.hardware_version,
         via_device_id=panel_device_id,
