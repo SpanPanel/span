@@ -7,7 +7,7 @@
       "no_devices_found": "No se hallaron aparatos en la red",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",
       "no_serial": "No se pudo determinar el número de serie del panel.",
-      "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a añadirlo.",
+      "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a intentarlo.",
       "reauth_successful": "Autenticación exitosa.",
       "reconfigure_successful": "Host actualizado exitosamente.",
       "unique_id_mismatch": "El panel en esta dirección tiene un número de serie diferente. No puede cambiar a un panel diferente durante la reconfiguración.",
@@ -24,7 +24,7 @@
       "https_port_is_plaintext": "El puerto 80 es el puerto HTTP sin cifrar. Introduzca el puerto en el que el panel sirve TLS — 443 salvo que algo lo haya movido.",
       "https_port_unreachable": "No se pudo establecer una conexión TLS en el puerto HTTPS {https_port}, por lo que no había ningún certificado que comprobar con la autoridad que ha publicado el panel. Compruebe que el panel sirve TLS en ese puerto — 443 salvo que algo lo haya movido — y vuelva a intentarlo.",
       "invalid_auth": "Autenticación invalida",
-      "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a añadirlo.",
+      "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a intentarlo.",
       "panel_not_ready": "El panel aún no está listo para registrar Home Assistant, normalmente porque todavía se está iniciando. Espere un momento e intente de nuevo.",
       "passphrase_unavailable": "El panel no puede emitir credenciales porque su frase de contraseña aún no está disponible. Esto no significa que se haya introducido una frase de contraseña incorrecta. Espere unos minutos e intente de nuevo.",
       "rate_limited": "El panel está limitando los intentos de registro. Intente de nuevo en {retry_after} segundos.",
@@ -568,7 +568,7 @@
       "message": "Error al conectar con el SPAN Panel en {host}."
     },
     "panel_firmware_flat": {
-      "message": "El SPAN Panel {panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano; actualice su firmware y el panel se reconectará por sí solo"
+      "message": "El SPAN Panel {panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano; actualice el firmware del panel y se reconectará por sí solo"
     },
     "panel_not_ready": {
       "message": "El SPAN Panel no está listo. Por favor verifique que el panel esté en línea."
@@ -1052,7 +1052,7 @@
     },
     "panel_firmware_flat": {
       "title": "El firmware del SPAN Panel necesita una actualización",
-      "description": "{panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano que esta integración ya no admite. Actualice el firmware del panel; el panel se reconectará por sí solo una vez actualizado."
+      "description": "{panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano con el que esta integración ya no es compatible. Actualice el firmware del panel; el panel se reconectará por sí solo una vez actualizado."
     }
   }
 }

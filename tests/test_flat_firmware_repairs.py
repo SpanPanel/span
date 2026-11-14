@@ -60,11 +60,11 @@ _APPROVED_ENGLISH: dict[tuple[str, ...], str] = {
     ),
     _FLOW_ERROR: (
         "This panel is on spanos2 firmware, which publishes the older flat eBus"
-        " schema. Update the panel's firmware, then add it again."
+        " schema. Update the panel's firmware, then try again."
     ),
     _FLOW_ABORT: (
         "This panel is on spanos2 firmware, which publishes the older flat eBus"
-        " schema. Update the panel's firmware, then add it again."
+        " schema. Update the panel's firmware, then try again."
     ),
 }
 
