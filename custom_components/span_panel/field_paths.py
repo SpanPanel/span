@@ -107,9 +107,8 @@ class Producibility(Enum):
     A mapped path would ordinarily be a declaration: `evaluate_field_metadata`
     asks about it, and an unresolved row raises a `schema_field_unresolved`
     Repair naming every entity that reads it and takes down any entity whose
-    value it is. These are the reads for which that would be wrong, or would be
-    a runtime change nobody has decided on, and each entry in
-    `RESIDUAL_EXEMPT_PATHS` says which.
+    value it is. These are the reads for which that would be wrong, and each
+    entry in `RESIDUAL_EXEMPT_PATHS` says why.
 
     Named for the two facts a reader needs before promoting one: that the row
     exists, which the conformance suite holds to the adapter, and that
@@ -336,9 +335,10 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # state. The library takes it from the panel-side owner's
         # `connection/*-device-status` record for the battery rather than from a
         # property of the BESS, and maps no row for it, which is what makes
-        # `bess_connected` `NO_SOURCE_FIELD`. The two DER-link paths below carry
-        # the same fact for the inverter and the charger, and those do have a
-        # row.
+        # `bess_connected` `NO_SOURCE_FIELD`. `pv.connected` and
+        # `evse.connected` carry the same fact for the inverter and the
+        # charger, and those do have a row, so they are plain declarations
+        # rather than entries here.
         "battery.connected": Producibility.UNMAPPED,
         # Whether a circuit's relay can be commanded, from
         # `switch/relay-controllable`. A gate rather than a reading: it decides
@@ -360,21 +360,6 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # `SpanEvseNumber._residual_field_paths` either, which feed
         # `declared_field_paths()`.
         "evse.charge_current_ceiling_a": Producibility.MAPPED_UNVALIDATED,
-        # The enclosure's view of the link to each circuit-fed DER, which the
-        # `pv_panel_link` and `evse_panel_link` binary sensors name as their
-        # `field_path`. The adapter maps both, from one property: the feeding
-        # circuit's `connection/feeds-device-status`.
-        #
-        # Unvalidated because the three link descriptions have never been in
-        # `platform_descriptions()`; they were collected by the introspection
-        # suite alone when they were added (78989f13). So
-        # `evaluate_field_metadata` has never asked about either path, and an
-        # unresolved row raises no Repair and takes neither entity down.
-        # Collecting them would close that gap, and would also change what a
-        # panel that drops `feeds-device-status` is told, so it waits on a
-        # decision of its own.
-        "pv.connected": Producibility.MAPPED_UNVALIDATED,
-        "evse.connected": Producibility.MAPPED_UNVALIDATED,
     }
 )
 """Residual readers exempt from the producible check, and why each is exempt.
@@ -519,9 +504,11 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
     hold each description to its declaration walk the same descriptions: a
     second copy is how a platform ends up gated by one and checked by the other.
 
-    The three DER-link descriptions are not collected here, which is why the
-    paths they name are enumerated as exempt; see `pv.connected` in
-    `RESIDUAL_EXEMPT_PATHS`.
+    Kept by hand, and held complete by
+    `test_every_description_the_integration_defines_is_collected`, which walks
+    every module in the package: a description a module defines and this list
+    misses fails the build, unless that test excuses it with the reason it is
+    not validated.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, so importing them at module scope would close that loop. (They no
@@ -531,8 +518,11 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         BESS_CONNECTED_SENSOR,
         BINARY_SENSORS,
         EVSE_BINARY_SENSORS,
+        EVSE_PANEL_LINK_SENSOR,
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
+        PV_INVERTER_LINK_SENSOR,
+        PV_PANEL_LINK_SENSOR,
     )
     from .lock import EVSE_LOCK  # pylint: disable=import-outside-toplevel
     from .number import EVSE_NUMBERS  # pylint: disable=import-outside-toplevel
@@ -549,6 +539,9 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,
+        PV_PANEL_LINK_SENSOR,
+        PV_INVERTER_LINK_SENSOR,
+        EVSE_PANEL_LINK_SENSOR,
     )
 
 

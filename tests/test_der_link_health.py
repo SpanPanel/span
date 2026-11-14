@@ -29,43 +29,65 @@ mixed-load circuit, and the enum has no UNKNOWN member, so an unpublished
 property is the only way a panel can say it does not know. The entity is gated on
 the record existing, never on the circuit's type, and never treats silence as a
 fault.
+
+**A row the adapter cannot resolve is a fault.** Both paths are plain
+declarations, so validation asks about them: a `feeds-device-status` the panel
+stops declaring takes down every link sensor reading it, and the Repair it
+raises names each one.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Iterable, Sequence
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, replace
 import json
+import logging
+from typing import Final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from span_panel_api import SpanPanelSnapshot
+from span_panel_api.protocol import SpanPanelClientProtocol
 
-from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
 from custom_components.span_panel.binary_sensor import (
     EVSE_BINARY_SENSORS,
     EVSE_PANEL_LINK_SENSOR,
+    PV_INVERTER_LINK_SENSOR,
     PV_PANEL_LINK_SENSOR,
     SpanEvseBinarySensor,
     SpanPanelBinarySensor,
     SpanPanelBinarySensorEntityDescription,
+    SpanPVInverterBinarySensor,
+    SpanPVSolarLinkBinarySensor,
     async_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    Producibility,
     declared_field_paths,
+    platform_descriptions,
 )
 from custom_components.span_panel.helpers import detect_capabilities, has_der_link_health
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.entity import Entity, EntityCategory
 
-from .adapter_fixtures import schema_one_snapshot, schema_one_tree
+from .adapter_fixtures import (
+    pv_inverters_tree,
+    schema_one_metadata,
+    schema_one_snapshot,
+    schema_one_tree,
+)
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import PANEL_NAME, add_panel_entry
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
 
 CONNECTION_NODE = "connection"
 FEEDS_ID_TOPIC = f"{CONNECTION_NODE}/feeds-device-id"
@@ -497,23 +519,22 @@ async def test_the_inverter_link_does_not_displace_the_batterys(hass: HomeAssist
 # ---------------------------------------------------------------------------
 
 
-def test_both_descriptions_name_their_field_and_keep_it_from_validation() -> None:
-    """Plain `field_path` declarations of a mapped field that is not validated.
+def test_the_link_descriptions_are_plain_declarations_the_gate_covers() -> None:
+    """Plain `field_path` declarations of a mapped field, validated like every other.
 
-    The adapter maps both from the feeding circuit's
-    `connection/feeds-device-status`, but the link descriptions sit outside
-    `platform_descriptions()`, so neither path is in the gate: each is
-    enumerated as `MAPPED_UNVALIDATED`, with the reason written beside it.
+    The adapter maps both paths from the feeding circuit's
+    `connection/feeds-device-status`, so the producible gate covers them and
+    neither is exempt. The inverter's own link reads the Solar card's path.
     """
-    for description in (PV_PANEL_LINK_SENSOR, EVSE_PANEL_LINK_SENSOR):
+    for description in (PV_PANEL_LINK_SENSOR, PV_INVERTER_LINK_SENSOR, EVSE_PANEL_LINK_SENSOR):
+        assert description in platform_descriptions()
         assert description.derived is None
         assert description.field_path is not None
-        assert (
-            RESIDUAL_EXEMPT_PATHS[description.field_path] is Producibility.MAPPED_UNVALIDATED
-        )
-        assert description.field_path not in declared_field_paths()
+        assert description.field_path not in RESIDUAL_EXEMPT_PATHS
+        assert description.field_path in declared_field_paths()
 
     assert PV_PANEL_LINK_SENSOR.field_path == "pv.connected"
+    assert PV_INVERTER_LINK_SENSOR.field_path == PV_PANEL_LINK_SENSOR.field_path
     assert EVSE_PANEL_LINK_SENSOR.field_path == "evse.connected"
 
 
@@ -531,3 +552,173 @@ def test_the_capability_gate_follows_the_record_and_reaches_the_reload() -> None
 
     assert "der_link_health" in detect_capabilities(schema_one_snapshot())
     assert "der_link_health" not in detect_capabilities(SpanPanelSnapshotFactory.create())
+
+
+# ---------------------------------------------------------------------------
+# A row the panel stops resolving
+# ---------------------------------------------------------------------------
+
+
+PV_PATH: Final = "pv.connected"
+EVSE_PATH: Final = "evse.connected"
+
+LINK_KEY_BY_PATH: Final = {PV_PATH: PV_PANEL_LINK_SENSOR.key, EVSE_PATH: EVSE_PANEL_LINK_SENSOR.key}
+"""The key every sensor reading each link row carries, whichever class serves it."""
+
+UNRESOLVED_AND_KEPT: Final = (
+    pytest.param(PV_PATH, EVSE_PATH, id="pv"),
+    pytest.param(EVSE_PATH, PV_PATH, id="evse"),
+)
+"""The link row a test unresolves, and the other, which stays resolved."""
+
+AnyLink = SpanPVSolarLinkBinarySensor | SpanPVInverterBinarySensor | SpanEvseBinarySensor
+"""Every class that serves a link sensor: the Solar card's, an inverter's own, a charger's."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Validated:
+    """One platform setup over a validated capture."""
+
+    entry: MockConfigEntry
+    coordinator: SpanPanelCoordinator
+    entities: list[Entity]
+
+
+@asynccontextmanager
+async def _validated(hass: HomeAssistant, unresolved: str) -> AsyncIterator[_Validated]:
+    """Set the binary-sensor platform up over the capture with one link row unresolved.
+
+    The capture with a second inverter fed by a circuit of its own, so the
+    platform builds both PV link classes -- the Solar card's, which reads the
+    inverters together, and each inverter's own, on its own card -- beside the
+    two chargers' links.
+
+    Through a real coordinator and a real entity platform, in the order setup
+    runs them: validation on the first refresh, then the platform, then the
+    reconcile. The coordinator's validation is what is under test, and the
+    platform is what gives each entity its id and has it tell the coordinator
+    which field it reads; a mocked coordinator would answer both with what the
+    test told it. The row becomes the adapter's "node present, property
+    missing" answer, as `test_schema_findings_captures` rewrites the rows it
+    tests.
+    """
+    tree = pv_inverters_tree()
+    snapshot = schema_one_snapshot(tree)
+    metadata = schema_one_metadata(tree)
+    row = metadata[unresolved]
+    assert row.resolved, f"the capture already leaves {unresolved} unresolved, so it proves nothing"
+    metadata[unresolved] = replace(row, resolved=False)
+
+    entry = add_panel_entry(hass, f"entry-{unresolved}", snapshot.serial_number)
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = metadata
+    coordinator = SpanPanelCoordinator(hass, client, entry)
+    coordinator.data = snapshot
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=await ensure_device_registered(hass, entry, snapshot, PANEL_NAME),
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+
+    coordinator._run_schema_validation()
+    entities: list[Entity] = []
+
+    def collect(
+        new_entities: Iterable[Entity],
+        update_before_add: bool = False,
+        *,
+        config_subentry_id: str | None = None,
+    ) -> None:
+        entities.extend(new_entities)
+
+    await async_setup_entry(hass, entry, collect)
+    platform = MockEntityPlatform(
+        hass, domain="binary_sensor", platform_name=DOMAIN, logger=logging.getLogger(__name__)
+    )
+    platform.config_entry = entry
+    await platform.platform_data.async_load_translations()
+    await platform.async_add_entities(entities)
+    coordinator.async_sync_schema_repairs()
+    try:
+        yield _Validated(entry, coordinator, entities)
+    finally:
+        await platform.async_reset()
+
+
+def _links(entities: Sequence[Entity], key: str) -> list[AnyLink]:
+    """Return the link sensors carrying `key`, whichever class serves each."""
+    return [
+        entity
+        for entity in entities
+        if isinstance(entity, AnyLink) and entity.entity_description.key == key
+    ]
+
+
+@pytest.mark.parametrize(("path", "other_path"), UNRESOLVED_AND_KEPT)
+async def test_an_unresolved_link_row_takes_every_sensor_reading_it_down(
+    hass: HomeAssistant, path: str, other_path: str
+) -> None:
+    """Unavailable, not unknown: a link nothing resolves has no reading to show.
+
+    Every sensor reading the row goes, the Solar card's and each inverter's
+    own alike, because a row describes the property on every circuit at once.
+    The other DER's links read a row that still resolves, and stay.
+    """
+    async with _validated(hass, path) as validated:
+        down = _links(validated.entities, LINK_KEY_BY_PATH[path])
+        assert down, f"the capture builds no sensor reading {path}"
+        if path == PV_PATH:
+            own = [link for link in down if isinstance(link, SpanPVInverterBinarySensor)]
+            assert len(own) == len(validated.coordinator.data.pv_inverters) == 2, (
+                "the capture should give each of its two inverters a link of its own"
+            )
+            assert any(isinstance(link, SpanPVSolarLinkBinarySensor) for link in down), (
+                "the capture should give the Solar card its link"
+            )
+
+        for link in down:
+            assert link.available is False, link.entity_id
+            state = hass.states.get(link.entity_id)
+            assert state is not None and state.state == STATE_UNAVAILABLE, link.entity_id
+
+        kept = _links(validated.entities, LINK_KEY_BY_PATH[other_path])
+        assert kept, f"the capture builds no sensor reading {other_path}"
+        for link in kept:
+            state = hass.states.get(link.entity_id)
+            assert state is not None and state.state != STATE_UNAVAILABLE, link.entity_id
+
+
+@pytest.mark.parametrize(("path", "other_path"), UNRESOLVED_AND_KEPT)
+async def test_the_repair_for_an_unresolved_link_row_names_every_sensor_reading_it(
+    hass: HomeAssistant, path: str, other_path: str
+) -> None:
+    """The `schema_field_unresolved` Repair counts and names the links it took down.
+
+    Its affected list is what the entities registered with the coordinator as
+    they were added, so it names each one by the id the platform gave it. The
+    row that still resolves raises nothing.
+    """
+    async with _validated(hass, path) as validated:
+        named = sorted(
+            link.entity_id for link in _links(validated.entities, LINK_KEY_BY_PATH[path])
+        )
+        assert named, f"the capture builds no sensor reading {path}"
+        assert validated.coordinator.entity_ids_by_field_path[path] == named
+
+        registry = ir.async_get(hass)
+        entry_id = validated.entry.entry_id
+        issue = registry.async_get_issue(DOMAIN, f"unresolved_{entry_id}_{path}")
+        assert issue is not None, f"no Repair raised for {path}"
+        assert issue.translation_key == "schema_field_unresolved"
+        placeholders = issue.translation_placeholders
+        assert placeholders is not None
+        assert placeholders["field_path"] == path
+        assert placeholders["count"] == str(len(named))
+        examples = placeholders["examples"].split(", ")
+        assert examples == named[: len(examples)], (
+            "the Repair names entities that do not read the row"
+        )
+
+        assert registry.async_get_issue(DOMAIN, f"unresolved_{entry_id}_{other_path}") is None

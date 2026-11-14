@@ -25,14 +25,19 @@ from custom_components.span_panel.pv_binding import async_resolve_pv_binding, ke
 from custom_components.span_panel.sensor_panel import SpanPVMetadataSensor
 from custom_components.span_panel.util import SUB_DEVICE_PV
 
-from .adapter_fixtures import schema_one_snapshot, schema_one_tree
-from .test_pv_device import PANEL_NAME, PV_DEVICE, SOLAR_CIRCUIT, _entry
-from .test_pv_inverters import (
+from .adapter_fixtures import (
     FIRST_PV,
     SECOND_PV,
     SECOND_SOLAR_CIRCUIT,
+    SOLAR_CIRCUIT,
+    pv_inverters_tree,
+    schema_one_snapshot,
+    schema_one_tree,
+)
+from .helpers import PANEL_NAME, add_panel_entry
+from .test_pv_device import PV_DEVICE
+from .test_pv_inverters import (
     _setup,
-    _tree,
     _unload,
     inverter_cards,
     solar_entities,
@@ -107,12 +112,12 @@ def _record(hass_storage: dict[str, object], entry: MockConfigEntry) -> object:
 async def test_scenario_a_a_second_inverter_on_a_lower_breaker_space_moves_nothing(hass: HomeAssistant) -> None:
     """The 2.1.2b3 regression, from a 2.1.1 registry: the Solar card stays on the Enphase on 36/38."""
     one = schema_one_snapshot()
-    entry = _entry(hass, "entry-a", one.serial_number)
+    entry = add_panel_entry(hass, "entry-a", one.serial_number)
     held = _seed_2_1_1(hass, entry, renamed={"pv_product": "sensor.my_pv_product"})
     await _unload(await _setup(hass, entry, one))
     assert solar_entities(hass, entry) == held
 
-    two = schema_one_snapshot(_tree())
+    two = schema_one_snapshot(pv_inverters_tree())
     platforms = await _setup(hass, entry, two)
 
     assert solar_entities(hass, entry) == held
@@ -127,7 +132,7 @@ async def test_scenario_b_inverters_behind_a_gateway_leave_the_solar_card_readin
 ) -> None:
     """span#269 from a 2.1.1 registry; r202639 shape pending confirmation."""
     before = schema_one_snapshot(_gateway_tree(("panel-se7600h-us", "SE7600H-US", "11680")))
-    entry = _entry(hass, "entry-b", before.serial_number)
+    entry = add_panel_entry(hass, "entry-b", before.serial_number)
     held = _seed_2_1_1(hass, entry, link=False, renamed={"pv_vendor": "sensor.my_solar_brand"})
     await _unload(await _setup(hass, entry, before))
     assert solar_entities(hass, entry) == held
@@ -147,8 +152,8 @@ async def test_scenario_b_inverters_behind_a_gateway_leave_the_solar_card_readin
 
 
 async def test_scenario_c_two_inverters_at_first_upgrade_leave_the_solar_card_unbound(hass: HomeAssistant) -> None:
-    snapshot = schema_one_snapshot(_tree())
-    entry = _entry(hass, "entry-c", snapshot.serial_number)
+    snapshot = schema_one_snapshot(pv_inverters_tree())
+    entry = add_panel_entry(hass, "entry-c", snapshot.serial_number)
     held = _seed_2_1_1(hass, entry, renamed={"pv_vendor": "sensor.my_solar_brand"})
 
     await _setup(hass, entry, snapshot)
@@ -160,7 +165,7 @@ async def test_scenario_c_two_inverters_at_first_upgrade_leave_the_solar_card_un
 
 async def test_scenario_d_a_record_that_has_not_arrived_mints_no_card(hass: HomeAssistant) -> None:
     fed = schema_one_snapshot()
-    entry = _entry(hass, "entry-d", fed.serial_number)
+    entry = add_panel_entry(hass, "entry-d", fed.serial_number)
     held = _seed_2_1_1(hass, entry, renamed={"pv_product": "sensor.my_pv_product"})
     await _unload(await _setup(hass, entry, fed))
 
@@ -175,7 +180,7 @@ async def test_scenario_d_a_record_that_has_not_arrived_mints_no_card(hass: Home
 async def test_scenario_e_a_replaced_circuit_reads_unknown_and_the_inverter_gets_a_card(hass: HomeAssistant) -> None:
     """Not expected for in-panel PV; the honest outcome if a panel ever does it."""
     fed = schema_one_snapshot()
-    entry = _entry(hass, "entry-e", fed.serial_number)
+    entry = add_panel_entry(hass, "entry-e", fed.serial_number)
     held = _seed_2_1_1(hass, entry)
     await _unload(await _setup(hass, entry, fed))
 
@@ -194,7 +199,7 @@ async def test_scenario_f_an_identity_only_inverter_given_a_circuit_keeps_the_so
 ) -> None:
     """The one refinement: unbound, then bound to the circuit the card already reads, then a newcomer."""
     unfed = schema_one_snapshot(_unfed_tree())
-    entry = _entry(hass, "entry-f", unfed.serial_number)
+    entry = add_panel_entry(hass, "entry-f", unfed.serial_number)
     held = _seed_2_1_1(hass, entry)
     await _unload(await _setup(hass, entry, unfed))
     assert _record(hass_storage, entry) == {"circuit_id": None}
@@ -203,14 +208,14 @@ async def test_scenario_f_an_identity_only_inverter_given_a_circuit_keeps_the_so
     await _unload(await _setup(hass, entry, schema_one_snapshot()))
     assert _record(hass_storage, entry) == {"circuit_id": SOLAR_CIRCUIT}
 
-    await _setup(hass, entry, schema_one_snapshot(_tree()))
+    await _setup(hass, entry, schema_one_snapshot(pv_inverters_tree()))
     assert solar_entities(hass, entry) == held
     assert inverter_cards(hass, entry) == {SECOND_SOLAR_CIRCUIT}
 
 
 async def test_scenario_g_a_single_inverter_keeps_its_2_1_1_ids(hass: HomeAssistant) -> None:
     snapshot = schema_one_snapshot()
-    entry = _entry(hass, "entry-g", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-g", snapshot.serial_number)
     held = _seed_2_1_1(hass, entry)
 
     await _setup(hass, entry, snapshot)
@@ -229,12 +234,12 @@ async def test_without_the_record_two_inverters_leave_the_card_unbound(
     that does neither.
     """
     one = schema_one_snapshot()
-    entry = _entry(hass, "entry-no-record", one.serial_number)
+    entry = add_panel_entry(hass, "entry-no-record", one.serial_number)
     held = _seed_2_1_1(hass, entry, renamed={"pv_vendor": "sensor.my_solar_brand"})
     await _unload(await _setup(hass, entry, one))
     del hass_storage[f"{DOMAIN}.pv_binding.{entry.entry_id}"]
 
-    await _setup(hass, entry, schema_one_snapshot(_tree()))
+    await _setup(hass, entry, schema_one_snapshot(pv_inverters_tree()))
 
     assert _record(hass_storage, entry) == {"circuit_id": None}
     assert entry.runtime_data.pv_binding.mode == "unbound"
@@ -251,15 +256,15 @@ async def test_a_key_that_holds_a_card_keeps_it_through_every_shape(
     or a damaged file reaches a real install. After each setup, every inverter that had a card before it and is still
     published still has its own card.
     """
-    entry = _entry(hass, "entry-invariant", schema_one_snapshot().serial_number)
+    entry = add_panel_entry(hass, "entry-invariant", schema_one_snapshot().serial_number)
     _seed_2_1_1(hass, entry, renamed={"pv_product": "sensor.my_pv_product"})
     key = f"{DOMAIN}.pv_binding.{entry.entry_id}"
     steps: tuple[tuple[str, SpanPanelSnapshot, str | None], ...] = (
-        ("two at first sight", schema_one_snapshot(_tree()), None),
-        ("back to one, store removed", schema_one_snapshot(_tree(second=False)), "remove"),
+        ("two at first sight", schema_one_snapshot(pv_inverters_tree()), None),
+        ("back to one, store removed", schema_one_snapshot(pv_inverters_tree(second=False)), "remove"),
         ("record late, store corrupt", schema_one_snapshot(_unfed_tree()), "corrupt"),
-        ("two again", schema_one_snapshot(_tree()), None),
-        ("two again, store removed", schema_one_snapshot(_tree()), "remove"),
+        ("two again", schema_one_snapshot(pv_inverters_tree()), None),
+        ("two again, store removed", schema_one_snapshot(pv_inverters_tree()), "remove"),
     )
     for label, snapshot, store_action in steps:
         if store_action == "remove":
@@ -275,7 +280,7 @@ async def test_a_key_that_holds_a_card_keeps_it_through_every_shape(
 
 async def test_a_wrong_shaped_record_does_not_stop_setup(hass: HomeAssistant, hass_storage: dict[str, object]) -> None:
     snapshot = schema_one_snapshot()
-    entry = _entry(hass, "entry-bad-record", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-bad-record", snapshot.serial_number)
     key = f"{DOMAIN}.pv_binding.{entry.entry_id}"
     hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": ["not", "a", "record"]}
 
@@ -286,11 +291,11 @@ async def test_a_wrong_shaped_record_does_not_stop_setup(hass: HomeAssistant, ha
 
 async def test_a_second_setup_writes_nothing(hass: HomeAssistant, hass_storage: dict[str, object]) -> None:
     snapshot = schema_one_snapshot()
-    entry = _entry(hass, "entry-idempotent", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-idempotent", snapshot.serial_number)
     await _unload(await _setup(hass, entry, snapshot))
     written = _record(hass_storage, entry)
 
-    await _unload(await _setup(hass, entry, schema_one_snapshot(_tree())))
+    await _unload(await _setup(hass, entry, schema_one_snapshot(pv_inverters_tree())))
 
     assert _record(hass_storage, entry) == written
 
@@ -317,9 +322,9 @@ async def test_vendor_readings_follow_the_binding_through_setup(hass: HomeAssist
     """The bound inverter's readings register on the Solar card under the keyless ids; the newcomer's on its own card."""
     one = schema_one_snapshot()
     serial = one.serial_number
-    entry = _entry(hass, "entry-vendor", serial)
+    entry = add_panel_entry(hass, "entry-vendor", serial)
     await _unload(await _setup(hass, entry, one))
-    two = schema_one_snapshot(_with_vendor_readings(_tree(), FIRST_PV, SECOND_PV))
+    two = schema_one_snapshot(_with_vendor_readings(pv_inverters_tree(), FIRST_PV, SECOND_PV))
 
     await _unload(await _setup(hass, entry, two))
     # The newcomer's card is minted by that setup, so its readings follow on the next.
@@ -347,7 +352,7 @@ async def test_vendor_readings_follow_the_binding_through_setup(hass: HomeAssist
 
 def test_a_card_is_counted_only_in_its_own_entry(hass: HomeAssistant) -> None:
     """An inverter id another entry owns says nothing about this entry's cards."""
-    mine = _entry(hass, "entry-cards-mine", "sp3-cards-001")
+    mine = add_panel_entry(hass, "entry-cards-mine", "sp3-cards-001")
     theirs = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-cards-theirs", unique_id="sp3-cards-002")
     theirs.add_to_hass(hass)
     registry = er.async_get(hass)
@@ -361,7 +366,7 @@ def test_a_card_is_counted_only_in_its_own_entry(hass: HomeAssistant) -> None:
 
 def test_an_inverter_holding_only_its_link_sensor_holds_a_card(hass: HomeAssistant) -> None:
     """The link binary sensor alone is a card of its own; the Solar card's panel-scoped ids are not."""
-    entry = _entry(hass, "entry-cards-link", "sp3-cards-003")
+    entry = add_panel_entry(hass, "entry-cards-link", "sp3-cards-003")
     registry = er.async_get(hass)
     registry.async_get_or_create(
         "binary_sensor",
@@ -385,7 +390,7 @@ async def test_first_sight_writes_the_record_and_no_inverter_writes_none(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
     empty = schema_one_snapshot(schema_one_tree(without=PV_DEVICE))
-    entry = _entry(hass, "entry-record-write", empty.serial_number)
+    entry = add_panel_entry(hass, "entry-record-write", empty.serial_number)
     key = f"{DOMAIN}.pv_binding.{entry.entry_id}"
 
     undecided = await async_resolve_pv_binding(hass, entry, empty)
@@ -411,7 +416,7 @@ async def test_the_platforms_decide_from_the_snapshot_the_binding_was_resolved_f
     """
     before = schema_one_snapshot(schema_one_tree(without=PV_DEVICE))
     after = schema_one_snapshot()
-    entry = _entry(hass, "entry-drift", after.serial_number)
+    entry = add_panel_entry(hass, "entry-drift", after.serial_number)
 
     await _unload(await _setup(hass, entry, before, published=after))
     assert inverter_cards(hass, entry) == set()
@@ -442,7 +447,7 @@ def _solar_link(platforms: list[MockEntityPlatform], serial: str) -> SpanPVSolar
 
 def _one_record_less(status: str) -> dict[str, dict[str, str]]:
     """Two inverters at first sight; the first circuit reports `status`, the second publishes no record."""
-    tree = _tree()
+    tree = pv_inverters_tree()
     tree[SOLAR_CIRCUIT][STATUS_TOPIC] = status
     tree[SECOND_SOLAR_CIRCUIT].pop(STATUS_TOPIC)
     return tree
@@ -457,7 +462,7 @@ async def test_a_lone_inverter_has_the_link_exactly_as_2_1_1_did(
     if not recorded:
         tree[SOLAR_CIRCUIT].pop(STATUS_TOPIC)
     snapshot = schema_one_snapshot(tree)
-    entry = _entry(hass, "entry-link-lone", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-link-lone", snapshot.serial_number)
 
     link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
 
@@ -469,7 +474,7 @@ async def test_a_bound_link_is_kept_and_reads_unknown_while_its_inverter_is_not_
     hass: HomeAssistant,
 ) -> None:
     fed = schema_one_snapshot()
-    entry = _entry(hass, "entry-link-bound", fed.serial_number)
+    entry = add_panel_entry(hass, "entry-link-bound", fed.serial_number)
     await _unload(await _setup(hass, entry, fed))
 
     pending = schema_one_snapshot(_unfed_tree())
@@ -489,7 +494,7 @@ async def test_a_bound_link_is_kept_and_reads_unknown_while_its_inverter_is_not_
 
 async def test_an_unbound_link_over_several_does_not_come_and_go_with_a_reading(hass: HomeAssistant) -> None:
     """One inverter publishes no record: the link's existence is the same whether the other is OK or LOST."""
-    entry = _entry(hass, "entry-link-unbound", schema_one_snapshot().serial_number)
+    entry = add_panel_entry(hass, "entry-link-unbound", schema_one_snapshot().serial_number)
     existence = []
     for status in ("OK", "LOST", "OK"):
         snapshot = schema_one_snapshot(_one_record_less(status))
@@ -501,8 +506,8 @@ async def test_an_unbound_link_over_several_does_not_come_and_go_with_a_reading(
 
 
 async def test_an_unbound_link_over_several_all_recorded_is_created(hass: HomeAssistant) -> None:
-    snapshot = schema_one_snapshot(_tree())
-    entry = _entry(hass, "entry-link-all", snapshot.serial_number)
+    snapshot = schema_one_snapshot(pv_inverters_tree())
+    entry = add_panel_entry(hass, "entry-link-all", snapshot.serial_number)
 
     link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
 
@@ -520,7 +525,7 @@ async def test_an_install_that_had_the_link_keeps_it_when_the_record_rule_fails(
     unknown with one unreported and the other up, down once the other is down.
     """
     snapshot = schema_one_snapshot(_one_record_less(status))
-    entry = _entry(hass, "entry-link-held", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-link-held", snapshot.serial_number)
     held = _seed_2_1_1(hass, entry)
 
     link = _solar_link(await _setup(hass, entry, snapshot), snapshot.serial_number)
@@ -532,9 +537,9 @@ async def test_an_install_that_had_the_link_keeps_it_when_the_record_rule_fails(
 
 async def test_an_inverters_own_link_is_kept_when_its_record_goes(hass: HomeAssistant) -> None:
     """The Solar link's rule per key: a link already registered is created whatever the record does, reading unknown."""
-    entry = _entry(hass, "entry-own-link", schema_one_snapshot().serial_number)
-    await _unload(await _setup(hass, entry, schema_one_snapshot(_tree())))
-    tree = _tree()
+    entry = add_panel_entry(hass, "entry-own-link", schema_one_snapshot().serial_number)
+    await _unload(await _setup(hass, entry, schema_one_snapshot(pv_inverters_tree())))
+    tree = pv_inverters_tree()
     tree[SECOND_SOLAR_CIRCUIT].pop(STATUS_TOPIC)
     silent = schema_one_snapshot(tree)
 

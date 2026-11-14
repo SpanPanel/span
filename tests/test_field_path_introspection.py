@@ -21,9 +21,7 @@ from span_panel_api import (
 )
 
 from custom_components.span_panel.field_paths import (
-    RESIDUAL_EXEMPT_PATHS,
     DerivedReason,
-    Producibility,
     declared_field_paths,
     residual_field_paths,
 )
@@ -289,26 +287,16 @@ def test_introspection_covers_every_declared_path() -> None:
 
     `_declaring_descriptions` restates the collections `declared_field_paths()`
     walks. Without this, a platform collection added to the gate but not here
-    would be gated for producibility and never checked against its reader.
-
-    The three DER-link descriptions are verified here and deliberately not
-    collected by the gate, so the paths they name are subtracted as exactly what
-    they are: mapped and kept from validation. Any other path verified here and
-    missing from the gate still fails.
+    would be gated for producibility and never checked against its reader, and
+    one verified here but not gated would be checked against its reader and
+    never validated.
     """
     introspected = {
         description.field_path
         for description in _declaring_descriptions()
         if not description.derived and description.field_path is not None
     }
-    kept_from_validation = {
-        path
-        for path, producibility in RESIDUAL_EXEMPT_PATHS.items()
-        if producibility is Producibility.MAPPED_UNVALIDATED
-    }
-    assert declared_field_paths() == frozenset(
-        (introspected - kept_from_validation) | residual_field_paths()
-    )
+    assert declared_field_paths() == frozenset(introspected | residual_field_paths())
 
 
 def test_no_derived_description_reads_one_producible_field() -> None:

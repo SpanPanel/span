@@ -77,13 +77,13 @@ from custom_components.span_panel.util import (
     pv_device_info,
 )
 from custom_components.span_panel.websocket import _classify_sub_device
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .factories import pv_binding_for
+from .helpers import PANEL_NAME, add_panel_entry
 from .test_declared_but_unread import REFERENCE
 
 from pytest_homeassistant_custom_component.common import (
@@ -95,15 +95,10 @@ from pytest_homeassistant_custom_component.common import (
 PV_DEVICE: Final = "pv"
 """The inverter's Homie device id in the capture."""
 
-SOLAR_CIRCUIT: Final = "573066aaddd7b75114c4563ce3af18c4"
-"""The capture's solar circuit, which feeds its one inverter."""
-
 VENDOR_TOPIC: Final = "info/vendor-name"
 MODEL_TOPIC: Final = "info/model"
 FIRMWARE_TOPIC: Final = "info/firmware-version"
 SERIAL_TOPIC: Final = "info/serial-number"
-
-PANEL_NAME: Final = "SPAN Panel"
 
 FALLBACK_MANUFACTURER: Final = "Unknown"
 FALLBACK_MODEL: Final = "Solar Inverter"
@@ -188,20 +183,6 @@ def _pv_snapshot(**rewrites: str | None) -> SpanPanelSnapshot:
 # ---------------------------------------------------------------------------
 
 
-def _entry(hass: HomeAssistant, entry_id: str, serial: str) -> MockConfigEntry:
-    """A config entry keyed on the panel's serial, as the config flow makes one."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_HOST: "192.168.1.40", "device_name": PANEL_NAME},
-        options={},
-        title=PANEL_NAME,
-        entry_id=entry_id,
-        unique_id=serial,
-    )
-    entry.add_to_hass(hass)
-    return entry
-
-
 def _coordinator(
     hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot
 ) -> MagicMock:
@@ -257,7 +238,7 @@ async def _install(
     seed: Callable[[HomeAssistant, MockConfigEntry, str], None] | None = None,
 ) -> MockConfigEntry:
     """Set up both platforms the way the integration does, optionally over a seeded registry."""
-    entry = _entry(hass, entry_id, snapshot.serial_number)
+    entry = add_panel_entry(hass, entry_id, snapshot.serial_number)
     panel_device_id = await ensure_device_registered(hass, entry, snapshot, PANEL_NAME)
     if seed is not None:
         seed(hass, entry, panel_device_id)

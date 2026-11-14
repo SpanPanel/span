@@ -33,6 +33,7 @@ All notable changes to this project will be documented in this file.
   is not signed by the authority it published, and the certificate repair likewise says when none could be made on the panel's broker port.
 - **A circuit whose relay is locked on no longer reports a shed priority or PCS participation**, which the panel publishes for it but never acts on, so a
   circuit that stays on in an outage no longer claims it turns off.
+- **The solar and charger link sensors now go unavailable, and are named in the schema Repair, if the panel stops publishing their link status.**
 
 ## [2.2.0] - 11/2026
 

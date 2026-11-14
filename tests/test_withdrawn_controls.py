@@ -37,7 +37,8 @@ from custom_components.span_panel.select import async_setup_entry as select_setu
 from custom_components.span_panel.switch import async_setup_entry as switch_setup
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
-from .test_pv_device import PANEL_NAME, _coordinator, _entry
+from .helpers import PANEL_NAME, add_panel_entry
+from .test_pv_device import _coordinator
 
 SERIAL: Final = "sp3-withdrawn-001"
 BACKUP: Final = "backup-system"
@@ -189,7 +190,7 @@ def _assert_tombstoned(hass: HomeAssistant, entry: MockConfigEntry, domain: str,
 
 
 async def test_setup_before_start_removes_the_orphans_and_start_restores_no_state(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-before-start", SERIAL)
+    entry = add_panel_entry(hass, "entry-before-start", SERIAL)
     seeded = _seed_a_2_1_1_registry(hass, entry)
 
     await _set_up(hass, entry, R202639)
@@ -205,7 +206,7 @@ async def test_setup_before_start_removes_the_orphans_and_start_restores_no_stat
 
 async def test_setup_after_start_removes_the_restored_unavailable_states(hass: HomeAssistant) -> None:
     """The setup-retry path: Core has already written `restored: true` states (spec F10)."""
-    entry = _entry(hass, "entry-after-start", SERIAL)
+    entry = add_panel_entry(hass, "entry-after-start", SERIAL)
     seeded = _seed_a_2_1_1_registry(hass, entry)
     hass.bus.async_fire(EVENT_HOMEASSISTANT_START)
     await hass.async_block_till_done()
@@ -226,7 +227,7 @@ async def test_setup_after_start_removes_the_restored_unavailable_states(hass: H
 
 
 async def test_a_never_backup_circuit_keeps_its_switch_and_loses_its_select(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-never-backup", SERIAL)
+    entry = add_panel_entry(hass, "entry-never-backup", SERIAL)
     switch_id = _seed(hass, entry, "switch", build_switch_unique_id(SERIAL, WELL), "span_panel_well_pump_breaker")
     _seed(hass, entry, "select", build_select_unique_id(SERIAL, WELL), "span_panel_well_pump_circuit_priority")
 
@@ -237,7 +238,7 @@ async def test_a_never_backup_circuit_keeps_its_switch_and_loses_its_select(hass
 
 
 async def test_a_circuit_absent_from_the_setup_snapshot_is_never_judged(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-absent", SERIAL)
+    entry = add_panel_entry(hass, "entry-absent", SERIAL)
     gone = _seed(hass, entry, "switch", build_switch_unique_id(SERIAL, GONE), "span_panel_gone_breaker")
 
     await _set_up(hass, entry, _panel(KITCHEN_CIRCUIT))
@@ -246,10 +247,10 @@ async def test_a_circuit_absent_from_the_setup_snapshot_is_never_judged(hass: Ho
 
 
 async def test_another_entrys_registration_of_the_same_unique_id_is_untouched(hass: HomeAssistant) -> None:
-    other = _entry(hass, "entry-other", "sp3-other-002")
+    other = add_panel_entry(hass, "entry-other", "sp3-other-002")
     unique_id = build_switch_unique_id(SERIAL, BACKUP)
     held = _seed(hass, other, "switch", unique_id, "span_panel_other_breaker")
-    entry = _entry(hass, "entry-mine", SERIAL)
+    entry = add_panel_entry(hass, "entry-mine", SERIAL)
 
     await _set_up(hass, entry, R202639)
 
@@ -257,7 +258,7 @@ async def test_another_entrys_registration_of_the_same_unique_id_is_untouched(ha
 
 
 async def test_nobody_removes_nothing_and_administrators_only_then_removes_the_withdrawn(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-nobody", SERIAL)
+    entry = add_panel_entry(hass, "entry-nobody", SERIAL)
     seeded = _seed_a_2_1_1_registry(hass, entry)
 
     controls = await _set_up(hass, entry, R202639, mode=ControlMode.DISABLED)
@@ -273,7 +274,7 @@ async def test_nobody_removes_nothing_and_administrators_only_then_removes_the_w
 async def test_the_function_reports_and_logs_what_it_removed(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    entry = _entry(hass, "entry-direct", SERIAL)
+    entry = add_panel_entry(hass, "entry-direct", SERIAL)
     backup = _seed(hass, entry, "switch", build_switch_unique_id(SERIAL, BACKUP), "span_panel_backup_breaker")
     _seed(hass, entry, "switch", build_switch_unique_id(SERIAL, KITCHEN), "span_panel_kitchen_breaker")
 
@@ -297,7 +298,7 @@ async def test_the_function_reports_and_logs_what_it_removed(
 
 
 async def test_a_restored_control_returns_with_its_identity_and_customisations(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-restore", SERIAL)
+    entry = add_panel_entry(hass, "entry-restore", SERIAL)
     registry = er.async_get(hass)
     controls = await _set_up(hass, entry, R202633)
     switch_uid = build_switch_unique_id(SERIAL, BACKUP)
@@ -348,7 +349,7 @@ async def test_a_restored_control_returns_with_its_identity_and_customisations(h
 
 
 async def test_a_user_disabled_control_comes_back_disabled(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-disabled", SERIAL)
+    entry = add_panel_entry(hass, "entry-disabled", SERIAL)
     registry = er.async_get(hass)
     controls = await _set_up(hass, entry, R202633)
     switch_id = registry.async_get_entity_id("switch", DOMAIN, build_switch_unique_id(SERIAL, BACKUP))
@@ -365,7 +366,7 @@ async def test_a_user_disabled_control_comes_back_disabled(hass: HomeAssistant) 
 
 
 async def test_the_entity_id_survives_every_withdrawal_and_return(hass: HomeAssistant) -> None:
-    entry = _entry(hass, "entry-permanence", SERIAL)
+    entry = add_panel_entry(hass, "entry-permanence", SERIAL)
     registry = er.async_get(hass)
     await (await _set_up(hass, entry, R202633)).unload()
     original = registry.async_get_entity_id("switch", DOMAIN, build_switch_unique_id(SERIAL, BACKUP))
@@ -378,7 +379,7 @@ async def test_the_entity_id_survives_every_withdrawal_and_return(hass: HomeAssi
 
 async def test_cores_exception_another_entity_taking_the_id_moves_the_restored_one(hass: HomeAssistant) -> None:
     """Pinned, not endorsed: only a newly created collision or a user rename can do this (spec §3.4)."""
-    entry = _entry(hass, "entry-collision", SERIAL)
+    entry = add_panel_entry(hass, "entry-collision", SERIAL)
     registry = er.async_get(hass)
     await (await _set_up(hass, entry, R202633)).unload()
     unique_id = build_switch_unique_id(SERIAL, BACKUP)
