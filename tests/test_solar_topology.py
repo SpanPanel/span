@@ -11,11 +11,19 @@ from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.solar_topology import SolarTopology, solar_topology
 from custom_components.span_panel.util import PvDeviceRef, pv_device_ref
 
-from .adapter_fixtures import schema_one_snapshot, schema_one_tree
+from .adapter_fixtures import (
+    FIRST_PV,
+    SECOND_PV,
+    SECOND_SOLAR_CIRCUIT,
+    SOLAR_CIRCUIT,
+    UNFED_PV,
+    pv_inverters_tree,
+    schema_one_snapshot,
+    schema_one_tree,
+)
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .test_pv_binding import NEW_CIRCUIT, _gateway_tree, _unfed_tree
-from .test_pv_device import PV_DEVICE, SOLAR_CIRCUIT
-from .test_pv_inverters import FIRST_PV, SECOND_PV, SECOND_SOLAR_CIRCUIT, UNFED_PV, _tree
+from .test_pv_device import PV_DEVICE
 
 PANEL = "sp3-solar-001"
 
@@ -86,7 +94,7 @@ def test_one_bound_inverter_puts_its_circuit_on_the_site_tile() -> None:
 
 
 def test_each_other_inverter_gets_its_own_circuit() -> None:
-    snapshot = schema_one_snapshot(_tree())
+    snapshot = schema_one_snapshot(pv_inverters_tree())
     binding = _bound(C, legacy=C)
 
     site = _site(binding, snapshot)
@@ -105,7 +113,7 @@ def test_each_other_inverter_gets_its_own_circuit() -> None:
 
 
 def test_unbound_over_several_leaves_the_site_tile_on_the_site_total() -> None:
-    snapshot = schema_one_snapshot(_tree())
+    snapshot = schema_one_snapshot(pv_inverters_tree())
     binding = pv_binding_for(snapshot)
     assert binding.mode == "unbound"
 
@@ -162,7 +170,7 @@ def test_a_bound_circuit_that_is_gone_leaves_the_site_total() -> None:
 
 def test_a_bound_key_holding_a_card_leaves_the_site_tile_on_the_site_total() -> None:
     """A restored store: the bound inverter has its own tile, so the site tile must not draw its circuit too."""
-    snapshot = schema_one_snapshot(_tree())
+    snapshot = schema_one_snapshot(pv_inverters_tree())
     binding = _bound(C, legacy=None)
 
     site = _site(binding, snapshot)
@@ -215,8 +223,8 @@ def _without_identity(tree: dict[str, dict[str, str]], *devices: str) -> dict[st
 
 def test_identity_is_read_live_and_structure_as_of_setup() -> None:
     """A vendor or model published after setup is not a capability change, so nothing reloads; the tile reads it as the sensors do."""
-    setup = schema_one_snapshot(_without_identity(_tree(), FIRST_PV, SECOND_PV))
-    live = schema_one_snapshot(_tree(unfed=True))
+    setup = schema_one_snapshot(_without_identity(pv_inverters_tree(), FIRST_PV, SECOND_PV))
+    live = schema_one_snapshot(pv_inverters_tree(unfed=True))
     binding = _bound(C, legacy=C)
 
     site = solar_topology(None, binding, setup, live, POWER, SITE)
@@ -235,8 +243,8 @@ def test_identity_is_read_live_and_structure_as_of_setup() -> None:
 
 def test_an_inverter_gone_from_the_live_snapshot_keeps_its_block_with_no_identity() -> None:
     """Structure is as of setup, so the block stays until the reload the departure causes; identity reads empty, as its sensors do."""
-    setup = schema_one_snapshot(_tree())
-    live = schema_one_snapshot(_tree(second=False))
+    setup = schema_one_snapshot(pv_inverters_tree())
+    live = schema_one_snapshot(pv_inverters_tree(second=False))
     assert C2 in setup.pv_inverters and C2 not in live.pv_inverters
 
     second = solar_topology(C2, _bound(C, legacy=C), setup, live, POWER, SITE)

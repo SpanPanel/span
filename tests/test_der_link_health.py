@@ -78,10 +78,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity import Entity, EntityCategory
 
-from .adapter_fixtures import schema_one_metadata, schema_one_snapshot, schema_one_tree
+from .adapter_fixtures import (
+    pv_inverters_tree,
+    schema_one_metadata,
+    schema_one_snapshot,
+    schema_one_tree,
+)
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
-from .test_pv_device import PANEL_NAME, _entry
-from .test_pv_inverters import _tree as two_inverter_tree
+from .helpers import PANEL_NAME, add_panel_entry
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
 
@@ -598,14 +602,14 @@ async def _validated(hass: HomeAssistant, unresolved: str) -> AsyncIterator[_Val
     missing" answer, as `test_schema_findings_captures` rewrites the rows it
     tests.
     """
-    tree = two_inverter_tree()
+    tree = pv_inverters_tree()
     snapshot = schema_one_snapshot(tree)
     metadata = schema_one_metadata(tree)
     row = metadata[unresolved]
     assert row.resolved, f"the capture already leaves {unresolved} unresolved, so it proves nothing"
     metadata[unresolved] = replace(row, resolved=False)
 
-    entry = _entry(hass, f"entry-{unresolved}", snapshot.serial_number)
+    entry = add_panel_entry(hass, f"entry-{unresolved}", snapshot.serial_number)
     client = MagicMock(spec=SpanPanelClientProtocol)
     client.field_metadata = metadata
     coordinator = SpanPanelCoordinator(hass, client, entry)

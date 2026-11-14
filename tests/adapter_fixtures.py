@@ -141,6 +141,50 @@ def add_grid_forming_inverter(tree: dict[str, dict[str, str]], *, capable: bool)
     tree["bess"]["$description"] = json.dumps(bess)
 
 
+SOLAR_CIRCUIT = "573066aaddd7b75114c4563ce3af18c4"
+"""The capture's solar circuit, which feeds its one inverter."""
+
+SECOND_SOLAR_CIRCUIT = "5be1d2c3a4f5061728394a5b6c7d8e9f"
+"""The circuit `pv_inverters_tree` adds to feed `SECOND_PV`."""
+
+FIRST_PV = "pv-1"
+"""What `pv_inverters_tree` renames the capture's inverter to."""
+
+SECOND_PV = "pv-2"
+"""The inverter `pv_inverters_tree` adds beside the first, fed by `SECOND_SOLAR_CIRCUIT`."""
+
+UNFED_PV = "pv-3"
+"""The inverter `pv_inverters_tree` adds, on request, with no circuit feeding it."""
+
+
+def pv_inverters_tree(*, second: bool = True, unfed: bool = False) -> dict[str, dict[str, str]]:
+    """Rewrite the capture with its inverter renamed and others added, as r202639 publishes them; the second sits on lower breaker spaces, where 2.1.2b3 would have ranked it first.
+
+    The second also publishes a serial, so a serial is on the wire for the
+    identity assertions to ignore.
+    """
+    tree = schema_one_tree()
+    pv_topics = tree.pop("pv")
+    tree[FIRST_PV] = dict(pv_topics)
+    tree[SOLAR_CIRCUIT]["connection/feeds-device-id"] = FIRST_PV
+    if second:
+        tree[SECOND_PV] = {
+            **pv_topics,
+            "info/vendor-name": "Second Vendor",
+            "info/serial-number": "INVERTER-SERIAL-0002",
+            "info/nominal-power": "4000.0",
+        }
+        tree[SECOND_SOLAR_CIRCUIT] = {
+            **tree[SOLAR_CIRCUIT],
+            "connection/feeds-device-id": SECOND_PV,
+            "info/name": "Garage Solar",
+            "info/spaces": "12,14",
+        }
+    if unfed:
+        tree[UNFED_PV] = dict(pv_topics)
+    return tree
+
+
 def tree_snapshot(tree: dict[str, dict[str, str]], panel_id: str) -> SpanPanelSnapshot:
     """Build a snapshot through the schema_1 mapper from any tree whose enclosure is `panel_id`.
 

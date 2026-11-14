@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 import datetime
 import inspect
 from types import ModuleType
-from typing import Any
+from typing import Any, Final
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import package_ratings
+from custom_components.span_panel.const import DOMAIN
 
 type WebSocketHandler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
 """A websocket command's own coroutine, as a test awaits it with a mock connection."""
@@ -132,6 +133,24 @@ def setup_span_panel_entry(
         host=host,
         access_token=access_token,
         options=options,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+PANEL_NAME: Final = "SPAN Panel"
+"""The title `add_panel_entry` gives its entry, and its `device_name`."""
+
+
+def add_panel_entry(hass: HomeAssistant, entry_id: str, serial: str) -> MockConfigEntry:
+    """Add a config entry keyed on the panel's serial, as the config flow makes one."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: "192.168.1.40", "device_name": PANEL_NAME},
+        options={},
+        title=PANEL_NAME,
+        entry_id=entry_id,
+        unique_id=serial,
     )
     entry.add_to_hass(hass)
     return entry

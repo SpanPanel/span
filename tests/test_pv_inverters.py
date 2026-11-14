@@ -54,43 +54,17 @@ from custom_components.span_panel.util import (
 )
 from custom_components.span_panel.websocket import _classify_sub_device
 
-from .adapter_fixtures import schema_one_snapshot, schema_one_tree
-from .test_pv_device import PANEL_NAME, SOLAR_CIRCUIT, _coordinator, _entry
-
-SECOND_SOLAR_CIRCUIT: Final = "5be1d2c3a4f5061728394a5b6c7d8e9f"
-FIRST_PV: Final = "pv-1"
-SECOND_PV: Final = "pv-2"
-UNFED_PV: Final = "pv-3"
+from .adapter_fixtures import (
+    SECOND_SOLAR_CIRCUIT,
+    SOLAR_CIRCUIT,
+    UNFED_PV,
+    pv_inverters_tree,
+    schema_one_snapshot,
+)
+from .helpers import PANEL_NAME, add_panel_entry
+from .test_pv_device import _coordinator
 
 METADATA_KEYS: Final = ("pv_vendor", "pv_product", "pv_nameplate_capacity")
-
-
-def _tree(*, second: bool = True, unfed: bool = False) -> dict[str, dict[str, str]]:
-    """Rewrite the capture with its inverter renamed and others added, as r202639 publishes them; the second sits on lower breaker spaces, where 2.1.2b3 would have ranked it first.
-
-    The second also publishes a serial, so a serial is on the wire for the
-    identity assertions to ignore.
-    """
-    tree = schema_one_tree()
-    pv_topics = tree.pop("pv")
-    tree[FIRST_PV] = dict(pv_topics)
-    tree[SOLAR_CIRCUIT]["connection/feeds-device-id"] = FIRST_PV
-    if second:
-        tree[SECOND_PV] = {
-            **pv_topics,
-            "info/vendor-name": "Second Vendor",
-            "info/serial-number": "INVERTER-SERIAL-0002",
-            "info/nominal-power": "4000.0",
-        }
-        tree[SECOND_SOLAR_CIRCUIT] = {
-            **tree[SOLAR_CIRCUIT],
-            "connection/feeds-device-id": SECOND_PV,
-            "info/name": "Garage Solar",
-            "info/spaces": "12,14",
-        }
-    if unfed:
-        tree[UNFED_PV] = dict(pv_topics)
-    return tree
 
 
 async def _setup(
@@ -207,7 +181,7 @@ def inverter_cards(hass: HomeAssistant, entry: MockConfigEntry) -> set[str]:
 async def test_a_single_inverter_keeps_every_id_it_had(hass: HomeAssistant) -> None:
     snapshot = schema_one_snapshot()
     assert len(snapshot.pv_inverters) == 1
-    entry = _entry(hass, "entry-pv-single", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-pv-single", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -227,9 +201,9 @@ async def test_a_single_inverter_keeps_every_id_it_had(hass: HomeAssistant) -> N
 async def test_each_inverter_gets_a_card_and_entities_keyed_by_its_circuit(
     hass: HomeAssistant,
 ) -> None:
-    snapshot = schema_one_snapshot(_tree())
+    snapshot = schema_one_snapshot(pv_inverters_tree())
     assert set(snapshot.pv_inverters) == {SOLAR_CIRCUIT, SECOND_SOLAR_CIRCUIT}
-    entry = _entry(hass, "entry-pv-two", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-pv-two", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -267,8 +241,8 @@ async def test_each_inverter_gets_a_card_and_entities_keyed_by_its_circuit(
 async def test_two_inverters_at_first_sight_leave_the_solar_card_unbound(
     hass: HomeAssistant,
 ) -> None:
-    snapshot = schema_one_snapshot(_tree())
-    entry = _entry(hass, "entry-pv-two-unbound", snapshot.serial_number)
+    snapshot = schema_one_snapshot(pv_inverters_tree())
+    entry = add_panel_entry(hass, "entry-pv-two-unbound", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -282,7 +256,7 @@ async def test_two_inverters_at_first_sight_leave_the_solar_card_unbound(
 
 def test_every_inverters_circuit_reads_as_solar() -> None:
     """Both feeding circuits are labeled PV, so both get the solar sign."""
-    snapshot = schema_one_snapshot(_tree())
+    snapshot = schema_one_snapshot(pv_inverters_tree())
     power = next(d for d in CIRCUIT_SENSORS if d.key == "circuit_power")
 
     first = snapshot.circuits[SOLAR_CIRCUIT]
@@ -295,7 +269,7 @@ def test_every_inverters_circuit_reads_as_solar() -> None:
 
 def test_every_inverter_is_a_capability_so_a_new_key_reloads() -> None:
     single = detect_capabilities(schema_one_snapshot())
-    multi = detect_capabilities(schema_one_snapshot(_tree()))
+    multi = detect_capabilities(schema_one_snapshot(pv_inverters_tree()))
 
     assert len([cap for cap in single if cap.startswith("pv_inverter:")]) == 1
     assert len([cap for cap in multi - single if cap.startswith("pv_inverter:")]) == 1
@@ -316,9 +290,9 @@ def test_the_identifier_grammar_reads_both_shapes() -> None:
 
 
 async def test_an_unfed_inverter_is_keyed_by_its_device_id(hass: HomeAssistant) -> None:
-    snapshot = schema_one_snapshot(_tree(second=False, unfed=True))
+    snapshot = schema_one_snapshot(pv_inverters_tree(second=False, unfed=True))
     assert set(snapshot.pv_inverters) == {SOLAR_CIRCUIT, UNFED_PV}
-    entry = _entry(hass, "entry-pv-unfed", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-pv-unfed", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -340,11 +314,11 @@ def _names(hass: HomeAssistant, entry: MockConfigEntry, serial: str, keys: list[
 
 
 async def test_two_unfed_inverters_get_distinct_names(hass: HomeAssistant) -> None:
-    tree = _tree(second=False, unfed=True)
+    tree = pv_inverters_tree(second=False, unfed=True)
     tree["pv-4"] = dict(tree[UNFED_PV])
     snapshot = schema_one_snapshot(tree)
     assert set(snapshot.pv_inverters) == {SOLAR_CIRCUIT, UNFED_PV, "pv-4"}
-    entry = _entry(hass, "entry-pv-two-unfed", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-pv-two-unfed", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -369,7 +343,7 @@ async def test_two_unfed_inverters_get_distinct_names(hass: HomeAssistant) -> No
 def test_only_a_suffix_equal_to_the_label_is_dropped(
     display_suffix: str | None, expected: str
 ) -> None:
-    pv = schema_one_snapshot(_tree()).pv_inverters[SOLAR_CIRCUIT]
+    pv = schema_one_snapshot(pv_inverters_tree()).pv_inverters[SOLAR_CIRCUIT]
 
     info = pv_inverter_device_info(
         "serial", SOLAR_CIRCUIT, pv, PANEL_NAME, display_suffix, panel_device_id="panel-device"
@@ -381,10 +355,10 @@ def test_only_a_suffix_equal_to_the_label_is_dropped(
 async def test_circuits_sharing_a_name_fall_back_to_their_breaker_positions(
     hass: HomeAssistant,
 ) -> None:
-    tree = _tree()
+    tree = pv_inverters_tree()
     tree[SECOND_SOLAR_CIRCUIT]["info/name"] = tree[SOLAR_CIRCUIT]["info/name"]
     snapshot = schema_one_snapshot(tree)
-    entry = _entry(hass, "entry-pv-same-name", snapshot.serial_number)
+    entry = add_panel_entry(hass, "entry-pv-same-name", snapshot.serial_number)
 
     await _setup(hass, entry, snapshot)
 
@@ -411,12 +385,12 @@ def _inverter_devices(hass: HomeAssistant, entry: MockConfigEntry) -> set[str]:
 async def test_a_departed_inverter_keeps_its_device_until_its_owner_removes_it(
     hass: HomeAssistant,
 ) -> None:
-    before = schema_one_snapshot(_tree(unfed=True))
-    entry = _entry(hass, "entry-pv-departed", before.serial_number)
+    before = schema_one_snapshot(pv_inverters_tree(unfed=True))
+    entry = add_panel_entry(hass, "entry-pv-departed", before.serial_number)
     serial = before.serial_number
     await _unload(await _setup(hass, entry, before))
 
-    await _setup(hass, entry, schema_one_snapshot(_tree()))
+    await _setup(hass, entry, schema_one_snapshot(pv_inverters_tree()))
 
     assert f"{serial}_{SUB_DEVICE_PV}_{UNFED_PV}" in _inverter_devices(hass, entry)
     assert [uid for uid in _unique_ids(hass, entry) if UNFED_PV in uid]
