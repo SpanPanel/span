@@ -31,6 +31,8 @@ from span_panel_api import (
     ca_fingerprint,
 )
 from span_panel_api.exceptions import (
+    SpanPanelAdapterIncompatibleError,
+    SpanPanelAdapterMissingError,
     SpanPanelAPIError,
     SpanPanelAuthError,
     SpanPanelCAChangedError,
@@ -61,6 +63,7 @@ from .ca_repairs import (
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
+    PanelRestTransport,
     as_port,
     async_ca_signs_panel_leaf,
     async_fetch_panel_ca,
@@ -86,6 +89,17 @@ from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
 from .extension import async_notice_declined_extensions
+from .firmware_schema import (
+    FLAT_ADAPTER_KEY,
+    SchemaRead,
+    async_read_schema,
+    is_flat_adapter_error,
+)
+from .flat_firmware_repairs import (
+    FLAT_FIRMWARE_TRANSLATION_KEY,
+    async_clear_flat_firmware,
+    async_raise_flat_firmware,
+)
 from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
@@ -342,6 +356,86 @@ def _async_enforce_hardware_verdict(
     )
 
 
+@callback
+def _async_refuse_flat_firmware(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry
+) -> ConfigEntryNotReady:
+    """Raise the flat-firmware Repair, and answer the not-ready setup raises with it.
+
+    Not-ready rather than terminal, unlike refused hardware: the remedy is a
+    firmware update on the panel, and the retry is what notices it, clearing the
+    Repair as it sets up. Returned rather than raised, so each place that finds
+    a flat panel raises it itself, chained to the error it caught where it has one.
+    """
+    async_raise_flat_firmware(hass, entry)
+    return ConfigEntryNotReady(
+        translation_domain=DOMAIN,
+        translation_key=FLAT_FIRMWARE_TRANSLATION_KEY,
+        translation_placeholders={"panel": entry.title},
+    )
+
+
+async def _async_enforce_schema_read(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry, host: str, transport: PanelRestTransport
+) -> SchemaRead:
+    """Read the panel's schema, refuse a flat one, and clear a standing refusal on parent/child.
+
+    Over the entry's own transport, as the hardware read is. A read that cannot
+    be had says nothing about the firmware, so it neither refuses nor clears,
+    and is answered for the connect to settle.
+    """
+    schema = await async_read_schema(
+        host,
+        port=transport.port,
+        httpx_client=get_async_client(hass),
+        ssl_context=transport.ssl_context,
+    )
+    if schema == "flat":
+        raise _async_refuse_flat_firmware(hass, entry)
+    if schema == "parent_child":
+        async_clear_flat_firmware(hass, entry)
+    return schema
+
+
+async def _async_connect_unless_flat(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry, client: SpanMqttClient
+) -> None:
+    """Connect the client, refusing a panel the library has no usable flat adapter for.
+
+    The backstop for a schema read that could not be had. Missing means the
+    schema-0 package is gone, and incompatible that a leftover one no longer
+    matches the library's adapter contract; either, for `schema_0`, is a flat
+    panel. Only these two are caught, and setup catches neither, so either for
+    any other key leaves setup exactly as it always has, and every other error
+    reaches setup's own handlers unchanged.
+    """
+    try:
+        await client.connect()
+    except (SpanPanelAdapterMissingError, SpanPanelAdapterIncompatibleError) as err:
+        if not is_flat_adapter_error(err):
+            raise
+        await client.close()
+        raise _async_refuse_flat_firmware(hass, entry) from err
+
+
+async def _async_enforce_connected_schema(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry, client: SpanMqttClient, schema: SchemaRead
+) -> None:
+    """Refuse a panel a leftover flat adapter parsed, or clear a refusal an unread read left up.
+
+    The other backstop. A schema-0 package left by an older install still
+    parses a flat panel, and is no reason to load one this release refuses; no
+    coordinator exists yet to close the client, so this does. Any other adapter
+    means the panel is not flat, which is what a read that could not be had
+    left unsettled.
+    """
+    if client.schema_major == FLAT_ADAPTER_KEY:
+        await client.close()
+        raise _async_refuse_flat_firmware(hass, entry)
+    if schema == "unread":
+        async_clear_flat_firmware(hass, entry)
+
+
 async def _async_rest_tls_verdict(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
@@ -521,6 +615,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # which model the panel is.
             hardware_version = await async_read_hardware_version(hass, host, transport)
 
+            # Before the client is built, so a panel on the flat schema is
+            # refused without its broker ever being dialled.
+            schema = await _async_enforce_schema_read(hass, entry, host, transport)
+
             broker_config = MqttClientConfig(
                 broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
@@ -576,7 +674,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             entry.async_on_unload(client.register_leaf_mismatch_callback(_on_leaf_name_mismatch))
 
             try:
-                await client.connect()
+                # Its flat refusal is a `ConfigEntryNotReady`, which none of the
+                # handlers below catches, so it leaves setup as it was raised.
+                await _async_connect_unless_flat(hass, entry, client)
             except SpanPanelCAChangedError as err:
                 # Terminal on purpose, and `ConfigEntryError` rather than
                 # `ConfigEntryNotReady` for the same reason the library refuses
@@ -674,6 +774,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # what these two describe failing.
             async_clear_rest_tls_untrusted(hass, entry)
             async_clear_ca_unusable(hass, entry)
+
+            # After the clears above, which stand whichever adapter the connect
+            # reached: the handshake did succeed under the pin.
+            await _async_enforce_connected_schema(hass, entry, client, schema)
 
             # The other half of the same condition: the reconnect loop runs
             # fire-and-forget, so a CA that changes mid-session cannot surface as
@@ -875,6 +979,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_rest_tls_untrusted(hass, entry)
     async_clear_leaf_name_mismatch(hass, entry)
     async_clear_unvalidated_hardware(hass, entry)
+    async_clear_flat_firmware(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)

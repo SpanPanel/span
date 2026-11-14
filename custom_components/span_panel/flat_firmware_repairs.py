@@ -41,6 +41,13 @@ from .const import DOMAIN
 
 FLAT_FIRMWARE_ISSUE_PREFIX: Final = "flat_firmware_"
 
+FLAT_FIRMWARE_TRANSLATION_KEY: Final = "panel_firmware_flat"
+"""The key every refusal of a flat panel is worded under.
+
+The Repair here, setup's `ConfigEntryNotReady`, and the config flow's error and
+abort each find their sentence under it, in their own section of `strings.json`.
+"""
+
 
 def flat_firmware_issue_id(entry_id: str) -> str:
     """Issue id for one entry's flat-firmware refusal."""
@@ -57,7 +64,7 @@ def async_raise_flat_firmware(hass: HomeAssistant, entry: ConfigEntry) -> None:
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.ERROR,
-        translation_key="panel_firmware_flat",
+        translation_key=FLAT_FIRMWARE_TRANSLATION_KEY,
         translation_placeholders={"panel": entry.title},
         data={"entry_id": entry.entry_id},
     )
@@ -65,5 +72,9 @@ def async_raise_flat_firmware(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 @callback
 def async_clear_flat_firmware(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Drop the Repair, on a setup that finds the panel on parent/child firmware."""
+    """Drop the Repair, on a setup that finds the panel is not flat and on removal of the entry.
+
+    Setup finds that by reading a parent/child schema, or, when the read could
+    not be had, by connecting on an adapter other than the flat one.
+    """
     ir.async_delete_issue(hass, DOMAIN, flat_firmware_issue_id(entry.entry_id))

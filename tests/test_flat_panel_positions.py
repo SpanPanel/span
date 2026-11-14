@@ -1,22 +1,21 @@
-"""A flat panel's empty breaker positions are not circuits, and no entity is built on one.
+"""A flat panel that a leftover schema-0 package still parses is refused at setup, and builds nothing.
 
-The pinned schema_0 adapter reports only the circuits the panel publishes. Earlier
-releases added an `unmapped_tab_<n>` entry for every position no breaker occupied,
-and the integration filtered those out by name; the filters went with them. This
-holds the integration to that: the flat adapter, driven over the schema it ships,
-with every position empty, through the real setup and every platform.
+An install upgraded from an older release can keep the schema-0 package, which is
+never upgraded with this one. When the schema read before connecting could not
+be had, that package parses the flat panel and the connect succeeds, so the
+adapter the client reached is the only evidence left. This holds setup to
+refusing on it: the real flat adapter, driven over the schema it ships, through
+the real setup, ends retrying with the flat-firmware Repair and no entity.
 """
 
 from __future__ import annotations
 
-import re
-from typing import Final
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-import pytest
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import (
@@ -27,6 +26,7 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_USERNAME,
     DOMAIN,
 )
+from custom_components.span_panel.flat_firmware_repairs import flat_firmware_issue_id
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
     CURRENT_CONFIG_VERSION,
@@ -35,21 +35,14 @@ from custom_components.span_panel.migrations import (
 from .adapter_fixtures import SCHEMA_ZERO_SERIAL, schema_zero_adapter
 from .captures_replay import ReplayClient
 
-UNOCCUPIED_POSITION: Final = re.compile(r"(^|_)unmapped_tab_\d+")
-"""The synthesised circuit id, wherever it would appear in a circuit id or a unique id."""
 
-
-@pytest.fixture(autouse=True)
-def expected_lingering_timers() -> bool:
-    """The switch platform's relock and debounce timers may outlive a test."""
-    return True
-
-
-async def test_a_flat_panel_creates_no_unoccupied_position_entities(hass: HomeAssistant) -> None:
+async def test_a_flat_panel_the_leftover_adapter_parses_is_refused(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
     adapter = schema_zero_adapter()
-    snapshot = adapter.build_snapshot()
-    assert snapshot.panel_size > 0, "the schema declares breaker positions, every one of them empty"
-    assert not [circuit_id for circuit_id in snapshot.circuits if UNOCCUPIED_POSITION.search(circuit_id)]
+    client = ReplayClient(adapter)
+    assert client.schema_major == "schema_0", "the replay connects on the real flat adapter"
+    panel_schema.side_effect = TimeoutError()
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -67,13 +60,17 @@ async def test_a_flat_panel_creates_no_unoccupied_position_entities(hass: HomeAs
         minor_version=CURRENT_CONFIG_MINOR_VERSION,
     )
     entry.add_to_hass(hass)
-    with patch("custom_components.span_panel.SpanMqttClient", return_value=ReplayClient(adapter)):
-        assert await hass.config_entries.async_setup(entry.entry_id) is True
+    with (
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch.object(client, "close", AsyncMock()) as close,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
         await hass.async_block_till_done()
 
-    unique_ids = [
-        registered.unique_id
-        for registered in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    ]
-    assert unique_ids, "setup created the panel's own entities"
-    assert not [unique_id for unique_id in unique_ids if UNOCCUPIED_POSITION.search(unique_id)]
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "panel_firmware_flat"
+    close.assert_awaited_once()
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, flat_firmware_issue_id(entry.entry_id))
+    assert issue is not None
+    assert issue.translation_placeholders == {"panel": "Span Panel"}
+    assert er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id) == []

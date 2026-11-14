@@ -8,7 +8,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from span_panel_api import V2StatusInfo
+from span_panel_api import V2HomieSchema, V2StatusInfo
 
 # The real span_panel_api library is used directly (no sys.modules mocking).
 # Individual tests mock SpanMqttClient as needed.
@@ -145,3 +145,29 @@ def panel_status(ensure_custom_components_imported: None) -> Iterator[AsyncMock]
         new=AsyncMock(return_value=VALIDATED_PANEL_STATUS),
     ) as status:
         yield status
+
+
+PARENT_CHILD_PANEL_SCHEMA = V2HomieSchema(
+    firmware_version="spanos3/r202639/03",
+    types_schema_hash="0000000000000000",
+    types={},
+    data_model_version="1.0",
+)
+"""What the stand-in for setup's schema read answers unless a test says otherwise."""
+
+
+@pytest.fixture(autouse=True)
+def panel_schema(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:
+    """Answer the unauthenticated schema read without touching the network.
+
+    Autouse for the reason `panel_status` is: every test that runs
+    `async_setup_entry` reaches the read, and the harness refuses the socket it
+    would open. The default is a parent/child schema, so setup proceeds exactly
+    as it did before the read existed; a test about flat firmware sets
+    `return_value` or `side_effect` on the mock this yields.
+    """
+    with patch(
+        "custom_components.span_panel.firmware_schema.get_homie_schema",
+        new=AsyncMock(return_value=PARENT_CHILD_PANEL_SCHEMA),
+    ) as schema:
+        yield schema
