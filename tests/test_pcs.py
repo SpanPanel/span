@@ -53,6 +53,7 @@ from custom_components.span_panel.sensor_definitions import (
     PCS_BINDING_CONSTRAINT_OPTIONS,
     PCS_CONSTRAINT_FAMILIES,
     PCS_SENSORS,
+    SpanPcsSensorEntityDescription,
 )
 from custom_components.span_panel.sensor_panel import SpanPcsSensor
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -824,7 +825,9 @@ def test_every_attribute_read_is_enumerated_as_unmapped() -> None:
 
 
 @pytest.mark.parametrize("description", [*PCS_SENSORS, PCS_ACTIVE_SENSOR], ids=lambda d: str(d.key))
-def test_each_description_is_a_plain_declaration(description: Any) -> None:
+def test_each_description_is_a_plain_declaration(
+    description: SpanPcsSensorEntityDescription | SpanPanelBinarySensorEntityDescription,
+) -> None:
     """`field_path` says what the entity's value is, and with no `derived` the
     gate covers it: the entity gets its Repair mention and goes unavailable when
     the panel stops resolving the property."""

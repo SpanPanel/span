@@ -33,7 +33,7 @@ from .helpers import (
     outside_meter_label,
     shared_relay_groups,
 )
-from .runtime import SpanPanelConfigEntry
+from .runtime import SpanPanelConfigEntry, loaded_runtime_data
 from .schema_validation import SchemaFindings
 
 if TYPE_CHECKING:
@@ -392,12 +392,32 @@ def _panel_ca(entry: SpanPanelConfigEntry) -> dict[str, Any]:
         return {"pinned": True, "pending": False, "fingerprint_error": str(err)}
 
 
+def _not_loaded(entry: SpanPanelConfigEntry) -> dict[str, object]:
+    """Report why an entry with no runtime data is not loaded, and the entry itself.
+
+    Home Assistant offers the download for every entry, loaded or not, and an
+    entry setup refused has nothing else to report. A panel on spanos2 firmware
+    is the common case: setup refuses it and retries, and its owner is the one
+    most likely to download diagnostics. `state` and `reason` are what Home
+    Assistant shows on the entry's card; the config entry is redacted as a
+    loaded entry's is.
+    """
+    return {
+        "config_entry": async_redact_data(entry.as_dict(), TO_REDACT),
+        "state": entry.state.value,
+        "reason": entry.reason,
+    }
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
 ) -> dict[str, Any]:
-    """Return diagnostics for a config entry."""
-    coordinator = entry.runtime_data.coordinator
+    """Return diagnostics for a config entry, or why it is not loaded when it has no runtime data."""
+    runtime_data = loaded_runtime_data(entry)
+    if runtime_data is None:
+        return _not_loaded(entry)
+    coordinator = runtime_data.coordinator
     snapshot = coordinator.data
 
     panel_data: dict[str, Any] = {
@@ -484,7 +504,7 @@ async def async_get_config_entry_diagnostics(
         "pv_power_without_source_w": _pv_power_without_source(snapshot),
         "evse": evse_data,
         "battery": battery_data,
-        "pv": _pv(snapshot, entry.runtime_data.pv_binding),
+        "pv": _pv(snapshot, runtime_data.pv_binding),
         "coordinator": {
             "panel_offline": coordinator.panel_offline,
             "last_update_success": coordinator.last_update_success,
@@ -497,5 +517,5 @@ async def async_get_config_entry_diagnostics(
         # Keys and enum values only -- no wire values, no user free text (names
         # and icons live in Core's registry, not here). Same withholding rules
         # as the adoption block above.
-        "adopted_curation": entry.runtime_data.curation.as_dicts(),
+        "adopted_curation": runtime_data.curation.as_dicts(),
     }

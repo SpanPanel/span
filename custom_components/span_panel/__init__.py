@@ -538,10 +538,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             "Please reauthenticate with your panel passphrase or proximity."
         )
 
-    # Before the coordinator, because the coordinator can raise a notice as soon
-    # as it starts streaming -- a panel that upgraded its firmware while Home
-    # Assistant was down announces itself on the first snapshot. Restoring after
-    # that would overwrite the record with a view that never saw it.
+    # Before the coordinator, because `package_rating_manager` can raise a notice
+    # on the first snapshot -- a panel that changed while Home Assistant was down
+    # in a way that removes a rating copied from the SPAN app announces it then --
+    # and asks whether the last run's notice still stands before adding to it.
+    # Restoring after that would overwrite the record with a view that never saw it.
     await async_restore(hass, entry)
 
     coordinator: SpanPanelCoordinator | None = None

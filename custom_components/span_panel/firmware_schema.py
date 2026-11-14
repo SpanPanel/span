@@ -5,7 +5,7 @@ property arrived with the parent/child model, so its absence is the flat signal.
 It is the rule the library itself dispatches on in `dispatch.select_adapter_key`,
 which hands absence to the flat adapter, `schema_0`, and a present value to the
 major it names. `is_flat_schema` is the one place the integration states it, so
-setup, the config flow and diagnostics cannot come to disagree about a panel.
+setup and the config flow cannot come to disagree about a panel.
 
 `async_read_schema` answers one of three things: parent/child, flat, or unread.
 Unread is never flat. A request that failed says nothing about the firmware, so
@@ -31,10 +31,9 @@ from span_panel_api import V2HomieSchema, get_homie_schema
 from span_panel_api.exceptions import (
     SpanPanelAdapterIncompatibleError,
     SpanPanelAdapterMissingError,
-    SpanPanelError,
 )
 
-from .hardware_guard import HARDWARE_READ_TIMEOUT_S
+from .hardware_guard import FAIL_OPEN_READ_ERRORS, HARDWARE_READ_TIMEOUT_S
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,11 +85,12 @@ async def async_read_schema(
 ) -> SchemaRead:
     """Read the panel's Homie schema and classify it, or answer "unread" when it cannot be had.
 
-    Fail-open by design, as `hardware_guard.async_read_hardware_version` is: a
-    timeout, a refused or reset connection, a certificate the pin rejects, an
-    unusable URL and a body that cannot be read all answer "unread". Every caller
-    proceeds on it as it would without the read, and its own path reports any of
-    these failures in its own terms.
+    Fail-open by design, as `hardware_guard.async_read_hardware_version` is, and
+    on the same failures, `FAIL_OPEN_READ_ERRORS`: a timeout, a refused or reset
+    connection, a certificate the pin rejects, an unusable URL and a body that
+    cannot be read all answer "unread". Every caller proceeds on it as it would
+    without the read, and its own path reports any of these failures in its own
+    terms.
 
     The schema endpoint is unauthenticated. The arguments go to `get_homie_schema`
     unchanged, so a caller passes the transport its other REST calls to the panel
@@ -108,7 +108,8 @@ async def async_read_schema(
             schema = await get_homie_schema(
                 host, port=port, httpx_client=httpx_client, ssl_context=ssl_context
             )
-    except (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL) as err:
-        _LOGGER.debug("Could not read the Homie schema of SPAN panel %s: %s", host, err)
+    except FAIL_OPEN_READ_ERRORS as err:
+        # `%r`, because a timeout's `str()` is empty and the line would name no cause.
+        _LOGGER.debug("Could not read the Homie schema of SPAN panel %s: %r", host, err)
         return "unread"
     return "flat" if is_flat_schema(schema) else "parent_child"

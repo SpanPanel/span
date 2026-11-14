@@ -66,6 +66,7 @@ from custom_components.span_panel.sensor import create_battery_sensors
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BESS_TELEMETRY_SENSORS,
+    SpanBessMetadataSensorEntityDescription,
 )
 from custom_components.span_panel.sensor_panel import (
     SpanBessMetadataSensor,
@@ -760,7 +761,9 @@ def test_both_paths_are_declarations() -> None:
 
 
 @pytest.mark.parametrize("description", BESS_TELEMETRY_SENSORS, ids=lambda d: d.key)
-def test_each_description_is_a_plain_declaration(description: Any) -> None:
+def test_each_description_is_a_plain_declaration(
+    description: SpanBessMetadataSensorEntityDescription,
+) -> None:
     """`field_path` says what the entity's value is, and with no `derived` the
     gate covers it: the entity gets its Repair mention and goes unavailable when
     the panel stops resolving the property."""

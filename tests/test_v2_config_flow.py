@@ -4893,6 +4893,29 @@ async def test_reconfigure_refuses_a_flat_panel(
     assert entry.data[CONF_HOST] == MOCK_HOST
 
 
+async def test_reconfigure_to_an_fqdn_refuses_a_flat_panel_before_registering_it(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """Refused before `register_fqdn` is asked for, so the panel is left as it was.
+
+    Registering an FQDN makes the panel regenerate its certificate, which is
+    not a change to make to a panel this release refuses to set up.
+    """
+    entry = _reconfigurable_entry(hass, **{CONF_EBUS_BROKER_PORT: 8883})
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    register = AsyncMock()
+
+    with patch("custom_components.span_panel.config_flow.register_fqdn", register):
+        result, _detect = await _reconfigure(hass, entry, {CONF_HOST: "panel.example.com"})
+
+    register.assert_not_called()
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "panel_firmware_flat"}
+    assert entry.data[CONF_HOST] == MOCK_HOST
+    assert CONF_REGISTERED_FQDN not in entry.data
+
+
 async def test_zeroconf_skips_a_flat_panel(hass: HomeAssistant, panel_schema: AsyncMock) -> None:
     """Aborted, and Home Assistant shows no card for an aborted discovery."""
     panel_schema.return_value = FLAT_PANEL_SCHEMA

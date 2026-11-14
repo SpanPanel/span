@@ -5,21 +5,30 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
 from homeassistant.components.sensor import SensorStateClass
-from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.components.diagnostics import (
+    get_diagnostics_for_config_entry,
+)
+from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 from span_panel_api import FieldMetadata, MaskedTree, SpanPanelSnapshot, SpanPVSnapshot, TreeExportingAdapter
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_HOST,
     CONF_EBUS_BROKER_PASSWORD,
+    CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
+    CONF_HTTP_PORT,
     DOMAIN,
 )
 from custom_components.span_panel.curation import (
@@ -33,12 +42,17 @@ from custom_components.span_panel.diagnostics import (
 )
 from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
+from custom_components.span_panel.migrations import (
+    CURRENT_CONFIG_MINOR_VERSION,
+    CURRENT_CONFIG_VERSION,
+)
 from custom_components.span_panel.notices import async_restore
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .captures_replay import replay
+from .conftest import FLAT_PANEL_SCHEMA
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
@@ -737,3 +751,66 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     }
     assert set(result["package_ratings"]["packages"]) <= set(result["circuits"])
     assert json.dumps(result["package_ratings"])
+
+
+# -- an entry that never loaded ----------------------------------------------
+
+
+def _installed_flat_entry() -> MockConfigEntry:
+    """Return an entry an earlier setup left, for a panel now on spanos2 firmware.
+
+    At the current version, so Home Assistant sets it up as it does at boot,
+    with no migration first.
+    """
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_API_VERSION: "v2",
+            CONF_HOST: "192.0.2.50",
+            CONF_ACCESS_TOKEN: "access-secret",
+            CONF_EBUS_BROKER_HOST: "192.0.2.50",
+            CONF_EBUS_BROKER_USERNAME: "mqtt-user",
+            CONF_EBUS_BROKER_PASSWORD: "mqtt-password",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_HTTP_PORT: 80,
+        },
+        entry_id="diag-flat-entry",
+        title="SPAN Panel",
+        unique_id="sp3-diag-flat",
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+    )
+
+
+async def test_a_refused_entry_downloads_why_it_is_not_loaded(
+    hass: HomeAssistant, hass_client: ClientSessionGenerator, panel_schema: AsyncMock
+) -> None:
+    """A flat panel's entry never loads, and its owner is the one most likely to ask for diagnostics.
+
+    Home Assistant offers the download for every entry, loaded or not. One with
+    no runtime data answers with its state and the reason setup gave, beside
+    the config entry redacted as a loaded entry's is, rather than failing the
+    download.
+    """
+    entry = _installed_flat_entry()
+    entry.add_to_hass(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    assert await hass.config_entries.async_setup(entry.entry_id) is False
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "panel_firmware_flat"
+    assert entry.reason
+
+    result = await get_diagnostics_for_config_entry(hass, hass_client, entry)
+
+    assert result["state"] == ConfigEntryState.SETUP_RETRY.value
+    assert result["reason"] == entry.reason
+    config_entry = result["config_entry"]
+    assert isinstance(config_entry, dict)
+    assert config_entry["entry_id"] == entry.entry_id
+    data = config_entry["data"]
+    assert isinstance(data, dict)
+    for key in (CONF_ACCESS_TOKEN, CONF_EBUS_BROKER_USERNAME, CONF_EBUS_BROKER_PASSWORD):
+        assert data[key] == REDACTED
+    dumped = json.dumps(result)
+    for secret in ("access-secret", "mqtt-user", "mqtt-password"):
+        assert secret not in dumped

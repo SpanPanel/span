@@ -44,8 +44,14 @@ def test_a_schema_without_a_data_model_version_is_flat() -> None:
     assert is_flat_schema(_schema(None)) is True
 
 
-def test_a_schema_with_one_is_not() -> None:
-    assert is_flat_schema(_schema("1.0")) is False
+@pytest.mark.parametrize("data_model_version", ["1.0", ""])
+def test_a_schema_with_one_is_not(data_model_version: str) -> None:
+    """Absence alone decides, so a present but empty version is not flat either.
+
+    The library keeps the two apart when it reads the schema, and refuses an
+    empty version at connect rather than hand the panel to the flat parser.
+    """
+    assert is_flat_schema(_schema(data_model_version)) is False
 
 
 def test_the_flat_key_is_the_one_the_library_dispatches_absence_to() -> None:
