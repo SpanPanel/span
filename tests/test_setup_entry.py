@@ -25,7 +25,7 @@ from homeassistant.util import dt as dt_util
 import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot, V2HomieSchema, V2StatusInfo
+from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot, V2StatusInfo
 from span_panel_api.exceptions import (
     SpanPanelAdapterIncompatibleError,
     SpanPanelAdapterMissingError,
@@ -64,7 +64,7 @@ from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
-from .conftest import PARENT_CHILD_PANEL_SCHEMA
+from .conftest import FLAT_PANEL_SCHEMA, PARENT_CHILD_PANEL_SCHEMA
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 
@@ -1209,14 +1209,6 @@ class _ErrorRecords(logging.Handler):
 # ---------------------------------------------------------------------------
 
 FLAT_FIRMWARE_ISSUE = "flat_firmware_entry-setup"
-
-FLAT_PANEL_SCHEMA = V2HomieSchema(
-    firmware_version="spanos2/r202603/05",
-    types_schema_hash="0000000000000000",
-    types={},
-    data_model_version=None,
-)
-"""What a panel on spanos2 firmware answers: a schema that publishes no `data_model_version`."""
 
 
 def _installed_entry() -> MockConfigEntry:

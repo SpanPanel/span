@@ -155,6 +155,14 @@ PARENT_CHILD_PANEL_SCHEMA = V2HomieSchema(
 )
 """What the stand-in for setup's schema read answers unless a test says otherwise."""
 
+FLAT_PANEL_SCHEMA = V2HomieSchema(
+    firmware_version="spanos2/r202603/05",
+    types_schema_hash="0000000000000000",
+    types={},
+    data_model_version=None,
+)
+"""What a panel on spanos2 firmware answers: a schema that publishes no `data_model_version`."""
+
 
 @pytest.fixture(autouse=True)
 def panel_schema(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:

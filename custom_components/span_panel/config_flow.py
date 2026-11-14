@@ -22,6 +22,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
+import httpx
 from span_panel_api import (
     V2AuthResponse,
     build_panel_ssl_context,
@@ -90,6 +91,8 @@ from .const import (
     EntityNamingPattern,
 )
 from .control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL, DEFAULT_CONTROL_MODE
+from .firmware_schema import SchemaRead, async_read_schema
+from .flat_firmware_repairs import FLAT_FIRMWARE_TRANSLATION_KEY
 from .hardware_guard import registers_by_passphrase_only
 from .options import (
     ALLOW_CONTEXTLESS_CONTROL,
@@ -298,6 +301,47 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if self._rest_transport is None:
             raise ConfigFlowError("Reached a panel REST call with no transport pinned")
         return self._rest_transport
+
+    async def _async_read_schema(
+        self,
+        host: str,
+        *,
+        port: int,
+        httpx_client: httpx.AsyncClient | None,
+        ssl_context: ssl.SSLContext | None,
+    ) -> SchemaRead:
+        """Read which eBus schema the panel that detection just reached publishes.
+
+        Each step that would add a panel, or point an entry at one, refuses a
+        panel on spanos2 firmware, which publishes the older flat eBus schema,
+        rather than end in an entry whose setup refuses it. The step passes the
+        host and transport its detection used, so the panel judged is the one
+        that answered, and a pinned entry's read rides its anchor: plaintext to
+        the HTTPS port would answer unread and skip the check unseen.
+
+        Unread is not flat, and the step goes on as it would without the read;
+        setup reads the schema again before it connects. How to refuse is the
+        step's, because a form can say why and a discovery can only not be
+        offered.
+
+        Discovery and the user step read once no entry already has the panel.
+        Such an entry is its setup's to refuse, as on reauth, and meanwhile
+        still follows its panel to a new address or ports; nor does every
+        re-announcement of a configured panel cost a second request.
+        """
+        schema = await async_read_schema(
+            host, port=port, httpx_client=httpx_client, ssl_context=ssl_context
+        )
+        if schema == "flat":
+            # An aborted discovery shows nothing, so this is where to look for
+            # why a panel on the network is not offered.
+            _LOGGER.debug(
+                "Refusing the SPAN panel at %s, port %s: it is on spanos2 firmware, which "
+                "publishes the older flat eBus schema, and needs a firmware update first",
+                host,
+                port,
+            )
+        return schema
 
     async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> LeafVerdict:
         """Settle which address the panel is dialled by, and whether it can be at all.
@@ -707,11 +751,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 self._https_port = https_port
                 self._https_port_known = True
 
-            detection = await detect_api_version(
-                host,
-                port=http_port,
-                httpx_client=get_async_client(self.hass, verify_ssl=False),
-            )
+            httpx_client = get_async_client(self.hass, verify_ssl=False)
+            detection = await detect_api_version(host, port=http_port, httpx_client=httpx_client)
             if detection.api_version != "v2" or detection.status_info is None:
                 return self.async_abort(reason="not_span_panel")
             self.api_version = "v2"
@@ -728,6 +769,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             }
             self._is_flow_setup = True
             await self.ensure_not_already_configured()
+            schema = await self._async_read_schema(
+                host, port=http_port, httpx_client=httpx_client, ssl_context=None
+            )
+            if schema == "flat":
+                return self.async_abort(reason=FLAT_FIRMWARE_TRANSLATION_KEY)
             return await self.async_step_confirm_discovery()
 
         # Non-v2 panels are not supported
@@ -777,9 +823,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Validate panel is reachable and v2
         self._http_port = port
-        detection = await detect_api_version(
-            host, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
-        )
+        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        detection = await detect_api_version(host, port=port, httpx_client=httpx_client)
         if detection.api_version != "v2" or detection.status_info is None:
             return self.async_abort(reason="not_span_panel")
 
@@ -799,6 +844,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             updates[CONF_HTTPS_PORT] = self._https_port
         updates.update(await self._async_hassio_host_update(host, port, panel_serial))
         self._abort_if_unique_id_configured(updates=updates)
+
+        schema = await self._async_read_schema(
+            host, port=port, httpx_client=httpx_client, ssl_context=None
+        )
+        if schema == "flat":
+            return self.async_abort(reason=FLAT_FIRMWARE_TRANSLATION_KEY)
 
         # Set up flow — same path as v2 zeroconf discovery
         self.api_version = "v2"
@@ -852,11 +903,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Detect API version — only v2 is supported
-        detection = await detect_api_version(
-            host,
-            port=self._http_port,
-            httpx_client=get_async_client(self.hass, verify_ssl=False),
-        )
+        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        detection = await detect_api_version(host, port=self._http_port, httpx_client=httpx_client)
         if detection.probe_failed:
             return self.async_show_form(
                 step_id="user",
@@ -886,6 +934,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             }
             self._is_flow_setup = True
             await self.ensure_not_already_configured(raise_on_progress=False)
+            schema = await self._async_read_schema(
+                host, port=self._http_port, httpx_client=httpx_client, ssl_context=None
+            )
+            if schema == "flat":
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=STEP_USER_DATA_SCHEMA,
+                    errors={"base": FLAT_FIRMWARE_TRANSLATION_KEY},
+                )
             # The CA first, then authentication over it. Registration is the one
             # exchange that carries the passphrase and returns both credentials.
             return await self.async_step_panel_ca_start()
@@ -1898,6 +1955,17 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Ensure the serial number matches — prevent switching to a different panel
         await self.async_set_unique_id(detection.status_info.serial_number)
         self._abort_if_unique_id_mismatch(reason="unique_id_mismatch")
+
+        # Refused here, with the person who asked present, rather than by the
+        # reload that would follow.
+        schema = await self._async_read_schema(
+            self._rest_host,
+            port=self._rest_transport.port,
+            httpx_client=self._rest_transport.httpx_client,
+            ssl_context=self._rest_transport.ssl_context,
+        )
+        if schema == "flat":
+            return self._reconfigure_form(reconfigure_entry, host, FLAT_FIRMWARE_TRANSLATION_KEY)
 
         if is_fqdn(host):
             # New host is FQDN — register it (replaces any existing FQDN on the panel)
