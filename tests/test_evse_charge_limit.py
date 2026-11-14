@@ -51,8 +51,8 @@ from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
     Producibility,
+    declared_field_paths,
     platform_descriptions,
 )
 from custom_components.span_panel.number import (
@@ -949,24 +949,26 @@ async def test_the_range_home_assistant_checks_is_the_commissioned_one(hass: Hom
 # ---------------------------------------------------------------------------
 
 
-def test_the_description_names_its_source_field_and_why_it_is_exempt() -> None:
-    """Both `field_path` and `derived`, as a schema-conditional description must.
+def test_the_description_declares_its_source_field() -> None:
+    """A plain declaration, which the producible gate covers.
 
-    The only settable entity to carry the pair, and the Repair naming a dead
-    field has to be able to name this entity too.
+    The Repair naming a dead limit has to be able to name this entity, and the
+    entity has to go unavailable with it.
     """
     assert EVSE_CHARGE_CURRENT_LIMIT.field_path == FIELD_LIMIT
-    assert EVSE_CHARGE_CURRENT_LIMIT.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+    assert EVSE_CHARGE_CURRENT_LIMIT.derived is None
     assert EVSE_CHARGE_CURRENT_LIMIT in platform_descriptions()
+    assert FIELD_LIMIT in declared_field_paths()
 
 
-def test_every_field_this_control_reads_is_enumerated() -> None:
-    """Four reads, four annotations, each checked against the adapters elsewhere.
+def test_every_field_this_control_reads_is_accounted_for() -> None:
+    """Four reads: one declaration and three annotations, each checked against the adapter elsewhere.
 
-    The pair the panel publishes as readings carries a schema_1 metadata row; the
-    pair that describes a command carries none on either adapter.
+    The limit is the entity's reading and is declared. The ceiling is mapped but
+    is a bound rather than the reading, so validation is kept from it. The pair
+    that describes a command carries no row at all.
     """
-    assert RESIDUAL_EXEMPT_PATHS[FIELD_LIMIT] is Producibility.SCHEMA_1_ONLY
-    assert RESIDUAL_EXEMPT_PATHS[FIELD_CEILING] is Producibility.SCHEMA_1_ONLY
-    assert RESIDUAL_EXEMPT_PATHS[FIELD_TARGET] is Producibility.NEITHER
-    assert RESIDUAL_EXEMPT_PATHS[FIELD_SETTABLE] is Producibility.NEITHER
+    assert FIELD_LIMIT not in RESIDUAL_EXEMPT_PATHS
+    assert RESIDUAL_EXEMPT_PATHS[FIELD_CEILING] is Producibility.MAPPED_UNVALIDATED
+    assert RESIDUAL_EXEMPT_PATHS[FIELD_TARGET] is Producibility.UNMAPPED
+    assert RESIDUAL_EXEMPT_PATHS[FIELD_SETTABLE] is Producibility.UNMAPPED

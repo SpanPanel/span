@@ -55,7 +55,7 @@ from .const import CONF_DEVICE_NAME, USE_CIRCUIT_NUMBERS
 from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
-from .field_paths import DerivedReason, FieldPathDeclarationMixin
+from .field_paths import FieldPathDeclarationMixin
 from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
 from .runtime import SpanPanelConfigEntry
 from .util import EMPTY_EVSE, evse_device_info, evse_display_name
@@ -88,14 +88,13 @@ class SpanEvseNumberEntityDescription(NumberEntityDescription, SpanEvseNumberReq
 
 EVSE_CHARGE_CURRENT_LIMIT: Final = SpanEvseNumberEntityDescription(
     key="evse_charge_current_limit",
+    # A plain declaration: the adapter maps the limit from the charger's own
+    # `$description`, so the producible gate covers it, and the control gets its
+    # Repair mention and its unavailability when the charger stops resolving
+    # the property. The ceiling it reads for its maximum is not declared
+    # alongside; see `evse.charge_current_ceiling_a` in `RESIDUAL_EXEMPT_PATHS`
+    # for why validation is kept from it.
     field_path="evse.charge_current_limit_a",
-    # One field, produced by schema_1 alone: flat firmware's `evse` device type
-    # carries `advertised-current` — what the charger is offering the vehicle,
-    # read-only — and no settable ceiling anywhere, so the both-adapters gate
-    # cannot be satisfied. schema_1 carries a metadata row for the field, which
-    # is what makes the path SCHEMA_1_ONLY rather than NEITHER and buys the
-    # entity unit validation against the charger's own `$description`.
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="evse_charge_current_limit",
     device_class=NumberDeviceClass.CURRENT,
     native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,

@@ -105,11 +105,11 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     # `_residual_field_paths` stays empty on purpose. The four `panel.shed_*`
     # policy fields read for `dsm_state`'s attributes are not declarable here:
     # everything declared on an entity flows into `declared_field_paths()`,
-    # where the producible gate demands both adapters emit it, and no adapter
-    # carries a row for any of them -- flat has no `shed` node at all, and a
-    # JSON policy document has no unit surface for a schema_1 row to describe.
-    # They are enumerated in `RESIDUAL_EXEMPT_PATHS` as `Producibility.NEITHER`
-    # instead, beside the shed-forecast refinements and the PCS attributes.
+    # where the producible gate demands the adapter map a row for it, and it
+    # maps none for any of them -- a JSON policy document has no unit surface
+    # for a row to describe. They are enumerated in `RESIDUAL_EXEMPT_PATHS` as
+    # `Producibility.UNMAPPED` instead, beside the shed-forecast refinements and
+    # the PCS attributes.
 
     def __init__(
         self,
@@ -164,12 +164,11 @@ class SpanShedForecastSensor(
     """
 
     # `_residual_field_paths` stays empty on purpose. The attribute reads below
-    # are not declarable: neither adapter carries a metadata row for those three
+    # are not declarable: the adapter maps no metadata row for those three
     # fields, so declaring them here would put them in `declared_field_paths()`
-    # where the producible gate rejects anything one adapter cannot emit. They
-    # are enumerated in `RESIDUAL_EXEMPT_PATHS` as `Producibility.NEITHER`
-    # instead, which is where the `mid.*` attribute reads live for the same
-    # reason.
+    # where the producible gate rejects a path with no row. They are enumerated
+    # in `RESIDUAL_EXEMPT_PATHS` as `Producibility.UNMAPPED` instead, which is
+    # where the `mid.*` attribute reads live for the same reason.
 
     def __init__(
         self,
@@ -243,11 +242,11 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
     """
 
     # `_residual_field_paths` stays empty on purpose. The thirteen fields
-    # `pcs_arbitration_attributes` reads are not declarable here: no adapter
-    # carries a metadata row for them, so declaring them would put them in
-    # `declared_field_paths()` where the producible gate rejects anything one
-    # adapter cannot emit. They are enumerated in `RESIDUAL_EXEMPT_PATHS` as
-    # `Producibility.NEITHER` instead, beside the shed-forecast refinements and
+    # `pcs_arbitration_attributes` reads are not declarable here: the adapter
+    # maps no metadata row for them, so declaring them would put them in
+    # `declared_field_paths()` where the producible gate rejects a path with no
+    # row. They are enumerated in `RESIDUAL_EXEMPT_PATHS` as
+    # `Producibility.UNMAPPED` instead, beside the shed-forecast refinements and
     # the `mid.*` attribute reads, which are outside the gate for the same
     # reason.
 
@@ -317,8 +316,8 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
     # declared here while this sensor rendered the SSID; the read moved to
     # `SpanPanelWifiLinkBinarySensor` and the declaration went with it, because
     # the declaration exists to let a Repair name the entity that made the read.
-    # `panel.panel_size` is not declared for the older reason: no adapter
-    # produces it, so it is an entry in `RESIDUAL_EXEMPT_PATHS` instead.
+    # `panel.panel_size` is not declared for the older reason: the adapter maps
+    # no row for it, so it is an entry in `RESIDUAL_EXEMPT_PATHS` instead.
 
     def __init__(
         self,

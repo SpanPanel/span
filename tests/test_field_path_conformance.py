@@ -1,22 +1,22 @@
-"""Every declared field path must be producible by each adapter, or derived.
+"""Every declared field path must be producible by the parent/child adapter, or derived.
 
 This is the test that would have caught the battery.product_name drift.
 
-A read that no adapter, or only one, produces cannot satisfy that gate, so it is
-exempted in `RESIDUAL_EXEMPT_PATHS`. The second half of this module holds those
-exemptions to the same standard: each one states which adapters produce it, and
-that statement is checked against the adapters rather than left as prose.
+A read the adapter maps no metadata row for cannot satisfy that gate, and a few
+it does map are kept from validation on purpose, so both are exempted in
+`RESIDUAL_EXEMPT_PATHS`. The second half of this module holds those exemptions
+to the same standard: each one states whether the adapter produces it, and that
+statement is checked against the adapter rather than left as prose.
 """
 
 from __future__ import annotations
 
 import ast
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 import pathlib
 
 import pytest
-from span_panel_api.models import FieldMetadata
 from span_panel_api_schema_0.adapter import SchemaZeroAdapter
 from span_panel_api_schema_1.adapter import SchemaOneAdapter
 
@@ -27,14 +27,7 @@ from custom_components.span_panel.field_paths import (
     declared_field_paths,
     residual_field_paths,
 )
-from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
-
-MetadataFn = Callable[[], dict[str, FieldMetadata]]
-
-_ADAPTERS: list[tuple[str, MetadataFn]] = [
-    ("schema_0", schema_zero_metadata),
-    ("schema_1", schema_one_metadata),
-]
+from tests.adapter_fixtures import schema_one_metadata
 
 _PACKAGE_ROOT = pathlib.Path(field_paths_module.__file__).parent
 
@@ -65,12 +58,11 @@ def _source_declared_paths() -> dict[str, str]:
     return found
 
 
-@pytest.mark.parametrize(("adapter", "metadata_fn"), _ADAPTERS)
-def test_every_declared_path_is_producible(adapter: str, metadata_fn: MetadataFn) -> None:
-    metadata = metadata_fn()
+def test_every_declared_path_is_producible() -> None:
+    metadata = schema_one_metadata()
     missing = sorted(path for path in declared_field_paths() if path not in metadata)
     assert not missing, (
-        f"{adapter} does not produce declared field paths: {missing}. "
+        f"the parent/child adapter does not produce declared field paths: {missing}. "
         "Either the declaration is stale, or the entity should declare a DerivedReason."
     )
 
@@ -89,11 +81,13 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     when a collection is emptied rather than unreferenced.
     """
     declared = declared_field_paths()
-    # A `SCHEMA_CONDITIONAL_FIELD` description names its source field too, and
-    # that path is by definition one adapter short of this gate. It is covered
-    # instead by `RESIDUAL_EXEMPT_PATHS`, whose annotation is checked against
-    # both adapters below — so being enumerated there is the alternative to
-    # being in `declared`, not an escape from being checked.
+    # A `NO_SOURCE_FIELD` description may name its source field too, and the
+    # adapter maps no row for that path, so it is outside this gate by
+    # definition; the DER-link descriptions name theirs from outside the
+    # collections the gate walks. Each such path is covered instead by
+    # `RESIDUAL_EXEMPT_PATHS`, whose annotation is checked against the adapter
+    # below — so being enumerated there is the alternative to being in
+    # `declared`, not an escape from being checked.
     uncovered = sorted(
         (path, module)
         for path, module in _source_declared_paths().items()
@@ -240,10 +234,7 @@ def test_the_residual_walk_imports_exactly_the_modules_that_declare_one() -> Non
     )
 
 
-@pytest.mark.parametrize(("adapter", "metadata_fn"), _ADAPTERS)
-def test_gate_is_one_directional(
-    adapter: str, metadata_fn: MetadataFn, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_gate_is_one_directional(capsys: pytest.CaptureFixture[str]) -> None:
     """A produced path nothing reads must NOT fail the build.
 
     Additions are legal within a major version, so asserting the converse would
@@ -251,7 +242,7 @@ def test_gate_is_one_directional(
     property. This test exists to stop someone "completing" the gate by adding
     that assertion.
     """
-    metadata = metadata_fn()
+    metadata = schema_one_metadata()
     unread = sorted(set(metadata) - set(declared_field_paths()))
     # The CI inventory the spec asks for: never asserted against, an addition is
     # legal within a major version. Written with capture suspended so it reaches
@@ -259,156 +250,78 @@ def test_gate_is_one_directional(
     # from a passing test, which would leave the inventory existing in code and
     # nowhere else.
     with capsys.disabled():
-        print(f"\n[{adapter}] produced but unread ({len(unread)}):")
+        print(f"\n[parent/child] produced but unread ({len(unread)}):")
         for path in unread:
             print(f"  {path}")
 
 
-def _adapter_paths() -> tuple[frozenset[str], frozenset[str]]:
-    """Return the paths each adapter actually produces, from the reference payloads."""
-    return frozenset(schema_zero_metadata()), frozenset(schema_one_metadata())
-
-
-def _observed_producibility(
-    path: str, s0: frozenset[str], s1: frozenset[str]
-) -> Producibility | None:
-    """Classify a path by which adapters produce it.
-
-    `None` is the fourth, illegal case — produced by both — which has no
-    `Producibility` member precisely because such a path is not exemptible.
-    """
-    match (path in s0, path in s1):
-        case (True, True):
-            return None
-        case (True, False):
-            return Producibility.SCHEMA_0_ONLY
-        case (False, True):
-            return Producibility.SCHEMA_1_ONLY
-        case _:
-            return Producibility.NEITHER
+def _observed_producibility(path: str, produced: frozenset[str]) -> Producibility:
+    """Classify a path by whether the adapter's reference metadata carries a row for it."""
+    return Producibility.MAPPED_UNVALIDATED if path in produced else Producibility.UNMAPPED
 
 
 def test_every_exempt_path_matches_its_annotation() -> None:
-    """Each exemption's stated reason is checked against the adapters that run.
+    """Each exemption's stated reason is checked against the adapter that runs.
 
-    Before these annotations the 26 exemptions were checked against nothing:
-    the neither/one-adapter distinction lived in prose, so an entry could be
-    mislabelled from the day it was written, or go stale when the library
-    changed what it publishes, with no signal anywhere.
+    Before these annotations the exemptions were checked against nothing: the
+    distinction lived in prose, so an entry could be mislabelled from the day it
+    was written, or go stale when the library changed what it publishes, with
+    no signal anywhere.
+
+    An `UNMAPPED` path the library grows a row for fails here. That is the
+    moment to promote it to a declaration -- a description's `field_path=`, or
+    an entity's `_residual_field_paths` for a reader in entity code -- so the
+    producible gate covers it, and only to re-annotate it `MAPPED_UNVALIDATED`
+    with a reason written beside it if validation must not act on it.
     """
-    s0, s1 = _adapter_paths()
+    produced = frozenset(schema_one_metadata())
     wrong = [
-        (path, annotated.name, observed.name if observed else "BOTH")
+        (path, annotated.name, observed.name)
         for path, annotated in RESIDUAL_EXEMPT_PATHS.items()
-        if (observed := _observed_producibility(path, s0, s1)) is not annotated
+        if (observed := _observed_producibility(path, produced)) is not annotated
     ]
     assert not wrong, (
-        "RESIDUAL_EXEMPT_PATHS annotations disagree with the adapters "
-        f"(path, annotated, actual): {wrong}. Either the annotation is stale or "
-        "the library changed what it produces."
-    )
-
-
-def test_no_exempt_path_is_producible_by_both() -> None:
-    """A path both adapters produce is a declaration, not an exemption.
-
-    The exemption exists only because the gate demands producibility by both.
-    Once both produce it, the reason has evaporated and the path should be
-    declared — silently leaving it exempt would retire the gate for that read.
-    """
-    s0, s1 = _adapter_paths()
-    promotable = sorted(RESIDUAL_EXEMPT_PATHS.keys() & s0 & s1)
-    assert not promotable, (
-        f"exempt paths are now producible by both adapters: {promotable}. "
-        "Promote each to a declaration — a description's `field_path=`, or an "
-        "entity's `_residual_field_paths` for a reader in entity code — so the "
-        "producible gate covers it again."
+        "RESIDUAL_EXEMPT_PATHS annotations disagree with the adapter "
+        f"(path, annotated, actual): {wrong}. Either the annotation is stale, the "
+        "library changed what it produces, or the path now has a row and should be "
+        "promoted to a declaration."
     )
 
 
 _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
-    # +3 with the shed forecast: the two full-charge refinements and the
-    # confidence enum, read as attributes on the two forecast sensors and
-    # carried by no adapter's metadata map.
-    # +1 for `mid.grid_state`, the `mid_grid_state` sensor's source field. Like
-    # `panel.dominant_power_source` below it was read by a description and
-    # enumerated nowhere, so nothing held it against the adapters and
-    # `evaluate_field_metadata` had no way to tell it from an unread field.
-    # +15 with the PCS: the twelve arbitration inputs and `pcs.enabled` behind
-    # `pcs_import_limit`'s attributes, plus the two circuit participation fields
-    # read as attributes on the circuit power sensor. schema_1 reads all fifteen
-    # and maps none of them, deliberately — they explain the effective limit
-    # rather than being readings of their own.
-    # +3 for the enclosure's own build identity -- `panel.vendor_name`,
-    # `panel.model`, `panel.hardware_version` -- read by `snapshot_to_device_info`
-    # for the panel's device card. Flat declares none of the three, and a
-    # schema_1 row exists to carry a unit and a datatype for a reading, which an
-    # identity string is not; the `mid.*` device-card reads sit here for the
-    # same reason.
-    # +4 for the shed policy -- the raw `shed/policy` document plus the
-    # algorithm and the two SoC thresholds parsed out of it -- read as
-    # attributes on `dsm_state`. Flat has no `shed` node, and a JSON document
-    # has no unit surface for a schema_1 row to describe.
-    # +2 for the EVSE charge-current control's two non-readings:
-    # `charge_current_limit_settable`, the `$settable` flag `number.py` gates
-    # entity creation on, and `charge_current_limit_target_a`, the Homie
-    # `$target` echo it renders as an attribute. Facts about a command rather
-    # than readings, so no adapter carries a row for either -- the same shape as
-    # the `circuit.*_target` pair.
-    # +2 for `circuit.meter_shared_with` and `circuit.relay_shared_with`, which
-    # the shared-with attributes of a circuit's power sensor and switch read.
-    # Membership rather than a reading, so no adapter carries a row for either.
-    # +5 for a circuit's nominal voltage and protection functions, read by its
-    # attributes, and the panel's busbar current, frequency and upstream
-    # protection rating, read by sensors created only where declared. No
-    # reference payload declares any of the five.
-    # +1 for `circuit.feeds_role`, which orients a solar-role circuit's power
-    # and Net Energy as generation. A role, not a reading, so no adapter carries
-    # a row for it.
-    Producibility.NEITHER: 51,
-    # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
-    # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
-    # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
-    # but-unread while an entity was reading it.
-    # -1 for `panel.wifi_ssid`, which left this map entirely: schema_1 grew the
-    # `status/wifi-ssid` row, both adapters produce the path, and
-    # `test_no_exempt_path_is_producible_by_both` demanded it become a
-    # declaration -- `SpanPanelStatus._residual_field_paths`. Its time here as a
-    # true `SCHEMA_0_ONLY` annotation is what sanctioned a flat -> v1.0
-    # regression: the attribute a flat panel filled, a v1.0 panel did not.
-    # +1 for `pv.software_version`, the firmware row on the solar inverter's own
-    # device card, which moved here from `NEITHER`. It was annotated on the
-    # claim that flat's `pv` device class declares no firmware version; flat
-    # declares `software-version` on it, and the library grew the mapping row
-    # once a producer valued the v1.0 half. schema_1 still carries no row -- a
-    # version string is identity rather than a reading, the same argument as the
-    # `mid.*` and `panel.*` card reads above -- so this stays an exemption
-    # rather than becoming a declaration.
-    Producibility.SCHEMA_0_ONLY: 11,
-    # +2 with the shed forecast: the two live estimates, which schema_1 maps and
-    # flat firmware does not publish at all.
-    # +2 for `battery.power_w` and `battery.communication_state`, the BESS's own
-    # meter and link health behind `bess_meter_power` and
-    # `bess_communication_state`. schema_1 maps both; flat's BESS device class
-    # declares neither property, so neither can ever satisfy the both-adapters
-    # gate.
-    # +3 for the PCS's result: `pcs.import_limit_a`, `pcs.binding_constraint`
-    # and `pcs.active`, behind the two PCS sensors and the `pcs_active` binary
-    # sensor. schema_1 maps all three; no flat panel declares the capability at
-    # all, so none can ever satisfy the both-adapters gate.
-    # +2 for `pv.connected` and `evse.connected`, the enclosure's view of the
-    # link to each circuit-fed DER, behind `pv_panel_link` and
-    # `evse_panel_link`. schema_1 maps both from one property — the feeding
-    # circuit's `connection/feeds-device-status` — while flat publishes
-    # `connected` on the BESS and on no other device class, so neither can
-    # satisfy the both-adapters gate.
-    # +2 for the EVSE charge-current pair behind the
-    # `evse_charge_current_limit` number: the settable limit its description
-    # names, and the commissioned ceiling the entity reads for
-    # `native_max_value`. schema_1 resolves both from the charger's own
-    # `$description`; flat's `evse` type declares no settable ceiling at all, so
-    # neither can satisfy the both-adapters gate.
-    Producibility.SCHEMA_1_ONLY: 12,
+    # Re-derived when the classification collapsed onto the parent/child
+    # adapter: the eleven paths only the flat adapter mapped a row for joined
+    # the unmapped reads, and the eight description fields only this adapter
+    # maps left the map as declarations. The 62, by group:
+    #   2  `$target` echoes: `circuit.relay_state_target`, `circuit.priority_target`
+    #   2  assembled from topology: `circuit.device_type`, `circuit.relative_position`
+    #   1  `panel.panel_size`, outside the typed field surface
+    #   3  the enclosure's device card: `panel.vendor_name`, `.model`, `.hardware_version`
+    #   4  the shed policy and the three values parsed out of it
+    #   2  identity keys: `panel.serial_number`, `circuit.circuit_id`
+    #   1  `panel.dsm_state`
+    #   6  the MID's device card and grid-forming name
+    #   1  `mid.grid_state`
+    #   1  `pv.software_version`, on the solar card
+    #   1  `evse.node_id`, an addressing handle
+    #   2  the charge-limit command facts: `$settable` and the `$target` echo
+    #   3  the shed-forecast refinements
+    #  13  the PCS arbitration inputs and `pcs.enabled`
+    #   2  a circuit's PCS participation
+    #   2  a circuit's meter and relay peers
+    #   2  a circuit's nominal voltage and protection functions
+    #   3  the panel readings created only where declared
+    #   1  `circuit.feeds_role`
+    #   2  a circuit's `always_on` and `is_sheddable`
+    #   2  answers the library derives: `panel.dominant_power_source`, `panel.grid_islandable`
+    #   5  the charger's device card and the circuit that feeds it
+    #   1  `battery.connected`, the panel-side link record
+    Producibility.UNMAPPED: 62,
+    # The four reads the adapter maps and validation is kept from, each with its
+    # reason beside it in `RESIDUAL_EXEMPT_PATHS`: the controllability gate, the
+    # charge-limit ceiling, and the two DER-link fields whose descriptions sit
+    # outside `platform_descriptions()`.
+    Producibility.MAPPED_UNVALIDATED: 4,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 
@@ -419,7 +332,7 @@ def test_exempt_inventory_is_complete() -> None:
     Every other check here is consistency-only: deleting an entry leaves the
     survivors perfectly annotated, so the set could quietly shrink and no test
     would notice — the read would simply stop being enumerated anywhere. The
-    completeness of the set cannot be derived (a `Producibility.NEITHER` path
+    completeness of the set cannot be derived (a `Producibility.UNMAPPED` path
     has, by definition, no adapter row to discover it from, and matching reads
     by leaf attribute name collides across snapshot types), so it is pinned by
     size per reason instead. Changing a count is fine; doing it in the same

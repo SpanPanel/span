@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 from span_panel_api.models import FieldMetadata
 
@@ -10,8 +8,6 @@ from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     DerivedReason,
     FieldPathDeclarationMixin,
-    Producibility,
-    conditional_field_paths,
     declared_field_paths,
 )
 from custom_components.span_panel.schema_validation import (
@@ -22,13 +18,7 @@ from custom_components.span_panel.sensor_definitions import (
     all_sensor_descriptions,
     sensor_descriptions_by_field_path,
 )
-from tests.adapter_fixtures import (
-    schema_one_metadata,
-    schema_one_metadata_batteryless,
-    schema_zero_metadata,
-)
-
-MetadataFn = Callable[[], dict[str, FieldMetadata]]
+from tests.adapter_fixtures import schema_one_metadata, schema_one_metadata_batteryless
 
 
 def test_unresolved_entry_is_degradation() -> None:
@@ -151,14 +141,14 @@ def test_every_declared_field_path_keys_a_sensor_or_a_residual_reader() -> None:
     dict keyed on `description.key` would silently collapse them.
     """
     by_path = sensor_descriptions_by_field_path()
-    assert by_path.keys() <= declared_field_paths() | conditional_field_paths()
+    assert by_path.keys() <= declared_field_paths() | RESIDUAL_EXEMPT_PATHS.keys()
     assert {"battery.model", "pv.model"} <= by_path.keys()
     for field_path, description in by_path.items():
         assert description.field_path == field_path
-        # A schema-conditional description is included: its unit is as
-        # checkable as any other's. What it must never be is a description
-        # that names no field at all.
-        assert description.derived in (None, DerivedReason.SCHEMA_CONDITIONAL_FIELD)
+        # A description outside the gate is included where it names its field,
+        # which only a `NO_SOURCE_FIELD` description reading an unmapped path
+        # may do. A `MULTIPLE_FIELDS` one names none, so it never keys a row.
+        assert description.derived in (None, DerivedReason.NO_SOURCE_FIELD)
 
 
 def test_resolved_unitless_sensor_yields_no_mismatch() -> None:
@@ -194,46 +184,40 @@ def test_descriptions_without_a_declaration_raise(
         sensor_definitions.sensor_descriptions_by_field_path()
 
 
-@pytest.mark.parametrize(
-    "metadata_fn",
-    [
-        pytest.param(schema_zero_metadata, id="schema_0"),
-        pytest.param(schema_one_metadata, id="schema_1"),
-    ],
-)
-def test_real_adapter_metadata_produces_no_findings(metadata_fn: MetadataFn) -> None:
-    """A healthy panel of either generation must be finding-free.
+def test_real_adapter_metadata_produces_no_findings() -> None:
+    """A healthy panel must be finding-free.
 
     The rest of this file drives the evaluator with synthetic single-entry dicts,
     which cannot show what real firmware actually declares. This is the standing
-    guard against a day-one Repair that no user can act on.
+    guard against a day-one Repair that no user can act on, over the adapter's
+    reference payload; `test_schema_findings_captures` holds the same line over
+    every capture.
     """
-    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    findings = evaluate_field_metadata(schema_one_metadata(), sensor_descriptions_by_field_path())
     assert findings.unresolved == frozenset()
     assert findings.unit_mismatches == ()
 
 
-def test_a_schema_conditional_field_can_be_unresolved() -> None:
-    """The evaluator must ask about the paths the producible gate cannot.
+def test_a_shed_forecast_field_can_be_unresolved() -> None:
+    """The backup estimates are declarations, and are asked about like any other.
 
-    A `SCHEMA_CONDITIONAL_FIELD` entity reads a field that only one adapter
-    publishes a metadata row for. That row still carries the adapter's
-    three-way answer, so it can come back `resolved=False` -- the panel
-    declares the node and omits the property. Iterating `declared_field_paths()`
-    alone never asked, so such an entity got no Repair and no unavailability,
-    however dead its field was.
+    They were once outside the producible gate, which demanded a second adapter
+    that never published the capability, and had to be asked about through a
+    second set beside it. As declarations they need no such route: the row
+    still carries the adapter's three-way answer, so it can come back
+    `resolved=False` -- the panel declares the node and omits the property --
+    and that is a Repair and an unavailable entity.
     """
     path = "panel.shed_time_to_priority_shed_min"
-    assert path in conditional_field_paths()
-    assert path not in declared_field_paths()
+    assert path in declared_field_paths()
 
     findings = evaluate_field_metadata({path: FieldMetadata(None, "unknown", resolved=False)})
 
     assert findings.unresolved == frozenset({path})
 
 
-def test_a_schema_conditional_unit_is_still_compared() -> None:
-    """Being one adapter short of the gate does not excuse a wrong unit."""
+def test_a_shed_forecast_unit_is_compared() -> None:
+    """A declaration's wrong unit is a mismatch, whatever capability it comes from."""
     findings = evaluate_field_metadata(
         {"panel.shed_total_time_remaining_min": FieldMetadata("h", "integer")},
         sensor_descriptions_by_field_path(),
@@ -243,19 +227,19 @@ def test_a_schema_conditional_unit_is_still_compared() -> None:
     ]
 
 
-def test_a_decorating_exempt_path_is_not_probed() -> None:
+def test_no_exempt_path_is_probed() -> None:
     """Exempt is not the same as read-as-a-value.
 
-    `evse.vendor_name` builds a DeviceInfo and `circuit.always_on` is an
-    attribute; neither is any entity's reading, so neither belongs in the
-    unresolved set. Widening the evaluator to every non-`NEITHER` exemption
-    would have swept both in.
+    `evse.vendor_name` builds a DeviceInfo, `circuit.always_on` is an attribute
+    and `circuit.is_user_controllable` is a gate on a circuit's controls; none
+    is any entity's reading, so none belongs in the unresolved set, whether the
+    adapter maps it or not. Every exemption is offered as unresolved at once,
+    so widening the evaluator to any of them fails here.
     """
-    for path in ("evse.vendor_name", "circuit.always_on"):
-        assert RESIDUAL_EXEMPT_PATHS[path] is not Producibility.NEITHER
-        assert path not in conditional_field_paths()
-        findings = evaluate_field_metadata({path: FieldMetadata(None, "unknown", resolved=False)})
-        assert findings.unresolved == frozenset()
+    findings = evaluate_field_metadata(
+        {path: FieldMetadata(None, "unknown", resolved=False) for path in RESIDUAL_EXEMPT_PATHS}
+    )
+    assert findings.unresolved == frozenset()
 
 
 def test_known_bad_schema_unit_exception_is_narrow() -> None:
@@ -290,22 +274,16 @@ def test_absent_hardware_on_real_metadata_is_not_degradation() -> None:
     assert findings.unit_mismatches == ()
 
 
-@pytest.mark.parametrize(
-    "metadata_fn",
-    [
-        pytest.param(schema_zero_metadata, id="schema_0"),
-        pytest.param(schema_one_metadata, id="schema_1"),
-    ],
-)
-def test_unread_excludes_readers_exempt_from_the_producible_gate(
-    metadata_fn: MetadataFn,
-) -> None:
-    """`RESIDUAL_EXEMPT_PATHS` are read, just not required of both adapters.
+def test_unread_excludes_readers_exempt_from_the_producible_gate() -> None:
+    """`RESIDUAL_EXEMPT_PATHS` are read, just not gated.
 
     They are absent from `declared_field_paths()`, so a plain set difference
-    reports them as produced-but-unread — false for 10 of schema_0's 17.
+    would report the ones the adapter maps as produced-but-unread.
     """
-    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    metadata = schema_one_metadata()
+    assert metadata.keys() & RESIDUAL_EXEMPT_PATHS.keys(), "no mapped exemption to exclude"
+
+    findings = evaluate_field_metadata(metadata, sensor_descriptions_by_field_path())
     assert findings.unread.isdisjoint(RESIDUAL_EXEMPT_PATHS)
 
 

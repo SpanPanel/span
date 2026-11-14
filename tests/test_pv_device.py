@@ -802,14 +802,13 @@ def test_the_firmware_version_is_no_longer_an_unread_declaration() -> None:
 def test_the_cards_firmware_read_is_enumerated_as_a_residual() -> None:
     """`pv_device_info` is not an entity, so its read is an exempt residual.
 
-    `SCHEMA_0_ONLY`: flat declares `software-version` on its `pv` device class
-    and the library maps it, while schema_1 carries no row -- a row states a
-    reading's unit and datatype, and a version string is identity, the same
-    argument as the `mid.*` and `panel.*` card reads. One adapter short of the
-    both-adapters gate either way, so it stays an exemption rather than becoming
-    a declaration.
+    `UNMAPPED`: the library reads the inverter's firmware version into the
+    snapshot and maps no row for it -- a row states a reading's unit and
+    datatype, and a version string is identity, the same argument as the
+    `mid.*` and `panel.*` card reads. So it is an exemption rather than a
+    declaration.
     """
-    assert RESIDUAL_EXEMPT_PATHS["pv.software_version"] is Producibility.SCHEMA_0_ONLY
+    assert RESIDUAL_EXEMPT_PATHS["pv.software_version"] is Producibility.UNMAPPED
     assert "pv.software_version" not in declared_field_paths()
 
 

@@ -717,14 +717,14 @@ async def test_entities_with_no_source_field_are_not_tracked(hass) -> None:
         await _stop_scheduling(coordinator)
 
 
-async def test_schema_conditional_entities_are_tracked(hass) -> None:
-    """A schema-conditional entity must be nameable by its field's Repair.
+async def test_a_derived_entity_naming_its_field_is_tracked(hass) -> None:
+    """A derived entity that names its field is counted against it.
 
-    `bess_connected` reads exactly one field. That the *other* adapter does not
-    publish it is why the description is `derived`, and is no reason for the
-    Repair against a dead `battery.connected` to report "0 entities affected" --
-    the suppression rule then throws the finding away entirely, so the user is
-    told nothing at all about a sensor that has gone to a default.
+    `bess_connected` is `NO_SOURCE_FIELD` and names `battery.connected`, the one
+    field it reads. Being derived is no reason for a Repair against that field
+    to report "0 entities affected" -- the suppression rule then throws the
+    finding away entirely, so the user would be told nothing at all about a
+    sensor that has gone to a default.
     """
     from unittest.mock import MagicMock
 
@@ -739,14 +739,14 @@ async def test_schema_conditional_entities_are_tracked(hass) -> None:
 
         added = MagicMock()
         await binary_setup(hass, config_entry, added)
-        conditional = [
+        named = [
             entity
             for entity in added.call_args.args[0]
             if getattr(entity, "entity_description", None) is BESS_CONNECTED_SENSOR
         ]
-        assert conditional
+        assert named
 
-        await _add_to_platform(hass, config_entry, conditional, "binary_sensor")
+        await _add_to_platform(hass, config_entry, named, "binary_sensor")
 
         assert coordinator.entity_ids_by_field_path["battery.connected"]
     finally:

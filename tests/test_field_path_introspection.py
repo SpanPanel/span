@@ -6,6 +6,7 @@ declaration stays authoritative — this only stops it drifting from the reader.
 
 from __future__ import annotations
 
+from annotationlib import Format
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any, Protocol, get_args, get_type_hints, runtime_checkable
 
@@ -20,12 +21,14 @@ from span_panel_api import (
 )
 
 from custom_components.span_panel.field_paths import (
+    RESIDUAL_EXEMPT_PATHS,
     DerivedReason,
+    Producibility,
     declared_field_paths,
     residual_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import all_sensor_descriptions
-from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
+from tests.adapter_fixtures import schema_one_metadata
 
 # Attributes of the panel snapshot that are themselves sub-snapshots. Their
 # fields are addressed as "battery.x", not "panel.battery.x".
@@ -38,6 +41,12 @@ class _Recorder:
     value_fns do real work — `or "unknown"`, `a - b`, unary minus for PV sign
     flips — so the proxy has to absorb those without raising and without
     ending the recording.
+
+    A property of a snapshot class is followed into the fields its getter
+    reads. It is the library computing a value from fields, so the field a
+    declaration names is the one the property reads, not the property's own
+    name: the EVSE charge-limit number reads `effective_charge_current_limit_a`,
+    which is the limit it declares, falling back to the ceiling.
     """
 
     def __init__(self, sink: set[str], prefix: str, root: bool = False) -> None:
@@ -55,6 +64,11 @@ class _Recorder:
             return _Recorder(sink, name)
         path = f"{prefix}.{name}" if prefix else name
         sink.add(path)
+        getter = _property_getter(prefix, name)
+        if getter is not None:
+            computed = getter(_Recorder(sink, prefix))
+            if isinstance(computed, _Recorder):
+                return computed
         return _Recorder(sink, path)
 
     # Absorb the operations value_fns perform on the values they read.
@@ -129,11 +143,13 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         PV_INVERTER_LINK_SENSOR,
         PV_PANEL_LINK_SENSOR,
     )
+    from custom_components.span_panel.number import EVSE_NUMBERS  # noqa: PLC0415
 
     for description in (
         *all_sensor_descriptions(),
         *BINARY_SENSORS,
         *EVSE_BINARY_SENSORS,
+        *EVSE_NUMBERS,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,
@@ -166,6 +182,15 @@ _SNAPSHOT_PREFIX: Mapping[type, str] = {
 }
 
 
+def _property_getter(prefix: str, name: str) -> Callable[[Any], object] | None:
+    """Return the getter of `name` when it is a property of the snapshot type `prefix` addresses."""
+    snapshot_type = next(
+        (cls for cls, addressed in _SNAPSHOT_PREFIX.items() if addressed == prefix), None
+    )
+    attribute = getattr(snapshot_type, name, None) if snapshot_type is not None else None
+    return attribute.fget if isinstance(attribute, property) else None
+
+
 class _UndeterminedPrefix(Exception):
     """A description's snapshot prefix could not be determined.
 
@@ -182,10 +207,16 @@ def _snapshot_type(description: _DeclaringDescription) -> type:
     resolves it with `get_type_hints`, which evaluates it in the defining
     module's namespace — every mixin's module imports the snapshot types it
     names, so resolution succeeds.
+
+    Only `value_fn` has to resolve. Home Assistant's frozen-dataclass metaclass
+    carries the field-path mixin's annotations onto each description class,
+    where they are evaluated in the platform module's namespace, and a module
+    that names no `DerivedReason` has no reason to import it. `FORWARDREF`
+    leaves such an annotation unresolved instead of failing the whole lookup.
     """
     cls = type(description)
     try:
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, format=Format.FORWARDREF)
     except Exception as err:  # noqa: BLE001
         raise _UndeterminedPrefix(
             f"{cls.__name__}: value_fn annotation does not resolve ({err!r})"
@@ -228,9 +259,9 @@ def _record_reads(description: _DeclaringDescription) -> set[str]:
 def test_declared_paths_match_what_value_fns_read() -> None:
     """Every named source field must be one the `value_fn` actually reads.
 
-    `derived` is not consulted: a `SCHEMA_CONDITIONAL_FIELD` description names
-    its source field too, and that name is what the Repair and the availability
-    probe act on. An unverified one would send both at the wrong path.
+    `derived` is not consulted: a `NO_SOURCE_FIELD` description may name its
+    source field too, and that name is what the entity is counted against. An
+    unverified one would count it against the wrong path.
     """
     mismatches: list[str] = []
 
@@ -259,29 +290,41 @@ def test_introspection_covers_every_declared_path() -> None:
     `_declaring_descriptions` restates the collections `declared_field_paths()`
     walks. Without this, a platform collection added to the gate but not here
     would be gated for producibility and never checked against its reader.
+
+    The three DER-link descriptions are verified here and deliberately not
+    collected by the gate, so the paths they name are subtracted as exactly what
+    they are: mapped and kept from validation. Any other path verified here and
+    missing from the gate still fails.
     """
     introspected = {
         description.field_path
         for description in _declaring_descriptions()
         if not description.derived and description.field_path is not None
     }
-    assert declared_field_paths() == frozenset(introspected | residual_field_paths())
+    kept_from_validation = {
+        path
+        for path, producibility in RESIDUAL_EXEMPT_PATHS.items()
+        if producibility is Producibility.MAPPED_UNVALIDATED
+    }
+    assert declared_field_paths() == frozenset(
+        (introspected - kept_from_validation) | residual_field_paths()
+    )
 
 
 def test_no_derived_description_reads_one_producible_field() -> None:
     """`derived` must mean no field, several fields, or an unproducible one.
 
     Pins the rule, not the instance that broke it. `evse_ev_connected` read
-    exactly `evse.status` — one field both adapters produce — while declaring
+    exactly `evse.status` — one producible field — while declaring
     itself derived, so `_declared_field_paths` skipped it: the Repair for a dead
     `evse.status` never named it and the availability probe never fired for it,
     though its sibling `evse_charging` got both from the very same field.
 
     Producibility is what makes this checkable: the recorder also picks up
-    method names and other noise, and intersecting with what both adapters
-    actually emit leaves only real fields.
+    method names and other noise, and intersecting with what the adapter
+    actually emits leaves only real fields.
     """
-    producible = set(schema_zero_metadata()) & set(schema_one_metadata())
+    producible = set(schema_one_metadata())
     offenders: list[str] = []
 
     for description in _declaring_descriptions():
@@ -317,18 +360,15 @@ def test_derived_reasons_match_what_value_fns_read() -> None:
     reason is only worth its syntax if it is checked, so each variant is a claim
     about the recorder's output and is asserted as one:
 
-    * `NO_SOURCE_FIELD` — reads nothing either adapter publishes,
-    * `MULTIPLE_FIELDS` — reads two or more fields an adapter publishes,
-    * `SCHEMA_CONDITIONAL_FIELD` — reads exactly one, produced by one adapter
-      only. When the other adapter grows it, this fails and demands promotion to
-      a `field_path` declaration.
+    * `NO_SOURCE_FIELD` — reads nothing the adapter publishes a row for. When
+      the library grows a row for the field it reads, this fails and demands
+      promotion to a `field_path` declaration.
+    * `MULTIPLE_FIELDS` — reads two or more fields the adapter publishes.
 
-    Intersecting with what the adapters emit is what makes the count meaningful:
+    Intersecting with what the adapter emits is what makes the count meaningful:
     the recorder also picks up method names and other noise.
     """
-    schema_0 = set(schema_zero_metadata())
-    schema_1 = set(schema_one_metadata())
-    produced = schema_0 | schema_1
+    produced = set(schema_one_metadata())
     offenders: list[str] = []
 
     for description in _declaring_descriptions():
@@ -347,28 +387,12 @@ def test_derived_reasons_match_what_value_fns_read() -> None:
         if reason is DerivedReason.NO_SOURCE_FIELD and read:
             offenders.append(
                 f"{description.key}: claims NO_SOURCE_FIELD but reads {read} — "
-                "the reason is MULTIPLE_FIELDS, SCHEMA_CONDITIONAL_FIELD, or it is a "
-                "declaration"
+                "the reason is MULTIPLE_FIELDS, or it is a declaration"
             )
         elif reason is DerivedReason.MULTIPLE_FIELDS and len(read) < 2:
             offenders.append(
                 f"{description.key}: claims MULTIPLE_FIELDS but reads {read} — "
                 "one field or none is a different reason"
             )
-        elif reason is DerivedReason.SCHEMA_CONDITIONAL_FIELD:
-            if len(read) != 1 or read[0] in schema_0 & schema_1:
-                offenders.append(
-                    f"{description.key}: claims SCHEMA_CONDITIONAL_FIELD but reads {read}, "
-                    f"of which {sorted(set(read) & schema_0 & schema_1)} are produced by both "
-                    "adapters"
-                )
-            elif description.field_path != read[0]:
-                # The one reason that still names a field names the right one.
-                # That name is what the Repair and the availability probe act
-                # on, so a stale one degrades the wrong entity or none.
-                offenders.append(
-                    f"{description.key}: declares field_path={description.field_path!r} "
-                    f"but reads {read[0]!r}"
-                )
 
     assert not offenders, "Derived reasons disagree with readers:\n" + "\n".join(offenders)

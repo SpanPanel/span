@@ -32,7 +32,7 @@ import logging
 from homeassistant.components.sensor import SensorEntityDescription
 from span_panel_api.models import DiscoveredMetadata, FieldMetadata, is_discovery_path
 
-from .field_paths import RESIDUAL_EXEMPT_PATHS, conditional_field_paths, declared_field_paths
+from .field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -168,21 +168,17 @@ def evaluate_field_metadata(
     # about the panel, not an inventory of what we produce, and every question
     # below is the second kind.
     curated, discovered = partition(field_metadata)
+    # Every path the producible gate covers, and no other. A read exempt from
+    # the gate is either one the adapter maps no row for, so there is nothing
+    # to ask, or one it maps that validation is deliberately kept from acting
+    # on -- see `Producibility.MAPPED_UNVALIDATED`.
     declared = declared_field_paths()
-    # Schema-conditional entities read a real field off a real metadata row;
-    # what they cannot do is satisfy a gate that demands *both* adapters
-    # produce it. Resolution is a property of the adapter that is running, so
-    # asking about these paths alongside the declared ones is what gives such
-    # an entity its unavailability and its Repair — the apparatus every other
-    # entity already has. Leaving them out is how `panel.wifi_ssid` stayed
-    # invisible: exempt from the gate read as exempt from everything.
-    resolvable = declared | conditional_field_paths()
     sensor_defs = sensor_defs or {}
 
     unresolved: set[str] = set()
     mismatches: list[UnitMismatch] = []
 
-    for field_path in resolvable:
+    for field_path in declared:
         entry = curated.get(field_path)
         if entry is None:
             # Hardware not present. Not a defect, and deliberately silent.
@@ -205,10 +201,10 @@ def evaluate_field_metadata(
         mismatches.append(UnitMismatch(field_path, str(ha_unit), schema_unit))
 
     # `RESIDUAL_EXEMPT_PATHS` are read by the integration; they are exempt from
-    # the *producible* gate because only one adapter emits them, or neither
-    # does, so they are absent from `declared` without being unread. Only the
-    # paths matter here; each entry's `Producibility` annotation is what the
-    # conformance tests verify.
+    # the *producible* gate because the adapter maps no row for them, or maps
+    # one validation must not act on, so they are absent from `declared`
+    # without being unread. Only the paths matter here; each entry's
+    # `Producibility` annotation is what the conformance tests verify.
     #
     # `curated` and never `field_metadata`, which still holds both halves. A
     # discovered path reaching this set would read as a produced field nothing

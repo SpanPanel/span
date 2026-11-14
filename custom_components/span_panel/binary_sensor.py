@@ -160,8 +160,11 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
+    # Named although the reason is `NO_SOURCE_FIELD`: the library derives the
+    # field from the BESS inverters and maps no row for it. See
+    # `DerivedReason.NO_SOURCE_FIELD` for what naming it obliges.
     field_path="panel.grid_islandable",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    derived=DerivedReason.NO_SOURCE_FIELD,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -170,8 +173,11 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
+    # Named although the reason is `NO_SOURCE_FIELD`: the library takes the
+    # field from the panel-side owner's connection record and maps no row for
+    # it. See `DerivedReason.NO_SOURCE_FIELD` for what naming it obliges.
     field_path="battery.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    derived=DerivedReason.NO_SOURCE_FIELD,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -181,7 +187,6 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
 PV_PANEL_LINK_SENSOR = SpanPanelBinarySensorEntityDescription(
     key=PV_PANEL_LINK_KEY,
     field_path="pv.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="pv_panel_link",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -200,17 +205,17 @@ On the inverter's own sub-device, beside `pv_vendor` and `pv_product`, which is
 where it moved when the PV got a device of its own -- the same place
 `bess_connected` sits relative to the battery.
 
-`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`: flat firmware publishes
-`connected` on the BESS and on nothing else, so the both-adapters gate cannot be
-satisfied, while the entity still needs its Repair mention and its
-unavailability when the panel stops resolving the property.
+A plain `field_path` declaration of a field the adapter maps, which validation
+does not ask about: this description and its two siblings sit outside
+`platform_descriptions()`, so `pv.connected` is enumerated in
+`RESIDUAL_EXEMPT_PATHS` as `MAPPED_UNVALIDATED`, where the reason is written
+down.
 """
 
 
 PCS_ACTIVE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="pcs_active",
     field_path="pcs.active",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="pcs_active",
     device_class=BinarySensorDeviceClass.RUNNING,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -234,10 +239,9 @@ firmware without the node report — but the entity is not created there at all,
 the branch is reached only if the node disappears mid-session, where unknown is
 the right answer.
 
-`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, by the producible rule: flat
-declares no `pcs` capability, so the both-adapters gate cannot be satisfied,
-while the entity still needs its Repair mention and its unavailability when the
-panel stops resolving the property.
+A plain `field_path` declaration: the adapter maps `pcs/active`, so the
+producible gate covers it, and the entity gets its Repair mention and its
+unavailability when the panel stops resolving the property.
 """
 
 
@@ -402,9 +406,8 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
     _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
     """The SSID, read for an attribute rather than by the `value_fn`.
 
-    A plain residual and not an exemption: both adapters map the property
-    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
-    gate covers it.
+    A plain residual and not an exemption: the adapter maps `status/wifi-ssid`,
+    so the producible gate covers it.
 
     The only declaration of this path in the integration. It was on
     `SpanPanelStatus` while that sensor rendered the SSID, and it moved with the
@@ -506,7 +509,6 @@ EVSE_BINARY_SENSORS: tuple[
 EVSE_PANEL_LINK_SENSOR = SpanEvseBinarySensorEntityDescription(
     key="evse_panel_link",
     field_path="evse.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="evse_panel_link",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -609,7 +611,6 @@ class SpanPVBinarySensorEntityDescription(
 PV_INVERTER_LINK_SENSOR = SpanPVBinarySensorEntityDescription(
     key=PV_PANEL_LINK_SENSOR.key,
     field_path="pv.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key=PV_PANEL_LINK_SENSOR.translation_key,
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,

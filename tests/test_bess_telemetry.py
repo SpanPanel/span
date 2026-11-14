@@ -60,11 +60,7 @@ from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.curation import CurationOverlay
-from custom_components.span_panel.field_paths import (
-    RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
-    Producibility,
-)
+from custom_components.span_panel.field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
 from custom_components.span_panel.helpers import detect_capabilities, has_bess_telemetry
 from custom_components.span_panel.sensor import create_battery_sensors
 from custom_components.span_panel.sensor_definitions import (
@@ -765,21 +761,19 @@ def test_every_bess_sensor_gets_a_distinct_unique_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_both_paths_are_exempt_as_schema_1_only() -> None:
-    """Pinned here as well as in the conformance suite, because the reason is
-    specific to these properties: flat's BESS device class declares neither, so
-    the producible gate cannot be satisfied and the descriptions must stay
-    derived. schema_1 does map both, which is what makes the annotation
-    SCHEMA_1_ONLY rather than NEITHER."""
-    assert RESIDUAL_EXEMPT_PATHS["battery.power_w"] is Producibility.SCHEMA_1_ONLY
-    assert RESIDUAL_EXEMPT_PATHS["battery.communication_state"] is Producibility.SCHEMA_1_ONLY
+def test_both_paths_are_declarations() -> None:
+    """Pinned here as well as in the conformance suite: the adapter maps both
+    properties from the BESS's own `$description`, so the producible gate covers
+    them and neither is an exemption."""
+    for path in ("battery.power_w", "battery.communication_state"):
+        assert path in declared_field_paths()
+        assert path not in RESIDUAL_EXEMPT_PATHS
 
 
 @pytest.mark.parametrize("description", BESS_TELEMETRY_SENSORS, ids=lambda d: d.key)
-def test_each_description_names_its_field_as_well_as_its_reason(description: Any) -> None:
-    """`field_path` says what the entity's value is and `derived` says why that
-    path is outside the both-adapters gate. Leaving the first unset excuses the
-    entity from its Repair mention and from going unavailable when the panel stops
-    resolving the property."""
-    assert description.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
-    assert description.field_path in RESIDUAL_EXEMPT_PATHS
+def test_each_description_is_a_plain_declaration(description: Any) -> None:
+    """`field_path` says what the entity's value is, and with no `derived` the
+    gate covers it: the entity gets its Repair mention and goes unavailable when
+    the panel stops resolving the property."""
+    assert description.derived is None
+    assert description.field_path in declared_field_paths()

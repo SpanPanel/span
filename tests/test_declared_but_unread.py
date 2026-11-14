@@ -10,7 +10,8 @@ That direction cannot see a property nobody reads: an unread declaration is
 absent from every list the gate consults, so it is invisible by construction.
 `panel.wifi_ssid` is the worked example — flat surfaces it, v1.0 declares it,
 schema_1 maps nothing to it, and its `RESIDUAL_EXEMPT_PATHS` annotation said
-`SCHEMA_0_ONLY`, which was *true* and still sanctioned a silent regression.
+only the flat adapter produced it, which was *true* and still sanctioned a
+silent regression.
 Every check in the codebase agreed, and a user upgrading lost an attribute.
 
 **How consumption is decided, and why not from a list.** A hand-kept map of

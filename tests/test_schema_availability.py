@@ -207,22 +207,19 @@ async def test_panel_status_binary_sensor_is_never_probed(hass: HomeAssistant) -
     assert entity.available is True
 
 
-async def test_schema_conditional_entity_goes_unavailable(hass: HomeAssistant) -> None:
-    """A schema-conditional entity is probed like any other.
+async def test_a_derived_entity_is_probed_on_the_field_it_names(hass: HomeAssistant) -> None:
+    """An entity is probed on the field it names, whatever `derived` says.
 
-    `bess_connected` reads exactly one field, `battery.connected`, which only
-    the schema_0 adapter publishes -- that, and only that, is what `derived`
-    says here. The adapter that does publish it still reports whether the panel
-    resolved it, and an unresolved field reaches this entity as a default it
-    would present as a reading.
-
-    Excluding these from the probe was the `evse_ev_connected` failure reached
-    by a second route: an entity exempt from the producible gate silently
-    exempt from degradation too.
+    `bess_connected` is `NO_SOURCE_FIELD` and still names `battery.connected`,
+    the one field it reads. The adapter maps no row for that path, so on a real
+    panel validation never reports it unresolved; what this pins is that the
+    probe keys on the name alone. Consulting `derived` as well would excuse
+    entities from the probe, which is how `evse_ev_connected` once went unprobed
+    and presented a default as a reading.
     """
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({"battery.connected"}), (), frozenset())
-    assert BESS_CONNECTED_SENSOR.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+    assert BESS_CONNECTED_SENSOR.derived is DerivedReason.NO_SOURCE_FIELD
     assert BESS_CONNECTED_SENSOR.field_path == "battery.connected"
 
     entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
@@ -230,10 +227,10 @@ async def test_schema_conditional_entity_goes_unavailable(hass: HomeAssistant) -
     assert entity.available is False
 
 
-async def test_schema_conditional_entity_stays_available_when_resolved(
+async def test_a_derived_entity_stays_available_while_its_field_resolves(
     hass: HomeAssistant,
 ) -> None:
-    """The probe must key on the entity's own field, not on being conditional."""
+    """The probe must key on the entity's own field, not on its being derived."""
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({_ETHERNET_LINK_PATH}), (), frozenset())
 
@@ -245,9 +242,9 @@ async def test_schema_conditional_entity_stays_available_when_resolved(
 async def test_residual_reads_still_do_not_probe(hass: HomeAssistant) -> None:
     """`circuit.name` and `circuit.tabs` decorate a reading; they are not it.
 
-    The deliberate exclusion the schema-conditional change must not regress: a
-    circuit power sensor reads its name and tabs for naming and attributes, and
-    its power reading is still true when those are gone.
+    The deliberate exclusion the field-keyed probe must not regress: a circuit
+    power sensor reads its name and tabs for naming and attributes, and its
+    power reading is still true when those are gone.
     """
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({"circuit.name"}), (), frozenset())

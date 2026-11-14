@@ -54,8 +54,8 @@ from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
     Producibility,
+    declared_field_paths,
 )
 from custom_components.span_panel.helpers import detect_capabilities, has_der_link_health
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -493,17 +493,21 @@ async def test_the_inverter_link_does_not_displace_the_batterys(hass: HomeAssist
 # ---------------------------------------------------------------------------
 
 
-def test_both_descriptions_name_their_field_and_say_why_it_is_exempt() -> None:
-    """`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, per the established rule.
+def test_both_descriptions_name_their_field_and_keep_it_from_validation() -> None:
+    """Plain `field_path` declarations of a mapped field that is not validated.
 
-    Flat firmware publishes `connected` on the BESS alone, so neither path can
-    satisfy the both-adapters gate — while both entities still need their Repair
-    mention and their unavailability when the panel stops resolving the property.
+    The adapter maps both from the feeding circuit's
+    `connection/feeds-device-status`, but the link descriptions sit outside
+    `platform_descriptions()`, so neither path is in the gate: each is
+    enumerated as `MAPPED_UNVALIDATED`, with the reason written beside it.
     """
     for description in (PV_PANEL_LINK_SENSOR, EVSE_PANEL_LINK_SENSOR):
-        assert description.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+        assert description.derived is None
         assert description.field_path is not None
-        assert RESIDUAL_EXEMPT_PATHS[description.field_path] is Producibility.SCHEMA_1_ONLY
+        assert (
+            RESIDUAL_EXEMPT_PATHS[description.field_path] is Producibility.MAPPED_UNVALIDATED
+        )
+        assert description.field_path not in declared_field_paths()
 
     assert PV_PANEL_LINK_SENSOR.field_path == "pv.connected"
     assert EVSE_PANEL_LINK_SENSOR.field_path == "evse.connected"

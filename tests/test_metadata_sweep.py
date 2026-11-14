@@ -14,9 +14,9 @@ the registry is what a user sees.
 **`panel.wifi_ssid` is the regression.** Flat published `core/wifi-ssid` and the
 integration has surfaced it as an attribute since; v1.0 declares
 `status/wifi-ssid`, schema_1 mapped nothing to it, and the path's exemption
-annotation said `SCHEMA_0_ONLY` -- which was true, and sanctioned a user losing
-an attribute on upgrade. With the library reading it, both adapters produce the
-path, so it is a declaration now and the producible gate covers it.
+annotation said only the flat adapter produced it -- which was true, and
+sanctioned a user losing an attribute on upgrade. With the library reading it,
+the path is a declaration now and the producible gate covers it.
 
 It is published on the **Wi-Fi Link binary sensor**, which is the coherent host:
 the entity that reports whether Wi-Fi is up is the one that should say which
