@@ -60,16 +60,13 @@ from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.curation import CurationOverlay
-from custom_components.span_panel.field_paths import (
-    RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
-    Producibility,
-)
+from custom_components.span_panel.field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
 from custom_components.span_panel.helpers import detect_capabilities, has_bess_telemetry
 from custom_components.span_panel.sensor import create_battery_sensors
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BESS_TELEMETRY_SENSORS,
+    SpanBessMetadataSensorEntityDescription,
 )
 from custom_components.span_panel.sensor_panel import (
     SpanBessMetadataSensor,
@@ -96,10 +93,10 @@ POWER_KEY = "meter_power"
 COMMS_KEY = "communication_state"
 ENCLOSURE_FLOW_KEY = BATTERY_POWER_SENSOR.key
 
-R202633_FIRMWARE = "spanos2/r202633/01"
+R202633_FIRMWARE = "spanos3/r202633/02"
 """A release that publishes the BESS meter charge-positive, the old frame."""
 
-R202639_FIRMWARE = "spanos2/r202639/03"
+R202639_FIRMWARE = "spanos3/r202639/03"
 """The first release that publishes the BESS meter discharge-positive, the capture's frame."""
 
 
@@ -587,7 +584,7 @@ def test_communication_state_is_not_the_connected_binary_sensor() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Absence: deleted property, dropped node, no BESS, flat panel
+# Absence: deleted property, dropped node, no BESS
 # ---------------------------------------------------------------------------
 
 
@@ -684,17 +681,6 @@ def test_no_bess_device_creates_no_battery_sensors_at_all() -> None:
     assert create_battery_sensors(_coordinator(snapshot), snapshot) == []
 
 
-def test_a_flat_panel_gets_neither_sensor() -> None:
-    """The same absence by the other route: flat's BESS device class declares
-    neither property, so the factory's default snapshot carries neither field."""
-    snapshot = SpanPanelSnapshotFactory.create()
-
-    assert has_bess_telemetry(snapshot) is False
-    created = _sensors(snapshot)
-    assert POWER_KEY not in created
-    assert COMMS_KEY not in created
-
-
 def test_the_telemetry_appearing_is_a_capability_change() -> None:
     """Which is how a BESS that gains these nodes mid-life gets the sensors: the
     coordinator reloads on a new capability."""
@@ -765,21 +751,21 @@ def test_every_bess_sensor_gets_a_distinct_unique_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_both_paths_are_exempt_as_schema_1_only() -> None:
-    """Pinned here as well as in the conformance suite, because the reason is
-    specific to these properties: flat's BESS device class declares neither, so
-    the producible gate cannot be satisfied and the descriptions must stay
-    derived. schema_1 does map both, which is what makes the annotation
-    SCHEMA_1_ONLY rather than NEITHER."""
-    assert RESIDUAL_EXEMPT_PATHS["battery.power_w"] is Producibility.SCHEMA_1_ONLY
-    assert RESIDUAL_EXEMPT_PATHS["battery.communication_state"] is Producibility.SCHEMA_1_ONLY
+def test_both_paths_are_declarations() -> None:
+    """Pinned here as well as in the conformance suite: the adapter maps both
+    properties from the BESS's own `$description`, so the producible gate covers
+    them and neither is an exemption."""
+    for path in ("battery.power_w", "battery.communication_state"):
+        assert path in declared_field_paths()
+        assert path not in RESIDUAL_EXEMPT_PATHS
 
 
 @pytest.mark.parametrize("description", BESS_TELEMETRY_SENSORS, ids=lambda d: d.key)
-def test_each_description_names_its_field_as_well_as_its_reason(description: Any) -> None:
-    """`field_path` says what the entity's value is and `derived` says why that
-    path is outside the both-adapters gate. Leaving the first unset excuses the
-    entity from its Repair mention and from going unavailable when the panel stops
-    resolving the property."""
-    assert description.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
-    assert description.field_path in RESIDUAL_EXEMPT_PATHS
+def test_each_description_is_a_plain_declaration(
+    description: SpanBessMetadataSensorEntityDescription,
+) -> None:
+    """`field_path` says what the entity's value is, and with no `derived` the
+    gate covers it: the entity gets its Repair mention and goes unavailable when
+    the panel stops resolving the property."""
+    assert description.derived is None
+    assert description.field_path in declared_field_paths()

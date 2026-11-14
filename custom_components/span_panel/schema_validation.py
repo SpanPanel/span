@@ -32,31 +32,9 @@ import logging
 from homeassistant.components.sensor import SensorEntityDescription
 from span_panel_api.models import DiscoveredMetadata, FieldMetadata, is_discovery_path
 
-from .field_paths import RESIDUAL_EXEMPT_PATHS, conditional_field_paths, declared_field_paths
+from .field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
 
 _LOGGER = logging.getLogger(__name__)
-
-
-KNOWN_BAD_SCHEMA_UNITS: dict[str, str] = {
-    # SPAN firmware declares the circuit `active-power` property as "kW" while
-    # publishing watts. Three things agree that the label, not the reading, is
-    # wrong: the sibling `lugs` device declares the same quantity as "W"; the
-    # library consumes the value unscaled ("active-power is in watts",
-    # span_panel_api_schema_0/consumer.py:244); and the independent `span-hass`
-    # integration documents the same defect under "Known SPAN API Issue" and
-    # hardcodes the same override. Our `UnitOfPower.WATT` declaration is correct.
-    "circuit.instant_power_w": "kW",
-}
-"""Schema unit declarations this integration knowingly ignores, by field path.
-
-Every entry is a firmware defect worked around deliberately — the panel labels a
-property with a unit it does not publish — never a sensor whose unit we gave up
-on checking. Without this, a panel running the affected firmware raises a
-mismatch its owner cannot act on and that reflects no real defect.
-
-The match is exact. If firmware later declares something OTHER than the value
-here for the same field, that is new information and is still reported.
-"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,8 +98,8 @@ class SchemaFindings:
 
     Defaulted because it is additive and because every other member is a
     finding about *our* declarations, which this is not: an adapter that emits
-    no discovered rows — the flat one does not — leaves this empty, and that is
-    a fact about the adapter rather than a clean bill of health.
+    no discovered rows leaves this empty, and that is a fact about the adapter
+    rather than a clean bill of health.
     """
 
 
@@ -168,21 +146,17 @@ def evaluate_field_metadata(
     # about the panel, not an inventory of what we produce, and every question
     # below is the second kind.
     curated, discovered = partition(field_metadata)
+    # Every path the producible gate covers, and no other. A read exempt from
+    # the gate is either one the adapter maps no row for, so there is nothing
+    # to ask, or one it maps that validation is deliberately kept from acting
+    # on -- see `Producibility.MAPPED_UNVALIDATED`.
     declared = declared_field_paths()
-    # Schema-conditional entities read a real field off a real metadata row;
-    # what they cannot do is satisfy a gate that demands *both* adapters
-    # produce it. Resolution is a property of the adapter that is running, so
-    # asking about these paths alongside the declared ones is what gives such
-    # an entity its unavailability and its Repair — the apparatus every other
-    # entity already has. Leaving them out is how `panel.wifi_ssid` stayed
-    # invisible: exempt from the gate read as exempt from everything.
-    resolvable = declared | conditional_field_paths()
     sensor_defs = sensor_defs or {}
 
     unresolved: set[str] = set()
     mismatches: list[UnitMismatch] = []
 
-    for field_path in resolvable:
+    for field_path in declared:
         entry = curated.get(field_path)
         if entry is None:
             # Hardware not present. Not a defect, and deliberately silent.
@@ -199,16 +173,13 @@ def evaluate_field_metadata(
         schema_unit = str(entry.unit)
         if schema_unit == str(ha_unit):
             continue
-        if KNOWN_BAD_SCHEMA_UNITS.get(field_path) == schema_unit:
-            # A firmware mislabel we already work around. See the constant.
-            continue
         mismatches.append(UnitMismatch(field_path, str(ha_unit), schema_unit))
 
     # `RESIDUAL_EXEMPT_PATHS` are read by the integration; they are exempt from
-    # the *producible* gate because only one adapter emits them, or neither
-    # does, so they are absent from `declared` without being unread. Only the
-    # paths matter here; each entry's `Producibility` annotation is what the
-    # conformance tests verify.
+    # the *producible* gate because the adapter maps no row for them, or maps
+    # one validation must not act on, so they are absent from `declared`
+    # without being unread. Only the paths matter here; each entry's
+    # `Producibility` annotation is what the conformance tests verify.
     #
     # `curated` and never `field_metadata`, which still holds both halves. A
     # discovered path reaching this set would read as a produced field nothing

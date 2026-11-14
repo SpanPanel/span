@@ -187,16 +187,13 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         """Return the snapshot field this entity's value comes from, if any.
 
         The description's `field_path`, regardless of `derived`. A
-        `SCHEMA_CONDITIONAL_FIELD` description is exempt from the *producible*
-        gate, which is a statement about the other adapter, not about this
-        entity: the adapter that does produce the field publishes a metadata
-        row for it, that row can come back unresolved, and when it does this
-        entity's reading is a default rather than a measurement — exactly as
-        for a plain declaration.
+        `NO_SOURCE_FIELD` description may name the field it reads; the adapter
+        maps no row for it, so validation never reports it unresolved, and
+        naming it only counts the entity against the field it actually reads.
 
-        `None` for `MULTIPLE_FIELDS` and `NO_SOURCE_FIELD` descriptions, which
-        have no single field to blame, and for the circuit switch, which has no
-        entity description at all.
+        `None` for `MULTIPLE_FIELDS` descriptions and for a `NO_SOURCE_FIELD`
+        description that names nothing, which have no single field to blame,
+        and for the circuit switch, which has no entity description at all.
         """
         description: object = getattr(self, "entity_description", None)
         if isinstance(description, FieldPathDeclarationMixin):
@@ -230,11 +227,11 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         names them.
 
         `derived` is deliberately not consulted. It says why a path is outside
-        the both-adapters producible gate, which is a fact about the *other*
-        adapter; the adapter running here still resolves the field or fails to.
-        Excluding schema-conditional entities from this probe left them with a
-        default they present as a reading -- the `evse_ev_connected` failure
-        mode, reached by a different route.
+        the producible gate, and a path outside the gate is never in
+        `unresolved_paths`, so consulting it here would add a second statement
+        of the gate's rule that could drift from the first. Keying on the field
+        alone gives the same probe to every entity whose field validation
+        covers; the `evse_ev_connected` failure was an entity excused from it.
         """
         source = self._source_field_path()
         return source is not None and source in self.coordinator.unresolved_paths

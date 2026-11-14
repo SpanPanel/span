@@ -70,6 +70,8 @@ from custom_components.span_panel.id_builder import (
 from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
 from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL, CONTROL_MODE
 
+from .conftest import FLAT_PANEL_SCHEMA, VALIDATED_PANEL_STATUS
+
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
     api_version="v2",
@@ -4819,3 +4821,232 @@ async def test_every_route_creates_the_entry_whatever_the_hardware_version(
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_PANEL_SERIAL] == HARDWARE_PANEL_SERIAL
+
+
+# ---------- firmware that publishes the older flat eBus schema ----------
+
+FLAT_PANEL_STATUS = V2StatusInfo(
+    serial_number=HARDWARE_PANEL_SERIAL,
+    firmware_version="spanos2/r202603/05",
+)
+"""What a panel on spanos2 firmware answers to detection: a v2 panel like any other."""
+
+RECONFIGURED_HOST = "192.168.1.200"
+
+
+def _reconfigurable_entry(hass: HomeAssistant, **data: object) -> MockConfigEntry:
+    """Add an entry for the detected panel's serial, configured at `MOCK_HOST`."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            **data,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def _reconfigure(
+    hass: HomeAssistant, entry: MockConfigEntry, user_input: dict[str, object]
+) -> tuple[ConfigFlowResult, AsyncMock]:
+    """Submit the reconfigure form; return what it led to, and the detection it ran."""
+    detect = AsyncMock(return_value=MOCK_V2_DETECTION)
+    with patch("custom_components.span_panel.config_flow.detect_api_version", detect):
+        form = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(form["flow_id"], user_input)
+    return result, detect
+
+
+async def test_user_step_refuses_a_flat_panel(hass: HomeAssistant, panel_schema: AsyncMock) -> None:
+    """The form says why, and nothing is added: the panel needs a firmware update first."""
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+
+    result = await _start_flow(hass, config_entries.SOURCE_USER, FLAT_PANEL_STATUS)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "panel_firmware_flat"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_reconfigure_refuses_a_flat_panel(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """The form says why, and the entry keeps the host it had."""
+    entry = _reconfigurable_entry(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+
+    result, _detect = await _reconfigure(hass, entry, {CONF_HOST: RECONFIGURED_HOST})
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "panel_firmware_flat"}
+    assert entry.data[CONF_HOST] == MOCK_HOST
+
+
+async def test_reconfigure_to_an_fqdn_refuses_a_flat_panel_before_registering_it(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """Refused before `register_fqdn` is asked for, so the panel is left as it was.
+
+    Registering an FQDN makes the panel regenerate its certificate, which is
+    not a change to make to a panel this release refuses to set up.
+    """
+    entry = _reconfigurable_entry(hass, **{CONF_EBUS_BROKER_PORT: 8883})
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    register = AsyncMock()
+
+    with patch("custom_components.span_panel.config_flow.register_fqdn", register):
+        result, _detect = await _reconfigure(hass, entry, {CONF_HOST: "panel.example.com"})
+
+    register.assert_not_called()
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "panel_firmware_flat"}
+    assert entry.data[CONF_HOST] == MOCK_HOST
+    assert CONF_REGISTERED_FQDN not in entry.data
+
+
+async def test_zeroconf_skips_a_flat_panel(hass: HomeAssistant, panel_schema: AsyncMock) -> None:
+    """Aborted, and Home Assistant shows no card for an aborted discovery."""
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+
+    result = await _start_flow(hass, config_entries.SOURCE_ZEROCONF, FLAT_PANEL_STATUS)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "panel_firmware_flat"
+
+
+async def test_hassio_skips_a_flat_panel(hass: HomeAssistant, panel_schema: AsyncMock) -> None:
+    """Aborted, and Home Assistant shows no card for an aborted discovery."""
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+
+    result = await _start_flow(hass, config_entries.SOURCE_HASSIO, FLAT_PANEL_STATUS)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "panel_firmware_flat"
+
+
+@pytest.mark.parametrize(
+    ("source", "next_step"),
+    [
+        (config_entries.SOURCE_USER, "choose_v2_auth"),
+        (config_entries.SOURCE_ZEROCONF, "confirm_discovery"),
+        (config_entries.SOURCE_HASSIO, "confirm_discovery"),
+    ],
+)
+async def test_an_unread_schema_does_not_block_the_flow(
+    hass: HomeAssistant, panel_schema: AsyncMock, source: str, next_step: str
+) -> None:
+    """A read that could not be had says nothing about the firmware, so the step goes on.
+
+    Setup reads the schema again before it connects, and refuses a flat panel there.
+    """
+    panel_schema.side_effect = TimeoutError()
+
+    result = await _start_flow(hass, source, VALIDATED_PANEL_STATUS)
+
+    assert result.get("step_id") == next_step, result
+
+
+async def test_an_unread_schema_does_not_block_a_reconfigure(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """Reconfigure takes an unread schema as the other steps do."""
+    entry = _reconfigurable_entry(hass)
+    panel_schema.side_effect = TimeoutError()
+
+    result, _detect = await _reconfigure(hass, entry, {CONF_HOST: RECONFIGURED_HOST})
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HOST] == RECONFIGURED_HOST
+
+
+@pytest.mark.parametrize(
+    ("source", "host", "port"),
+    [
+        (config_entries.SOURCE_USER, MOCK_HOST, 80),
+        (config_entries.SOURCE_ZEROCONF, HARDWARE_ZEROCONF_HOST, 80),
+        (
+            config_entries.SOURCE_HASSIO,
+            HARDWARE_HASSIO_CONFIG["host"],
+            HARDWARE_HASSIO_CONFIG["port"],
+        ),
+    ],
+)
+async def test_the_schema_is_read_from_the_panel_detection_reached(
+    hass: HomeAssistant, panel_schema: AsyncMock, source: str, host: str, port: int
+) -> None:
+    """The host, port and client detection used, so the panel judged is the one that answered."""
+    client = MagicMock(name="shared-client")
+
+    with patch("custom_components.span_panel.config_flow.get_async_client", return_value=client):
+        await _start_flow(hass, source, VALIDATED_PANEL_STATUS)
+
+    panel_schema.assert_awaited_once_with(host, port=port, httpx_client=client, ssl_context=None)
+
+
+async def test_reconfigure_reads_the_schema_over_the_entrys_pin(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """The pinned port and anchor detection used, and no shared client.
+
+    Plaintext to the HTTPS port would fail and answer unread, which skips the
+    check on every pinned entry with nothing to show it.
+    """
+    entry = _reconfigurable_entry(hass, **{CONF_PANEL_CA_PEM: FAKE_CA_PEM})
+    context = MagicMock(name="pinned-context")
+
+    with patch(
+        "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+        return_value=context,
+    ):
+        _result, detect = await _reconfigure(
+            hass, entry, {CONF_HOST: RECONFIGURED_HOST, CONF_HTTPS_PORT: 8443}
+        )
+
+    detect.assert_awaited_once()
+    panel_schema.assert_awaited_once_with(*detect.await_args.args, **detect.await_args.kwargs)
+    assert panel_schema.await_args.kwargs == {
+        "port": 8443,
+        "httpx_client": None,
+        "ssl_context": context,
+    }
+
+
+async def test_a_configured_flat_panel_still_takes_the_ports_its_add_on_publishes(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """An entry that already has the panel is its own setup's to refuse, as on reauth.
+
+    So discovery still points it at the panel's new ports, without reading the
+    schema at all: an entry left on last run's ports could not reach its panel
+    even after the firmware update its Repair asks for.
+    """
+    existing = _hassio_configured_entry(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert existing.data[CONF_HTTP_PORT] == 9090
+    panel_schema.assert_not_awaited()

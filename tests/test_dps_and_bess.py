@@ -197,8 +197,8 @@ class TestGridFormingDeviceAttribute:
     def test_the_attribute_is_absent_when_the_library_has_no_mid(self) -> None:
         """Degrades to nothing against span-panel-api 2.6.4, which has no `mid` field.
 
-        Also the correct answer on any flat panel: no flat firmware publishes a MID, so
-        there is no forming device to name.
+        Also the correct answer on any panel that declares no MID: there is no forming
+        device to name.
         """
         snapshot = SpanPanelSnapshotFactory.create(dominant_power_source="BATTERY")
 

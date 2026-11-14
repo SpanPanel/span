@@ -54,8 +54,8 @@ from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
     Producibility,
+    declared_field_paths,
 )
 from custom_components.span_panel.helpers import detect_capabilities, has_der_link_health
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -142,16 +142,17 @@ def _without_status(der: str) -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
-def _without_record(der: str) -> SpanPanelSnapshot:
-    """A snapshot whose feeding circuit publishes no connection record at all.
+def _without_records(*ders: str) -> SpanPanelSnapshot:
+    """A snapshot whose circuits feeding each named DER publish no connection record at all.
 
     What a circuit feeding an ordinary load looks like, applied to a circuit
     that used to feed a DER.
     """
     tree = schema_one_tree()
-    circuit = _feeding_circuit(tree, der)
-    del tree[circuit][FEEDS_ID_TOPIC]
-    del tree[circuit][FEEDS_STATUS_TOPIC]
+    for der in ders:
+        circuit = _feeding_circuit(tree, der)
+        del tree[circuit][FEEDS_ID_TOPIC]
+        del tree[circuit][FEEDS_STATUS_TOPIC]
     return schema_one_snapshot(tree)
 
 
@@ -383,7 +384,7 @@ async def test_a_charger_whose_circuit_publishes_no_record_gets_no_entity(
     that asked "does any DER have a record" would keep both, and the surviving
     one would report a link nothing publishes.
     """
-    snapshot = _without_record(EVSE)
+    snapshot = _without_records(EVSE)
     created = await _created(hass, snapshot)
 
     links = _evse_links_by_feed(created, snapshot)
@@ -409,15 +410,18 @@ async def test_the_circuits_that_feed_no_der_create_nothing(hass: HomeAssistant)
 async def test_a_panel_with_no_connection_records_creates_neither_sensor(
     hass: HomeAssistant,
 ) -> None:
-    """A flat panel, and any v1.0 panel whose circuits publish no record.
+    """A panel whose circuits feed its DER and publish no record for any of them.
 
-    The factory snapshot leaves both fields `None`, which is what every flat
-    panel produces: flat publishes `connected` on the BESS and on no other
-    device class.
+    The capture with every feeding circuit's record removed: the inverter and
+    both chargers are still there, so the gate is the record and never the
+    device.
     """
-    snapshot = SpanPanelSnapshotFactory.create()
+    snapshot = _without_records(PV, EVSE, EVSE_2)
+    assert snapshot.pv_inverters, "the inverter stays; only its record goes"
+    assert len(snapshot.evse) == 2, "the chargers stay; only their records go"
     created = await _created(hass, snapshot)
 
+    assert has_der_link_health(snapshot) is False
     assert [key for key in _keys(created) if key.endswith("_panel_link")] == []
 
 
@@ -493,17 +497,21 @@ async def test_the_inverter_link_does_not_displace_the_batterys(hass: HomeAssist
 # ---------------------------------------------------------------------------
 
 
-def test_both_descriptions_name_their_field_and_say_why_it_is_exempt() -> None:
-    """`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, per the established rule.
+def test_both_descriptions_name_their_field_and_keep_it_from_validation() -> None:
+    """Plain `field_path` declarations of a mapped field that is not validated.
 
-    Flat firmware publishes `connected` on the BESS alone, so neither path can
-    satisfy the both-adapters gate — while both entities still need their Repair
-    mention and their unavailability when the panel stops resolving the property.
+    The adapter maps both from the feeding circuit's
+    `connection/feeds-device-status`, but the link descriptions sit outside
+    `platform_descriptions()`, so neither path is in the gate: each is
+    enumerated as `MAPPED_UNVALIDATED`, with the reason written beside it.
     """
     for description in (PV_PANEL_LINK_SENSOR, EVSE_PANEL_LINK_SENSOR):
-        assert description.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+        assert description.derived is None
         assert description.field_path is not None
-        assert RESIDUAL_EXEMPT_PATHS[description.field_path] is Producibility.SCHEMA_1_ONLY
+        assert (
+            RESIDUAL_EXEMPT_PATHS[description.field_path] is Producibility.MAPPED_UNVALIDATED
+        )
+        assert description.field_path not in declared_field_paths()
 
     assert PV_PANEL_LINK_SENSOR.field_path == "pv.connected"
     assert EVSE_PANEL_LINK_SENSOR.field_path == "evse.connected"
@@ -517,7 +525,7 @@ def test_the_capability_gate_follows_the_record_and_reaches_the_reload() -> None
     """
     assert has_der_link_health(schema_one_snapshot()) is True
     assert has_der_link_health(SpanPanelSnapshotFactory.create()) is False
-    assert has_der_link_health(_without_record(PV)) is True, (
+    assert has_der_link_health(_without_records(PV)) is True, (
         "the chargers still publish records; the gate must not be all-or-nothing"
     )
 

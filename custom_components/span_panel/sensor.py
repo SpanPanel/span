@@ -386,15 +386,12 @@ def create_mid_sensors(
 ) -> list[SpanMidSensor]:
     """Create the Microgrid Interconnect sub-device and its sensors.
 
-    v1.0 only, and purely additive: no flat panel publishes a MID, so `has_mid` is false
-    everywhere today and nothing a user has changes. Presence is the library's optional
-    `mid` field rather than a sentinel value, so there is nothing to infer.
+    Presence is the library's optional `mid` field rather than a sentinel value, so
+    there is nothing to infer, and a panel that declares no MID gets no device.
 
-    DUAL-SCHEMA: gated on what the snapshot carries, never on a version or a config flag. A
-    panel that hot-loads parent/child mid-life gains the MID as a capability change, the
-    coordinator reloads, and the device appears; one that never does simply never sees
-    it. When the flat path retires, this gate can go and the sensors become
-    unconditional.
+    Gated on what the snapshot carries, never on a version or a config flag. A panel
+    that gains a MID mid-life reports it as a capability change, the coordinator
+    reloads, and the device appears.
     """
     if not has_mid(snapshot):
         return []
@@ -409,21 +406,18 @@ def create_shed_forecast_sensors(
     """Create the backup-planning forecast sensors the panel can actually fill.
 
     Two gates, not one, because absence has two shapes here. `has_shed_forecast`
-    answers whether the panel publishes the capability at all — false on every
-    flat panel and on any v1.0 firmware that omits the node, and the reason a
-    reload creates these when a panel gains it mid-life. The per-description
-    check then answers whether *this* estimate is among what the node publishes:
-    the catalog marks all four times SHOULD rather than MUST, so a partial
-    node is legal and the half it omits must produce no entity rather than one
-    permanently unknown.
+    answers whether the panel publishes the capability at all — false on any
+    firmware that omits the node, and the reason a reload creates these when a
+    panel gains it mid-life. The per-description check then answers whether
+    *this* estimate is among what the node publishes: the catalog marks all four
+    times SHOULD rather than MUST, so a partial node is legal and the half it
+    omits must produce no entity rather than one permanently unknown.
 
     The presence test is the description's own `value_fn`. The field a sensor
     reads is exactly the field whose absence should suppress it, so asking the
     reader is what keeps the gate from drifting away from the read.
 
-    DUAL-SCHEMA: gated on what the snapshot carries, never on a version or a
-    config flag. When the flat path retires, the first gate goes and the second
-    stays — a v1.0 panel may still publish a partial node.
+    Both gates read what the snapshot carries, never a version or a config flag.
     """
     if not has_shed_forecast(snapshot):
         return []
@@ -455,9 +449,9 @@ def create_pcs_sensors(
     stays. Both results the capability marks `SHOULD`, so a panel publishing the
     node without them is unusual firmware rather than an expected shape.
 
-    DUAL-SCHEMA: gated on what the snapshot carries, never on a version. No flat
-    panel publishes the capability, and a v1.0 panel that gains it reaches
-    `detect_capabilities` and picks the entities up on the reload.
+    Gated on what the snapshot carries, never on a version, so a panel that gains
+    the capability reaches `detect_capabilities` and picks the entities up on the
+    reload.
     """
     if not has_pcs(snapshot):
         return []
@@ -470,8 +464,8 @@ def create_battery_sensors(
 ) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
     """Create battery sensors when BESS is commissioned.
 
-    Auto-detected from soe_percentage — only a commissioned BESS reports SoE.
-    All BESS sensors live on the BESS sub-device.
+    Detected by `has_bess`, where the battery's declaration decides. All BESS
+    sensors live on the BESS sub-device.
     """
     if not has_bess(snapshot):
         return []
@@ -493,11 +487,11 @@ def create_battery_sensors(
 
     # What the BESS reports about itself, gated per description because it comes
     # from capability nodes a BESS may not have. `has_bess_telemetry` answers
-    # whether it publishes either node at all -- false on every flat panel, and
-    # the reason a reload creates these when a BESS gains them mid-life. The
-    # per-description check then asks whether *this* reading is among what it
-    # publishes: a BESS with a `meter` node and no `status` node is legal, and the
-    # half it omits must produce no entity rather than one permanently unknown.
+    # whether it publishes either node at all, and is the reason a reload creates
+    # these when a BESS gains them mid-life. The per-description check then asks
+    # whether *this* reading is among what it publishes: a BESS with a `meter`
+    # node and no `status` node is legal, and the half it omits must produce no
+    # entity rather than one permanently unknown.
     #
     # The presence test is the description's own `value_fn`, so the gate cannot
     # drift away from the read it is gating.

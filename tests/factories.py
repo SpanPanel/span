@@ -227,7 +227,7 @@ class SpanPanelSnapshotFactory:
         wwan_link: bool = False,
         circuits: dict[str, SpanCircuitSnapshot] | None = None,
         battery: SpanBatterySnapshot | None = None,
-        # v1.0 only. Defaults to None so every existing fixture stays a flat panel.
+        # Defaults to None, a panel that declares no MID; a fixture opts in to one.
         mid: SpanMidSnapshot | None = None,
         dominant_power_source: str | None = None,
         grid_state: str | None = None,
@@ -250,9 +250,8 @@ class SpanPanelSnapshotFactory:
         pv: SpanPVSnapshot | None = None,
         evse: dict[str, SpanEvseSnapshot] | None = None,
         # Defaults True for the same reason the library field does: a panel at the
-        # service entrance is the ordinary case, and flat firmware cannot be
-        # anything else. A fixture opts out to model a chained panel or one behind
-        # an upstream DER.
+        # service entrance is the ordinary case. A fixture opts out to model a
+        # chained panel or one behind an upstream DER.
         lugs_at_service_entrance: bool | None = True,
     ) -> SpanPanelSnapshot:
         """Create a SpanPanelSnapshot with reasonable defaults."""

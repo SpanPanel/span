@@ -187,8 +187,11 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
+        # Named although the reason is `NO_SOURCE_FIELD`: the library derives
+        # the field from the MID's grid-forming entity and maps no row for it.
+        # See `DerivedReason.NO_SOURCE_FIELD` for what naming it obliges.
         field_path="panel.dominant_power_source",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -379,12 +382,12 @@ class DeclaredPanelReading(NamedTuple):
     description: SpanPanelDataSensorEntityDescription
 
 
-# Panel readings the flat schema has no property for, and that no reference
-# payload declares either, so neither adapter's reference metadata produces
-# them and each is `NO_SOURCE_FIELD` to the producible gate. Where a panel does
-# declare one, schema_1 publishes a resolved row for it, and that row is what
-# creates the sensor (`sensor._declared`): a panel without the property gains
-# no permanently unknown entity.
+# Panel readings the adapter's reference payload does not declare, so its
+# reference metadata produces no row for them and each is `NO_SOURCE_FIELD` to
+# the producible gate. Where a panel does declare one, the adapter publishes a
+# resolved row for it, and that row is what creates the sensor
+# (`sensor._declared`): a panel without the property gains no permanently
+# unknown entity.
 BUSBAR_CURRENT_SENSOR: Final = SpanPanelDataSensorEntityDescription(
     key="busbar_current",
     derived=DerivedReason.NO_SOURCE_FIELD,
@@ -470,7 +473,6 @@ SHED_FORECAST_SENSORS: tuple[
     SpanShedForecastSensorEntityDescription(
         key="time_to_priority_shed",
         field_path="panel.shed_time_to_priority_shed_min",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="time_to_priority_shed",
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
@@ -483,7 +485,6 @@ SHED_FORECAST_SENSORS: tuple[
     SpanShedForecastSensorEntityDescription(
         key="shed_total_time_remaining",
         field_path="panel.shed_total_time_remaining_min",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="shed_total_time_remaining",
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
@@ -502,13 +503,9 @@ before the battery is spent — so they belong beside the power and energy
 sensors rather than under the diagnostics fold. That is the whole argument for
 surfacing them ahead of the rest of the unread v1.0 surface.
 
-**`derived` rather than a `field_path` declaration, by the producible rule.**
-The gate requires a path *both* adapters produce, and no flat panel publishes
-this capability at all; `SCHEMA_CONDITIONAL_FIELD` is what that situation is
-called. The paths are enumerated in `RESIDUAL_EXEMPT_PATHS` instead, annotated
-`SCHEMA_1_ONLY`, and the conformance suite checks that annotation against what
-the adapters actually emit — so if flat firmware ever grew the capability, the
-build would fail and demand promotion rather than leaving the read ungated.
+**Plain `field_path` declarations.** The adapter maps both estimates, so the
+producible gate covers them, and each gets its unit checked against the panel's
+own `$description`, its Repair mention and its unavailability.
 
 The two hypothetical-full-charge figures ride as attributes rather than as
 sensors of their own. They answer "what would this installation give me from a
@@ -681,7 +678,6 @@ PCS_SENSORS: tuple[SpanPcsSensorEntityDescription, SpanPcsSensorEntityDescriptio
     SpanPcsSensorEntityDescription(
         key="pcs_import_limit",
         field_path="pcs.import_limit_a",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="pcs_import_limit",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -711,7 +707,6 @@ PCS_SENSORS: tuple[SpanPcsSensorEntityDescription, SpanPcsSensorEntityDescriptio
     SpanPcsSensorEntityDescription(
         key="pcs_binding_constraint",
         field_path="pcs.binding_constraint",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="pcs_binding_constraint",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -741,13 +736,10 @@ where nobody finds it.
 throttling import is a fact about the user's electricity supply, not about the
 integration's health.
 
-**`derived` as well as `field_path`, by the producible rule.** No flat panel
-publishes `energy.ebus.capability.pcs` at all, so the both-adapters gate cannot
-be satisfied; the paths are enumerated in `RESIDUAL_EXEMPT_PATHS` as
-`SCHEMA_1_ONLY`, which schema_1's metadata rows earn them and which buys
-`pcs_import_limit` unit validation against the panel's own `$description`.
-`field_path` still names the source, which is what gives each sensor its Repair
-mention and its unavailability when the panel stops resolving the property.
+**Plain `field_path` declarations.** The adapter maps both results, so the
+producible gate covers them: `pcs_import_limit` gets unit validation against the
+panel's own `$description`, and each sensor its Repair mention and its
+unavailability when the panel stops resolving the property.
 """
 
 
@@ -826,12 +818,13 @@ MID_SENSORS: tuple[SpanMidSensorEntityDescription, ...] = (
 )
 """Sensors on the MID device.
 
-Only `grid-state` — utility-supply health, genuinely new in v1.0 with no flat
-equivalent, and the one non-metadata addition the MID brings.
+Only `grid-state` — utility-supply health, which no other entity reports, and the
+one non-metadata addition the MID brings.
 
 Islanding state and the grid-forming entity are deliberately *not* duplicated here.
-Both already reach a user through entities that predate v1.0 — `dsm_state` and
-`grid_forming_entity` on the panel — and those must keep their ids and their history.
+Both already reach a user through entities that predate the MID device — `dsm_state`
+and `grid_forming_entity` on the panel — and those must keep their ids and their
+history.
 Showing the same fact twice is not the benign cell of the absorb-or-surface policy;
 adding a fact nobody had is.
 """
@@ -911,7 +904,6 @@ BESS_TELEMETRY_SENSORS: tuple[
     SpanBessMetadataSensorEntityDescription(
         key="meter_power",
         field_path="battery.power_w",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="bess_meter_power",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -922,7 +914,6 @@ BESS_TELEMETRY_SENSORS: tuple[
     SpanBessMetadataSensorEntityDescription(
         key="communication_state",
         field_path="battery.communication_state",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="bess_communication_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -973,7 +964,7 @@ for the same reason.
 
 **What is settled is that the sign did not regress.** `BATTERY_POWER_SENSOR`
 reads the same source with the same single negation, device and state class
-as the one released in 2.0.8, and both adapters pass `power_flow_battery`
+as the one released in 2.0.8, and the library passes `power_flow_battery`
 through untouched. Whatever a live panel showed then, it shows now -- except
 that an unpublished value now reads unknown where 2.0.8 reported 0 W. `bess_meter_power` was briefly withdrawn on the belief that it would
 disagree with its neighbor on real firmware; the capture showed the two wire
@@ -985,12 +976,10 @@ build number from the panel's firmware version and, where that does not parse,
 compares the BESS meter's sign with `power-flows/battery`. `battery.power_w`
 arrives discharge-positive on every firmware, so this sensor reads it as is.
 
-**`derived` as well as `field_path`, by the producible rule.** The gate wants a
-path both adapters produce, and flat's BESS device class declares neither
-property -- so `SCHEMA_CONDITIONAL_FIELD`, with the paths enumerated in
-`RESIDUAL_EXEMPT_PATHS` as `SCHEMA_1_ONLY`. `field_path` still names the source,
-which is what gives each sensor its Repair mention and its unavailability when
-the panel stops resolving the property.
+**Plain `field_path` declarations.** The adapter maps both properties, so the
+producible gate covers them: `bess_meter_power` gets its unit checked against
+the BESS's own `$description`, and each sensor its Repair mention and its
+unavailability when the panel stops resolving the property.
 """
 
 # ---------------------------------------------------------------------------
@@ -1382,10 +1371,10 @@ EVSE_SENSORS: tuple[
         value_fn=lambda e: e.lock_state or "unknown",
     ),
     # The charger's SKU, shaped like `bess_part_number`: build metadata, so
-    # diagnostic and off by default, and a plain `field_path` because both
-    # adapters map the property (`evse/part-number` on flat, `info/part-number`
-    # on v1.0). It was the one unread declaration whose promotion the producible
-    # gate could demand, and adding the schema_1 metadata row is what demanded it.
+    # diagnostic and off by default, and a plain `field_path` because the
+    # adapter maps the property, `info/part-number`. It was the one unread
+    # declaration whose promotion the producible gate could demand, and adding
+    # the schema_1 metadata row is what demanded it.
     SpanEvseSensorEntityDescription(
         key="evse_part_number",
         field_path="evse.part_number",
@@ -1444,11 +1433,10 @@ def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
     Descriptions that name no field are excluded — they read several fields, or
     none, so no single path identifies them.
 
-    A `SCHEMA_CONDITIONAL_FIELD` description does name one and is included. Its
-    exemption is from the *producible* gate, and the unit its schema declares
-    for the field is checkable exactly as any other's: the adapter that
-    produces the row publishes a unit, and this integration's sensor declares
-    one, and they can disagree.
+    A `NO_SOURCE_FIELD` description that names its field is included too. The
+    adapter maps no row for such a field, so validation never consults its
+    entry here; including it keeps this map a plain index of what each sensor
+    names rather than a second copy of the gate's rule.
 
     Each field path has one reader today. Were a second added, only the first
     would be kept, which is safe only while the two agree on

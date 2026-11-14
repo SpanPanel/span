@@ -34,6 +34,15 @@ PASSPHRASE_ONLY_HARDWARE_VERSIONS: Final = frozenset({"3.0"})
 HARDWARE_READ_TIMEOUT_S: Final = 5.0
 """How long a caller waits for the panel's status before going on without it."""
 
+FAIL_OPEN_READ_ERRORS: Final = (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL)
+"""The failures a fail-open REST read made before connecting answers as unread, rather than raising.
+
+A timeout, a refused or reset connection, a certificate the pin rejects, an
+unusable URL and a body that cannot be read. Named once, here, so the hardware
+read and the schema read (`firmware_schema`) cannot come to fail open on
+different things.
+"""
+
 
 class _HardwareRead(Enum):
     """A status read that failed, so nothing is known about the hardware."""
@@ -57,7 +66,14 @@ class HardwareVerdict(StrEnum):
 
 
 def hardware_verdict(hardware_version: str | None) -> HardwareVerdict:
-    """Judge the REST value: absent or empty proceeds, so firmware before r202639 is never refused.
+    """Judge the REST value: absent or empty proceeds, so its absence alone never refuses a panel.
+
+    Firmware before r202639 publishes no `hardwareVersion`, so a parent/child panel
+    on such firmware proceeds here. Whether a panel's schema is supported is a
+    separate question, and setup settles it first, so a panel on the flat schema
+    never reaches this verdict. A schema read (`firmware_schema`) refuses it
+    before its broker is dialled; where that read could not be had, the connect
+    refuses it instead, still before this verdict is applied.
 
     Surrounding whitespace and the case of `UNKNOWN` are ignored, so a spelling
     the changelog did not show cannot alone make the terminal refusal.
@@ -114,7 +130,8 @@ async def async_read_hardware_version(
                 httpx_client=get_async_client(hass),
                 ssl_context=transport.ssl_context,
             )
-    except (TimeoutError, SpanPanelError, httpx.HTTPError, httpx.InvalidURL) as err:
-        _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %s", host, err)
+    except FAIL_OPEN_READ_ERRORS as err:
+        # `%r`, because a timeout's `str()` is empty and the line would name no cause.
+        _LOGGER.debug("Could not read the hardware version of SPAN panel %s: %r", host, err)
         return HARDWARE_UNREAD
     return status.hardware_version

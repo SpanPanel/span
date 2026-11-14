@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.span_panel.const import DOMAIN, EVENT_SCHEMA_ISSUE
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.schema_repairs import (
+    async_clear_retired_upgrade_notice,
     async_clear_schema_issues,
     async_sync_schema_issues,
 )
@@ -469,6 +470,51 @@ async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
 
 
+# --- The retired firmware-upgrade Repair ----------------------------------
+#
+# Installs from older versions may still hold one. Nothing raises it any more,
+# and setup clears it.
+
+_RETIRED_UPGRADE_ISSUE = "panel_upgraded_to_ebus_v1"
+
+
+def _raise_retired_upgrade_issue(hass, entry: MockConfigEntry) -> None:
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"{_RETIRED_UPGRADE_ISSUE}_{entry.entry_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=_RETIRED_UPGRADE_ISSUE,
+    )
+
+
+async def test_the_retired_upgrade_repair_is_cleared_from_an_upgraded_install(hass, entry) -> None:
+    """It is on screen now, and its owner has no reason to restart to be rid of it."""
+    _raise_retired_upgrade_issue(hass, entry)
+
+    async_clear_retired_upgrade_notice(hass, entry)
+
+    issue_id = f"{_RETIRED_UPGRADE_ISSUE}_{entry.entry_id}"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_clearing_the_retired_upgrade_repair_leaves_another_panels_alone(
+    hass, entry
+) -> None:
+    """Two panels share the domain, and one being cleared is not both."""
+    other = MockConfigEntry(domain=DOMAIN, data={}, unique_id="abc456")
+    other.add_to_hass(hass)
+    for target in (entry, other):
+        _raise_retired_upgrade_issue(hass, target)
+
+    async_clear_retired_upgrade_notice(hass, entry)
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"{_RETIRED_UPGRADE_ISSUE}_{entry.entry_id}") is None
+    assert registry.async_get_issue(DOMAIN, f"{_RETIRED_UPGRADE_ISSUE}_{other.entry_id}")
+
+
 # --- The affected-entity map, built from real entities ---------------------
 #
 # The map is populated by the entities themselves rather than reverse-engineered
@@ -717,14 +763,14 @@ async def test_entities_with_no_source_field_are_not_tracked(hass) -> None:
         await _stop_scheduling(coordinator)
 
 
-async def test_schema_conditional_entities_are_tracked(hass) -> None:
-    """A schema-conditional entity must be nameable by its field's Repair.
+async def test_a_derived_entity_naming_its_field_is_tracked(hass) -> None:
+    """A derived entity that names its field is counted against it.
 
-    `bess_connected` reads exactly one field. That the *other* adapter does not
-    publish it is why the description is `derived`, and is no reason for the
-    Repair against a dead `battery.connected` to report "0 entities affected" --
-    the suppression rule then throws the finding away entirely, so the user is
-    told nothing at all about a sensor that has gone to a default.
+    `bess_connected` is `NO_SOURCE_FIELD` and names `battery.connected`, the one
+    field it reads. Being derived is no reason for a Repair against that field
+    to report "0 entities affected" -- the suppression rule then throws the
+    finding away entirely, so the user would be told nothing at all about a
+    sensor that has gone to a default.
     """
     from unittest.mock import MagicMock
 
@@ -739,14 +785,14 @@ async def test_schema_conditional_entities_are_tracked(hass) -> None:
 
         added = MagicMock()
         await binary_setup(hass, config_entry, added)
-        conditional = [
+        named = [
             entity
             for entity in added.call_args.args[0]
             if getattr(entity, "entity_description", None) is BESS_CONNECTED_SENSOR
         ]
-        assert conditional
+        assert named
 
-        await _add_to_platform(hass, config_entry, conditional, "binary_sensor")
+        await _add_to_platform(hass, config_entry, named, "binary_sensor")
 
         assert coordinator.entity_ids_by_field_path["battery.connected"]
     finally:

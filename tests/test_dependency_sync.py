@@ -51,7 +51,6 @@ def repo(tmp_path: Path) -> Path:
             {
                 "domain": "span_panel",
                 "requirements": [
-                    "span-panel-api-schema-0==1.0.0b5",
                     "span-panel-api-schema-1==0.1.0b6",
                     "span-panel-api==3.0.0b7",
                 ],
@@ -64,7 +63,6 @@ def repo(tmp_path: Path) -> Path:
         'name = "span-panel"\n'
         "dependencies = [\n"
         '    "span-panel-api==3.0.0b7",\n'
-        '    "span-panel-api-schema-0==1.0.0b5",\n'
         '    "span-panel-api-schema-1==0.1.0b6",\n'
         '    "homeassistant>=2026.8.0",\n'
         "]\n"
@@ -77,8 +75,7 @@ def repo(tmp_path: Path) -> Path:
         'constraint-dependencies = ["span-panel-api==3.0.0b3"]\n'
     )
     (tmp_path / "requirements_test.txt").write_text(
-        "pytest>=9.0.3\nspan-panel-api==3.0.0b7\nspan-panel-api-schema-0==1.0.0b5\n"
-        "span-panel-api-schema-1==0.1.0b6\n"
+        "pytest>=9.0.3\nspan-panel-api==3.0.0b7\nspan-panel-api-schema-1==0.1.0b6\n"
     )
     return tmp_path
 
@@ -125,10 +122,10 @@ def test_a_pre_release_pin_is_synced(repo: Path) -> None:
 
 
 def test_the_adapter_packages_are_synced_too(repo: Path) -> None:
-    """`span-panel-api-schema-0` starts with `span-panel-api`, which is how it was missed.
+    """`span-panel-api-schema-1` starts with `span-panel-api`, which is how it was missed.
 
     The old implementation entered its bootstrap branch on the prefix and then
-    failed its own regex on the `-schema-0` that followed, so the adapters were
+    failed its own regex on the `-schema-1` that followed, so the adapters were
     never synced by anything.
     """
     pyproject = repo / "pyproject.toml"
@@ -218,7 +215,6 @@ def test_a_manifest_that_does_not_list_the_core_last_is_an_error(repo: Path) -> 
             {
                 "requirements": [
                     "span-panel-api==3.0.0b7",
-                    "span-panel-api-schema-0==1.0.0b5",
                     "span-panel-api-schema-1==0.1.0b6",
                 ]
             },

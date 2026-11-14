@@ -7,6 +7,7 @@
       "no_devices_found": "Não foram encontrados dispositivos na rede",
       "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",
       "no_serial": "Não foi possível determinar o número de série do painel.",
+      "panel_firmware_flat": "Este painel usa o firmware spanos2, que publica o antigo esquema eBus plano. Atualize o firmware do painel e depois tente novamente.",
       "reauth_successful": "Autenticação bem-sucedida.",
       "reconfigure_successful": "Anfitrião atualizado com sucesso.",
       "unique_id_mismatch": "O painel neste endereço tem um número de série diferente. Não é possível mudar para um painel diferente durante a reconfiguração.",
@@ -23,6 +24,7 @@
       "https_port_is_plaintext": "A porta 80 é a porta HTTP sem cifra. Introduza a porta em que o painel serve TLS — 443 a menos que algo a tenha movido.",
       "https_port_unreachable": "Não foi possível estabelecer uma ligação TLS na porta HTTPS {https_port}, pelo que não havia nenhum certificado para verificar face à autoridade que o painel publicou. Verifique se o painel serve TLS nessa porta — 443 a menos que algo a tenha movido — e tente novamente.",
       "invalid_auth": "Autenticação inválida",
+      "panel_firmware_flat": "Este painel usa o firmware spanos2, que publica o antigo esquema eBus plano. Atualize o firmware do painel e depois tente novamente.",
       "panel_not_ready": "O painel ainda não está pronto para registar o Home Assistant, normalmente porque ainda está a arrancar. Aguarde um momento e tente novamente.",
       "passphrase_unavailable": "O painel não consegue emitir credenciais porque a sua frase-passe ainda não está disponível. Isto não significa que tenha sido introduzida uma frase-passe incorreta. Aguarde alguns minutos e tente novamente.",
       "rate_limited": "O painel está a limitar as tentativas de registo. Tente novamente dentro de {retry_after} segundos.",
@@ -565,6 +567,9 @@
     "panel_connection_failed": {
       "message": "Falha ao ligar ao SPAN Panel em {host}."
     },
+    "panel_firmware_flat": {
+      "message": "O SPAN Panel {panel} usa o firmware spanos2, que publica o antigo esquema eBus plano; atualize o firmware do painel e este volta a ligar-se sozinho"
+    },
     "panel_not_ready": {
       "message": "O SPAN Panel não está pronto. Verifique se o painel está online."
     },
@@ -1044,6 +1049,10 @@
     "unvalidated_hardware_no_model": {
       "title": "Hardware do SPAN Panel não validado com esta versão",
       "description": "A versão de hardware {version} com um modelo desconhecido não foi validada com esta versão da integração. A configuração foi interrompida e nenhuma entidade é criada para este painel."
+    },
+    "panel_firmware_flat": {
+      "title": "O firmware do SPAN Panel precisa de uma atualização",
+      "description": "{panel} usa o firmware spanos2, que publica o antigo esquema eBus plano que esta integração já não suporta. Atualize o firmware do painel; depois de atualizado, o painel volta a ligar-se sozinho."
     }
   }
 }

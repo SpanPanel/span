@@ -43,8 +43,8 @@ from custom_components.span_panel.binary_sensor import (
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    DerivedReason,
     Producibility,
+    declared_field_paths,
 )
 from custom_components.span_panel.helpers import detect_capabilities, has_pcs
 from custom_components.span_panel.sensor import create_circuit_sensors, create_pcs_sensors
@@ -53,6 +53,7 @@ from custom_components.span_panel.sensor_definitions import (
     PCS_BINDING_CONSTRAINT_OPTIONS,
     PCS_CONSTRAINT_FAMILIES,
     PCS_SENSORS,
+    SpanPcsSensorEntityDescription,
 )
 from custom_components.span_panel.sensor_panel import SpanPcsSensor
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -62,7 +63,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -575,7 +576,7 @@ def test_the_activity_sensor_is_a_running_diagnostic() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Absence: no node, no PCS, a flat panel
+# Absence: no node, no PCS
 # ---------------------------------------------------------------------------
 
 
@@ -589,15 +590,6 @@ def test_the_capture_creates_all_three_entities() -> None:
 def test_a_panel_with_no_pcs_node_gets_no_entities() -> None:
     """The presence gate, from the tree end."""
     snapshot = _without_node()
-
-    assert has_pcs(snapshot) is False
-    assert _sensors(snapshot) == {}
-
-
-def test_a_flat_panel_gets_no_entities() -> None:
-    """The same absence by the other route: no flat panel declares the
-    capability, so the factory's default snapshot carries no PCS at all."""
-    snapshot = SpanPanelSnapshotFactory.create()
 
     assert has_pcs(snapshot) is False
     assert _sensors(snapshot) == {}
@@ -725,19 +717,6 @@ def test_a_circuit_outside_any_pcs_shows_neither_attribute() -> None:
     assert "shed_priority" in attributes
 
 
-def test_a_flat_circuit_shows_neither_attribute() -> None:
-    """No flat circuit declares a `pcs` node, so the attributes simply do not
-    appear rather than appearing empty."""
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", name="Kitchen")
-    snapshot = SpanPanelSnapshotFactory.create(circuits={circuit.circuit_id: circuit})
-
-    assert circuit.pcs_managed is None
-    attributes = _circuit_attributes(snapshot, circuit.circuit_id)
-
-    assert "pcs_managed" not in attributes
-    assert "pcs_priority" not in attributes
-
-
 # ---------------------------------------------------------------------------
 # Shape of the entities, and the conformance annotations
 # ---------------------------------------------------------------------------
@@ -823,17 +802,15 @@ def test_every_pcs_entity_gets_a_distinct_unique_id() -> None:
     assert len(unique_ids) == len(created) + 1
 
 
-def test_the_three_result_paths_are_exempt_as_schema_1_only() -> None:
-    """Pinned here as well as in the conformance suite because the reason is
-    specific to this capability: no flat panel declares `pcs` at all, so the
-    producible gate cannot be satisfied and the descriptions must stay derived.
-    schema_1 maps all three, which is what makes the annotation SCHEMA_1_ONLY
-    rather than NEITHER."""
+def test_the_three_result_paths_are_declarations() -> None:
+    """Pinned here as well as in the conformance suite: the adapter maps all
+    three, so the producible gate covers them and none is an exemption."""
     for path in ("pcs.import_limit_a", "pcs.binding_constraint", "pcs.active"):
-        assert RESIDUAL_EXEMPT_PATHS[path] is Producibility.SCHEMA_1_ONLY
+        assert path in declared_field_paths()
+        assert path not in RESIDUAL_EXEMPT_PATHS
 
 
-def test_every_attribute_read_is_enumerated_as_neither() -> None:
+def test_every_attribute_read_is_enumerated_as_unmapped() -> None:
     """The fifteen fields nothing renders as a reading are still reads, and an
     unenumerated read is invisible to the Repair machinery — which is the exact
     hole `panel.wifi_ssid` sat in. Derived from the families rather than listed
@@ -844,14 +821,15 @@ def test_every_attribute_read_is_enumerated_as_neither() -> None:
         expected |= {f"{field}_a", f"{field}_enablement", f"{field}_active"}
 
     for path in expected:
-        assert RESIDUAL_EXEMPT_PATHS[path] is Producibility.NEITHER
+        assert RESIDUAL_EXEMPT_PATHS[path] is Producibility.UNMAPPED
 
 
 @pytest.mark.parametrize("description", [*PCS_SENSORS, PCS_ACTIVE_SENSOR], ids=lambda d: str(d.key))
-def test_each_description_names_its_field_as_well_as_its_reason(description: Any) -> None:
-    """`field_path` says what the entity's value is and `derived` says why that
-    path is outside the both-adapters gate. Leaving the first unset excuses the
-    entity from its Repair mention and from going unavailable when the panel
-    stops resolving the property."""
-    assert description.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
-    assert description.field_path in RESIDUAL_EXEMPT_PATHS
+def test_each_description_is_a_plain_declaration(
+    description: SpanPcsSensorEntityDescription | SpanPanelBinarySensorEntityDescription,
+) -> None:
+    """`field_path` says what the entity's value is, and with no `derived` the
+    gate covers it: the entity gets its Repair mention and goes unavailable when
+    the panel stops resolving the property."""
+    assert description.derived is None
+    assert description.field_path in declared_field_paths()

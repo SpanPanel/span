@@ -132,26 +132,25 @@ BINARY_SENSORS: tuple[
 
 
 def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
-    """Whether this panel can island, across both schema generations.
+    """Whether this panel can island.
 
-    Flat publishes `core/grid-islandable` outright. v1.0 has no such property and
-    that is deliberate -- `devices/bess.md` says a consumer "distinguishes the
-    variants without any dedicated type property: a MID `grid` child means
+    The panel's own answer comes first. BESS model 0.14 puts `grid-forming/capable`
+    on the BESS's `inverter` child, and the library fills `grid_islandable` from
+    every inverter that publishes it (`resolve_grid_islandable`), leaving `None`
+    where none does.
+
+    Without that answer, the classifier `devices/bess.md` nominates decides. It
+    has no panel-level property for this, deliberately: a consumer "distinguishes
+    the variants without any dedicated type property: a MID `grid` child means
     premises-segment backup ... neither means no backup", and "there is no single
-    'islanded?' bit to reconcile".
+    'islanded?' bit to reconcile". That is a consumer deriving a convenience from
+    what is published, not a producer inventing a claim -- the panel still says
+    exactly what the spec says it should.
 
-    So under v1.0 the answer is read from the classifier the spec nominates rather
-    than from a property that no longer exists. That is a consumer deriving a
-    convenience from what is published, not a producer inventing a claim -- the
-    panel still says exactly what the spec says it should.
-
-    Keeping the entity alive matters because the alternative is what a firmware
-    upgrade did in practice: it went `unavailable` with `restored: true`, which
-    reaches a user as a sensor that broke rather than one whose source moved. The
-    deprecation is announced separately, as a repair issue.
-
-    DUAL-SCHEMA: when the flat path retires this becomes `has_mid(snapshot)` and the
-    first branch goes.
+    The fallback is what keeps the entity alive on a panel whose inverters say
+    nothing. `None` there is what a firmware upgrade once produced in practice:
+    the entity went `unavailable` with `restored: true`, which reaches a user as
+    a sensor that broke rather than one whose source moved.
     """
     if snapshot.grid_islandable is not None:
         return snapshot.grid_islandable
@@ -160,8 +159,11 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
+    # Named although the reason is `NO_SOURCE_FIELD`: the library derives the
+    # field from the BESS inverters and maps no row for it. See
+    # `DerivedReason.NO_SOURCE_FIELD` for what naming it obliges.
     field_path="panel.grid_islandable",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    derived=DerivedReason.NO_SOURCE_FIELD,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -170,8 +172,11 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
+    # Named although the reason is `NO_SOURCE_FIELD`: the library takes the
+    # field from the panel-side owner's connection record and maps no row for
+    # it. See `DerivedReason.NO_SOURCE_FIELD` for what naming it obliges.
     field_path="battery.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    derived=DerivedReason.NO_SOURCE_FIELD,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -181,7 +186,6 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
 PV_PANEL_LINK_SENSOR = SpanPanelBinarySensorEntityDescription(
     key=PV_PANEL_LINK_KEY,
     field_path="pv.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="pv_panel_link",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -200,17 +204,17 @@ On the inverter's own sub-device, beside `pv_vendor` and `pv_product`, which is
 where it moved when the PV got a device of its own -- the same place
 `bess_connected` sits relative to the battery.
 
-`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`: flat firmware publishes
-`connected` on the BESS and on nothing else, so the both-adapters gate cannot be
-satisfied, while the entity still needs its Repair mention and its
-unavailability when the panel stops resolving the property.
+A plain `field_path` declaration of a field the adapter maps, which validation
+does not ask about: this description and its two siblings sit outside
+`platform_descriptions()`, so `pv.connected` is enumerated in
+`RESIDUAL_EXEMPT_PATHS` as `MAPPED_UNVALIDATED`, where the reason is written
+down.
 """
 
 
 PCS_ACTIVE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="pcs_active",
     field_path="pcs.active",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="pcs_active",
     device_class=BinarySensorDeviceClass.RUNNING,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -229,15 +233,13 @@ Diagnostic, and enabled by default. It reports the panel constraining the user's
 supply, which is worth seeing, but it belongs beside the other panel-state
 sensors rather than among the power readings.
 
-`None` when the panel runs no PCS, which is what a flat panel and any v1.0
-firmware without the node report — but the entity is not created there at all, so
-the branch is reached only if the node disappears mid-session, where unknown is
-the right answer.
+`None` when the panel runs no PCS, which is what firmware without the node
+reports — but the entity is not created there at all, so the branch is reached
+only if the node disappears mid-session, where unknown is the right answer.
 
-`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, by the producible rule: flat
-declares no `pcs` capability, so the both-adapters gate cannot be satisfied,
-while the entity still needs its Repair mention and its unavailability when the
-panel stops resolving the property.
+A plain `field_path` declaration: the adapter maps `pcs/active`, so the
+producible gate covers it, and the entity gets its Repair mention and its
+unavailability when the panel stops resolving the property.
 """
 
 
@@ -402,9 +404,8 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
     _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
     """The SSID, read for an attribute rather than by the `value_fn`.
 
-    A plain residual and not an exemption: both adapters map the property
-    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
-    gate covers it.
+    A plain residual and not an exemption: the adapter maps `status/wifi-ssid`,
+    so the producible gate covers it.
 
     The only declaration of this path in the integration. It was on
     `SpanPanelStatus` while that sensor rendered the SSID, and it moved with the
@@ -422,8 +423,8 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
 
         The coherent host for the SSID: the entity that reports whether Wi-Fi is
         up is the one that should report which network it is up on. Both values
-        come from the same node on the wire — `status/wifi` and
-        `status/wifi-ssid` on v1.0, `core/wifi` and `core/wifi-ssid` on flat.
+        come from the same node on the wire, `status/wifi` and
+        `status/wifi-ssid`.
 
         The Software Version sensor used to publish it, for the historical
         reason that `panel_size` was already occupying its attribute block. That
@@ -506,7 +507,6 @@ EVSE_BINARY_SENSORS: tuple[
 EVSE_PANEL_LINK_SENSOR = SpanEvseBinarySensorEntityDescription(
     key="evse_panel_link",
     field_path="evse.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="evse_panel_link",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -609,7 +609,6 @@ class SpanPVBinarySensorEntityDescription(
 PV_INVERTER_LINK_SENSOR = SpanPVBinarySensorEntityDescription(
     key=PV_PANEL_LINK_SENSOR.key,
     field_path="pv.connected",
-    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key=PV_PANEL_LINK_SENSOR.translation_key,
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -749,29 +748,18 @@ async def async_setup_entry(
 
     snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
-    # Created unconditionally, because on both generations the answer is knowable.
+    # Created unconditionally, because the answer is always knowable.
     #
-    # This gate has been narrowed twice for the same symptom. Gating on the flat
-    # property alone left the entity `unavailable` after a v1.0 upgrade -- the
-    # panel had not lost the capability, only the property that used to report
-    # it. Adding `has_mid` rescued panels that have a battery and left every
-    # battery-less one exactly where it was, because it admitted the entity only
-    # when the answer was going to be `True`. For a boolean whose `False` is
-    # informative that is backwards: no MID is not missing information, it is the
-    # information. `devices/bess.md` makes the signal structural -- "a MID `grid`
-    # child means premises-segment backup ... neither means no backup" -- so a
-    # panel without one does not island, and saying so is the answer rather than
-    # the absence of one.
-    #
-    # Nothing about flat changes. Its property is published, so `_grid_islandable`
-    # returns it exactly as before; and a flat panel that stops publishing it has
-    # a metadata row that fails to resolve, which is what makes the entity
-    # unavailable and raises the Repair. That path is untouched, and it is the one
-    # that must not become a default presented as a reading.
-    #
-    # DUAL-SCHEMA: nothing to remove here when the flat path retires -- an
-    # unconditional append is already the end state. The branch that goes is the
-    # first one in `_grid_islandable`, which is where the flat property is read.
+    # A gate here would admit the entity only where it reads `True`. Gating on
+    # `has_mid` once did exactly that: it created the entity on panels with a
+    # battery and left every battery-less one `unavailable`. For a boolean whose
+    # `False` is informative that is backwards: no MID is not missing
+    # information, it is the information. `devices/bess.md` makes the signal
+    # structural -- "a MID `grid` child means premises-segment backup ...
+    # neither means no backup" -- so a panel without one does not island, and
+    # saying so is the answer rather than the absence of one. `_grid_islandable`
+    # reads the inverters' own answer first, and the MID only where they give
+    # none.
     entities.append(SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR))
 
     # Add BESS connected sensor on the BESS sub-device when battery is commissioned

@@ -91,10 +91,7 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
 
         The second check reads `dsm_state`, not the grid-forming entity. It asks
         "are we already on the grid", which is what `dsm_state` answers directly and
-        the GFE answers only by implication -- and, unlike the GFE, it is populated on
-        both wire schemas, so this stays free of any knowledge of which one is
-        underneath. It used to compare `dominant_power_source` to `"GRID"`, which is
-        `None` under v1.0 and so never fired there at all.
+        the GFE answers only by implication.
 
         One useful consequence: `dsm_state` folds in the user's own assertion, so once
         a press takes effect the button disables itself rather than inviting a second.

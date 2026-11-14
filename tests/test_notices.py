@@ -448,4 +448,4 @@ async def test_a_queued_write_records_the_set_as_it_was_when_raised(
 
 def test_a_translation_file_of_the_wrong_shape_falls_through_to_english() -> None:
     """Same class as the store: our own files are fine, and the disk is not ours."""
-    assert read_translations("xx", "panel_upgraded")["title"]
+    assert read_translations("xx", "new_entities")["title"]

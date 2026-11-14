@@ -1,8 +1,8 @@
 """The Microgrid Interconnect Device, surfaced as its own device.
 
 v1.0 publishes a MID and puts the `grid` capability on it rather than on the enclosure.
-Everything here is additive: no flat panel publishes a MID, so `has_mid` is false on
-every existing install and nothing a user has today changes.
+Not every panel declares one: a panel without a MID gets no MID device, and nothing
+that reads the MID may assume it is there.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from span_panel_api import SpanMidSnapshot
+from span_panel_api import SpanMidSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.helpers import detect_capabilities, has_mid
 from custom_components.span_panel.sensor import create_mid_sensors
@@ -18,7 +18,16 @@ from custom_components.span_panel.sensor_definitions import MID_SENSORS
 from custom_components.span_panel.sensor_panel import _grid_forming_device_name
 from custom_components.span_panel.util import mid_device_info
 
+from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory
+
+MID_DEVICE = "bess-mid"
+"""The capture's MID, which it declares as a child of the BESS."""
+
+
+def _without_a_mid() -> SpanPanelSnapshot:
+    """The capture with its MID gone, as a panel that declares none publishes it."""
+    return schema_one_snapshot(schema_one_tree(without=MID_DEVICE))
 
 
 def _mid(**overrides: str | None) -> SpanMidSnapshot:
@@ -43,15 +52,24 @@ def _coordinator() -> MagicMock:
     return coordinator
 
 
-def test_a_flat_panel_has_no_mid() -> None:
-    """The whole reason this is additive rather than a migration risk."""
-    assert has_mid(SpanPanelSnapshotFactory.create()) is False
-    assert create_mid_sensors(_coordinator(), SpanPanelSnapshotFactory.create()) == []
+def test_a_panel_without_a_mid_gets_no_mid_device() -> None:
+    """The gate reads what the snapshot carries, because a panel can declare no MID.
+
+    The capture with its MID removed is that panel, built through the real
+    adapter, so the absence is the adapter's `None` rather than a value a test
+    wrote down.
+    """
+    assert has_mid(schema_one_snapshot()) is True, "the capture's MID is the premise"
+
+    snapshot = _without_a_mid()
+
+    assert has_mid(snapshot) is False
+    assert create_mid_sensors(_coordinator(), snapshot) == []
 
 
 def test_presence_needs_no_sentinel() -> None:
-    """`snapshot.mid is not None`, unlike `has_bess`, which infers from soe_percentage
-    because the battery field is always present.
+    """`snapshot.mid is not None`: the library makes `mid` optional, so the field is the
+    presence, where the always-present battery field needs its `present` declaration.
     """
     assert has_mid(SpanPanelSnapshotFactory.create(mid=_mid())) is True
 
@@ -118,41 +136,39 @@ def test_a_mid_appearing_is_a_capability_change() -> None:
     assert "mid" in with_mid
 
 
-def test_every_schema_conditional_is_findable() -> None:
-    """The integration serves flat and parent/child side by side until every panel has
-    hot-loaded v1.0, and the branches that make that work have to be findable when the
-    flat path is finally retired.
+def test_no_dual_schema_mark_remains() -> None:
+    """The integration serves one schema, so nothing in it may branch on which one.
 
-    Asserted rather than left to a convention, because the failure mode is silent: a
-    later addition that assumes parent/child would work on the developer's panel and
-    break on everyone else's, and nothing would say so.
+    `DUAL-SCHEMA` marked every branch that differed between the flat and the
+    parent/child schema while both were served. A mark left behind would claim a
+    second schema this integration no longer serves. If two schemas are ever
+    served side by side again, the marks return with that decision, and this
+    guard changes with it.
     """
     component = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
     marked = sorted(
-        path.name for path in component.rglob("*.py") if "DUAL-SCHEMA" in path.read_text()
+        str(path.relative_to(component))
+        for path in component.rglob("*.py")
+        if "DUAL-SCHEMA" in path.read_text(encoding="utf-8")
     )
 
-    assert marked == ["binary_sensor.py", "helpers.py", "sensor.py", "sensor_panel.py"], (
-        "the set of schema-conditional modules moved. If a conditional was added, mark it "
-        "DUAL-SCHEMA so it can be found when flat support is dropped; if one was removed, "
-        "update this list."
-    )
+    assert marked == [], f"DUAL-SCHEMA marks remain in {marked}"
 
 
 def test_nothing_reads_the_mid_without_checking_it_is_there() -> None:
-    """A flat snapshot must survive every MID code path untouched.
+    """A snapshot without a MID must survive every MID code path untouched.
 
-    This is the constraint that matters more than any single feature: the integration
-    has to keep working on a panel that will never publish a MID, for as long as such
-    panels exist.
+    This is the constraint that matters more than any single feature: a panel that
+    declares no MID is an ordinary panel, so the integration has to keep working on
+    it.
     """
-    flat = SpanPanelSnapshotFactory.create()
+    snapshot = _without_a_mid()
 
-    assert flat.mid is None
-    assert has_mid(flat) is False
-    assert create_mid_sensors(_coordinator(), flat) == []
-    assert _grid_forming_device_name(flat) is None
-    assert "mid" not in detect_capabilities(flat)
+    assert snapshot.mid is None
+    assert has_mid(snapshot) is False
+    assert create_mid_sensors(_coordinator(), snapshot) == []
+    assert _grid_forming_device_name(snapshot) is None
+    assert "mid" not in detect_capabilities(snapshot)
 
 
 def test_the_mid_card_carries_the_identity_a_producer_publishes() -> None:
@@ -163,9 +179,9 @@ def test_the_mid_card_carries_the_identity_a_producer_publishes() -> None:
     user saw a Microgrid Interconnect card with no firmware row beside a battery that
     had one — the battery's identical property having been mapped from the start.
 
-    Not gated on schema. Flat publishes no MID at all, so `has_mid` keeps every caller
-    of this builder off a flat panel; a guard here would be unreachable code implying a
-    case that cannot arise.
+    Not gated. `has_mid` keeps every caller of this builder off a panel that declares
+    no MID, so a guard here would be unreachable code implying a case that cannot
+    arise.
     """
     info = mid_device_info(
         "sim-40t-001",

@@ -14,9 +14,9 @@ the registry is what a user sees.
 **`panel.wifi_ssid` is the regression.** Flat published `core/wifi-ssid` and the
 integration has surfaced it as an attribute since; v1.0 declares
 `status/wifi-ssid`, schema_1 mapped nothing to it, and the path's exemption
-annotation said `SCHEMA_0_ONLY` -- which was true, and sanctioned a user losing
-an attribute on upgrade. With the library reading it, both adapters produce the
-path, so it is a declaration now and the producible gate covers it.
+annotation said only the flat adapter produced it -- which was true, and
+sanctioned a user losing an attribute on upgrade. With the library reading it,
+the path is a declaration now and the producible gate covers it.
 
 It is published on the **Wi-Fi Link binary sensor**, which is the coherent host:
 the entity that reports whether Wi-Fi is up is the one that should say which
@@ -275,8 +275,7 @@ async def test_a_panel_publishing_no_identity_keeps_the_card_it_has_always_had(
 ) -> None:
     """The fallbacks are the compatibility guarantee, not a courtesy.
 
-    Flat firmware declares none of these three, so every existing installation
-    lands here. A panel that omits one must keep the row it has rather than
+    A panel that omits one of these three must keep the row it has rather than
     losing it -- and `hw_version`, which never had a string to fall back to, must
     be absent rather than blank: `DeviceInfo` omits a `None` and renders an empty
     string as a present-but-empty row.
@@ -293,10 +292,10 @@ async def test_a_panel_publishing_no_identity_keeps_the_card_it_has_always_had(
 def test_the_panel_identity_paths_are_enumerated_as_device_card_reads() -> None:
     """`snapshot_to_device_info` is not an entity, so its reads are exempt residuals.
 
-    Annotated `NEITHER` beside the `mid.*` device-card reads: flat declares none
-    of the three, and a schema_1 metadata row exists to carry a unit and a
-    datatype for a reading, which an identity string is not. Asserted here so the
-    three cannot quietly leave the inventory that is the only record of them.
+    Annotated `UNMAPPED` beside the `mid.*` device-card reads: a metadata row
+    exists to carry a unit and a datatype for a reading, which an identity string
+    is not. Asserted here so the three cannot quietly leave the inventory that is
+    the only record of them.
     """
     for path in ("panel.vendor_name", "panel.model", "panel.hardware_version"):
         assert path in RESIDUAL_EXEMPT_PATHS, path
@@ -330,11 +329,13 @@ def test_the_ssid_moved_off_the_software_version_sensor() -> None:
 def test_the_ssid_is_a_declaration_now_rather_than_an_exemption() -> None:
     """The gate's own ratchet, asserted where a reader will find it.
 
-    Both adapters map `wifi_ssid`, so the path satisfies the producible gate and
-    `test_no_exempt_path_is_producible_by_both` refuses to let it stay exempt.
-    It is declared on the entity that reads it -- one entity, now that the read
-    has moved -- which is what lets a Repair name the entity a dead field takes
-    with it.
+    The adapter maps `status/wifi-ssid`, so the path satisfies the producible
+    gate and cannot stay exempt: re-exempted as `UNMAPPED` it fails
+    `test_every_exempt_path_matches_its_annotation`, and as `MAPPED_UNVALIDATED`
+    it fails `test_the_fields_kept_out_of_validation_are_the_ones_annotated_so`,
+    which admits only the reads named there with a reason. It is declared on the
+    entity that reads it -- one entity, now that the read has moved -- which is
+    what lets a Repair name the entity a dead field takes with it.
     """
     assert "panel.wifi_ssid" not in RESIDUAL_EXEMPT_PATHS
     assert "panel.wifi_ssid" in declared_field_paths()
@@ -537,13 +538,13 @@ def test_a_charger_publishing_no_part_number_reports_unknown_rather_than_a_defau
     assert states == {STATE_UNKNOWN, _published(EVSE, PART_NUMBER_TOPIC)}
 
 
-def test_the_part_number_is_a_plain_declaration_on_both_adapters() -> None:
+def test_the_part_number_is_a_plain_declaration() -> None:
     """The promotion this task's schema_1 metadata row demanded.
 
-    Flat has mapped `evse/part-number` all along; adding the v1.0 row made the
-    path producible by both, and a both-producible path is a declaration rather
-    than an exemption. Diagnostic and off by default, matching `bess_part_number`
-    -- build metadata is not something a user wants on a card by default.
+    Adding the v1.0 row made the path producible, and a producible path is a
+    declaration rather than an exemption. Diagnostic and off by default, matching
+    `bess_part_number` -- build metadata is not something a user wants on a card
+    by default.
     """
     (description,) = [d for d in EVSE_SENSORS if d.key == EVSE_PART_NUMBER_KEY]
 

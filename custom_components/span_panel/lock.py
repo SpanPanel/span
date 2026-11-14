@@ -59,9 +59,9 @@ class SpanEvseLockEntityDescription(LockEntityDescription, SpanEvseLockRequiredK
 
 EVSE_LOCK: Final = SpanEvseLockEntityDescription(
     key="lock",
-    # The field the read-only lock-state sensor already reads, which both
-    # adapters produce; only the control is new, and the library resolves it
-    # from the declaration rather than from this description.
+    # The field the read-only lock-state sensor already reads, which the
+    # adapter maps; only the control is new, and the library resolves it from
+    # the declaration rather than from this description.
     field_path="evse.lock_state",
     translation_key="evse_lock",
     settable_fn=lambda evse: evse.lock_control is not None,

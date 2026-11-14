@@ -265,18 +265,17 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         # powered through an off-grid test. So neither policy is republished
         # where the relay cannot be moved.
         #
-        # `is_user_controllable` is the field that answers that question on
-        # both adapters: schema_1 reads it from `switch/relay-controllable`, and
-        # false where no `switch` is declared at all; flat derives it as `not
-        # always-on`. `circuit_has_a_breaker_switch` and
+        # `is_user_controllable` is the field that answers that question: the
+        # adapter reads it from `switch/relay-controllable`, and it is false
+        # where no `switch` is declared at all. `circuit_has_a_breaker_switch` and
         # `circuit_has_a_priority_select` both withhold their control where it
         # is false, so no switch or select is ever offered on a circuit whose
         # policies are omitted here. The converse does not hold: the select is
         # also withheld from a never-backup circuit and from a PV or EVSE
         # circuit not wired at a breaker, which keep these attributes.
-        # `always_on` is narrower -- a relay that exists and is locked -- and on
-        # schema_1 is false for a circuit declaring no relay, where both
-        # policies are as meaningless.
+        # `always_on` is narrower -- a relay that exists and is locked -- and is
+        # false for a circuit declaring no relay, where both policies are as
+        # meaningless.
         # Read from the live snapshot on every update, so a circuit
         # re-commissioned in place gains or loses them with its relay.
         relay_policies_apply = circuit.is_user_controllable
@@ -306,12 +305,12 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         # eighty entities carrying two facts that change only when somebody
         # reconfigures the panel.
         #
-        # Omitted when the circuit publishes neither, which is every flat
-        # circuit and any v1.0 circuit outside a PCS. Both properties are `MAY`,
-        # so absence is conformant firmware; an attribute present and empty would
-        # read as a reading that failed, and `False` / `0` would each be a claim
-        # the panel never made. Omitted too where no controllable relay exists
-        # for the PCS to act on, for the reason given with `relay_policies_apply`.
+        # Omitted when the circuit publishes neither, which is any circuit
+        # outside a PCS. Both properties are `MAY`, so absence is conformant
+        # firmware; an attribute present and empty would read as a reading that
+        # failed, and `False` / `0` would each be a claim the panel never made.
+        # Omitted too where no controllable relay exists for the PCS to act on,
+        # for the reason given with `relay_policies_apply`.
         if relay_policies_apply and circuit.pcs_managed is not None:
             attributes["pcs_managed"] = circuit.pcs_managed
         if relay_policies_apply and circuit.pcs_priority is not None:

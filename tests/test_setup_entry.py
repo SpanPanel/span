@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import timedelta
 import logging
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import (
+    SETUP_RETRY_MAX_WAIT,
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
@@ -17,11 +21,14 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.util import dt as dt_util
 import httpx
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot, V2StatusInfo
 from span_panel_api.exceptions import (
+    SpanPanelAdapterIncompatibleError,
+    SpanPanelAdapterMissingError,
     SpanPanelAPIError,
     SpanPanelAuthError,
     SpanPanelConnectionError,
@@ -47,6 +54,7 @@ from custom_components.span_panel.const import (
 )
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
+from custom_components.span_panel.flat_firmware_repairs import async_raise_flat_firmware
 from custom_components.span_panel.id_builder import build_pv_inverter_unique_id
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
@@ -56,6 +64,7 @@ from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
+from .conftest import FLAT_PANEL_SCHEMA, PARENT_CHILD_PANEL_SCHEMA
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 
@@ -803,6 +812,9 @@ def _panel_with_model(model: str | None) -> _PanelUnderSetup:
     client = MagicMock()
     client.connect = AsyncMock()
     client.close = AsyncMock()
+    # Stated rather than left to the mock, whose own attribute would differ from
+    # the flat key only by accident.
+    client.schema_major = "schema_1"
     coordinator = MagicMock()
     coordinator.async_config_entry_first_refresh = AsyncMock()
     coordinator.package_rating_manager.async_load = AsyncMock()
@@ -812,18 +824,26 @@ def _panel_with_model(model: str | None) -> _PanelUnderSetup:
     return _PanelUnderSetup(client=client, coordinator=coordinator, forward=AsyncMock())
 
 
-async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> bool:
+@contextmanager
+def _stand_ins(hass: HomeAssistant, panel: _PanelUnderSetup) -> Iterator[MagicMock]:
+    """Put the panel's stand-ins where setup builds the real things, and yield the client class."""
     with (
         patch("custom_components.span_panel.async_register_commands"),
-        patch("custom_components.span_panel.SpanMqttClient", return_value=panel.client),
+        patch(
+            "custom_components.span_panel.SpanMqttClient", return_value=panel.client
+        ) as client_cls,
         patch("custom_components.span_panel.SpanPanelCoordinator", return_value=panel.coordinator),
         patch(
             "custom_components.span_panel.ensure_device_registered",
             AsyncMock(return_value="panel-device-id"),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", panel.forward),
-        patch.object(hass.config_entries, "async_update_entry"),
     ):
+        yield client_cls
+
+
+async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> bool:
+    with _stand_ins(hass, panel), patch.object(hass.config_entries, "async_update_entry"):
         return await async_setup_entry(hass, entry)
 
 
@@ -1182,3 +1202,299 @@ class _ErrorRecords(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.messages.append(record.getMessage())
+
+
+# ---------------------------------------------------------------------------
+# Firmware that publishes the older flat eBus schema
+# ---------------------------------------------------------------------------
+
+FLAT_FIRMWARE_ISSUE = "flat_firmware_entry-setup"
+
+
+def _installed_entry() -> MockConfigEntry:
+    """Return an entry as an earlier setup left it: at the current version, and already titled.
+
+    So Home Assistant sets it up as it does at boot, with no migration first and
+    no rename after, whose update listener would reload it underneath the test.
+    """
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data=dict(_create_v2_entry().data),
+        entry_id="entry-setup",
+        title="SPAN Panel",
+        unique_id="sp3-setup-001",
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+    )
+
+
+async def _boot(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> bool:
+    """Set the entry up through Home Assistant, which turns setup's outcome into its state."""
+    with _stand_ins(hass, panel):
+        return await hass.config_entries.async_setup(entry.entry_id)
+
+
+async def _let_the_retry_run(hass: HomeAssistant) -> None:
+    """Move past the longest wait Home Assistant schedules a retry for, and let the retry finish."""
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=SETUP_RETRY_MAX_WAIT + 1))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _flat_firmware_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, FLAT_FIRMWARE_ISSUE)
+
+
+def _assert_refused_as_flat(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Retrying, with the reason worded as flat firmware, and the Repair up."""
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_domain == DOMAIN
+    assert entry.error_reason_translation_key == "panel_firmware_flat"
+    assert entry.error_reason_translation_placeholders == {"panel": "SPAN Panel"}
+    assert _flat_firmware_issue(hass) is not None
+
+
+async def test_setup_refuses_a_flat_panel_and_raises_the_repair(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """Retried rather than refused for good, with the Repair, and no client built.
+
+    The remedy is a firmware update on the panel, and the retry is what notices
+    it. Nothing dials the broker of a panel this release refuses.
+    """
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    panel = _panel_with_model("MAIN_32")
+
+    with _stand_ins(hass, panel) as client_cls:
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    _assert_refused_as_flat(hass, entry)
+    client_cls.assert_not_called()
+    issue = _flat_firmware_issue(hass)
+    assert issue is not None
+    assert issue.translation_key == "panel_firmware_flat"
+    assert issue.translation_placeholders == {"panel": "SPAN Panel"}
+    assert issue.severity is ir.IssueSeverity.ERROR
+    assert issue.is_fixable is False
+    assert issue.is_persistent is False
+
+
+async def test_a_refused_panel_recovers_on_its_own(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """After a firmware update, Home Assistant's own retry sets the panel up and clears the Repair.
+
+    Nobody has to reload it: the panel reconnects on its own, as the Repair says.
+    """
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    panel = _panel_with_model("MAIN_32")
+
+    with _stand_ins(hass, panel) as client_cls:
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+        _assert_refused_as_flat(hass, entry)
+
+        panel_schema.return_value = PARENT_CHILD_PANEL_SCHEMA
+        await _let_the_retry_run(hass)
+
+    assert entry.state is ConfigEntryState.LOADED
+    client_cls.assert_called_once()
+    panel.forward.assert_awaited_once()
+    assert _flat_firmware_issue(hass) is None
+
+
+async def test_an_unread_schema_then_a_parent_child_connection_clears_a_standing_repair(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """A parent/child adapter settles what the read could not: the panel is not flat."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    async_raise_flat_firmware(hass, entry)
+    panel_schema.side_effect = TimeoutError()
+
+    assert await _boot(hass, entry, _panel_with_model("MAIN_32")) is True
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert _flat_firmware_issue(hass) is None
+
+
+async def test_an_unread_schema_leaves_a_standing_repair_until_connect(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """A failed read says nothing about the firmware, and nor does a connect that fails after it.
+
+    The panel retries as any unreachable panel does, under the connection's own
+    reason rather than the flat one.
+    """
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    async_raise_flat_firmware(hass, entry)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+    panel.client.connect.side_effect = SpanPanelConnectionError(
+        "Cannot reach panel at 192.168.1.50"
+    )
+
+    assert await _boot(hass, entry, panel) is False
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key is None
+    assert entry.reason is not None
+    assert entry.reason.startswith("SPAN panel is not ready yet")
+    assert _flat_firmware_issue(hass) is not None
+
+
+async def test_an_unread_schema_never_refuses(hass: HomeAssistant, panel_schema: AsyncMock) -> None:
+    """A healthy panel whose schema read times out at boot sets up as it always has."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+
+    assert await _boot(hass, entry, panel) is True
+
+    assert entry.state is ConfigEntryState.LOADED
+    panel.client.connect.assert_awaited_once()
+    panel.forward.assert_awaited_once()
+    assert _flat_firmware_issue(hass) is None
+
+
+async def test_backstop_refuses_on_a_missing_flat_adapter(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """With the schema-0 package gone, the library refusing to parse the panel says it is flat."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+    panel.client.connect.side_effect = SpanPanelAdapterMissingError(
+        needed="schema_0", reason="data-model-version absent (flat schema)", available=["schema_1"]
+    )
+
+    assert await _boot(hass, entry, panel) is False
+
+    _assert_refused_as_flat(hass, entry)
+    panel.client.close.assert_awaited_once()
+
+
+async def test_backstop_refuses_on_an_incompatible_flat_adapter(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """A leftover schema-0 package the library has outgrown is flat too: retried, not an error."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+    panel.client.connect.side_effect = SpanPanelAdapterIncompatibleError(
+        needed="schema_0",
+        reason="data-model-version absent (flat schema)",
+        defect="it was built against an older adapter contract.",
+    )
+
+    assert await _boot(hass, entry, panel) is False
+
+    _assert_refused_as_flat(hass, entry)
+    panel.client.close.assert_awaited_once()
+
+
+async def test_backstop_refuses_a_leftover_flat_adapter(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """A schema-0 package an older install left behind parses the panel, which is refused anyway.
+
+    Setup closes the client itself, since no coordinator exists yet to do it, and
+    refuses before the first refresh, so nothing reads what that adapter made.
+    """
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+    panel.client.schema_major = "schema_0"
+
+    assert await _boot(hass, entry, panel) is False
+
+    _assert_refused_as_flat(hass, entry)
+    panel.client.close.assert_awaited_once()
+    panel.coordinator.async_config_entry_first_refresh.assert_not_awaited()
+    panel.forward.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        SpanPanelAdapterMissingError(
+            needed="schema_2", reason="data-model-version='2.0'", available=["schema_1"]
+        ),
+        SpanPanelAdapterIncompatibleError(
+            needed="schema_2",
+            reason="data-model-version='2.0'",
+            defect="it was built against a newer adapter contract.",
+        ),
+    ],
+    ids=["missing", "incompatible"],
+)
+async def test_an_adapter_error_for_another_schema_is_not_flat(
+    hass: HomeAssistant, panel_schema: AsyncMock, error: Exception
+) -> None:
+    """Left as it always was, a setup error, and never taken for flat firmware."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.side_effect = TimeoutError()
+    panel = _panel_with_model("MAIN_32")
+    panel.client.connect.side_effect = error
+
+    assert await _boot(hass, entry, panel) is False
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert _flat_firmware_issue(hass) is None
+
+
+async def test_the_schema_is_read_before_the_client_is_built_over_the_entrys_rest_transport(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """The entry's own port and anchor, the shared client, and before any client exists.
+
+    A pinned entry read without its context would send plaintext to its HTTPS
+    port and answer unread on every boot, which skips the check unseen.
+    """
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    anchor = MagicMock(spec=ssl.SSLContext)
+    transport = PanelRestTransport(port=8443, ssl_context=anchor, httpx_client=None, ca_pem="pem")
+    panel = _panel_with_model("MAIN_32")
+    order: list[str] = []
+    panel_schema.side_effect = lambda *_args, **_kwargs: (
+        order.append("schema") or PARENT_CHILD_PANEL_SCHEMA
+    )
+
+    with (
+        patch("custom_components.span_panel.panel_rest_transport", return_value=transport),
+        _stand_ins(hass, panel) as client_cls,
+    ):
+        client_cls.side_effect = lambda *_args, **_kwargs: order.append("client") or panel.client
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    panel_schema.assert_awaited_once_with(
+        "192.168.1.50",
+        port=8443,
+        httpx_client=get_async_client(hass),
+        ssl_context=anchor,
+    )
+    assert order == ["schema", "client"]
+
+
+async def test_removing_a_refused_entry_clears_the_flat_firmware_repair(
+    hass: HomeAssistant, panel_schema: AsyncMock
+) -> None:
+    """Not persistent, yet it would outlive the entry until a restart: nothing else clears it."""
+    entry = _installed_entry()
+    entry.add_to_hass(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    assert await _boot(hass, entry, _panel_with_model("MAIN_32")) is False
+    assert _flat_firmware_issue(hass) is not None
+
+    await hass.config_entries.async_remove(entry.entry_id)
+
+    assert _flat_firmware_issue(hass) is None

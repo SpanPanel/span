@@ -24,10 +24,11 @@ from homeassistant.helpers.entity import EntityDescription
 
 
 class DerivedReason(Enum):
-    """Why an entity description declares no single source field.
+    """Why an entity's value is not one producible field.
 
-    A description is derived for exactly one of these reasons, and which one is
-    mechanical — count the snapshot fields its `value_fn` reads.
+    A field is producible when the parent/child adapter publishes a metadata row
+    for it. A description is derived for exactly one of these reasons, and which
+    one is mechanical: count the producible fields its `value_fn` reads.
     `test_derived_reasons_match_what_value_fns_read` runs every derived
     description against the recorder and asserts the reason it claims, so a
     wrong reason fails the build rather than misinforming a reader.
@@ -39,19 +40,28 @@ class DerivedReason(Enum):
     computes whatever it likes. `evse_ev_connected` was misclassified as derived
     this way, which cost it both a Repair mention and its unavailability, while
     its sibling `evse_charging` — same field, same shape — got both. That is the
-    conflation this enum exists to break: as a bare `bool`, all three reasons
-    below and that mistake looked identical.
+    conflation this enum exists to break: as a bare `bool`, every reason below
+    and that mistake looked identical.
     """
 
     NO_SOURCE_FIELD = "no_source_field"
-    """Reads no field either adapter publishes a metadata row for.
+    """Reads no field the adapter publishes a metadata row for.
 
     Either it reads nothing off the snapshot at all (`panel_status` reports
-    coordinator reachability) or the field it reads is one no adapter produces
-    (`dsm_state`, every `mid.*` read). Deliberately one member rather than two:
-    the recorder cannot tell those apart — both leave an empty intersection with
-    what the adapters emit — and a variant nothing can verify is exactly what
-    this enum replaces.
+    coordinator reachability), or the field it reads is one the library fills
+    without a row: `dsm_state`, every `mid.*` read, and the answers it derives
+    from other properties, such as `grid_islandable`. Deliberately one member
+    rather than two: the recorder cannot tell those apart — both leave an empty
+    intersection with what the adapter emits — and a variant nothing can verify
+    is exactly what this enum replaces.
+
+    Such a description may still name the one field it reads as `field_path`.
+    Naming it changes nothing while the adapter has no row for the path: schema
+    validation never asks about it, so neither a Repair nor unavailability can
+    follow. The path must then be enumerated in `RESIDUAL_EXEMPT_PATHS` as
+    `Producibility.UNMAPPED`, so a row the library later grows for it fails that
+    annotation and this reason together, which is the signal to promote the
+    description to a plain declaration.
     """
 
     MULTIPLE_FIELDS = "multiple_fields"
@@ -61,51 +71,50 @@ class DerivedReason(Enum):
     alone for the entity would be wrong.
     """
 
-    SCHEMA_CONDITIONAL_FIELD = "schema_conditional_field"
-    """Reads exactly one field, which only one adapter produces.
-
-    Keeps the producible gate satisfiable: the gate requires a path both
-    adapters emit, so a schema-conditional field cannot satisfy it. If the
-    other adapter ever grows the field, this stops being true and the
-    verification fails, demanding promotion to a plain `field_path` declaration.
-
-    Alone among the reasons, this one still names its source: the description
-    sets `field_path` **as well as** `derived`, and
-    `test_schema_conditional_descriptions_name_their_field` holds it to that.
-    The two attributes answer different questions -- "what does this entity's
-    value come from" and "why is that path outside the both-adapters gate" --
-    and only the first is what a Repair and the availability probe need. Leaving
-    it unset excused schema-conditional entities from both, which is the
-    `evse_ev_connected` failure mode one level along: an entity whose field the
-    panel stopped resolving would keep publishing a default, and the Repair
-    naming that field would say "0 entities affected".
-    """
-
 
 class Producibility(Enum):
-    """Which adapters publish a metadata row for an exempt residual path.
+    """Whether the parent/child adapter publishes a metadata row for an exempt residual path.
+
+    Judged against the adapter's metadata map as its reference payload builds
+    it, which is what `tests/test_field_path_conformance.py` asserts every
+    annotation against.
 
     A *path's* producibility, not a *description's* classification: kept beside
-    `DerivedReason` because the two are verified from the same pair of adapter
-    metadata sets, and deliberately separate because they describe different
-    subjects. `bess_connected` is `SCHEMA_CONDITIONAL_FIELD` while the
-    `battery.connected` path it reads is `SCHEMA_0_ONLY` — two facts about two
-    things.
+    `DerivedReason` because both are verified against the same adapter metadata,
+    and deliberately separate because they describe different subjects.
+    `bess_connected` is `NO_SOURCE_FIELD` while the `battery.connected` path it
+    reads is `UNMAPPED` — two facts about two things.
 
-    There is deliberately no `BOTH` member. A path both adapters produce
-    satisfies the producible gate, so it belongs in `declared_field_paths()`
-    rather than in an exemption; `test_no_exempt_path_is_producible_by_both`
-    turns that missing member into a failure naming the path to promote.
+    There is deliberately no member for a path the adapter maps and nothing
+    keeps from validation. Such a path satisfies the producible gate, so it
+    belongs in `declared_field_paths()` rather than in an exemption. The
+    conformance suite fails an `UNMAPPED` annotation the adapter has since
+    grown a row for, and `tests/test_schema_findings_captures.py` fails a
+    `MAPPED_UNVALIDATED` one nobody has given a reason for, so neither member
+    can become a quiet home for a path that should be promoted.
     """
 
-    NEITHER = "neither"
-    """No metadata row on either adapter."""
+    UNMAPPED = "unmapped"
+    """No metadata row in the adapter's map, so there is nothing to validate.
 
-    SCHEMA_0_ONLY = "schema_0_only"
-    """Produced by the schema_0 adapter, absent from schema_1."""
+    The read is enumerated anyway, so that it is written down somewhere and
+    `evaluate_field_metadata` can tell it from a field nothing reads.
+    """
 
-    SCHEMA_1_ONLY = "schema_1_only"
-    """Produced by the schema_1 adapter, absent from schema_0."""
+    MAPPED_UNVALIDATED = "mapped_unvalidated"
+    """A row in the adapter's map, which validation is deliberately kept from asking about.
+
+    A mapped path would ordinarily be a declaration: `evaluate_field_metadata`
+    asks about it, and an unresolved row raises a `schema_field_unresolved`
+    Repair naming every entity that reads it and takes down any entity whose
+    value it is. These are the reads for which that would be wrong, or would be
+    a runtime change nobody has decided on, and each entry in
+    `RESIDUAL_EXEMPT_PATHS` says which.
+
+    Named for the two facts a reader needs before promoting one: that the row
+    exists, which the conformance suite holds to the adapter, and that
+    validation does not act on it.
+    """
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -128,24 +137,26 @@ class FieldPathDeclarationMixin:
     reader are the same object. Verified against `value_fn` by the proxy test
     in tests/test_field_path_introspection.py.
 
-    Set whenever the entity *has* a single source field — including when that
-    field is schema-conditional and so cannot enter the producible gate. What
-    keeps a schema-conditional path out of the gate is `derived`, not the
-    absence of this. Consumers that ask "which field is this entity's value"
-    (`SpanPanelEntity._declared_field_paths`, `_reads_an_unresolved_field`)
-    therefore read this alone; the gate additionally consults `derived`.
+    Set whenever the entity's value comes from a single producible field, and
+    allowed on a `NO_SOURCE_FIELD` description to name the one field it reads
+    that the adapter maps no row for. What keeps such a path out of the
+    producible gate is `derived`, not the absence of this. Consumers that ask
+    "which field is this entity's value" (`SpanPanelEntity._declared_field_paths`,
+    `_reads_an_unresolved_field`) therefore read this alone; the gate
+    additionally consults `derived`.
     """
 
     derived: DerivedReason | None = None
-    """Why this entity's source field is outside the producible gate, or `None`.
+    """Why this entity's value is not one producible field, or `None`.
 
     Which reason applies is not a matter of opinion — see `DerivedReason`, whose
     members are each asserted against what the `value_fn` actually reads.
 
     Its relationship to `field_path` is per reason, pinned by
-    `test_every_description_declares_exactly_one`: `NO_SOURCE_FIELD` and
-    `MULTIPLE_FIELDS` have no single field to name, so `field_path` stays
-    `None`; `SCHEMA_CONDITIONAL_FIELD` has exactly one and must name it.
+    `test_every_description_declares_exactly_one`: `MULTIPLE_FIELDS` has no
+    single field to name, so `field_path` stays `None`; `NO_SOURCE_FIELD` may
+    name the unmapped field it reads, and `DerivedReason.NO_SOURCE_FIELD` says
+    what that obliges.
 
     A reason rather than a flag because `bool` conflated four situations, and
     that conflation is how `evse_ev_connected` — one producible field, marked
@@ -158,254 +169,234 @@ class FieldPathDeclarationMixin:
 RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
     {
         # Homie `$target` values — a pending-command echo, not a schema field.
-        "circuit.relay_state_target": Producibility.NEITHER,
-        "circuit.priority_target": Producibility.NEITHER,
+        "circuit.relay_state_target": Producibility.UNMAPPED,
+        "circuit.priority_target": Producibility.UNMAPPED,
         # Assembled by the library from panel topology rather than read from a
         # schema property.
-        "circuit.device_type": Producibility.NEITHER,
-        "circuit.relative_position": Producibility.NEITHER,
+        "circuit.device_type": Producibility.UNMAPPED,
+        "circuit.relative_position": Producibility.UNMAPPED,
         # The panel reports it outside the typed field surface.
-        "panel.panel_size": Producibility.NEITHER,
+        "panel.panel_size": Producibility.UNMAPPED,
         # The enclosure's build identity, read by `snapshot_to_device_info` for
-        # the panel's device card. No row on either adapter, and deliberately:
-        # flat declares none of the three, and schema_1 rows exist to carry a
-        # unit and a datatype for a *reading*, which an identity string is not.
-        # Same shape as the `mid.*` device-card reads below.
-        "panel.vendor_name": Producibility.NEITHER,
-        "panel.model": Producibility.NEITHER,
-        "panel.hardware_version": Producibility.NEITHER,
+        # the panel's device card. No row, and deliberately: a row exists to
+        # carry a unit and a datatype for a *reading*, which an identity string
+        # is not. Same shape as the `mid.*` device-card reads below.
+        "panel.vendor_name": Producibility.UNMAPPED,
+        "panel.model": Producibility.UNMAPPED,
+        "panel.hardware_version": Producibility.UNMAPPED,
         # `shed/policy` parsed, read for the attributes on `dsm_state`
         # (`SpanPanelPanelStatus.extra_state_attributes`). The raw document is
         # kept beside the parsed members because the policy schema is versioned
         # in its own `$id`: an algorithm this library does not recognise still
-        # reaches a user as the string the panel published. No row on either
-        # adapter -- flat has no `shed` node, and a JSON document has no unit
-        # surface for a schema_1 row to describe.
-        "panel.shed_policy": Producibility.NEITHER,
-        "panel.shed_policy_algorithm": Producibility.NEITHER,
-        "panel.shed_soc_threshold_shed_percent": Producibility.NEITHER,
-        "panel.shed_soc_threshold_release_percent": Producibility.NEITHER,
+        # reaches a user as the string the panel published. No row: a JSON
+        # document has no unit surface for a row to describe.
+        "panel.shed_policy": Producibility.UNMAPPED,
+        "panel.shed_policy_algorithm": Producibility.UNMAPPED,
+        "panel.shed_soc_threshold_shed_percent": Producibility.UNMAPPED,
+        "panel.shed_soc_threshold_release_percent": Producibility.UNMAPPED,
         # The panel identity key behind every unique_id and the panel DeviceInfo
         # (~30 read sites).
-        "panel.serial_number": Producibility.NEITHER,
-        # Gates button availability at button.py:115 — the same reason the
-        # `dsm_state` sensor is `derived=True`.
-        "panel.dsm_state": Producibility.NEITHER,
+        "panel.serial_number": Producibility.UNMAPPED,
+        # The `dsm_state` sensor's source, which is `NO_SOURCE_FIELD` because
+        # this has no row, and a gate on the GFE override button's availability
+        # (`SpanPanelGFEOverrideButton.available`).
+        "panel.dsm_state": Producibility.UNMAPPED,
         # The circuit's own identity key, used for lookups and id construction
         # (helpers.py, coordinator.py, entity_resolver.py).
-        "circuit.circuit_id": Producibility.NEITHER,
+        "circuit.circuit_id": Producibility.UNMAPPED,
         # util.py reads these off the MID snapshot for device_info, and
         # sensor_panel.py reads the grid-forming name for an attribute.
-        "mid.hardware_version": Producibility.NEITHER,
-        "mid.software_version": Producibility.NEITHER,
-        "mid.vendor_name": Producibility.NEITHER,
-        "mid.model": Producibility.NEITHER,
-        "mid.serial_number": Producibility.NEITHER,
-        "mid.grid_forming_device_name": Producibility.NEITHER,
+        "mid.hardware_version": Producibility.UNMAPPED,
+        "mid.software_version": Producibility.UNMAPPED,
+        "mid.vendor_name": Producibility.UNMAPPED,
+        "mid.model": Producibility.UNMAPPED,
+        "mid.serial_number": Producibility.UNMAPPED,
+        "mid.grid_forming_device_name": Producibility.UNMAPPED,
         # `pv_device_info` reads the inverter's firmware version for its device
         # card. `pv.vendor_name` and `pv.model` are not here beside it because
         # they are `field_path` declarations on the three PV metadata sensors
-        # already, and the card reads the same two fields those sensors do.
-        #
-        # `SCHEMA_0_ONLY`, and it says so because the annotation is checked
-        # rather than asserted: this read `NEITHER` on the claim that "flat's
-        # `pv` device class declares no firmware version at all", which was
-        # wrong. Flat declares `software-version` on `energy.ebus.device.pv`,
-        # and the library grew the mapping row for it once a producer valued the
-        # v1.0 half. schema_1 still carries no row, for the reason the `mid.*`
-        # and `panel.*` card reads above carry none: a row states a *reading's*
-        # unit and datatype, and a version string is not a reading.
+        # already, and the card reads the same two fields those sensors do. The
+        # library reads `info/firmware-version` into the snapshot and maps no
+        # row for it, for the reason the `mid.*` and `panel.*` card reads above
+        # carry none: a row states a *reading's* unit and datatype, and a
+        # version string is not a reading.
         #
         # `pv.serial_number` is deliberately absent -- from this table, from the
         # card and from the snapshot. See `pv_device_info`.
-        "pv.software_version": Producibility.SCHEMA_0_ONLY,
+        "pv.software_version": Producibility.UNMAPPED,
         # The `mid_grid_state` sensor's source field — utility-supply health,
-        # the one non-metadata entity the MID brings. Neither adapter maps the
-        # MID at all, which is why the description is `NO_SOURCE_FIELD`.
-        "mid.grid_state": Producibility.NEITHER,
+        # the one non-metadata entity the MID brings. The adapter maps nothing
+        # on the MID, which is why the description is `NO_SOURCE_FIELD`.
+        "mid.grid_state": Producibility.UNMAPPED,
         # The EVSE's Homie node id — an addressing handle used to build the
         # sub-device identifier, not a published field.
-        "evse.node_id": Producibility.NEITHER,
+        "evse.node_id": Producibility.UNMAPPED,
         # The charge-current control's two non-readings, read by
         # `SpanEvseNumber`: `$settable` on the limit's declaration, which is the
         # entity-creation gate, and the Homie `$target` echo of a write the
         # panel has accepted but not yet applied, rendered as an attribute. Both
-        # are facts about a command rather than readings, so no adapter carries
-        # a metadata row for either — the same shape as the `circuit.*_target`
-        # pair at the top of this map, and the same reason `panel.grid_islandable`
-        # sits here as a creation gate.
-        "evse.charge_current_limit_settable": Producibility.NEITHER,
-        "evse.charge_current_limit_target_a": Producibility.NEITHER,
+        # are facts about a command rather than readings, so the adapter maps no
+        # row for either — the same shape as the `circuit.*_target` pair at the
+        # top of this map.
+        "evse.charge_current_limit_settable": Producibility.UNMAPPED,
+        "evse.charge_current_limit_target_a": Producibility.UNMAPPED,
         # The shed-forecast refinements, read for attributes on the two forecast
-        # sensors (`SpanShedForecastSensor.extra_state_attributes`). schema_1
-        # reads all three into the snapshot but carries a `_PROPERTY_FIELD_MAP`
-        # row for neither: they qualify the two live estimates rather than being
+        # sensors (`SpanShedForecastSensor.extra_state_attributes`). The library
+        # reads all three into the snapshot but maps a `_PROPERTY_FIELD_MAP` row
+        # for none: they qualify the two live estimates rather than being
         # readings of their own, so there is no unit surface for a row to
         # describe. Same shape as the `mid.*` attribute reads above.
-        "panel.shed_full_charge_time_to_priority_shed_min": Producibility.NEITHER,
-        "panel.shed_full_charge_total_time_remaining_min": Producibility.NEITHER,
-        "panel.shed_forecast_confidence": Producibility.NEITHER,
+        "panel.shed_full_charge_time_to_priority_shed_min": Producibility.UNMAPPED,
+        "panel.shed_full_charge_total_time_remaining_min": Producibility.UNMAPPED,
+        "panel.shed_forecast_confidence": Producibility.UNMAPPED,
         # The PCS arbitration's *inputs*, read for the twelve attributes on
         # `pcs_import_limit` plus its `pcs_enabled` (`pcs_arbitration_attributes`
-        # in sensor_definitions). schema_1 reads all thirteen into the snapshot
-        # and carries a `_PROPERTY_FIELD_MAP` row for none of them, deliberately:
-        # the capability calls `import-limit` and `binding-constraint` "the
-        # result", and these explain that result rather than being readings of
-        # their own, so there is no unit surface for a row to describe. Same
-        # shape as the shed-forecast refinements above.
-        "pcs.enabled": Producibility.NEITHER,
-        "pcs.feed_import_limit_a": Producibility.NEITHER,
-        "pcs.feed_import_limit_enablement": Producibility.NEITHER,
-        "pcs.feed_import_limit_active": Producibility.NEITHER,
-        "pcs.operator_import_limit_a": Producibility.NEITHER,
-        "pcs.operator_import_limit_enablement": Producibility.NEITHER,
-        "pcs.operator_import_limit_active": Producibility.NEITHER,
-        "pcs.off_grid_import_limit_a": Producibility.NEITHER,
-        "pcs.off_grid_import_limit_enablement": Producibility.NEITHER,
-        "pcs.off_grid_import_limit_active": Producibility.NEITHER,
-        "pcs.requested_import_limit_a": Producibility.NEITHER,
-        "pcs.requested_import_limit_enablement": Producibility.NEITHER,
-        "pcs.requested_import_limit_active": Producibility.NEITHER,
+        # in sensor_definitions). The library reads all thirteen into the
+        # snapshot and maps a `_PROPERTY_FIELD_MAP` row for none of them,
+        # deliberately: the capability calls `import-limit` and
+        # `binding-constraint` "the result", and these explain that result
+        # rather than being readings of their own, so there is no unit surface
+        # for a row to describe. Same shape as the shed-forecast refinements
+        # above.
+        "pcs.enabled": Producibility.UNMAPPED,
+        "pcs.feed_import_limit_a": Producibility.UNMAPPED,
+        "pcs.feed_import_limit_enablement": Producibility.UNMAPPED,
+        "pcs.feed_import_limit_active": Producibility.UNMAPPED,
+        "pcs.operator_import_limit_a": Producibility.UNMAPPED,
+        "pcs.operator_import_limit_enablement": Producibility.UNMAPPED,
+        "pcs.operator_import_limit_active": Producibility.UNMAPPED,
+        "pcs.off_grid_import_limit_a": Producibility.UNMAPPED,
+        "pcs.off_grid_import_limit_enablement": Producibility.UNMAPPED,
+        "pcs.off_grid_import_limit_active": Producibility.UNMAPPED,
+        "pcs.requested_import_limit_a": Producibility.UNMAPPED,
+        "pcs.requested_import_limit_enablement": Producibility.UNMAPPED,
+        "pcs.requested_import_limit_active": Producibility.UNMAPPED,
         # A circuit's *participation* in that PCS — `managed` and `priority`,
-        # read as attributes on its power sensor (`sensor_circuit.py`). Not
-        # `_residual_field_paths` on the entity: that feeds
-        # `declared_field_paths()`, and no flat circuit declares a `pcs` node at
-        # all, so the producible gate would reject both. schema_1 maps neither
-        # for the reason above — they qualify a circuit's reading rather than
-        # being one.
-        "circuit.pcs_managed": Producibility.NEITHER,
-        "circuit.pcs_priority": Producibility.NEITHER,
+        # read as attributes on its power sensor (`sensor_circuit.py`). The
+        # adapter maps neither, for the reason above: they qualify a circuit's
+        # reading rather than being one. So they are not `_residual_field_paths`
+        # on the entity, which feed `declared_field_paths()`, where the
+        # producible gate rejects a path with no row.
+        "circuit.pcs_managed": Producibility.UNMAPPED,
+        "circuit.pcs_priority": Producibility.UNMAPPED,
         # The peers a circuit's meter and relay are shared with, named in the
         # `meter_shared_with` and `relay_shared_with` attributes of its power
-        # sensor and switch. Membership, not a reading, so no adapter carries a
+        # sensor and switch. Membership, not a reading, so the adapter maps no
         # row for either.
-        "circuit.meter_shared_with": Producibility.NEITHER,
-        "circuit.relay_shared_with": Producibility.NEITHER,
+        "circuit.meter_shared_with": Producibility.UNMAPPED,
+        "circuit.relay_shared_with": Producibility.UNMAPPED,
         # A circuit's declared nominal voltage, which its voltage attribute
         # prefers, and its breaker's protection functions, an attribute of its
         # power sensor.
-        "circuit.nominal_voltage_v": Producibility.NEITHER,
-        "circuit.protection_functions": Producibility.NEITHER,
+        "circuit.nominal_voltage_v": Producibility.UNMAPPED,
+        "circuit.protection_functions": Producibility.UNMAPPED,
         # Panel readings created only where the panel declares them, each read by
-        # a `NO_SOURCE_FIELD` description: neither adapter's reference payload
-        # declares them. The upstream protection rating is also the current
-        # monitor's mains limit where the panel has no main breaker.
-        "panel.busbar_current_a": Producibility.NEITHER,
-        "panel.frequency_hz": Producibility.NEITHER,
-        "panel.upstream_protection_rating_a": Producibility.NEITHER,
+        # a `NO_SOURCE_FIELD` description: the adapter's reference payload
+        # declares none of them. The upstream protection rating is also the
+        # current monitor's mains limit where the panel has no main breaker.
+        "panel.busbar_current_a": Producibility.UNMAPPED,
+        "panel.frequency_hz": Producibility.UNMAPPED,
+        "panel.upstream_protection_rating_a": Producibility.UNMAPPED,
         # What a circuit's `connection/feeds-role` declares, which orients its
         # power and Net Energy as generation where the role is solar
         # (`energy_orientation.circuit_is_generation`).
-        "circuit.feeds_role": Producibility.NEITHER,
-        "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
-        # The two backup-planning estimates behind `time_to_priority_shed` and
-        # `shed_total_time_remaining`, whose descriptions are
-        # `SCHEMA_CONDITIONAL_FIELD` for exactly this reason: no flat panel
-        # publishes `energy.ebus.capability.shed-forecast` at all, so the
-        # producible gate — which demands both adapters — cannot be satisfied.
-        # schema_1 does carry a metadata row for each, which is what makes the
-        # annotation SCHEMA_1_ONLY rather than NEITHER and buys the pair unit
-        # and datatype validation against the panel's own `$description`.
-        "panel.shed_time_to_priority_shed_min": Producibility.SCHEMA_1_ONLY,
-        "panel.shed_total_time_remaining_min": Producibility.SCHEMA_1_ONLY,
-        # The BESS's own meter and its own link health, behind `bess_meter_power`
-        # and `bess_communication_state`, whose descriptions are
-        # `SCHEMA_CONDITIONAL_FIELD` for the usual reason: flat's BESS device
-        # class declares neither property, so the both-adapters gate cannot be
-        # satisfied. schema_1 carries a `_PROPERTY_FIELD_MAP` row for each, which
-        # is what makes these SCHEMA_1_ONLY rather than NEITHER and buys them unit
-        # and datatype validation against the BESS's own `$description`.
+        "circuit.feeds_role": Producibility.UNMAPPED,
+        # A circuit's relay and shedding facts, read for attributes on its power
+        # sensor and, for `always_on`, its topology record. The library derives
+        # both from the `switch` declaration, `switch/relay-controllable` and
+        # the shed priority rather than reading a property of their own, so
+        # there is no row to map.
+        "circuit.always_on": Producibility.UNMAPPED,
+        "circuit.is_sheddable": Producibility.UNMAPPED,
+        # The `grid_forming_entity` sensor's source field. The library answers it
+        # through `resolve_dominant_power_source` over the MID's
+        # `grid/grid-forming-entity` rather than from a property of its own, so
+        # there is no row, which is what makes the sensor `NO_SOURCE_FIELD`.
+        "panel.dominant_power_source": Producibility.UNMAPPED,
+        # The `grid_islandable` binary sensor's source field. The library answers
+        # it through `resolve_grid_islandable` over the BESS inverters rather
+        # than from a property of its own, so there is no row, which is what
+        # makes the description `NO_SOURCE_FIELD`.
+        "panel.grid_islandable": Producibility.UNMAPPED,
+        # util.py builds the EVSE DeviceInfo from the first four. Two readers
+        # resolve the feed through `feed_circuit_id`: sensor.py keys each
+        # charger's DeviceInfo by it, which is what puts the feeding circuit's
+        # sensors on the charger's card, and entity_resolver.py names a charger
+        # after the circuit it resolves to. The identity strings carry no row for
+        # the reason the `panel.*` and `mid.*` card reads above carry none, and
+        # the feed is assembled from the feeding circuit's `connection` record
+        # rather than read from a property of the charger.
+        "evse.vendor_name": Producibility.UNMAPPED,
+        "evse.model": Producibility.UNMAPPED,
+        "evse.serial_number": Producibility.UNMAPPED,
+        "evse.software_version": Producibility.UNMAPPED,
+        "evse.feed_circuit_id": Producibility.UNMAPPED,
+        # The `bess_connected` binary sensor's source field, and what decides the
+        # GFE override button where the battery publishes no communication
+        # state. The library takes it from the panel-side owner's
+        # `connection/*-device-status` record for the battery rather than from a
+        # property of the BESS, and maps no row for it, which is what makes
+        # `bess_connected` `NO_SOURCE_FIELD`. The two DER-link paths below carry
+        # the same fact for the inverter and the charger, and those do have a
+        # row.
+        "battery.connected": Producibility.UNMAPPED,
+        # Whether a circuit's relay can be commanded, from
+        # `switch/relay-controllable`. A gate rather than a reading: it decides
+        # whether a circuit gets a switch and a priority select
+        # (`helpers.circuit_has_a_breaker_switch`, `circuit_has_a_priority_select`)
+        # and whether its power sensor carries the shed and PCS policy
+        # attributes, and it rides in the topology record. Where the property is
+        # missing, the library already answers from whether a `switch` is
+        # declared, so validating it would raise a Repair for a fact the adapter
+        # has filled in, on a field no entity presents as its reading.
+        "circuit.is_user_controllable": Producibility.MAPPED_UNVALIDATED,
+        # The commissioned ceiling the `evse_charge_current_limit` number reads
+        # for `native_max_value`, resolved from the charger's own `$description`.
+        # A bound on the control rather than its reading: a charger that
+        # declares its limit without a ceiling is still bounded by the limit's
+        # declared range, or by the control's own maximum, and its limit is still
+        # worth setting. Validating the ceiling would raise a Repair naming the
+        # control for that charger. It is therefore not on
+        # `SpanEvseNumber._residual_field_paths` either, which feed
+        # `declared_field_paths()`.
+        "evse.charge_current_ceiling_a": Producibility.MAPPED_UNVALIDATED,
+        # The enclosure's view of the link to each circuit-fed DER, which the
+        # `pv_panel_link` and `evse_panel_link` binary sensors name as their
+        # `field_path`. The adapter maps both, from one property: the feeding
+        # circuit's `connection/feeds-device-status`.
         #
-        # `battery.power_w` carries `bess_meter_power`, and `has_bess` reads it to
-        # decide whether a battery is commissioned. It agrees with `battery_power`
-        # by construction: the two wire properties behind them carry the same sign
-        # as each other on both the panel and the emitter, and each path negates
-        # once. See `BESS_TELEMETRY_SENSORS` for which direction that shared
-        # convention runs, which a live capture has not settled.
-        "battery.power_w": Producibility.SCHEMA_1_ONLY,
-        "battery.communication_state": Producibility.SCHEMA_1_ONLY,
-        # The Power Control System's result, behind `pcs_import_limit`,
-        # `pcs_binding_constraint` and the `pcs_active` binary sensor. Their
-        # descriptions are `SCHEMA_CONDITIONAL_FIELD` for the usual reason: no
-        # flat panel declares `energy.ebus.capability.pcs`, so the both-adapters
-        # gate cannot be satisfied. schema_1 carries a `_PROPERTY_FIELD_MAP` row
-        # for each of these three, which is what makes them SCHEMA_1_ONLY rather
-        # than NEITHER and buys `pcs.import_limit_a` unit validation against the
-        # panel's own `$description`.
-        "pcs.import_limit_a": Producibility.SCHEMA_1_ONLY,
-        "pcs.binding_constraint": Producibility.SCHEMA_1_ONLY,
-        "pcs.active": Producibility.SCHEMA_1_ONLY,
-        # The enclosure's view of the link to each circuit-fed DER, behind the
-        # `pv_panel_link` and `evse_panel_link` binary sensors. Both descriptions
-        # are `SCHEMA_CONDITIONAL_FIELD` for the usual reason: flat firmware
-        # publishes `connected` on the BESS and on no other device class, so the
-        # both-adapters gate cannot be satisfied. schema_1 maps both — from one
-        # property, the feeding circuit's `connection/feeds-device-status` —
-        # which is what makes these SCHEMA_1_ONLY rather than NEITHER.
-        #
-        # `battery.connected` is the same fact for the third DER and sits below
-        # as SCHEMA_0_ONLY, which is the whole shape of this gap: the link the
-        # enclosure reported through the lugs was read, and the one it reports
-        # through a circuit was not.
-        "pv.connected": Producibility.SCHEMA_1_ONLY,
-        "evse.connected": Producibility.SCHEMA_1_ONLY,
-        # The EVSE charge-current pair behind the `evse_charge_current_limit`
-        # number: the settable limit the entity's value comes from (its
-        # description is `SCHEMA_CONDITIONAL_FIELD` and names it; the value is
-        # the library's effective limit, which falls back to the ceiling), and
-        # the commissioned ceiling the entity reads for `native_max_value`. Flat
-        # firmware's `evse` device type publishes `advertised-current` and no
-        # settable ceiling at all, so neither can ever satisfy the both-adapters
-        # gate. schema_1 carries a metadata row for each, resolved from the
-        # charger's own `$description` rather than from a table, which is what
-        # makes these SCHEMA_1_ONLY rather than NEITHER and buys the entity unit
-        # validation against the property the panel actually declares.
-        #
-        # The ceiling is deliberately not on `SpanEvseNumber._residual_field_paths`:
-        # that feeds `declared_field_paths()`, which is the both-adapters gate,
-        # and flat produces neither path.
-        "evse.charge_current_limit_a": Producibility.SCHEMA_1_ONLY,
-        "evse.charge_current_ceiling_a": Producibility.SCHEMA_1_ONLY,
-        "circuit.always_on": Producibility.SCHEMA_0_ONLY,
-        "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
-        # The `grid_forming_entity` sensor's source field. schema_1 answers the
-        # same question through `resolve_dominant_power_source` over the MID's
-        # `grid/grid-forming-entity` instead of publishing a row of its own,
-        # which is what makes the sensor `SCHEMA_CONDITIONAL_FIELD`.
-        "panel.dominant_power_source": Producibility.SCHEMA_0_ONLY,
-        # util.py builds the EVSE DeviceInfo from these; entity_resolver.py and
-        # sensor.py resolve the fed circuit through `feed_circuit_id`.
-        "evse.vendor_name": Producibility.SCHEMA_0_ONLY,
-        "evse.model": Producibility.SCHEMA_0_ONLY,
-        "evse.serial_number": Producibility.SCHEMA_0_ONLY,
-        "evse.software_version": Producibility.SCHEMA_0_ONLY,
-        "evse.feed_circuit_id": Producibility.SCHEMA_0_ONLY,
-        # schema_1 derives islanding via `resolve_grid_islandable(inverters)`
-        # instead. Read at binary_sensor.py:408 as an entity-creation gate,
-        # outside any description.
-        "panel.grid_islandable": Producibility.SCHEMA_0_ONLY,
-        # schema_1's `_PROPERTY_FIELD_MAP` has no `connected` row — the same gap
-        # that makes the `bess_connected` binary sensor `derived=True`.
-        "battery.connected": Producibility.SCHEMA_0_ONLY,
+        # Unvalidated because the three link descriptions have never been in
+        # `platform_descriptions()`; they were collected by the introspection
+        # suite alone when they were added (78989f13). So
+        # `evaluate_field_metadata` has never asked about either path, and an
+        # unresolved row raises no Repair and takes neither entity down.
+        # Collecting them would close that gap, and would also change what a
+        # panel that drops `feeds-device-status` is told, so it waits on a
+        # decision of its own.
+        "pv.connected": Producibility.MAPPED_UNVALIDATED,
+        "evse.connected": Producibility.MAPPED_UNVALIDATED,
     }
 )
 """Residual readers exempt from the producible check, and why each is exempt.
 
-The gate requires a path to be producible by *both* adapters, so a read is
-exempt for one of two reasons, and the annotation says which:
-`Producibility.NEITHER` for values no adapter publishes a metadata row for —
-Homie `$target` echoes, values the library assembles from panel topology, every
-`mid.*` field; `SCHEMA_0_ONLY` / `SCHEMA_1_ONLY` for schema-conditional fields
-present on one schema and absent from the other.
+The gate requires a path the parent/child adapter maps a metadata row for, so a
+read is exempt for one of two reasons, and the annotation says which:
+`Producibility.UNMAPPED` for a value the adapter maps no row for — Homie
+`$target` echoes, values the library assembles from panel topology or derives
+from other properties, identity strings for a device card, every `mid.*` field;
+`Producibility.MAPPED_UNVALIDATED` for a value it does map, which validation is
+deliberately kept from asking about.
 
 Exempt is not the same as derived: these are read straight off a snapshot field,
-that field just is not on both schemas.
+that field just has no row for the gate to check, or has one that validation
+must not act on.
 
 The annotations are not documentation. `tests/test_field_path_conformance.py`
-builds both adapters' metadata from their reference payloads and asserts every
-entry's annotation against what those adapters actually produce, so a stale
-reason fails the build instead of misleading a reader. A path that becomes
-producible by both fails there too, demanding promotion to a declaration.
+builds the adapter's metadata from its reference payload and asserts every
+entry's annotation against what it actually produces, so a stale reason fails
+the build instead of misleading a reader. A path the library grows a row for
+fails there too, and is then either promoted to a declaration or given a
+written reason to stay out of validation.
 
 Deliberately **not** returned by `declared_field_paths()`. Recorded here so the
 reads are still enumerated somewhere rather than being invisible.
@@ -445,8 +436,8 @@ def iter_source_field_declarations[DescriptionT: EntityDescription](
 ) -> Iterator[tuple[str, DescriptionT]]:
     """Yield ``(field_path, description)`` for each description that names one.
 
-    Every entity that has a single source field, whatever `derived` says about
-    which adapters produce it.
+    Every entity that names a single source field, whatever `derived` says
+    about whether the adapter maps a row for it.
     """
     for field_path, _, description in _iter_declared(descriptions):
         yield field_path, description
@@ -458,11 +449,10 @@ def iter_field_path_declarations[DescriptionT: EntityDescription](
     """Yield only the declarations the producible gate covers.
 
     `derived` descriptions are skipped whether or not they name a field. That
-    is the whole content of the exemption: a `SCHEMA_CONDITIONAL_FIELD`
-    description does name its source field, and naming it is what gives the
-    entity its Repair mention and its unavailability — but the path is still
-    one adapter short of the both-adapters gate this function feeds, and
-    `RESIDUAL_EXEMPT_PATHS` is where it is enumerated instead.
+    is the whole content of the exemption: a `NO_SOURCE_FIELD` description may
+    name the field it reads, but the adapter maps no row for that path, so the
+    gate this function feeds would reject it, and `RESIDUAL_EXEMPT_PATHS` is
+    where it is enumerated instead.
     """
     for field_path, declaration, description in _iter_declared(descriptions):
         if declaration.derived:
@@ -525,10 +515,13 @@ def residual_field_paths() -> frozenset[str]:
 def platform_descriptions() -> tuple[EntityDescription, ...]:
     """Every entity description this integration builds entities from.
 
-    One copy of the collection list. `declared_field_paths` and
-    `conditional_field_paths` ask different questions of the same descriptions,
-    and a second copy of the list is how a platform ends up answering one and
-    not the other.
+    One copy of the collection list, so the producible gate and the tests that
+    hold each description to its declaration walk the same descriptions: a
+    second copy is how a platform ends up gated by one and checked by the other.
+
+    The three DER-link descriptions are not collected here, which is why the
+    paths they name are enumerated as exempt; see `pv.connected` in
+    `RESIDUAL_EXEMPT_PATHS`.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, so importing them at module scope would close that loop. (They no
@@ -560,40 +553,19 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
 
 
 def declared_field_paths() -> frozenset[str]:
-    """Field paths the integration reads that must be producible by an adapter.
+    """Field paths the integration reads that the parent/child adapter must produce.
 
-    Derived entities are excluded: they have no single source field, or the one
-    they have is not on both schemas, so there is nothing for both adapters to
-    produce. Residual readers that no adapter (or only one) produces are
+    Derived entities are excluded: their value is not one field the adapter maps
+    a row for, so there is nothing for it to produce. Residual readers the
+    adapter maps no row for, or whose row validation must not act on, are
     excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
+
+    This is also exactly the set `schema_validation.evaluate_field_metadata`
+    asks the adapter about, so a path here is one whose unresolved row raises a
+    Repair.
     """
     paths: set[str] = set(residual_field_paths())
     paths.update(
         field_path for field_path, _ in iter_field_path_declarations(platform_descriptions())
     )
     return frozenset(paths)
-
-
-def conditional_field_paths() -> frozenset[str]:
-    """Source fields of entities only one adapter produces the field for.
-
-    The producible gate cannot cover these -- that is what
-    `DerivedReason.SCHEMA_CONDITIONAL_FIELD` says -- but the adapter that *does*
-    produce the field still publishes a metadata row for it, and that row can
-    come back `resolved=False` when the panel drops the property. So the
-    degradation half of the apparatus applies to them exactly as it does to a
-    plain declaration, and `schema_validation.evaluate_field_metadata` asks
-    about these paths alongside `declared_field_paths()`.
-
-    Read off the descriptions rather than filtered out of
-    `RESIDUAL_EXEMPT_PATHS`: most of that map is decoration -- device_info
-    fields, circuit attributes, entity-creation gates -- whose loss does not
-    make an entity's *reading* wrong, and which is deliberately excluded from
-    the availability probe. What belongs here is the narrower thing the
-    description states: the field this entity's value comes from.
-    """
-    return frozenset(
-        field_path
-        for field_path, declaration, _ in _iter_declared(platform_descriptions())
-        if declaration.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
-    )

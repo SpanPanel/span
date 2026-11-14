@@ -1,14 +1,14 @@
-"""Build real adapter field metadata from the adapters' own reference payloads.
+"""Build real adapter field metadata from the adapter's own reference payload.
 
 The library's own harness compares wire-level deltas between schemas; it cannot
 know what this integration declares it reads. These helpers give the
 integration's tests real adapter output to check declarations against.
 
-The payloads are package data of the two adapter distributions, read through
-`importlib.resources` exactly as the library's own suite reads them, so the bytes
-replayed here are the bytes shipped by the wheel `manifest.json` pins. The pin is
-the provenance: bumping it is what moves the capture, and nothing has to keep a
-copy of it honest.
+The payload is package data of the parent/child adapter distribution, read
+through `importlib.resources` exactly as the library's own suite reads it, so the
+bytes replayed here are the bytes shipped by the wheel `manifest.json` pins. The
+pin is the provenance: bumping it is what moves the capture, and nothing has to
+keep a copy of it honest.
 
 Uses the real `ebus_sdk.DiscoveredDevice` rather than a stand-in. A
 description-only stand-in is not sufficient: `_downstream_lugs_metadata` ->
@@ -21,40 +21,14 @@ from __future__ import annotations
 
 from importlib.resources import files
 import json
-from typing import TYPE_CHECKING
 
 from ebus_sdk.homie import DiscoveredDevice
-from span_panel_api.models import FieldMetadata, HomieSchemaTypes, SpanPanelSnapshot, V2HomieSchema
+from span_panel_api.models import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
 
-if TYPE_CHECKING:
-    from span_panel_api_schema_0.adapter import SchemaZeroAdapter
-
 SCHEMA_ONE_TREE = files("span_panel_api_schema_1") / "reference" / "parent_child_tree.json"
 """The parent/child capture, as `span-panel-api-schema-1` ships it."""
-
-SCHEMA_ZERO_SCHEMA = files("span_panel_api_schema_0") / "reference" / "homie_schema.json"
-"""The `GET /api/v2/homie/schema` capture, as `span-panel-api-schema-0` ships it."""
-
-
-def _schema_zero_types() -> HomieSchemaTypes:
-    """Unwrap the flat capture's `types` map, the shape a schema_0 build takes.
-
-    The whole `GET /api/v2/homie/schema` response is what the adapter ships;
-    `types` is the half both flat fixtures need, so it is unwrapped once here
-    rather than at each of them. Narrowed rather than annotated: the document's
-    other top-level values are strings, and `json.loads` would let a wrong
-    annotation stand.
-    """
-    document: object = json.loads(SCHEMA_ZERO_SCHEMA.read_text(encoding="utf-8"))
-    if not isinstance(document, dict):
-        raise TypeError(f"{SCHEMA_ZERO_SCHEMA.name} is not a JSON object")
-    types = document["types"]
-    if not isinstance(types, dict):
-        raise TypeError(f"{SCHEMA_ZERO_SCHEMA.name} has no `types` object")
-    return types
-
 
 SCHEMA_ONE_PANEL = "example-40t-001"
 """Device id of the enclosure in the adapter's published capture.
@@ -127,6 +101,46 @@ def schema_one_snapshot(tree: dict[str, dict[str, str]] | None = None) -> SpanPa
     return tree_snapshot(schema_one_tree() if tree is None else tree, SCHEMA_ONE_PANEL)
 
 
+BESS_INVERTER = "bess-inverter"
+"""Device id of the inverter `add_grid_forming_inverter` hangs off the capture's BESS."""
+
+
+def add_grid_forming_inverter(tree: dict[str, dict[str, str]], *, capable: bool) -> None:
+    """Give the capture's BESS an inverter child that says whether it can form a grid.
+
+    The capture's BESS declares no inverter, so `grid_islandable` reads `None`
+    on it. BESS model 0.14 puts `grid-forming/capable` on the BESS's `inverter`
+    child, and the adapter answers the panel-level question from every inverter
+    it finds (`resolve_grid_islandable`), so this is the shape in which the
+    field is a reading. The BESS lists the new child, as a described tree would.
+    """
+    description = {
+        "homie": "5.0",
+        "version": 1,
+        "type": "energy.ebus.device.inverter",
+        "name": "Battery inverter",
+        "nodes": {
+            "grid-forming": {
+                "name": "grid-forming",
+                "type": "energy.ebus.capability.grid-forming",
+                "properties": {"capable": {"name": "Capable", "datatype": "boolean"}},
+            }
+        },
+        "children": [],
+        "root": SCHEMA_ONE_PANEL,
+        "parent": "bess",
+        "extensions": [],
+    }
+    tree[BESS_INVERTER] = {
+        "$description": json.dumps(description),
+        "$state": "ready",
+        "grid-forming/capable": "true" if capable else "false",
+    }
+    bess = json.loads(tree["bess"]["$description"])
+    bess["children"].append(BESS_INVERTER)
+    tree["bess"]["$description"] = json.dumps(bess)
+
+
 def tree_snapshot(tree: dict[str, dict[str, str]], panel_id: str) -> SpanPanelSnapshot:
     """Build a snapshot through the schema_1 mapper from any tree whose enclosure is `panel_id`.
 
@@ -142,59 +156,6 @@ def tree_snapshot(tree: dict[str, dict[str, str]], panel_id: str) -> SpanPanelSn
         if device_id != panel_id
     ]
     return build_snapshot(panel, children)
-
-
-def schema_zero_metadata() -> dict[str, FieldMetadata]:
-    """Curated field metadata as schema_0 builds it from the flat REST schema.
-
-    Partitioned like its schema_1 counterpart even though the flat adapter emits
-    no discovered rows: the fixtures state the rule, not the current contents of
-    one adapter.
-    """
-    from span_panel_api_schema_0.field_metadata import build_field_metadata
-
-    return _curated(build_field_metadata(_schema_zero_types()))
-
-
-SCHEMA_ZERO_SERIAL = "sp3-synthetic-0001"
-"""Serial the flat fixture adapter is built for. Synthetic, like every id here."""
-
-SCHEMA_ZERO_FIRMWARE = "r202612"
-"""A release in the flat window (r202603-r202627), which is what makes it flat.
-
-`V2HomieSchema.data_model_version` is left at its default `None` for the same
-reason: absent is the flat discriminator, and the dispatcher reads it.
-"""
-
-
-def schema_zero_snapshot() -> SpanPanelSnapshot:
-    """Build a snapshot as the real flat adapter builds it, before any topic arrives.
-
-    The counterpart to `schema_one_snapshot`, and it exists for the fields the
-    flat adapter never writes. Retained topics only ever *add* to this: a field
-    the adapter does not reference at all keeps whatever value the snapshot
-    dataclass gives it, and no message can move it.
-
-    `lugs_at_service_entrance` is such a field. It defaults to True, and
-    `span_panel_api_schema_0` contains no reference to the name, so on flat
-    firmware the value a consumer reads is the library's default rather than
-    anything the panel said. Driving the adapter rather than the snapshot
-    factory is what makes that a fact about the adapter instead of a fact the
-    test wrote down itself.
-    """
-    return schema_zero_adapter().build_snapshot()
-
-
-def schema_zero_adapter() -> SchemaZeroAdapter:
-    """The real flat adapter over the schema it ships, before any topic arrives."""
-    from span_panel_api_schema_0.adapter import SchemaZeroAdapter
-
-    schema = V2HomieSchema(
-        firmware_version=SCHEMA_ZERO_FIRMWARE,
-        types_schema_hash="0" * 16,
-        types=_schema_zero_types(),
-    )
-    return SchemaZeroAdapter(SCHEMA_ZERO_SERIAL, schema)
 
 
 def _curated(metadata: dict[str, FieldMetadata]) -> dict[str, FieldMetadata]:

@@ -22,6 +22,7 @@ from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     Producibility,
+    declared_field_paths,
 )
 from custom_components.span_panel.helpers import detect_capabilities, has_shed_forecast
 from custom_components.span_panel.sensor import create_shed_forecast_sensors
@@ -366,15 +367,6 @@ def test_a_panel_with_no_forecast_node_gets_no_sensors() -> None:
     assert create_shed_forecast_sensors(_coordinator(snapshot), snapshot) == []
 
 
-def test_a_flat_panel_gets_no_sensors() -> None:
-    """The same absence by the other route: flat firmware publishes no such
-    capability, so the factory's default snapshot carries none of the fields."""
-    snapshot = SpanPanelSnapshotFactory.create()
-
-    assert has_shed_forecast(snapshot) is False
-    assert create_shed_forecast_sensors(_coordinator(snapshot), snapshot) == []
-
-
 @pytest.mark.parametrize(
     ("dropped", "surviving"),
     [
@@ -456,21 +448,15 @@ def test_the_two_sensors_get_distinct_unique_ids() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_two_live_estimates_are_exempt_as_schema_1_only() -> None:
-    """Pinned here as well as in the conformance suite, because the reason is
-    specific to this capability: no flat panel publishes it, so the producible
-    gate cannot be satisfied and the descriptions must stay derived."""
-    assert (
-        RESIDUAL_EXEMPT_PATHS["panel.shed_time_to_priority_shed_min"]
-        is Producibility.SCHEMA_1_ONLY
-    )
-    assert (
-        RESIDUAL_EXEMPT_PATHS["panel.shed_total_time_remaining_min"]
-        is Producibility.SCHEMA_1_ONLY
-    )
+def test_the_two_live_estimates_are_declarations() -> None:
+    """Pinned here as well as in the conformance suite: the adapter maps both
+    estimates, so the producible gate covers them and neither is an exemption."""
+    for path in ("panel.shed_time_to_priority_shed_min", "panel.shed_total_time_remaining_min"):
+        assert path in declared_field_paths()
+        assert path not in RESIDUAL_EXEMPT_PATHS
 
 
-def test_the_three_refinements_are_exempt_as_neither() -> None:
+def test_the_three_refinements_are_exempt_as_unmapped() -> None:
     """No adapter maps them, by design — they qualify the two estimates rather
     than being readings of their own."""
     for path in (
@@ -478,4 +464,4 @@ def test_the_three_refinements_are_exempt_as_neither() -> None:
         "panel.shed_full_charge_total_time_remaining_min",
         "panel.shed_forecast_confidence",
     ):
-        assert RESIDUAL_EXEMPT_PATHS[path] is Producibility.NEITHER
+        assert RESIDUAL_EXEMPT_PATHS[path] is Producibility.UNMAPPED

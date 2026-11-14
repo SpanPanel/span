@@ -72,7 +72,7 @@ from custom_components.span_panel.sensor_panel import (
     SpanPVMetadataSensor,
 )
 
-from .adapter_fixtures import schema_one_snapshot, schema_one_tree, schema_zero_snapshot
+from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .captures_replay import snapshot as replayed_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -95,20 +95,10 @@ def _mock_entity_registry():
         yield registry
 
 
-def _make_coordinator(
-    snapshot, *, options: dict | None = None, schema_major: str | None = "schema_1"
-) -> MagicMock:
-    """Create a coordinator-like mock for direct sensor tests.
-
-    `schema_major` is the running adapter's key, as `SpanMqttClient.schema_major`
-    reports it. Defaulted to the parent/child adapter because a `MagicMock`
-    attribute answers every comparison with an object that is equal to nothing,
-    and a sensor asking which adapter produced a field would then read every
-    coordinator in this module as an adapter it has never heard of.
-    """
+def _make_coordinator(snapshot, *, options: dict | None = None) -> MagicMock:
+    """Create a coordinator-like mock for direct sensor tests."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.client.schema_major = schema_major
     coordinator.hass = MagicMock()
     coordinator.panel_offline = False
     coordinator.transport_dead = False
@@ -208,46 +198,15 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
     assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
-def test_flat_firmware_publishes_no_topology_it_was_never_told() -> None:
-    """The flat adapter never writes the field, so its value is a library default.
-
-    `lugs_at_service_entrance` defaults to True and
-    `span_panel_api_schema_0` does not reference it, so a flat panel with a BESS
-    ahead of its main lugs -- the very topology the attribute exists to report --
-    would publish `at_service_entrance: True`. That is not a wrong reading, which
-    a user could at least argue with; it is the absence of one wearing a
-    reading's clothes.
-
-    Driven through the real flat adapter rather than the snapshot factory: the
-    factory takes whatever a test hands it, and the claim under test is about
-    what the adapter does.
-    """
-    flat = schema_zero_snapshot()
-    assert flat.lugs_at_service_entrance is True, (
-        "the library default moved; this test's premise is stale"
-    )
-
-    coordinator = _make_coordinator(
-        replace(flat, instant_grid_power_w=480.0), schema_major="schema_0"
-    )
-    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
-
-    sensor = SpanPanelPowerSensor(coordinator, description, flat)
-    sensor._update_native_value()
-
-    assert sensor.native_value == 480.0
-    assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
-
-
 def test_the_topology_attribute_reports_what_the_parent_child_panel_published() -> None:
     """schema_1 resolves the field, so the attribute is a reading and is published.
 
     The reference capture's upstream lugs carry `connection/fed-by-device-id =
-    bess`: a real panel with a battery ahead of the main lugs, which is the case
-    the flat adapter cannot see and this one can.
+    bess`: a real panel with a battery ahead of the main lugs, which is the
+    topology the attribute exists to report.
     """
     snapshot = schema_one_snapshot()
-    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -266,7 +225,7 @@ def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None
     tree = schema_one_tree()
     tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = schema_one_snapshot(tree)
-    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -288,7 +247,7 @@ def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it() -> None:
     tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = replayed_snapshot(tree)
     assert snapshot.lugs_at_service_entrance is True
-    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -307,7 +266,7 @@ def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> Non
     del tree["lugs-upstream"]["connection/fed-by-device-id"]
     snapshot = schema_one_snapshot(tree)
     assert snapshot.lugs_at_service_entrance is None
-    coordinator = _make_coordinator(snapshot, schema_major="schema_1")
+    coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -316,20 +275,22 @@ def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> Non
     assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
-def test_the_topology_attribute_is_omitted_before_an_adapter_is_known() -> None:
-    """`schema_major` is None until the client has dispatched one.
+def test_the_topology_attribute_does_not_ask_which_adapter_produced_it() -> None:
+    """The snapshot's answer is the reading, whichever schema generation supplied it.
 
-    Unknown is not "flat" and not "at the service entrance"; it is unknown, and
-    the attribute's whole job is to be a reading.
+    A gate that also named the running adapter's key would silence the
+    attribute on a later generation that answers the same question. The
+    lugs' `None` is the one value that says the question is unanswered.
     """
-    snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
-    coordinator = _make_coordinator(snapshot, schema_major=None)
+    snapshot = schema_one_snapshot()
+    coordinator = _make_coordinator(snapshot)
+    coordinator.client.schema_major = "schema_2"
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
     sensor._update_native_value()
 
-    assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
+    assert sensor.extra_state_attributes["at_service_entrance"] is False
 
 
 def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label() -> None:

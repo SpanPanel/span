@@ -3,8 +3,8 @@
 Where the panel describes its devices, `battery.present` says whether a battery
 is declared, and that decides: the battery's device and sensors exist from
 setup and read unknown until it reports, rather than appearing only once a
-state of charge arrives. Where the panel describes nothing (`present` is None,
-as on the flat schema), the state of charge still decides, as it always has.
+state of charge arrives. Where the snapshot does not say (`present` is None),
+the state of charge decides: an unknown declaration is not an absent battery.
 """
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ def expected_lingering_timers() -> bool:
         (None, 80.0, True),
         (None, None, False),
     ],
-    ids=["declared-unvalued", "declared-valued", "undeclared", "flat-valued", "flat-unvalued"],
+    ids=["declared-unvalued", "declared-valued", "undeclared", "unstated-valued", "unstated-unvalued"],
 )
-def test_the_declaration_decides_and_the_flat_rule_is_unchanged(
+def test_the_declaration_decides_and_the_state_of_charge_decides_without_one(
     present: bool | None, soe_percentage: float | None, expected: bool
 ) -> None:
     battery = replace(SpanBatterySnapshot(), present=present, soe_percentage=soe_percentage)

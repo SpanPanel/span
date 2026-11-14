@@ -37,7 +37,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 ```json
 {
   "serial": "sim-main32-0001",
-  "firmware": "spanos2/r202603/05",
+  "firmware": "spanos3/r202639/03",
   "panel_size": 32,
   "device_id": "abc123def456",
   "panel_device_id": "abc123def456",

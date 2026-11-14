@@ -89,8 +89,8 @@ like the primary checkout does. When a library worktree of the same name exists,
 
 ## Working against unreleased library code
 
-`pyproject.toml` installs `span-panel-api` and both adapters from `../../span/span-panel-api` as editable path dependencies. That is a committed, shared file:
-whatever it names is what every import in this suite resolves to, for everyone, on every machine.
+`pyproject.toml` installs `span-panel-api` and its parent/child adapter, `span-panel-api-schema-1`, from `../../span/span-panel-api` as editable path
+dependencies. That is a committed, shared file: whatever it names is what every import in this suite resolves to, for everyone, on every machine.
 
 Sooner or later you need to test against library work that is not on `main` yet — an unmerged branch in a worktree beside the checkout. **Do not edit
 `pyproject.toml` to point at it.** Put the worktree in your virtual environment instead:
@@ -106,18 +106,16 @@ record of having been there. Nothing is committed at any point.
 
 ### What the second install actually does
 
-The venv holds one `.pth` file per editable distribution — `_editable_impl_span_panel_api.pth`, `_editable_impl_span_panel_api_schema_0.pth`,
-`_editable_impl_span_panel_api_schema_1.pth` — each holding the `src` directory of the main checkout. `uv pip install -e <worktree>` **replaces** the one for
-the distribution it installs: same filename, rewritten to the worktree, with the `dist-info` (including `direct_url.json`, which is where the redirection is
-recorded as data) replaced alongside it. There is no stacking and no shadowing, so no ordering question — the old target is gone.
+The venv holds one `.pth` file per editable distribution — `_editable_impl_span_panel_api.pth` and `_editable_impl_span_panel_api_schema_1.pth` — each holding
+the `src` directory of the main checkout. `uv pip install -e <worktree>` **replaces** the one for the distribution it installs: same filename, rewritten to the
+worktree, with the `dist-info` (including `direct_url.json`, which is where the redirection is recorded as data) replaced alongside it. There is no stacking and
+no shadowing, so no ordering question — the old target is gone.
 
-It replaces only that distribution. `span-panel-api` and the two adapters are three separate distributions, and installing the bootstrap from a worktree leaves
-`span_panel_api_schema_0` and `span_panel_api_schema_1` resolving to the main checkout. If the branch under test changes an adapter, or moves
-`ADAPTER_CONTRACT_VERSION`, install all three:
+It replaces only that distribution. `span-panel-api` and the adapter are two separate distributions, and installing the bootstrap from a worktree leaves
+`span_panel_api_schema_1` resolving to the main checkout. If the branch under test changes the adapter, or moves `ADAPTER_CONTRACT_VERSION`, install both:
 
 ```bash
 uv pip install -e ../../span/span-panel-api-<worktree> \
-                -e ../../span/span-panel-api-<worktree>/packages/schema-0 \
                 -e ../../span/span-panel-api-<worktree>/packages/schema-1
 ```
 
@@ -236,12 +234,11 @@ python -m pytest tests/test_current_monitor.py -q
 python -m pytest tests/ --cov=custom_components/span_panel --cov-report=term-missing
 ```
 
-## The adapter reference payloads
+## The adapter reference payload
 
-The conformance tests replay two real schema-adapter inputs: a full parent/child device tree and a flat `GET /api/v2/homie/schema` response. Neither is
-committed here. Both are package data of the adapter distributions — `span_panel_api_schema_1/reference/parent_child_tree.json` and
-`span_panel_api_schema_0/reference/homie_schema.json` — and `tests/adapter_fixtures.py` reads them through `importlib.resources`, exactly as the library's own
-suite does.
+The conformance tests replay a real schema-adapter input: a full parent/child device tree. It is not committed here. It is package data of the adapter
+distribution — `span_panel_api_schema_1/reference/parent_child_tree.json` — and `tests/adapter_fixtures.py` reads it through `importlib.resources`, exactly as
+the library's own suite does.
 
 So the payload the suite replays is whichever one the pinned wheel ships, and the pin in `custom_components/span_panel/manifest.json` is the record of which
 that is. **Moving to a newer capture is a pin bump and nothing else**: bump the adapter version there, let `scripts/sync-dependencies.py` carry it into
@@ -256,10 +253,10 @@ than a worktree an override is pointing at.
 The captured panels are not committed here either. They are the reference captures `ebus-panel-sim` ships as package data, a test-only dependency pinned exactly
 in `pyproject.toml`'s `dev` group and `requirements_test.txt`, never in `manifest.json`. `tests/captures_replay.py` names the ones the suite replays by their
 handles there (`main32_r202633`, `main32_r202639`) and reads each through `ebus_panel_sim.load_reference_capture`, so moving to a newer capture is a bump of
-that pin, as it is for the adapter payloads. It replays one through the pinned library the way the broker delivers it, and `tests/test_expected_entities.py`
-sets each replay up through the real `async_setup_entry`. The MQTT client is replaced whole by a static replay of the capture, so no reconnect, offline,
-connection, schema-change or streaming path runs; availability and offline behaviour stay with their own tests. Two files per stem, a capture's handle or a
-variant derived from it in-test, record the result:
+that pin, as it is for the adapter payload. It replays one through the pinned library the way the broker delivers it, and `tests/test_expected_entities.py` sets
+each replay up through the real `async_setup_entry`. The MQTT client is replaced whole by a static replay of the capture, so no reconnect, offline, connection,
+schema-change or streaming path runs; availability and offline behaviour stay with their own tests. Two files per stem, a capture's handle or a variant derived
+from it in-test, record the result:
 
 - `tests/fixtures/expected_entities/<stem>.json`: every device a fresh install registers (name, manufacturer, model, hardware and software version, serial,
   parent device) and every entity, by unique id, with its platform, entity id, name, translation key, device, device class, state class, unit, entity category,
@@ -369,6 +366,29 @@ The adapter decides "read" from four enumerations of what it addresses — the m
 `_CONSUMED_WITHOUT_A_ROW` for the properties it reads into the snapshot without a unit surface. A stale entry there fails _silently_, by keeping a property out
 of the report. `tests/test_schema_one_discovery.py` in the library runs the same republish-and-diff experiment this gate uses and holds every entry to it in
 both directions, so the report means "nothing reads this" rather than "nobody wrote it down".
+
+## Serving two schemas side by side
+
+From 2.1.0 until 2.3.0 this integration served panels on two eBus schemas at once: the flat one that spanos2 firmware publishes, and the parent/child one that
+replaced it. The library picks an adapter per panel, and the integration carried the branches where what it read differed. 2.3.0 retired the flat schema. How
+that went is the guidance for the next time two schemas have to be served together.
+
+**Mark every branch that differs by schema with one searchable token.** The flat era's was `DUAL-SCHEMA`, in a comment or docstring on each such branch saying
+why it differed and what would become of it at retirement. There were eleven in the package, across four modules, and a test pinned which modules carried one,
+so the retirement started from a single search rather than from reading the package for flat assumptions. Now that one schema is served,
+`tests/test_mid_device.py` asserts that none remain.
+
+**Prefer checks on what the snapshot carries over checks on the schema.** The gates that ask whether the snapshot holds a MID, a shed forecast or a PCS node
+(`has_mid`, `has_shed_forecast`, `has_pcs` and their neighbours in `helpers.py`) survived the retirement with only their wording changed, because a parent/child
+panel can lack each of those too. They also let a panel that changes schema while running gain the feature on the reload that follows. The one gate that asked
+which adapter was running, the service-entrance attribute's check for `schema_1`, had to be rewritten as a presence check: it would have shut out a later schema
+generation that publishes the same field.
+
+**When the old schema retires, delete what the token marks, after checking each mark against the code.** A mark records what its author believed.
+`_grid_islandable`'s said its first branch would go with flat, but the parent/child adapter already filled the field that branch reads, from a BESS inverter's
+`grid-forming/capable`, so the branch stayed and only the mark went. Dropping the adapter from the manifest does not finish the job either: Home Assistant does
+not uninstall a requirement that leaves the manifest, so an upgraded install can still load the old adapter. Setup and the config flow refuse the retired schema
+on what the panel publishes (`firmware_schema.py`), whether or not its adapter is installed.
 
 ## Circuit entity ids: a base, not a preset
 

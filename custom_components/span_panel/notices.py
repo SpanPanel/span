@@ -75,8 +75,8 @@ class StandingNotice(TypedDict):
     """A notice the user has been shown and has not dismissed.
 
     The rendered text is stored, not the arguments that produced it. A notice can
-    outlive the state that raised it -- the schema upgrade that raised one is over
-    by the time it is re-raised -- so re-deriving the wording is not possible, and
+    outlive the state that raised it -- the event that raised one is over by the
+    time it is re-raised -- so re-deriving the wording is not possible, and
     a notice that changed its story between restarts would be worse than one that
     did not survive at all.
     """
@@ -139,11 +139,10 @@ async def async_restore(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     A reload keeps the live view it already had rather than re-reading the file,
     because memory is the fresher of the two and the gap between them is exactly
-    where the interesting case lives: a schema upgrade raises a notice and
-    schedules a reload in the same breath, so the setup that follows can easily
-    arrive before the delayed write has landed. Re-reading there would drop the
-    notice from the standing set while it sat on the user's screen, and it would
-    not come back after the next restart.
+    where it matters: a notice raised just before a reload can still be waiting
+    on its delayed write when the setup that follows arrives. Re-reading there
+    would drop the notice from the standing set while it sat on the user's
+    screen, and it would not come back after the next restart.
     """
     known = hass.data.setdefault(_DATA, {})
     notices = known.get(entry.entry_id)
@@ -262,9 +261,9 @@ def async_raise(
 ) -> None:
     """Show a notice, and keep showing it until the user dismisses it.
 
-    A callback rather than a coroutine because the callers are: a schema-change
-    notice is raised from the MQTT client's own callback fan-out, which is not a
-    place that can await.
+    A callback rather than a coroutine because raising does no I/O of its own:
+    the notification is created in place and the write is queued, so a caller in
+    synchronous code can raise one without scheduling a task.
 
     Re-raising the same notice id replaces the text in place, which is what makes
     the restore above a no-op when it lands on a notice already on screen.

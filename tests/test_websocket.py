@@ -582,7 +582,7 @@ class TestHandlePanelTopology:
         )
         snapshot = SpanPanelSnapshotFactory.create(
             serial_number="sp3-test-001",
-            firmware_version="spanos2/r202603/05",
+            firmware_version="spanos3/r202639/03",
             circuits={"uuid_kitchen": kitchen, "uuid_bedroom": bedroom},
             panel_size=32,
         )
@@ -627,7 +627,7 @@ class TestHandlePanelTopology:
         result = connection.send_result.call_args[0][1]
 
         assert result["serial"] == "sp3-test-001"
-        assert result["firmware"] == "spanos2/r202603/05"
+        assert result["firmware"] == "spanos3/r202639/03"
         assert result["panel_size"] == 32
         assert result["device_name"] == "SPAN Panel"
         # The panel's current device and its entry, which a consumer reads from

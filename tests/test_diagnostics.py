@@ -5,21 +5,30 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
 from homeassistant.components.sensor import SensorStateClass
-from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.components.diagnostics import (
+    get_diagnostics_for_config_entry,
+)
+from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 from span_panel_api import FieldMetadata, MaskedTree, SpanPanelSnapshot, SpanPVSnapshot, TreeExportingAdapter
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_HOST,
     CONF_EBUS_BROKER_PASSWORD,
+    CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
+    CONF_HTTP_PORT,
     DOMAIN,
 )
 from custom_components.span_panel.curation import (
@@ -33,12 +42,17 @@ from custom_components.span_panel.diagnostics import (
 )
 from custom_components.span_panel.extension import create_extension_sensors
 from custom_components.span_panel.helpers import identity_digest
+from custom_components.span_panel.migrations import (
+    CURRENT_CONFIG_MINOR_VERSION,
+    CURRENT_CONFIG_VERSION,
+)
 from custom_components.span_panel.notices import async_restore
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.pv_binding import PvBinding, StoredPvBinding, resolve
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .captures_replay import replay
+from .conftest import FLAT_PANEL_SCHEMA
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanCircuitSnapshotFactory,
@@ -54,7 +68,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     """Return redacted diagnostics with optional runtime sections populated."""
     snapshot = SpanPanelSnapshotFactory.create(
         serial_number="sp3-diag-001",
-        firmware_version="spanos2/r202603/05",
+        firmware_version="spanos3/r202639/03",
         panel_size=32,
         wifi_ssid="Span WiFi",
         eth0_link=True,
@@ -88,7 +102,6 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     # this unset would let the discovery block render as an empty report rather
     # than as the "no metadata yet" state it actually is.
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
 
     # Version 6 deliberately: an entry that has not yet been through the v7
@@ -122,7 +135,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
 
     assert result["panel"] == {
         "serial_number": "sp3-diag-001",
-        "firmware_version": "spanos2/r202603/05",
+        "firmware_version": "spanos3/r202639/03",
         "panel_size": 32,
         "lugs_at_service_entrance": True,
         "instant_grid_power_w": 2500.75,
@@ -168,7 +181,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     """Return empty optional sections when the snapshot lacks them."""
     snapshot = SimpleNamespace(
         serial_number="sp3-diag-002",
-        firmware_version="spanos2/r202603/06",
+        firmware_version="spanos3/r202633/02",
         panel_size=None,
         wifi_ssid=None,
         eth0_link=None,
@@ -205,7 +218,6 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.panel_offline = True
     coordinator.last_update_success = False
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
@@ -221,7 +233,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
 
     assert result["panel"] == {
         "serial_number": "sp3-diag-002",
-        "firmware_version": "spanos2/r202603/06",
+        "firmware_version": "spanos3/r202633/02",
         "panel_size": None,
         "lugs_at_service_entrance": True,
         "instant_grid_power_w": 0.0,
@@ -279,7 +291,6 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     # The real runtime data, not a namespace, for the reason the circuit double
     # above is the real model: a hand-rolled stand-in carrying only the fields
@@ -330,7 +341,6 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -367,7 +377,6 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     identity = pv_binding_for(snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
@@ -417,7 +426,6 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -446,7 +454,6 @@ async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnaps
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
@@ -538,7 +545,6 @@ def _reference_entry(
     snapshot: SpanPanelSnapshot,
     tree: dict[str, dict[str, str]] | None = None,
     *,
-    schema_major: str = "schema_1",
     panel_offline: bool = False,
 ) -> MockConfigEntry:
     """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it.
@@ -552,7 +558,6 @@ def _reference_entry(
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = schema_major
     coordinator.client.masked_tree.return_value = None if tree is None else _export(tree)
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
     entry.runtime_data = SpanPanelRuntimeData(
@@ -641,18 +646,8 @@ async def test_diagnostics_carry_the_masked_device_tree(hass: HomeAssistant) -> 
     assert "device_tree_unavailable" not in result
 
 
-async def test_diagnostics_say_a_flat_panel_has_no_tree(hass: HomeAssistant) -> None:
-    """A flat data model has no device tree to export, and the report says that is why."""
-    entry = _reference_entry(schema_one_snapshot(), schema_major="schema_0")
-
-    result = await async_get_config_entry_diagnostics(hass, entry)
-
-    assert result["device_tree"] is None
-    assert result["device_tree_unavailable"] == "flat_data_model"
-
-
 async def test_diagnostics_say_an_undescribed_panel_has_no_tree(hass: HomeAssistant) -> None:
-    """A parent/child panel that has not described its root yet has nothing to export."""
+    """A panel that has not described its root yet has nothing to export, and the report says why."""
     result = await async_get_config_entry_diagnostics(hass, _reference_entry(schema_one_snapshot()))
 
     assert result["device_tree"] is None
@@ -718,7 +713,6 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     coordinator.panel_offline = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    coordinator.client.schema_major = "schema_1"
     coordinator.client.masked_tree.return_value = None
     coordinator.package_rating_manager = manager
     entry.runtime_data = SpanPanelRuntimeData(
@@ -757,3 +751,66 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     }
     assert set(result["package_ratings"]["packages"]) <= set(result["circuits"])
     assert json.dumps(result["package_ratings"])
+
+
+# -- an entry that never loaded ----------------------------------------------
+
+
+def _installed_flat_entry() -> MockConfigEntry:
+    """Return an entry an earlier setup left, for a panel now on spanos2 firmware.
+
+    At the current version, so Home Assistant sets it up as it does at boot,
+    with no migration first.
+    """
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_API_VERSION: "v2",
+            CONF_HOST: "192.0.2.50",
+            CONF_ACCESS_TOKEN: "access-secret",
+            CONF_EBUS_BROKER_HOST: "192.0.2.50",
+            CONF_EBUS_BROKER_USERNAME: "mqtt-user",
+            CONF_EBUS_BROKER_PASSWORD: "mqtt-password",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_HTTP_PORT: 80,
+        },
+        entry_id="diag-flat-entry",
+        title="SPAN Panel",
+        unique_id="sp3-diag-flat",
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+    )
+
+
+async def test_a_refused_entry_downloads_why_it_is_not_loaded(
+    hass: HomeAssistant, hass_client: ClientSessionGenerator, panel_schema: AsyncMock
+) -> None:
+    """A flat panel's entry never loads, and its owner is the one most likely to ask for diagnostics.
+
+    Home Assistant offers the download for every entry, loaded or not. One with
+    no runtime data answers with its state and the reason setup gave, beside
+    the config entry redacted as a loaded entry's is, rather than failing the
+    download.
+    """
+    entry = _installed_flat_entry()
+    entry.add_to_hass(hass)
+    panel_schema.return_value = FLAT_PANEL_SCHEMA
+    assert await hass.config_entries.async_setup(entry.entry_id) is False
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "panel_firmware_flat"
+    assert entry.reason
+
+    result = await get_diagnostics_for_config_entry(hass, hass_client, entry)
+
+    assert result["state"] == ConfigEntryState.SETUP_RETRY.value
+    assert result["reason"] == entry.reason
+    config_entry = result["config_entry"]
+    assert isinstance(config_entry, dict)
+    assert config_entry["entry_id"] == entry.entry_id
+    data = config_entry["data"]
+    assert isinstance(data, dict)
+    for key in (CONF_ACCESS_TOKEN, CONF_EBUS_BROKER_USERNAME, CONF_EBUS_BROKER_PASSWORD):
+        assert data[key] == REDACTED
+    dumped = json.dumps(result)
+    for secret in ("access-secret", "mqtt-user", "mqtt-password"):
+        assert secret not in dumped

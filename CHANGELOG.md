@@ -11,6 +11,11 @@ All notable changes to this project will be documented in this file.
 - **On MAIN 32, a package across two spaces can be recorded the same way**, and since the panel reports only the average of its two legs, the dashboard
   recommends turning monitoring off for that circuit instead of applying it.
 
+### Changed
+
+- **Panels on spanos2 firmware, which publishes the older flat eBus schema, are no longer supported**; such a panel is refused with a Repair asking for a
+  firmware update, and reconnects on its own once updated.
+
 ### Fixed
 
 - **On panels other than MAIN 32, the Solar device and PV Power are created again wherever the panel publishes a PV power figure, 0 W included**, so solar the

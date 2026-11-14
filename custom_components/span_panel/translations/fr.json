@@ -7,6 +7,7 @@
       "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "no_host": "Aucune adresse d'hôte n'a été fournie par le module complémentaire.",
       "no_serial": "Impossible de déterminer le numéro de série du panneau.",
+      "panel_firmware_flat": "Ce panneau utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat. Mettez à jour le micrologiciel du panneau, puis réessayez.",
       "reauth_successful": "Authentification réussie.",
       "reconfigure_successful": "Adresse de l'hôte mise à jour avec succès.",
       "unique_id_mismatch": "Le panneau à cette adresse a un numéro de série différent. Vous ne pouvez pas passer à un panneau différent lors de la reconfiguration.",
@@ -23,6 +24,7 @@
       "https_port_is_plaintext": "Le port 80 est le port HTTP en clair. Saisissez le port sur lequel le panneau sert TLS — 443 sauf si quelque chose l'a déplacé.",
       "https_port_unreachable": "Aucune connexion TLS n'a pu être établie sur le port HTTPS {https_port} ; il n'y avait donc aucun certificat à vérifier auprès de l'autorité publiée par le panneau. Vérifiez que le panneau sert TLS sur ce port — 443 sauf si quelque chose l'a déplacé —, puis réessayez.",
       "invalid_auth": "Authentification invalide",
+      "panel_firmware_flat": "Ce panneau utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat. Mettez à jour le micrologiciel du panneau, puis réessayez.",
       "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
       "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
       "rate_limited": "Le panneau limite les tentatives d'enregistrement. Réessayez dans {retry_after} secondes.",
@@ -565,6 +567,9 @@
     "panel_connection_failed": {
       "message": "Échec de la connexion au SPAN Panel à {host}."
     },
+    "panel_firmware_flat": {
+      "message": "Le SPAN Panel {panel} utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat ; mettez à jour son micrologiciel et le panneau se reconnectera de lui-même"
+    },
     "panel_not_ready": {
       "message": "Le SPAN Panel n'est pas prêt. Veuillez vérifier que le panneau est en ligne."
     },
@@ -1044,6 +1049,10 @@
     "unvalidated_hardware_no_model": {
       "title": "Matériel du SPAN Panel non validé avec cette version",
       "description": "La version matérielle {version} avec un modèle inconnu n'a pas été validée avec cette version de l'intégration. La configuration est arrêtée et aucune entité n'est créée pour ce panneau."
+    },
+    "panel_firmware_flat": {
+      "title": "Le micrologiciel du SPAN Panel doit être mis à jour",
+      "description": "{panel} utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat que cette intégration ne prend plus en charge. Mettez à jour le micrologiciel du panneau ; une fois à jour, le panneau se reconnectera de lui-même."
     }
   }
 }
