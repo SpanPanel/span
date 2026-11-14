@@ -568,7 +568,7 @@
       "message": "Error al conectar con el SPAN Panel en {host}."
     },
     "panel_firmware_flat": {
-      "message": "El SPAN Panel {panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano; actualice el firmware del panel y se reconectará por sí solo"
+      "message": "El SPAN Panel {panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano; actualice el firmware del panel y este se reconectará por sí solo"
     },
     "panel_not_ready": {
       "message": "El SPAN Panel no está listo. Por favor verifique que el panel esté en línea."

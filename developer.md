@@ -384,11 +384,11 @@ panel can lack each of those too. They also let a panel that changes schema whil
 which adapter was running, the service-entrance attribute's check for `schema_1`, had to be rewritten as a presence check: it would have shut out a later schema
 generation that publishes the same field.
 
-**When the old schema retires, delete what the token marks, after checking each mark against the code.** A mark records what was true when it was written.
-`_grid_islandable`'s said its first branch would go with flat, but by then the parent/child adapter also filled the field that branch reads, from a BESS
-inverter's `grid-forming/capable`, so the branch stayed and only the mark went. Dropping the adapter from the manifest does not finish the job either: Home
-Assistant does not uninstall a requirement that leaves the manifest, so an upgraded install can still load the old adapter. Setup and the config flow refuse the
-retired schema on what the panel publishes (`firmware_schema.py`), whether or not its adapter is installed.
+**When the old schema retires, delete what the token marks, after checking each mark against the code.** A mark records what its author believed.
+`_grid_islandable`'s said its first branch would go with flat, but the parent/child adapter already filled the field that branch reads, from a BESS inverter's
+`grid-forming/capable`, so the branch stayed and only the mark went. Dropping the adapter from the manifest does not finish the job either: Home Assistant does
+not uninstall a requirement that leaves the manifest, so an upgraded install can still load the old adapter. Setup and the config flow refuse the retired schema
+on what the panel publishes (`firmware_schema.py`), whether or not its adapter is installed.
 
 ## Circuit entity ids: a base, not a preset
 
