@@ -204,11 +204,10 @@ On the inverter's own sub-device, beside `pv_vendor` and `pv_product`, which is
 where it moved when the PV got a device of its own -- the same place
 `bess_connected` sits relative to the battery.
 
-A plain `field_path` declaration of a field the adapter maps, which validation
-does not ask about: this description and its two siblings sit outside
-`platform_descriptions()`, so `pv.connected` is enumerated in
-`RESIDUAL_EXEMPT_PATHS` as `MAPPED_UNVALIDATED`, where the reason is written
-down.
+A plain `field_path` declaration: the adapter maps `pv.connected` from the
+feeding circuit's `connection/feeds-device-status`, so the producible gate
+covers it, and the entity gets its Repair mention and its unavailability when
+the panel stops resolving the property.
 """
 
 
@@ -527,6 +526,11 @@ session state the panel heard.
 Deliberately outside `EVSE_BINARY_SENSORS`, which is the unconditional pair.
 This one is created per charger and only where the record exists, following
 `bess_connected` and `pcs_active` rather than its two neighbours.
+
+A plain `field_path` declaration, as `pv_panel_link` is: the adapter maps
+`evse.connected` from the same circuit property, so the producible gate covers
+it, and the entity gets its Repair mention and its unavailability when the
+panel stops resolving the property.
 """
 
 
@@ -620,6 +624,11 @@ The same key, translation and source field, read from that inverter's own
 snapshot rather than from `snapshot.pv`. Created per inverter and only where
 its feeding circuit publishes the record, as `EVSE_PANEL_LINK_SENSOR` is per
 charger.
+
+Validated on that path, as the Solar card's link is. The adapter's row for
+`pv.connected` describes the property on the circuits that feed the inverters
+rather than on any one of them, so an unresolved row takes this sensor down on
+every inverter's card along with the Solar card's, and the Repair names each.
 """
 
 

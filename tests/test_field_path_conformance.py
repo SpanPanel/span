@@ -81,11 +81,10 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     declared = declared_field_paths()
     # A `NO_SOURCE_FIELD` description may name its source field too, and the
     # adapter maps no row for that path, so it is outside this gate by
-    # definition; the DER-link descriptions name theirs from outside the
-    # collections the gate walks. Each such path is covered instead by
-    # `RESIDUAL_EXEMPT_PATHS`, whose annotation is checked against the adapter
-    # below — so being enumerated there is the alternative to being in
-    # `declared`, not an escape from being checked.
+    # definition. Each such path is covered instead by `RESIDUAL_EXEMPT_PATHS`,
+    # whose annotation is checked against the adapter below — so being
+    # enumerated there is the alternative to being in `declared`, not an escape
+    # from being checked.
     uncovered = sorted(
         (path, module)
         for path, module in _source_declared_paths().items()
@@ -312,11 +311,10 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     #   5  the charger's device card and the circuit that feeds it
     #   1  `battery.connected`, the panel-side link record
     Producibility.UNMAPPED: 62,
-    # The four reads the adapter maps and validation is kept from, each with its
-    # reason beside it in `RESIDUAL_EXEMPT_PATHS`: the controllability gate, the
-    # charge-limit ceiling, and the two DER-link fields whose descriptions sit
-    # outside `platform_descriptions()`.
-    Producibility.MAPPED_UNVALIDATED: 4,
+    # The two reads the adapter maps and validation is kept from, each with its
+    # reason beside it in `RESIDUAL_EXEMPT_PATHS`: the controllability gate and
+    # the charge-limit ceiling.
+    Producibility.MAPPED_UNVALIDATED: 2,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

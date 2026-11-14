@@ -69,8 +69,6 @@ _RECORDED: Final[Mapping[str, _Recorded]] = {
 KEPT_OUT_OF_VALIDATION: Final = (
     "circuit.is_user_controllable",
     "evse.charge_current_ceiling_a",
-    "pv.connected",
-    "evse.connected",
 )
 """Fields the adapter carries a row for, which validation deliberately never asks about.
 
@@ -78,13 +76,10 @@ Written out rather than read from `RESIDUAL_EXEMPT_PATHS`, because a path
 promoted out of that map would leave the list along with it, and the check
 below would pass for the very change it exists to catch.
 
-- `circuit.is_user_controllable` gates a circuit's controls, and
-  `evse.charge_current_ceiling_a` bounds the charge-limit number. Neither is an
-  entity's reading. Validating either would turn a dropped property into a
-  Repair on a panel that is otherwise healthy.
-- `pv.connected` and `evse.connected` are named by link sensors that
-  `platform_descriptions()` does not collect, so validation has never covered
-  them. Starting to is a runtime change, and needs a decision of its own.
+`circuit.is_user_controllable` gates a circuit's controls, and
+`evse.charge_current_ceiling_a` bounds the charge-limit number. Neither is an
+entity's reading. Validating either would turn a dropped property into a Repair
+on a panel that is otherwise healthy.
 """
 
 

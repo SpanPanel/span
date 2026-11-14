@@ -177,11 +177,17 @@ def _curated(metadata: dict[str, FieldMetadata]) -> dict[str, FieldMetadata]:
     return partition(metadata)[0]
 
 
-def schema_one_metadata() -> dict[str, FieldMetadata]:
-    """Curated field metadata as schema_1 builds it from a full parent/child tree."""
+def schema_one_metadata(tree: dict[str, dict[str, str]] | None = None) -> dict[str, FieldMetadata]:
+    """Curated field metadata as schema_1 builds it from a full parent/child tree.
+
+    The capture's own by default; `tree` is a rewritten one, so a test can
+    validate the metadata of the same tree it builds `schema_one_snapshot` from.
+    """
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return _curated(build_field_metadata(_devices_from(schema_one_tree())))
+    return _curated(
+        build_field_metadata(_devices_from(schema_one_tree() if tree is None else tree))
+    )
 
 
 def schema_one_metadata_raw() -> dict[str, FieldMetadata]:
