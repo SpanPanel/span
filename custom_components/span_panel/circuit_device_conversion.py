@@ -58,7 +58,9 @@ Left where they are:
   integration builds for it, because nothing says what its label would be.
 
 `conversion_repairs` turns the report into the notice that tells the user what
-changed, after the platforms are set up.
+changed, after the platforms are set up, and into a notice of its own for each
+breaker switch the move put in an area: one with no area, moved at a later
+setup onto a device its user had given one by then.
 """
 
 from __future__ import annotations
@@ -129,6 +131,14 @@ class ConversionReport:
 
     Those whose breaker switch has no area: an area moved to the device would
     reach the switch.
+    """
+
+    breaker_switches_joining_areas: tuple[str, ...]
+    """The entity ids of the breaker switches the move put in an area they were not in.
+
+    Those with no area of their own, moved onto a device that already had one:
+    a switch whose platform builds it again only at a later setup, after the
+    user gave its circuit's device an area.
     """
 
     @property
@@ -302,6 +312,10 @@ def _own_area_on_the_device(
     differ from the device's only where the device's was settled before the
     switch was converted and one of the two has been moved since, and there the
     switch keeps its own.
+
+    A switch with no area of its own has none to keep. On a device that has
+    one it is in the device's from then on, which the report records
+    (`ConversionReport.breaker_switches_joining_areas`).
     """
     if device_area is None:
         return row.area_id
@@ -332,6 +346,7 @@ def async_convert_circuit_entities(
     converted: list[ConvertedEntity] = []
     area_changes: list[AreaChange] = []
     circuits_left_in_areas: list[str] = []
+    breaker_switches_joining_areas: list[str] = []
 
     selected = _rows_to_convert(entity_registry, entry, snapshot, panel_device_id)
     for circuit_id, entities in selected.items():
@@ -381,6 +396,15 @@ def async_convert_circuit_entities(
             area_id = _own_area_on_the_device(row, switch, device_area)
             if own_area is not None and area_id is None and own_area != device_area:
                 area_changes.append(AreaChange(row.entity_id, own_area, device_area))
+            # The one way the move puts a breaker in a room: the switch had no
+            # area, and its circuit's device was given one before it got here.
+            if (
+                switch is not None
+                and row.entity_id == switch.entity_id
+                and own_area is None
+                and device_area is not None
+            ):
+                breaker_switches_joining_areas.append(row.entity_id)
 
             # An entity that keeps an area of its own displays without its
             # device, so its name is whole as it stands. Home Assistant's own
@@ -408,4 +432,9 @@ def async_convert_circuit_entities(
             entry.title,
             len(selected),
         )
-    return ConversionReport(tuple(converted), tuple(area_changes), tuple(circuits_left_in_areas))
+    return ConversionReport(
+        tuple(converted),
+        tuple(area_changes),
+        tuple(circuits_left_in_areas),
+        tuple(breaker_switches_joining_areas),
+    )

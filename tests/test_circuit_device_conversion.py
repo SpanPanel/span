@@ -1190,6 +1190,45 @@ async def test_a_late_breaker_switch_stays_in_the_area_it_is_in(
         assert install.notice_lists()["area_changes"] == NONE_LISTED
 
 
+async def test_the_report_lists_a_late_breaker_switch_that_joins_its_device_s_area(
+    hass: HomeAssistant,
+) -> None:
+    """A switch with no area, moved onto a device given one since, is in a room it was not in.
+
+    The one move that puts a breaker in an area, so the report names the
+    switch for a notice of its own. The circuit's other controls, moved with
+    it, are not breakers.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **CONTROLS_OFF})
+    kitchen = _area(hass, "Kitchen")
+    assert install.convert().breaker_switches_joining_areas == ()
+    dr.async_get(hass).async_update_child_device(
+        install.circuit_device(KITCHEN).id, area_id=kitchen
+    )
+    hass.config_entries.async_update_entry(install.entry, options=dict(NAMES_MODE))
+
+    report = install.convert()
+
+    switch = install.row(KITCHEN, BREAKER)
+    assert (switch.device_id, switch.area_id) == (install.circuit_device(KITCHEN).id, None)
+    assert report.breaker_switches_joining_areas == (switch.entity_id,)
+
+
+async def test_the_report_lists_no_breaker_switch_converted_with_its_circuit(
+    hass: HomeAssistant,
+) -> None:
+    """At the upgrade a switch with no area leaves its circuit's device without one."""
+    install = _install(hass, _tree())
+    install.update(KITCHEN, POWER, area_id=_area(hass, "Garage"))
+    install.update(LIGHTS, BREAKER, area_id=_area(hass, "Hallway"))
+
+    report = install.convert()
+
+    assert install.circuit_device(KITCHEN).area_id is None
+    assert install.circuit_device(LIGHTS).area_id is not None
+    assert report.breaker_switches_joining_areas == ()
+
+
 # ---------------------------------------------------------------------------
 # Run again
 # ---------------------------------------------------------------------------
@@ -1382,7 +1421,7 @@ async def test_the_notice_lists_fifty_names_then_counts_the_rest(hass: HomeAssis
         for index in range(53)
     )
 
-    async_raise_conversion_notice(hass, entry, ConversionReport(converted, (), ()))
+    async_raise_conversion_notice(hass, entry, ConversionReport(converted, (), (), ()))
 
     issue = ir.async_get(hass).async_get_issue(DOMAIN, "circuit_devices_converted_entry-many")
     assert issue is not None
@@ -1405,6 +1444,7 @@ async def test_the_notice_shows_an_area_it_cannot_name(hass: HomeAssistant) -> N
         (ConvertedEntity(row.entity_id, "Power"),),
         (AreaChange(row.entity_id, "area_since_deleted", None),),
         (),
+        (),
     )
 
     async_raise_conversion_notice(hass, entry, report)
@@ -1420,7 +1460,7 @@ async def test_a_conversion_that_changed_nothing_raises_no_notice(hass: HomeAssi
     entry = add_panel_entry(hass, "entry-quiet", "sp3-242424-001")
     register_panel_device(hass, entry, "sp3-242424-001")
 
-    report = ConversionReport((), (), ())
+    report = ConversionReport((), (), (), ())
     async_raise_conversion_notice(hass, entry, report)
 
     assert report.empty
@@ -1430,7 +1470,7 @@ async def test_a_conversion_that_changed_nothing_raises_no_notice(hass: HomeAssi
 
 
 def test_a_report_with_an_entity_in_it_is_not_empty() -> None:
-    assert not ConversionReport((ConvertedEntity("sensor.a", "A"),), (), ()).empty
+    assert not ConversionReport((ConvertedEntity("sensor.a", "A"),), (), (), ()).empty
 
 
 async def test_the_notice_is_cleared_on_removal(hass: HomeAssistant) -> None:
@@ -1457,7 +1497,7 @@ async def test_clearing_one_panel_s_notice_leaves_another_s(hass: HomeAssistant)
             "sensor", DOMAIN, f"uid-{entry.entry_id}", config_entry=entry, original_name="New"
         )
         async_raise_conversion_notice(
-            hass, entry, ConversionReport((ConvertedEntity(row.entity_id, "Old"),), (), ())
+            hass, entry, ConversionReport((ConvertedEntity(row.entity_id, "Old"),), (), (), ())
         )
 
     async_clear_conversion_notice(hass, first.entry_id)

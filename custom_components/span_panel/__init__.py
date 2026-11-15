@@ -86,7 +86,12 @@ from .const import (
     PANEL_CA_PENDING,
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
-from .conversion_repairs import async_clear_conversion_notice, async_raise_conversion_notice
+from .conversion_repairs import (
+    async_clear_conversion_notice,
+    async_raise_breaker_switch_area_notices,
+    async_raise_conversion_notice,
+    async_registered_breaker_switches,
+)
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
@@ -904,11 +909,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             hass, entry, snapshot, entry.runtime_data.panel_device_id
         )
 
+        # Read before the forward, so a breaker switch the platforms add can be
+        # told from one that was already registered.
+        breaker_switches_before = async_registered_breaker_switches(hass, entry, snapshot)
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # After the forward, so the names it lists as changed are the ones Home
         # Assistant composes for the entities as the platforms left them.
         async_raise_conversion_notice(hass, entry, conversion)
+
+        # After the forward too: only then is a new breaker switch in the
+        # registry, on its circuit's device, where it may have joined an area.
+        async_raise_breaker_switch_area_notices(
+            hass,
+            entry,
+            snapshot,
+            registered_before=breaker_switches_before,
+            converted=conversion.breaker_switches_joining_areas,
+        )
 
         # After the forward, because it reports on what the platforms just built
         # -- and once, rather than from each platform's own call to `adoptable`.
