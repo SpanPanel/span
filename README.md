@@ -606,9 +606,10 @@ Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `
 ### Entity Naming Pattern
 
 Each circuit is a device of its own in Home Assistant, under the panel's device and named by the circuit's name in the SPAN app. A circuit with no name there is
-named by its breaker position, such as "Circuit 15". A circuit's entities are named by what they measure or control, such as Power or Breaker, and Home
-Assistant puts the panel's name and the circuit's in front when it displays them, as in "Span Panel Kitchen Outlets Power". This requires Home Assistant 2026.11
-or later.
+named by its breaker position, such as "Circuit 15", or "Solar" where it is a solar circuit. A meter outside the panel is named by its number, such as "Remote
+CT 1". A circuit's entities are named by what they measure or control, such as Power or Breaker, and Home Assistant puts the panel's name and the circuit's in
+front when it displays them, as in "Span Panel Kitchen Outlets Power", except where an area of its own changes that, as described below. This requires Home
+Assistant 2026.11 or later.
 
 - Renaming a circuit in the SPAN app renames its device, and with it the displayed name of every entity of the circuit. The integration reloads itself to pick
   the new name up.
@@ -617,6 +618,9 @@ or later.
 - An area you set on a circuit's device applies to every entity of the circuit that has no area of its own, the Breaker switch included, so an action aimed at
   that area, such as turning off everything in a room, turns that breaker off. When the panel adds a Breaker switch to a circuit whose device already has an
   area, a repair names the switch and the area.
+- An area also changes the names Home Assistant displays. A circuit's device with an area of its own is shown without the panel's name, as in "Kitchen Outlets
+  Power". An entity with an area of its own is shown without its device, as just "Power", and **Recreate entity IDs** offers it an ID to match, such as
+  `sensor.kitchen_power`. To show the circuit's name again, set the area on the circuit's device and clear the entity's own.
 
 The naming pattern, chosen during initial setup, decides the entity ID a new circuit entity is created with. It also decides the suffix in the name of a
 charger's device and of an additional solar inverter's: the feeding circuit's name under circuit names, and the charger's serial number or the inverter
@@ -655,7 +659,8 @@ circuits were named before those settings existed — a SPAN Drive feed circuit,
 an ID with a different device half. Entities you already have keep the IDs they have until you press **Recreate entity IDs** and accept the offer.
 
 Upgrading from a release before 2.3.0 moves each circuit's entities from the panel's device to the circuit's own. No entity ID changes, and names you never
-changed display as before. A repair lists every displayed name and area the move changed. Templates that read an entity's device, such as `device_name` or
+changed display as before, except where the move gave a circuit's device an area or left an entity with an area of its own, which changes the displayed name as
+described above. A repair lists every displayed name and area the move changed. Templates that read an entity's device, such as `device_name` or
 `device_entities`, see the circuit's device from then on.
 
 ### Energy Dip Compensation

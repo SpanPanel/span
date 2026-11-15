@@ -284,9 +284,12 @@ def circuit_device_name(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
        been named since v1;
     4. otherwise its breaker positions, such as "Circuit 30 32".
 
-    An unnamed charger circuit takes its positions, not "EV Charger": its
-    sensors live on the charger's device, so its circuit device holds only the
-    breaker switch and priority select, whose names already use the positions.
+    An unnamed charger circuit takes its positions, not "EV Charger". The
+    sensors of the circuit a charger's device is fed by live on that device, so
+    the circuit's own device holds only the breaker switch and priority select,
+    whose names already use the positions. A second circuit feeding the same
+    charger keeps its sensors on its own device, where an unnamed one's change
+    from "EV Charger" to its positions.
     """
     if circuit.measures_outside_panel:
         return outside_meter_label(circuit_id)
