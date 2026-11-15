@@ -8,7 +8,8 @@ least once, so they are held here:
   by name, and name the places that may preset an `entity_id` and the functions
   whose answer the naming flag changes;
 - the README quotes the naming option's labels and the config entry version a
-  downgrade is refused across;
+  downgrade is refused across, and states the oldest Home Assistant the release
+  installs on, which `hacs.json` enforces;
 - `AGENTS.md` names the schema library a service is validated with.
 """
 
@@ -32,6 +33,7 @@ PACKAGE = Path(span_panel.__file__).resolve().parent
 RULES_DOC = REPO / "developer_entity_id_and_name_handling.md"
 README = REPO / "README.md"
 AGENTS = REPO / "AGENTS.md"
+HACS = REPO / "hacs.json"
 
 CITED_MODULES = (
     "circuit_device_conversion",
@@ -264,6 +266,33 @@ def test_the_readme_names_the_config_entry_version_a_downgrade_is_refused_across
     )
 
     assert f"version {CURRENT_CONFIG_VERSION}" in row
+
+
+def _enforced_minimum_home_assistant() -> str:
+    """Return the oldest Home Assistant HACS installs this release on, as `year.month`.
+
+    `hacs.json` holds a full version, and the README promises a release line
+    "or later", which is true only of that line's first version.
+    """
+    minimum = json.loads(_read(HACS))["homeassistant"]
+    assert isinstance(minimum, str), minimum
+    match = re.fullmatch(r"(?P<line>\d{4}\.\d{1,2})\.0", minimum)
+    assert match is not None, f"hacs.json must name a release line's first version: {minimum}"
+    return match["line"]
+
+
+def test_the_readme_requires_the_home_assistant_version_hacs_enforces() -> None:
+    """Each place the README states the minimum names the one HACS refuses to install below.
+
+    The README is what a user reads and `hacs.json` is what stops the install,
+    so one raised without the other either turns away a version the README
+    allows or installs on one the README rules out.
+    """
+    prose = " ".join(_read(README).split())
+    stated = re.findall(r"Home Assistant(?:\]\([^)]*\))? (\d{4}\.\d{1,2}) or later", prose)
+    assert stated, "the README states no minimum Home Assistant, so this test reads nothing"
+
+    assert set(stated) == {_enforced_minimum_home_assistant()}
 
 
 def test_agents_names_the_schema_library_services_import() -> None:
