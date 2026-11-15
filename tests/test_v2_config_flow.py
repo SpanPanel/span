@@ -64,6 +64,8 @@ from custom_components.span_panel.const import (
     DOMAIN,
     ENTITY_NAMING_PATTERN,
     PANEL_CA_PENDING,
+    USE_CIRCUIT_NUMBERS,
+    USE_DEVICE_PREFIX,
 )
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.id_builder import (
@@ -75,6 +77,8 @@ from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
 from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL, CONTROL_MODE
 
 from .conftest import FLAT_PANEL_SCHEMA, VALIDATED_PANEL_STATUS
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .test_circuit_number_ids import _set_up as _set_up_circuit_platforms
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -5233,3 +5237,73 @@ def test_first_setup_explains_the_naming_choice_without_the_retired_term() -> No
         "the circuit's name in the SPAN app, circuit numbers from its breaker's position. "
         "Displayed names follow the SPAN app either way."
     )
+
+
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+@pytest.mark.parametrize(
+    ("choice", "use_circuit_numbers", "circuit_half"),
+    [
+        pytest.param("circuit_numbers", True, "circuit_15", id="circuit-numbers"),
+        pytest.param("friendly_names", False, "kitchen_outlets", id="circuit-names"),
+    ],
+)
+async def test_the_naming_choice_at_first_setup_builds_the_ids_of_new_circuit_entities(
+    hass: HomeAssistant,
+    choice: str,
+    use_circuit_numbers: bool,
+    circuit_half: str,
+    expected_lingering_timers: bool,
+) -> None:
+    """The choice the form takes is the one the platforms build each new entity's ID from.
+
+    The flow is driven to the entry it creates, and the three circuit
+    platforms then set up for that entry as it stands: "Circuit numbers" gives
+    every entity of the circuit its breaker position, "Circuit names" the
+    circuit's name. The displayed name is the same either way, since the
+    circuit's device is named by the circuit.
+    """
+    form = await _first_setup_naming_form(hass)
+    # The entry is created and its platforms are run below, without the
+    # panel connection a whole setup opens.
+    with patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)):
+        created = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {ENTITY_NAMING_PATTERN: choice}
+        )
+        await hass.async_block_till_done()
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY, created
+    entry = created["result"]
+    assert entry.options[USE_CIRCUIT_NUMBERS] is use_circuit_numbers
+    assert entry.options[USE_DEVICE_PREFIX] is True
+
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="kitchen",
+        name="Kitchen Outlets",
+        tabs=[15],
+        current_a=1.5,
+        breaker_rating_a=20.0,
+    )
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number=entry.unique_id, circuits={circuit.circuit_id: circuit}
+    )
+    loaded = await _set_up_circuit_platforms(hass, entry, snapshot)
+
+    registry = er.async_get(hass)
+    rows = er.async_entries_for_config_entry(registry, entry.entry_id)
+    assert {row.entity_id for row in rows} >= {
+        f"sensor.span_panel_{circuit_half}_power",
+        f"sensor.span_panel_{circuit_half}_current",
+        f"sensor.span_panel_{circuit_half}_breaker_rating",
+        f"sensor.span_panel_{circuit_half}_produced_energy",
+        f"sensor.span_panel_{circuit_half}_consumed_energy",
+        f"sensor.span_panel_{circuit_half}_net_energy",
+        f"switch.span_panel_{circuit_half}_breaker",
+        f"select.span_panel_{circuit_half}_circuit_priority",
+    }
+    other_half = "kitchen_outlets" if use_circuit_numbers else "circuit_15"
+    assert [row.entity_id for row in rows if other_half in row.entity_id] == []
+    power = registry.async_get(f"sensor.span_panel_{circuit_half}_power")
+    assert power is not None
+    panel_name = entry.data["device_name"]
+    assert er.async_get_full_entity_name(hass, power) == f"{panel_name} Kitchen Outlets Power"
+    await loaded.unload()

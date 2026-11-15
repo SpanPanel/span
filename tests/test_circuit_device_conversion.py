@@ -816,6 +816,133 @@ async def test_a_charger_feed_circuits_sensors_are_left_for_the_charger_device(
     assert install.find_circuit_device(FEED) is None
 
 
+def _feed_at_a_breaker(install: _Install, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Have the replay report the charger's feed circuit as wired at a breaker of its own.
+
+    That is the position under which the switch and select platforms give a
+    charger circuit a breaker switch and a priority select. No capture reports
+    it: the panel's current schema publishes no position for a circuit, and
+    the library leaves the field empty. The platforms and the conversion both
+    decide by the field, so it is set on the replay's snapshot, which they
+    read alike.
+    """
+    build_snapshot = install.adapter.build_snapshot
+
+    def at_a_breaker() -> SpanPanelSnapshot:
+        snapshot = build_snapshot()
+        feed = replace(snapshot.circuits[FEED], relative_position="DOWNSTREAM")
+        return replace(snapshot, circuits={**snapshot.circuits, FEED: feed})
+
+    monkeypatch.setattr(install.adapter, "build_snapshot", at_a_breaker)
+
+
+def _seed_feed_controls(install: _Install) -> dict[_Kind, er.RegistryEntry]:
+    """Register the feed circuit's breaker switch and priority select as 2.3.0b4 left them.
+
+    On the panel's device, named with the circuit's name in front, as every
+    other circuit's were. The feed circuit's sensors are not seeded: they were
+    on the charger's device already.
+    """
+    feed = install.snapshot.circuits[FEED]
+    registry = er.async_get(install.hass)
+    seeded: dict[_Kind, er.RegistryEntry] = {}
+    for kind in (BREAKER, PRIORITY):
+        assert kind.present(feed), kind.label
+        seeded[kind] = registry.async_get_or_create(
+            kind.domain,
+            DOMAIN,
+            kind.unique_id(install.serial, FEED),
+            config_entry=install.entry,
+            device_id=install.panel_device_id,
+            has_entity_name=True,
+            original_name=f"{feed.name} {kind.label}",
+            object_id_base=f"{feed.name} {kind.id_words}",
+        )
+    return seeded
+
+
+async def test_a_charger_feed_circuits_breaker_switch_and_priority_select_are_converted(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The feed circuit's controls move to its own device, and its sensors stay the charger's.
+
+    A charger's device holds its feed circuit's sensors and nothing else of
+    the circuit, so the breaker switch and the priority select are all the
+    circuit's own device has. They convert like any other circuit's: the
+    switch's area becomes the device's, a name that began with the circuit's
+    name is trimmed, no ID moves, and Recreate offers each the ID it has.
+    """
+    install = _install(hass, _tree())
+    _feed_at_a_breaker(install, monkeypatch)
+    feed_name = install.snapshot.circuits[FEED].name
+    seeded = _seed_feed_controls(install)
+    garage = _area(hass, "Garage")
+    registry = er.async_get(hass)
+    registry.async_update_entity(seeded[BREAKER].entity_id, area_id=garage)
+    registry.async_update_entity(seeded[PRIORITY].entity_id, name=f"{feed_name} Shed order")
+    ids = {kind: row.entity_id for kind, row in seeded.items()}
+
+    async with _set_up(install) as at_forward:
+        device = install.circuit_device(FEED)
+        assert device.parent_device_id == install.panel_device_id
+        assert (device.name, device.area_id) == (feed_name, garage)
+
+        switch, select = install.row(FEED, BREAKER), install.row(FEED, PRIORITY)
+        assert (switch.entity_id, select.entity_id) == (ids[BREAKER], ids[PRIORITY])
+        assert (switch.device_id, switch.original_name, switch.name, switch.area_id) == (
+            device.id,
+            "Breaker",
+            None,
+            None,
+        )
+        assert (select.device_id, select.original_name, select.name, select.area_id) == (
+            device.id,
+            "Circuit Priority",
+            "Shed order",
+            None,
+        )
+        # Already so when the platforms were forwarded: the conversion's work.
+        assert at_forward[switch.entity_id] == _stored(switch)
+        assert at_forward[select.entity_id] == _stored(select)
+        # The add that followed gave each row the base that goes with the
+        # circuit's device. Recreate's offer differs from the ID only by the
+        # area the device took from the switch, which is the user's.
+        assert (switch.object_id_base, select.object_id_base) == ("breaker", "circuit priority")
+        assert registry.async_regenerate_entity_id(switch) == "switch.garage_flex_breaker"
+
+        # The circuit's sensors are the charger's, so its own device holds the two controls alone.
+        on_the_device = er.async_entries_for_device(
+            registry, device.id, include_disabled_entities=True
+        )
+        assert {row.entity_id for row in on_the_device} == set(ids.values())
+        power = install.row(FEED, POWER)
+        assert power.device_id not in (device.id, install.panel_device_id)
+
+        # The switch is in the area it was in. The select, which had none, is
+        # listed by the name Home Assistant displays, which for a name its user
+        # set differs between releases, so the line is held to its areas.
+        (moved,) = install.notice_lists()["area_changes"].splitlines()
+        assert moved.endswith(f"Shed order: {NONE_LISTED} → Garage")
+
+
+async def test_a_charger_feed_circuits_controls_stay_put_where_controls_are_switched_off(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no platform to build them, the feed circuit's controls wait on the panel's device.
+
+    Nothing of the circuit is then converted, so it gets no device of its own:
+    its sensors are on the charger's.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **CONTROLS_OFF})
+    _feed_at_a_breaker(install, monkeypatch)
+    before = {kind: _stored(row) for kind, row in _seed_feed_controls(install).items()}
+
+    async with _set_up(install):
+        for kind, stored in before.items():
+            assert _stored(install.row(FEED, kind)) == stored, kind.label
+        assert install.find_circuit_device(FEED) is None
+
+
 # ---------------------------------------------------------------------------
 # What no platform builds this setup
 # ---------------------------------------------------------------------------

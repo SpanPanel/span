@@ -2338,3 +2338,93 @@ async def test_an_area_given_to_another_entry_s_entity_is_left_alone(
     row = registry.async_get(stranger.entity_id)
     assert row is not None
     assert row.object_id_base == ""
+
+
+# --- Issue #252 for an id in a spelling a new entity no longer gets -------------
+#
+# A circuit renamed in the SPAN app leaves its entities on ids that name
+# neither the device nor the identifier any more. No wording composes such an
+# id, so it is read by its tail, and the suffix has to come back in the
+# spelling the id carries: `energy_consumed` from the releases that preset
+# ids, `current_power` from the first ones. Offered the new wording instead,
+# the rename the user made would bring one they did not make along with it.
+
+NON_DEFAULT_SPELLINGS = [
+    pytest.param(
+        _LegacyInstall,
+        "consumedEnergyWh",
+        None,
+        "span_panel_refrigerator_energy_consumed",
+        "sensor.span_panel_beer_fridge_energy_consumed",
+        id="energy-consumed",
+    ),
+    pytest.param(
+        _SensorInstall,
+        "instantPowerW",
+        None,
+        "span_panel_refrigerator_current_power",
+        "sensor.span_panel_beer_fridge_current_power",
+        id="current-power",
+    ),
+    # The same under a format that puts the entity first: the id ends on the
+    # old name, and the spelling is found as whole words ahead of it.
+    pytest.param(
+        _LegacyInstall,
+        "consumedEnergyWh",
+        [EntityNamePart.ENTITY, EntityNamePart.DEVICE],
+        "energy_consumed_refrigerator",
+        "sensor.energy_consumed_beer_fridge",
+        id="energy-consumed-entity-first",
+    ),
+    pytest.param(
+        _SensorInstall,
+        "instantPowerW",
+        [EntityNamePart.ENTITY, EntityNamePart.DEVICE],
+        "current_power_refrigerator",
+        "sensor.current_power_beer_fridge",
+        id="current-power-entity-first",
+    ),
+]
+"""An install, its sensor's API key, a saved format or none, the object id it has, the offer."""
+
+
+@pytest.mark.parametrize(
+    ("make_install", "api_key", "parts", "object_id", "offered"), NON_DEFAULT_SPELLINGS
+)
+async def test_a_renamed_circuit_keeps_a_spelling_new_entities_no_longer_get(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    make_install: type[_LegacyInstall] | type[_SensorInstall],
+    api_key: str,
+    parts: list[EntityNamePart] | None,
+    object_id: str,
+    offered: str,
+) -> None:
+    """Only the half the user changed moves, and the id it is offered is then its own.
+
+    Nothing is offered until the rename. After it the offer carries the new
+    name and the spelling the id has, and once accepted it reads back to the
+    same base, so the next restart offers nothing more.
+    """
+    if parts is None:
+        parts = [EntityNamePart.PARENT_DEVICE, EntityNamePart.DEVICE, EntityNamePart.ENTITY]
+    er.async_get(hass).async_update_settings(entity_id_parts=parts)
+    registry = er.async_get(hass)
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, api_key),
+        suggested_object_id=object_id,
+        config_entry=entry,
+    ).entity_id
+    install = make_install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, seeded)
+    words = row.object_id_base
+
+    accepted = await _accept_what_recreate_offers(hass, install, RENAMED, seeded)
+
+    assert accepted == offered
+    row = await _assert_recreate_offers_nothing(hass, install, RENAMED, offered)
+    assert row.object_id_base == words
+    assert words in {"energy consumed", "current power"}
