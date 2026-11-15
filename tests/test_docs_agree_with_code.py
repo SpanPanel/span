@@ -5,7 +5,8 @@ are facts about the code that a reader acts on, and each has gone stale at
 least once, so they are held here:
 
 - the naming rules (`developer_entity_id_and_name_handling.md`) cite functions
-  by name, and name the places that may preset an `entity_id`;
+  by name, and name the places that may preset an `entity_id` and the functions
+  whose answer the naming flag changes;
 - the README quotes the naming option's labels and the config entry version a
   downgrade is refused across;
 - `AGENTS.md` names the schema library a service is validated with.
@@ -35,6 +36,7 @@ AGENTS = REPO / "AGENTS.md"
 CITED_MODULES = (
     "circuit_device_conversion",
     "circuit_number_ids",
+    "entity_resolver",
     "helpers",
     "id_builder",
     "naming",
@@ -147,6 +149,73 @@ def test_the_rules_name_every_place_that_presets_an_entity_id() -> None:
     named = sorted(set(re.findall(r"`([a-z_]+\.py)`", preset_items[0])))
 
     assert named == entity_id_presets(PACKAGE)
+
+
+NAMING_FLAG_PARAMETER = "use_circuit_numbers"
+"""The parameter a function takes the naming flag as."""
+
+
+def naming_flag_functions(root: Path) -> list[str]:
+    """Return each function under `root` that takes the naming flag, as `module.function`.
+
+    A function handed the flag answers differently in the two naming modes,
+    which is what the rules have to account for. Read from the syntax tree, so
+    a local variable or a keyword argument of that name is not a finding.
+    """
+    found: list[str] = []
+    for source in sorted(root.rglob("*.py")):
+        tree = ast.parse(_read(source), filename=str(source))
+        module = ".".join(source.relative_to(root).with_suffix("").parts)
+        found.extend(
+            f"{module}.{node.name}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and any(
+                parameter.arg == NAMING_FLAG_PARAMETER
+                for parameter in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            )
+        )
+    return sorted(found)
+
+
+def test_the_scan_finds_each_function_that_takes_the_naming_flag(tmp_path: Path) -> None:
+    """The scan reports a function the flag is a parameter of, and nothing else."""
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "names.py").write_text(
+        "def display_suffix(serial, use_circuit_numbers):\n"
+        "    return serial if use_circuit_numbers else None\n"
+        "\n"
+        "\n"
+        "async def later(*, use_circuit_numbers):\n"
+        "    return use_circuit_numbers\n",
+        encoding="utf-8",
+    )
+    (package / "callers.py").write_text(
+        "def build(options, resolve):\n"
+        '    use_circuit_numbers = options.get("use_circuit_numbers", False)\n'
+        "    return resolve(use_circuit_numbers=use_circuit_numbers)\n",
+        encoding="utf-8",
+    )
+
+    assert naming_flag_functions(package) == ["names.display_suffix", "names.later"]
+
+
+def test_the_rules_name_every_function_the_naming_flag_is_passed_to() -> None:
+    """The rules say what the naming flag decides, so each function it reaches is in them.
+
+    A circuit's own device and entities are named alike in both modes, and the
+    rules say so. What the flag still decides elsewhere, such as the suffix of
+    a charger's device name, is stated beside that claim, function by function,
+    so a new use of the flag fails here until the rules account for it.
+    """
+    functions = naming_flag_functions(PACKAGE)
+    assert functions, "nothing takes the naming flag, so this test reads nothing"
+
+    rules = _read(RULES_DOC)
+    unnamed = [function for function in functions if f"`{function}`" not in rules]
+
+    assert unnamed == []
 
 
 def test_the_rules_cite_only_names_their_modules_have() -> None:

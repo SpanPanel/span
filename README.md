@@ -618,8 +618,10 @@ or later.
   that area, such as turning off everything in a room, turns that breaker off. When the panel adds a Breaker switch to a circuit whose device already has an
   area, a repair names the switch and the area.
 
-The naming pattern, chosen during initial setup, decides only the entity ID a new circuit entity is created with. Displayed names follow the SPAN app either
-way.
+The naming pattern, chosen during initial setup, decides the entity ID a new circuit entity is created with. It also decides the suffix in the name of a
+charger's device and of an additional solar inverter's: the feeding circuit's name under circuit names, and the charger's serial number or the inverter
+circuit's breaker position under circuit numbers (see [EVSE Device Naming](#evse-device-naming)). The names of a circuit's own device and its entities follow
+the SPAN app either way.
 
 1. **Circuit names** (Recommended for new installations)
 

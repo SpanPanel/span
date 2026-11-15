@@ -119,6 +119,32 @@ def test_a_renamed_circuit_reads_the_suffix_from_the_end_of_its_id() -> None:
     )
 
 
+def test_an_unnamed_charger_circuit_keeps_its_suffix_under_a_device_named_by_its_tabs() -> None:
+    """The rules' row for an unnamed charger circuit that feeds no charger device.
+
+    Its sensors' ids say "EV Charger", the name those sensors had, and its
+    device is named by its tabs, as its switch and select always were. The id
+    names the identifier, so what follows it settles the form, and in
+    circuit-names mode Recreate offers the tabs' id with the suffix the id
+    already carries: `sensor.span_panel_circuit_7_power`.
+    """
+    assert (
+        circuit_object_id_suffix(
+            "EV Charger", "Circuit 7", "power", "sensor.span_panel_ev_charger_power"
+        )
+        == "power"
+    )
+    assert (
+        circuit_object_id_suffix(
+            "EV Charger",
+            "Circuit 7",
+            "energy_consumed",
+            "sensor.span_panel_ev_charger_energy_consumed",
+        )
+        == "energy consumed"
+    )
+
+
 @pytest.mark.parametrize(
     ("identifier", "suffix", "existing", "expected"),
     [

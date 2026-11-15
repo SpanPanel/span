@@ -25,8 +25,9 @@ A consequence worth stating outright: R1 does **not** mean bypassing `entity_id_
 part than the entity has today, that is the user's configuration at work and the offer stands. The one-time attempt to add "legacy preset" exceptions for those
 cases was withdrawn. R2's creation preset is not such a bypass: it is composed under the user's `entity_id_parts` (§4.7), and it is made once.
 
-The two modes differ in one thing only: the entity ID a new circuit entity is created with. Devices, displayed names, the base and what Recreate offers are the
-same in both.
+For a circuit's own device and the entities on it, the two modes differ in one thing only: the entity ID a new entity is created with. The device's name, the
+displayed names, the base and what Recreate offers are the same in both. Outside that, the naming flag still chooses the suffix in the name of a charger's
+device and of an additional solar inverter's (§4.1), which reaches every entity on those devices, a charger feed circuit's sensors among them (§4.5).
 
 ## 2. Four values and their owners
 
@@ -123,9 +124,17 @@ registers the device calls. The name is the same in both naming modes:
 The name **always answers**. A device with no name would leave Core composing from the label alone, which gives every unnamed circuit the same ID and leaves the
 registry to disambiguate with `_2`, `_3` — the pre-2.1.0 behavior that is now gone.
 
-The naming flag no longer decides any name. It resolves an _identifier_, by `sensor_circuit._resolve_circuit_identifier` and the same branch inline in
-`switch.py` / `select.py`, which is used for two things only: an existing ID is read back against it (§4.3), and in circuit-numbers mode it stands in the
-device's place in the creation preset (§4.7).
+The naming flag no longer decides a circuit's name. It still chooses the suffix in two other devices' names:
+
+- **A charger's device**: the fed circuit's name, or in circuit-numbers mode the charger's serial (`entity_resolver.resolve_evse_display_suffix`).
+- **An additional solar inverter's device**: its feed circuit's name, or that circuit's breaker positions in circuit-numbers mode and where the circuit has no
+  name (`helpers.resolve_pv_display_suffix`, with `helpers.resolve_pv_display_suffixes` keeping several inverters' names apart).
+
+The suffix is part of the device's name, so the displayed names of the entities on those two devices, and the IDs Core composes for them, differ by mode.
+
+For a circuit, the flag resolves an _identifier_, by `sensor_circuit._resolve_circuit_identifier` and the same branch inline in `switch.py` / `select.py`, which
+is used for two things only: an existing ID is read back against it (§4.3), and in circuit-numbers mode it stands in the device's place in the creation preset
+(§4.7).
 
 | Mode                                    | Identifier                                                                  | Source                                                                     |
 | --------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -218,7 +227,8 @@ construction, through `SpanPanelEntity._circuit_object_id_base`. Every other ent
 - **Sub-device circuit sensors** (an EVSE feed circuit's sensors, `_is_sub_device`): no base, and no creation preset in either mode. They sit on the charger's
   device, not on a circuit's, so Core composes from the label on that device and the ID names the charger alone — `sensor.<charger>_power` — like the charger's
   other sensors. A feed sensor created before this route keeps its old ID until Recreate is pressed, and is then offered the charger-named one (a legitimate
-  offer: the device part is Core's).
+  offer: the device part is Core's). The charger's device name carries the suffix the naming flag chooses (§4.1), so these sensors' displayed names and composed
+  IDs differ by mode, as the charger's own do.
 - **Everything not a circuit entity** (panel, BESS, MID, EVSE, PV, binary sensors, adopted properties, and circuit-scoped extension entities, which stay on the
   panel's device): stock behavior, label-composed.
 
@@ -378,7 +388,11 @@ Recreate offers a different ID only where the user's own configuration composes 
 | Second panel whose generated device name is "Span Panel 2"                                                  | `span_panel_2_…`                                                                    | device part is Core's                                                                                    |
 | Install predating `use_device_prefix`, circuit IDs with no device half                                      | device-prefixed ID                                                                  | device part is Core's                                                                                    |
 | Unnamed circuit in circuit-names mode whose ID carries `single_circuit`/`power_2`                           | `circuit_7…`                                                                        | **uncaused** — no computed identifier reproduces both eras; accepted and documented                      |
-| Unnamed EVSE circuit that feeds no charger device, in circuit-names mode, whose sensor IDs say `ev_charger` | `circuit_7…`                                                                        | **uncaused** — the circuit's device is named by its tabs, as its switch and select always were; accepted |
+| Unnamed EVSE circuit that feeds no charger device, in circuit-names mode, whose sensor IDs say `ev_charger` | `circuit_7…`                                                                        | **uncaused**, and R1 names no exception for it — the circuit's device is named by its tabs (noted below) |
+
+The last row's circuit is an unnamed charger circuit with no charger device to hold its sensors. Its sensors were named "EV Charger" while its switch and select
+were named by its tabs, and its device takes the tabs (§4.1). Besides the offer, its never-renamed sensors change displayed name, in both modes:
+`Span Panel EV Charger Power` becomes `Span Panel Circuit 7 Power`, which the conversion's repair lists.
 
 Anything not in this table that Recreate offers on an unchanged install is a bug against R1.
 
@@ -389,8 +403,8 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
       assigns `_attr_entity_id`. `tests/test_docs_agree_with_code.py` holds this item to the code.
 - [ ] The registry `name` is assigned a value in one place, the conversion's trim (§6.2); the only other `async_update_entity(..., name=...)` call is the `None`
       in `release_registry_name_written_by_older_release`.
-- [ ] `_attr_name` is the label alone in both modes; nothing puts the circuit's name in it, and nothing branches on `use_circuit_numbers` to pick a display
-      name.
+- [ ] `_attr_name` is the label alone in both modes; nothing puts the circuit's name in it, and nothing branches on `use_circuit_numbers` to name a circuit's
+      device or its entities. Every function the flag is passed to is named in §4.1, which `tests/test_docs_agree_with_code.py` holds to the code.
 - [ ] A circuit's device is named by `helpers.circuit_device_name` wherever it is registered, in both modes.
 - [ ] The base is the suffix alone, computed from `(id_identifier, device_name, canonical suffix, existing_entity_id)` and nothing else — never from the display
       label, and never carrying the circuit's name.
