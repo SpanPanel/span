@@ -6,11 +6,17 @@ coming back:
 
 - a scan of the package's Python sources for the `"friendly_name"` string
   literal, the key such a read would use;
-- Ruff's banned-API list in `pyproject.toml`, which rejects Core's constant for
-  the same key, `homeassistant.const.ATTR_FRIENDLY_NAME`.
+- Ruff's banned-API list in `pyproject.toml`, which rejects each name
+  `homeassistant.const` gives the same key: `ATTR_FRIENDLY_NAME`,
+  `EntityStateAttribute.FRIENDLY_NAME` (the one Core itself reads the attribute
+  with) and `CONF_FRIENDLY_NAME`.
 
-Neither can see a read through `State.name`, Core's own accessor for the
-attribute, so that one stays a review item.
+Two reads escape both guards and stay review items:
+
+- one through `State.name`, Core's own accessor for the attribute;
+- one through a constant imported from a module other than
+  `homeassistant.const`, since Ruff matches the name a constant is imported
+  under and any module that imports one of these also offers it.
 
 The scan covers `*.py` only. The bundled card under `frontend/dist` is built
 from the card's repository, whose own lint bans the attribute there.
@@ -22,6 +28,8 @@ import ast
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
 
 import custom_components.span_panel as span_panel
 
@@ -77,8 +85,12 @@ def test_the_scan_finds_each_friendly_name_literal(tmp_path: Path) -> None:
     assert friendly_name_literals(package) == ["nested/subscripts.py:2", "reads.py:8"]
 
 
-def test_ruff_bans_the_friendly_name_constant() -> None:
-    """The repository's Ruff configuration rejects Core's constant for the key."""
+def banned_api_findings(source: str) -> list[str]:
+    """Return Ruff's banned-API findings for `source` as a file of the package.
+
+    Ruff runs with the repository's own configuration, so the answer is what CI
+    gives for the same lines in `custom_components/span_panel`.
+    """
     checked = subprocess.run(
         [
             sys.executable,
@@ -91,14 +103,67 @@ def test_ruff_bans_the_friendly_name_constant() -> None:
             str(PACKAGE / "reads_the_attribute.py"),
             "-",
         ],
-        input="from homeassistant.const import ATTR_FRIENDLY_NAME\n",
+        input=source,
         capture_output=True,
         text=True,
         cwd=REPO,
         check=False,
     )
 
-    assert checked.returncode == 1, checked.stderr
-    banned = [line for line in checked.stdout.splitlines() if "TID251" in line]
-    assert len(banned) == 1, checked.stdout
-    assert "ATTR_FRIENDLY_NAME" in banned[0]
+    # 0 is clean and 1 is findings; anything else means Ruff itself failed.
+    assert checked.returncode in (0, 1), checked.stderr
+    return [line for line in checked.stdout.splitlines() if "TID251" in line]
+
+
+@pytest.mark.parametrize(
+    ("source", "banned"),
+    [
+        pytest.param(
+            "from homeassistant.const import ATTR_FRIENDLY_NAME\n",
+            "homeassistant.const.ATTR_FRIENDLY_NAME",
+            id="attr_constant",
+        ),
+        pytest.param(
+            "from homeassistant.const import EntityStateAttribute\n"
+            "\n"
+            "\n"
+            "def name_of(state):\n"
+            "    return state.attributes.get(EntityStateAttribute.FRIENDLY_NAME)\n",
+            "homeassistant.const.EntityStateAttribute.FRIENDLY_NAME",
+            id="state_attribute_enum",
+        ),
+        pytest.param(
+            "from homeassistant import const\n"
+            "\n"
+            "\n"
+            "def name_of(state):\n"
+            "    return state.attributes[const.EntityStateAttribute.FRIENDLY_NAME]\n",
+            "homeassistant.const.EntityStateAttribute.FRIENDLY_NAME",
+            id="state_attribute_enum_through_the_module",
+        ),
+        pytest.param(
+            "from homeassistant.const import CONF_FRIENDLY_NAME\n",
+            "homeassistant.const.CONF_FRIENDLY_NAME",
+            id="conf_constant",
+        ),
+    ],
+)
+def test_ruff_bans_the_friendly_name_constant(source: str, banned: str) -> None:
+    """The repository's Ruff configuration rejects each Core name for the key."""
+    findings = banned_api_findings(source)
+
+    assert len(findings) == 1, findings
+    assert f"`{banned}` is banned" in findings[0]
+
+
+def test_ruff_allows_the_other_shared_state_attributes() -> None:
+    """The ban is on the one member, not on Core's enum of shared attributes."""
+    findings = banned_api_findings(
+        "from homeassistant.const import EntityStateAttribute\n"
+        "\n"
+        "\n"
+        "def device_class_of(state):\n"
+        "    return state.attributes.get(EntityStateAttribute.DEVICE_CLASS)\n"
+    )
+
+    assert findings == []

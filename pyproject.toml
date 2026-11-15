@@ -215,7 +215,11 @@ skips = ["B101", "B108"]  # Skip assert_used and hardcoded_tmp_directory for tes
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # Home Assistant plans to retire the `friendly_name` state attribute. Names come
 # from the entity and device registries (`er.async_get_full_entity_name`).
+# Every name `homeassistant.const` gives the key is banned: the two constants,
+# and the member of the enum Core itself reads the attribute with.
 "homeassistant.const.ATTR_FRIENDLY_NAME".msg = "The friendly_name state attribute is being retired. Read the name from the entity registry, for example with er.async_get_full_entity_name."
+"homeassistant.const.EntityStateAttribute.FRIENDLY_NAME".msg = "The friendly_name state attribute is being retired. Read the name from the entity registry, for example with er.async_get_full_entity_name."
+"homeassistant.const.CONF_FRIENDLY_NAME".msg = "This constant holds the key of the friendly_name state attribute, which is being retired. Read the name from the entity registry, for example with er.async_get_full_entity_name."
 
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
