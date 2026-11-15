@@ -14,7 +14,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import PublishOutcome, SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
-from .const import CONF_DEVICE_NAME, DOMAIN
+from .circuit_number_ids import (
+    compose_circuit_number_object_id,
+    preset_circuit_number_entity_id,
+)
+from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import (
     CONTROL_CALLER,
     async_bind_caller,
@@ -23,6 +27,7 @@ from .control_gate import (
 )
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
+from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix
 from .util import circuit_device_info, effective_circuit_device_name, snapshot_to_device_info
 
@@ -57,7 +62,9 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     composes the circuit's name from the device. Every other entity leaves it
     None and Core composes from the display name as it always has. Core reads
     `suggested_object_id` only for an entity that has not preset `entity_id`,
-    which after this release is every entity here.
+    which is every entity here but one being created in circuit-numbers mode
+    (`_circuit_number_entity_id`). That one's row takes the base from its next
+    add on.
     """
 
     @property
@@ -339,3 +346,53 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             config_entry_id=coordinator.config_entry.entry_id,
         )
         return circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)
+
+    @staticmethod
+    def _circuit_number_entity_id(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit_id: str,
+        *,
+        domain: str,
+        unique_id: str,
+        id_identifier: str,
+        suffix: str,
+    ) -> str | None:
+        """Return the id circuit-numbers mode creates a circuit entity with, or None.
+
+        The circuit's device is named by the circuit, so Core would compose a
+        new entity's id from that name. In circuit-numbers mode the entity is
+        given its circuit number instead: the id Core would compose under the
+        user's entity-id format were the device named `id_identifier`. That is
+        what the naming flag resolves, which in this mode is the circuit's
+        tabs (`Circuit 15`), or its label for a meter with no breaker space to
+        number. It is the identifier the base is read back against
+        (`_circuit_object_id_base`), so the id reads as built from it on every
+        later load.
+
+        None, which leaves the id to Core, in circuit-names mode and for an
+        entity that is not being created: one with a registry row, or one Core
+        remembers deleting (`preset_circuit_number_entity_id`). The suffix is
+        the wording a new entity gets, decided against the number and not the
+        device's name, so a circuit named "Solar Power" is created as
+        `..._circuit_15_power`.
+        """
+        entry = coordinator.config_entry
+        if not entry.options.get(USE_CIRCUIT_NUMBERS, False):
+            return None
+        return preset_circuit_number_entity_id(
+            coordinator.hass,
+            domain=domain,
+            unique_id=unique_id,
+            object_id=compose_circuit_number_object_id(
+                coordinator.hass,
+                panel_device_id=entry.runtime_data.panel_device_id,
+                circuit_device_identifier=(
+                    DOMAIN,
+                    build_circuit_device_identifier(snapshot.serial_number, circuit_id),
+                ),
+                circuit_number=id_identifier,
+                suffix_words=circuit_object_id_suffix(id_identifier, id_identifier, suffix, None),
+                config_entry_id=entry.entry_id,
+            ),
+        )

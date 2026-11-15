@@ -671,11 +671,13 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
 def test_switch_circuit_numbers_entity_id_120v_single_tab(
     hass: HomeAssistant,
 ) -> None:
-    """A single-tab circuit's existing id is read back against its one tab number.
+    """A single-tab circuit's id is built from its tab; the omission is its device's.
 
-    Named so that its device's name ends on the suffix word: read against the
-    name rather than the tabs, the id would look like one that left `breaker`
-    out, and the base would leave it out too.
+    Named so that its device's name ends on the suffix word. The id spells
+    `breaker` after the tab, which settles the form, but the id Core composes
+    is the device's name and the base, so the base leaves the word out as it
+    does for a new entity on that device: Recreate offers `..._main_breaker`,
+    the id the circuit has under circuit names, not `..._main_breaker_breaker`.
     """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="5",
@@ -695,7 +697,7 @@ def test_switch_circuit_numbers_entity_id_120v_single_tab(
         switch = SpanPanelCircuitsSwitch(coordinator, "5", "SPAN Panel")
 
     assert switch.name == "Breaker"
-    assert switch.suggested_object_id == "breaker"
+    assert switch.suggested_object_id == ""
 
 
 def test_switch_circuit_numbers_releases_the_synced_registry_name(

@@ -291,26 +291,6 @@ def parts_without_area(hass: HomeAssistant) -> None:
     )
 
 
-PRESET_AT_CREATION = (
-    "passes once circuit-numbers mode presets a circuit-number entity_id at creation"
-)
-"""Why a circuit-numbers case that pins a circuit-number entity_id fails until then.
-
-The circuit's device carries its name in both modes, so without a preset Home
-Assistant composes a new entity's id from that name.
-"""
-
-OFFER_REVERSED = (
-    "reversed once circuit-numbers mode presets a circuit-number entity_id at creation: "
-    "the circuit's device carries its name, so Recreate then offers that name in this mode too"
-)
-"""Why a circuit-numbers case that pins Recreate offering the circuit-number id fails.
-
-It fails now on the id at creation, and would still fail on the offer once the
-preset exists, because the offer is composed from the circuit's device.
-"""
-
-
 async def test_the_first_install_takes_its_entity_id_from_the_circuit_name(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -468,18 +448,21 @@ async def test_an_unrenamed_circuit_is_offered_its_own_entity_id(
     assert registry.async_regenerate_entity_id(registry_entry) == ORIGINAL_ENTITY_ID
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
-async def test_circuit_numbers_mode_is_offered_its_own_tab_based_id(
+async def test_circuit_numbers_mode_is_offered_the_circuits_name(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Recreate must not offer to convert a circuit-numbered panel to friendly names.
+    """Recreate offers a circuit-numbered entity the id its circuit's name composes.
 
-    The mode exists so an id follows the breaker position rather than the name.
-    Accepting a friendly-name proposal would undo that for every circuit at once.
+    The mode gives an entity its breaker position as its id when the entity is
+    created, and that id never moves on its own (R5). The circuit's device
+    carries the circuit's name in this mode too, so what Recreate composes is
+    the name -- the circuit's current one, after a rename on the panel. Offering
+    the entity its own id instead would take the integration presetting it on
+    every load, the exemption from the user's entity-id format that R2 forbids;
+    the preset is made once, and the offer is the user's to accept or leave.
 
-    It used to be offered because phase 2 sync wrote the panel's name into the
-    registry's `name`, which Home Assistant reads ahead of `suggested_object_id`.
-    The name now travels as `original_name`, which ranks below it.
+    This case used to pin the opposite, from before the circuit had a device
+    of its own to be named by.
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
@@ -493,7 +476,7 @@ async def test_circuit_numbers_mode_is_offered_its_own_tab_based_id(
     registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
     assert registry_entry is not None
 
-    assert registry.async_regenerate_entity_id(registry_entry) == CIRCUIT_NUMBERS_ENTITY_ID
+    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID
 
 
 async def test_circuit_numbers_mode_still_shows_the_panels_name(
@@ -520,11 +503,15 @@ async def test_circuit_numbers_mode_still_shows_the_panels_name(
     assert er.async_get_full_entity_name(hass, registry_entry) == f"SPAN Panel {RENAMED} Power"
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
 async def test_circuit_numbers_mode_releases_a_name_an_older_release_wrote(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """An install upgrading has the old scheme's name handed back to it."""
+    """An install upgrading has the old scheme's name handed back to it.
+
+    With the name released, Recreate composes from the circuit's device and
+    the suffix, like every other entity in this mode, and not from the name
+    the old scheme wrote.
+    """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
     install = _SensorInstall(hass, entry)
@@ -540,10 +527,9 @@ async def test_circuit_numbers_mode_releases_a_name_an_older_release_wrote(
     registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
     assert registry_entry is not None
     assert registry_entry.name is None
-    assert registry.async_regenerate_entity_id(registry_entry) == CIRCUIT_NUMBERS_ENTITY_ID
+    assert registry.async_regenerate_entity_id(registry_entry) == ORIGINAL_ENTITY_ID
 
 
-@pytest.mark.xfail(strict=True, reason=PRESET_AT_CREATION)
 async def test_releasing_the_name_is_idempotent(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -564,7 +550,6 @@ async def test_releasing_the_name_is_idempotent(
     assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID
 
 
-@pytest.mark.xfail(strict=True, reason=PRESET_AT_CREATION)
 async def test_a_name_the_user_set_is_never_released(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -590,7 +575,6 @@ async def test_a_name_the_user_set_is_never_released(
     assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID
 
 
-@pytest.mark.xfail(strict=True, reason=PRESET_AT_CREATION)
 async def test_circuit_numbers_mode_does_not_move_ids_across_the_change(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -763,10 +747,15 @@ async def test_a_pre_preset_energy_sensor_is_offered_its_own_id(
 async def test_circuit_numbers_mode_releases_the_energy_name_an_older_release_wrote(
     hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
 ) -> None:
-    """2.0.8 wrote "<circuit> Consumed Energy" into the registry, and it must be released."""
+    """2.0.8 wrote "<circuit> Consumed Energy" into the registry, and it must be released.
+
+    Recreate then composes from the circuit's device and the suffix, as it
+    does for every entity in this mode.
+    """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
     install = _LegacyInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
+    assert sensor.entity_id == "sensor.span_panel_circuit_15_consumed_energy"
     registry = er.async_get(hass)
     registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Consumed Energy")
 
@@ -775,7 +764,7 @@ async def test_circuit_numbers_mode_releases_the_energy_name_an_older_release_wr
     registry_entry = registry.async_get(sensor.entity_id)
     assert registry_entry is not None
     assert registry_entry.name is None
-    assert registry.async_regenerate_entity_id(registry_entry) == sensor.entity_id
+    assert registry.async_regenerate_entity_id(registry_entry) == LEGACY_ENTITY_ID
 
 
 async def test_a_name_written_under_the_beta_label_is_released_as_well(
@@ -795,20 +784,31 @@ async def test_a_name_written_under_the_beta_label_is_released_as_well(
     assert registry_entry.name is None
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
+@pytest.mark.parametrize(
+    ("mode", "created"),
+    [
+        pytest.param(FRIENDLY_NAMES, ORIGINAL_ENTITY_ID, id="friendly"),
+        pytest.param(CIRCUIT_NUMBERS, CIRCUIT_NUMBERS_ENTITY_ID, id="circuit_numbers"),
+    ],
+)
 async def test_an_area_the_user_assigned_reaches_the_proposal_under_default_parts(
-    hass: HomeAssistant, entry: MockConfigEntry
+    hass: HomeAssistant, entry: MockConfigEntry, mode: dict[str, bool], created: str
 ) -> None:
     """R2: the area is the user's global choice, and the integration does not exempt itself.
 
-    A preset id could not carry one. Handing Core a base instead means the area
-    part of `entity_id_parts` applies here exactly as it does to every other
-    integration -- and only where the user has actually assigned an area.
+    The area is the panel's, and it reaches a circuit entity through the
+    circuit's device, which has none of its own and inherits its parent's.
+    Handing Core a base means the area part of `entity_id_parts` applies here
+    exactly as it does to every other integration -- and only where the user
+    has actually assigned an area.
+
+    In both modes: the circuit-numbers preset is spent by the reload, and the
+    offer after it is composed like a circuit-names one.
     """
-    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
     install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
-    assert sensor.entity_id == CIRCUIT_NUMBERS_ENTITY_ID  # no area yet: identical to today
+    assert sensor.entity_id == created  # no area yet
 
     area = ar.async_get(hass).async_get_or_create("Basement")
     device_registry = dr.async_get(hass)
@@ -816,13 +816,15 @@ async def test_an_area_the_user_assigned_reaches_the_proposal_under_default_part
     assert device is not None
     device_registry.async_update_device(device.id, area_id=area.id)
 
+    await install.load(ORIGINAL_NAME)
+
     registry = er.async_get(hass)
-    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
+    registry_entry = registry.async_get(created)
     assert registry_entry is not None
-    assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID  # R5: nothing moved
+    assert registry_entry.entity_id == created  # R5: nothing moved
     assert (
         registry.async_regenerate_entity_id(registry_entry)
-        == "sensor.basement_span_panel_circuit_15_power"
+        == "sensor.basement_span_panel_refrigerator_power"
     )
 
 
@@ -1188,11 +1190,10 @@ SWITCH_ENTITY_ID = "switch.span_panel_circuit_15_breaker"
 SELECT_ENTITY_ID = "select.span_panel_circuit_15_circuit_priority"
 
 
-@pytest.mark.xfail(strict=True, reason=PRESET_AT_CREATION)
-async def test_a_new_switch_and_select_compose_todays_ids(
+async def test_a_new_switch_and_select_get_their_circuit_number_ids(
     hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
 ) -> None:
-    """Composition spells both exactly as the preset builder used to."""
+    """Circuit-numbers mode gives both their breaker position at creation, as it does a sensor."""
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
     switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
     select = await _SelectInstall(hass, entry).load(ORIGINAL_NAME)
@@ -1201,11 +1202,14 @@ async def test_a_new_switch_and_select_compose_todays_ids(
     assert select.entity_id == SELECT_ENTITY_ID
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
-async def test_switch_and_select_are_offered_their_own_ids_after_a_rename_in_circuit_numbers_mode(
+async def test_switch_and_select_are_offered_the_circuits_new_name_in_circuit_numbers_mode(
     hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
 ) -> None:
-    """#252's other half: the name follows the panel and the id does not move."""
+    """#252 in this mode: the id does not move, and the offer follows the panel's rename.
+
+    The controls are composed like the sensors: from the circuit's device,
+    which the reload renamed, and their suffix.
+    """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
     switches = _SwitchInstall(hass, entry)
     await switches.load(ORIGINAL_NAME)
@@ -1220,20 +1224,27 @@ async def test_switch_and_select_are_offered_their_own_ids_after_a_rename_in_cir
     switch_entry = registry.async_get(switch.entity_id)
     assert switch_entry is not None
     assert switch_entry.original_name == "Breaker"
-    assert registry.async_regenerate_entity_id(switch_entry) == switch.entity_id
+    assert (
+        registry.async_regenerate_entity_id(switch_entry) == "switch.span_panel_beer_fridge_breaker"
+    )
 
     assert select.entity_id == SELECT_ENTITY_ID
     select_entry = registry.async_get(select.entity_id)
     assert select_entry is not None
     assert select_entry.original_name == "Circuit Priority"
-    assert registry.async_regenerate_entity_id(select_entry) == select.entity_id
+    assert (
+        registry.async_regenerate_entity_id(select_entry)
+        == "select.span_panel_beer_fridge_circuit_priority"
+    )
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
 async def test_switch_and_select_release_the_name_an_older_release_wrote(
     hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
 ) -> None:
-    """2.0.8 wrote the panel's name into the registry's `name` for these two as well."""
+    """2.0.8 wrote the panel's name into the registry's `name` for these two as well.
+
+    Released, they are offered what their circuit's device and suffix compose.
+    """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
     registry = er.async_get(hass)
 
@@ -1247,15 +1258,21 @@ async def test_switch_and_select_release_the_name_an_older_release_wrote(
     registry.async_update_entity(select.entity_id, name=f"{ORIGINAL_NAME} Circuit Priority")
     await selects.load(ORIGINAL_NAME)
 
-    switch_entry = registry.async_get(switch.entity_id)
+    switch_entry = registry.async_get(SWITCH_ENTITY_ID)
     assert switch_entry is not None
     assert switch_entry.name is None
-    assert registry.async_regenerate_entity_id(switch_entry) == SWITCH_ENTITY_ID
+    assert (
+        registry.async_regenerate_entity_id(switch_entry)
+        == "switch.span_panel_refrigerator_breaker"
+    )
 
-    select_entry = registry.async_get(select.entity_id)
+    select_entry = registry.async_get(SELECT_ENTITY_ID)
     assert select_entry is not None
     assert select_entry.name is None
-    assert registry.async_regenerate_entity_id(select_entry) == SELECT_ENTITY_ID
+    assert (
+        registry.async_regenerate_entity_id(select_entry)
+        == "select.span_panel_refrigerator_circuit_priority"
+    )
 
 
 async def test_a_name_the_user_set_on_a_control_is_never_released(
@@ -1349,19 +1366,20 @@ async def test_a_new_control_on_a_no_prefix_install_composes_like_every_other_en
     assert select.entity_id == "select.span_panel_refrigerator_circuit_priority"
 
 
-@pytest.mark.xfail(strict=True, reason=OFFER_REVERSED)
 async def test_an_area_reaches_the_proposal_for_a_control_too(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     """R2: the controls stop exempting themselves from the user's `entity_id_parts`.
 
-    A preset id could not carry an area. Handing Core a base means the switch is
-    composed exactly like every other integration's entity -- and only where the
-    user has actually assigned one.
+    Handing Core a base means the switch is composed exactly like every other
+    integration's entity -- and only where the user has actually assigned an
+    area. The circuit-numbers preset is spent by the reload, so the offer
+    after it carries the area and the circuit's name.
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
-    switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
-    assert switch.entity_id == SWITCH_ENTITY_ID  # no area yet: identical to today
+    install = _SwitchInstall(hass, entry)
+    switch = await install.load(ORIGINAL_NAME)
+    assert switch.entity_id == SWITCH_ENTITY_ID  # no area yet
 
     area = ar.async_get(hass).async_get_or_create("Basement")
     device_registry = dr.async_get(hass)
@@ -1369,14 +1387,125 @@ async def test_an_area_reaches_the_proposal_for_a_control_too(
     assert device is not None
     device_registry.async_update_device(device.id, area_id=area.id)
 
+    await install.load(ORIGINAL_NAME)
+
     registry = er.async_get(hass)
     registry_entry = registry.async_get(SWITCH_ENTITY_ID)
     assert registry_entry is not None
     assert registry_entry.entity_id == SWITCH_ENTITY_ID  # R5: nothing moved
     assert (
         registry.async_regenerate_entity_id(registry_entry)
-        == "switch.basement_span_panel_circuit_15_breaker"
+        == "switch.basement_span_panel_refrigerator_breaker"
     )
+
+
+# --- Circuit-numbers mode: the id at creation, and the first offer after it ----
+#
+# The mode presets a circuit-number id for an entity being created, once. From
+# the reload after it the id is on file and is read back like any other: the
+# tabs it was built from locate the suffix's form, and the circuit's device,
+# which Core composes the offer from, decides whether the suffix repeats the
+# name. So the first offer is the id the same circuit has on a circuit-names
+# install, and accepting it leaves nothing more to offer.
+
+type _CircuitInstall = type[_SensorInstall] | type[_SwitchInstall] | type[_SelectInstall]
+
+
+@pytest.mark.parametrize(
+    ("make_install", "circuit_name", "created", "offered"),
+    [
+        pytest.param(
+            _SensorInstall,
+            "Solar Power",
+            CIRCUIT_NUMBERS_ENTITY_ID,
+            "sensor.span_panel_solar_power",
+            id="name-ends-on-the-suffix",
+        ),
+        pytest.param(
+            _SwitchInstall,
+            "Main Breaker",
+            SWITCH_ENTITY_ID,
+            "switch.span_panel_main_breaker",
+            id="switch-name-ends-on-the-suffix",
+        ),
+        pytest.param(
+            _SensorInstall,
+            "Kitchen Outlets",
+            CIRCUIT_NUMBERS_ENTITY_ID,
+            "sensor.span_panel_kitchen_outlets_power",
+            id="ordinary-name",
+        ),
+        pytest.param(
+            _SensorInstall,
+            "Power",
+            CIRCUIT_NUMBERS_ENTITY_ID,
+            "sensor.span_panel_power_power",
+            id="name-is-the-suffix-word",
+        ),
+    ],
+)
+async def test_numbers_mode_first_offer_matches_names_mode(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts_without_area: None,
+    make_install: _CircuitInstall,
+    circuit_name: str,
+    created: str,
+    offered: str,
+) -> None:
+    """Recreate offers a circuit-numbered entity the id a circuit-names install gives it.
+
+    A circuit named "Solar Power" is `sensor.span_panel_solar_power` on a
+    circuit-names install: the name already ends on the suffix word, so the
+    word is not repeated (`test_composed_ids_match_the_preset_shape_for_odd_names`).
+    The circuit-number id spells the suffix after the tabs, and reading the
+    omission from that id as well offered `..._solar_power_power`, an id no
+    install of either mode has. A circuit named exactly "Power" repeats
+    nothing and keeps both halves, as it does under circuit names.
+
+    The offer is accepted and the entry reloaded once more, because an offer
+    that changes again after it is taken is a rename the user did not cause.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    install = make_install(hass, entry)
+    entity = await install.load(circuit_name)
+    assert entity.entity_id == created
+
+    await install.load(circuit_name)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(created)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == offered
+
+    registry.async_update_entity(created, new_entity_id=offered)
+    await hass.async_block_till_done()
+    reloaded = await install.load(circuit_name)
+
+    assert reloaded.entity_id == offered
+    accepted = registry.async_get(offered)
+    assert accepted is not None
+    assert registry.async_regenerate_entity_id(accepted) == offered
+
+
+async def test_a_circuit_sensor_on_a_chargers_device_is_not_given_a_circuit_number_id(
+    hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
+) -> None:
+    """A charger's feed circuit's sensor is on the charger's device, in both modes.
+
+    The preset is the id Core would compose if the circuit's device were named
+    by its number, and this sensor is not on the circuit's device: it composes
+    from its label on the charger's, like the charger's own sensors.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+
+    install = _SensorInstall(hass, entry, device_info_override=EVSE_DEVICE_INFO)
+    sensor = await install.load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == "sensor.span_panel_ev_charger_power"
+    registry_entry = er.async_get(hass).async_get(sensor.entity_id)
+    assert registry_entry is not None
+    assert registry_entry.suggested_object_id is None
 
 
 # --- Phase 2: a rename in the SPAN app still reaches the display name ---------
@@ -1397,8 +1526,6 @@ async def test_an_area_reaches_the_proposal_for_a_control_too(
 # `EntityPlatform` and the real registry, for all three circuit platforms in
 # both modes, because handing composition the id moved where the name is
 # written.
-
-type _CircuitInstall = type[_SensorInstall] | type[_SwitchInstall] | type[_SelectInstall]
 
 CIRCUIT_INSTALLS: list[_CircuitInstall] = [_SensorInstall, _SwitchInstall, _SelectInstall]
 PLATFORM_IDS = ["sensor", "switch", "select"]
@@ -1501,31 +1628,26 @@ async def test_a_span_app_rename_reaches_the_device_when_every_entity_is_named_b
 
 
 @pytest.mark.parametrize(
-    ("mode", "expected"),
+    ("mode", "created"),
     [
-        pytest.param(FRIENDLY_NAMES, RENAMED_ENTITY_ID, id="friendly"),
-        pytest.param(
-            CIRCUIT_NUMBERS,
-            CIRCUIT_NUMBERS_ENTITY_ID,
-            id="circuit_numbers",
-            marks=pytest.mark.xfail(strict=True, reason=OFFER_REVERSED),
-        ),
+        pytest.param(FRIENDLY_NAMES, ORIGINAL_ENTITY_ID, id="friendly"),
+        pytest.param(CIRCUIT_NUMBERS, CIRCUIT_NUMBERS_ENTITY_ID, id="circuit_numbers"),
     ],
 )
-async def test_what_recreate_offers_after_a_pushed_rename_depends_on_the_mode(
+async def test_recreate_offers_the_renamed_id_after_a_pushed_rename_in_both_modes(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     parts_without_area: None,
     mode: dict[str, bool],
-    expected: str,
+    created: str,
 ) -> None:
-    """The two modes part company at the offer, and nowhere earlier.
+    """The two modes part company at the id an entity is created with, and nowhere later.
 
-    Both followed the same push and the same reload, and both display the new
-    name. What differs is what Recreate proposes: friendly names offers the
-    renamed id, which is issue #252; circuit numbers offers the entity its own
-    id, because an id that follows the breaker position is the point of the
-    mode and a whole-panel rename would undo it.
+    Both followed the same push and the same reload, both display the new
+    name, and both keep the id they had (R5). Recreate proposes the renamed id
+    in both, which is issue #252: the offer is composed from the circuit's
+    device, and the device carries the circuit's name whichever mode named the
+    entity's id.
     """
     hass.config_entries.async_update_entry(entry, options=dict(mode))
     install = _SensorInstall(hass, entry)
@@ -1535,9 +1657,10 @@ async def test_what_recreate_offers_after_a_pushed_rename_depends_on_the_mode(
     await install.rename_on_the_panel(RENAMED)
     sensor = await install.load(RENAMED)
 
+    assert sensor.entity_id == created
     registry = er.async_get(hass)
     registry_entry = registry.async_get(sensor.entity_id)
     assert registry_entry is not None
     assert registry_entry.original_name == "Power"
     assert er.async_get_full_entity_name(hass, registry_entry) == f"SPAN Panel {RENAMED} Power"
-    assert registry.async_regenerate_entity_id(registry_entry) == expected
+    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID

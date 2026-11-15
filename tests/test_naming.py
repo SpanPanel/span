@@ -204,19 +204,42 @@ def test_omission_follows_the_device_name() -> None:
 
 
 @pytest.mark.parametrize(
-    ("identifier", "device_name", "existing", "expected"),
+    ("identifier", "device_name", "suffix", "existing", "expected"),
     [
-        # The device's name ends on the suffix word, but the id kept the suffix.
-        ("Circuit 15", "Solar Power", "sensor.span_panel_circuit_15_power", "power"),
-        # The device's name does not, but the id stops at the identifier.
-        ("Solar Power", "Roof Array", "sensor.span_panel_solar_power", ""),
+        # Circuit-numbers presets on a device whose name ends on the suffix
+        # word: the id the circuit has under circuit names leaves the word out.
+        ("Circuit 15", "Solar Power", "power", "sensor.span_panel_circuit_15_power", ""),
+        ("Circuit 15", "Main Breaker", "breaker", "switch.span_panel_circuit_15_breaker", ""),
+        # The device's name does not end on it, so the suffix stays, in the form
+        # the id spells after the tabs.
+        ("Circuit 15", "Kitchen Outlets", "power", "sensor.span_panel_circuit_15_power", "power"),
+        (
+            "Circuit 15",
+            "Kitchen Outlets",
+            "power",
+            "sensor.span_panel_circuit_15_current_power",
+            "current power",
+        ),
+        # The id stops at the identifier, which is not what the device is
+        # called: the stop was the identifier's omission, not this device's.
+        ("Solar Power", "Roof Array", "power", "sensor.span_panel_solar_power", "power"),
+        ("Circuit 15", "Kitchen Outlets", "power", "sensor.span_panel_circuit_15", "power"),
     ],
 )
-def test_an_id_that_names_the_identifier_decides_the_omission_over_the_device_name(
-    identifier: str, device_name: str, existing: str, expected: str
+def test_an_id_built_from_the_identifier_takes_its_omission_from_the_device_name(
+    identifier: str, device_name: str, suffix: str, existing: str, expected: str
 ) -> None:
-    """The device name's ending decides the omission only where the id gives no answer."""
-    assert circuit_object_id_suffix(identifier, device_name, "power", existing) == expected
+    """The id settles the form; the device Core composes from settles the omission.
+
+    An id built from the tabs, or from a name the device no longer carries,
+    says which spelling of the suffix the entity shipped with. Whether the
+    suffix is left out is a question about the name in front of it, and the
+    offer is composed from the device's, so the answer is the one a new entity
+    on that device gets. In circuit-numbers mode that makes the first offer the
+    id the circuit has under circuit names: `..._solar_power`, not
+    `..._solar_power_power`.
+    """
+    assert circuit_object_id_suffix(identifier, device_name, suffix, existing) == expected
 
 
 @pytest.mark.parametrize(

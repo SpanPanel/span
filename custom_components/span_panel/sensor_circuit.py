@@ -209,11 +209,40 @@ class SpanCircuitSensorBase(
             snapshot,
             circuit,
             self.circuit_id,
-            id_identifier=_resolve_circuit_identifier(
-                circuit, self.circuit_id, self.coordinator.config_entry.options
-            ),
+            id_identifier=self._id_identifier(circuit),
             suffix=get_user_friendly_suffix(self._api_key),
             existing_entity_id=existing_entity_id,
+        )
+
+    def _entity_id_at_creation(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        unique_id: str,
+    ) -> str | None:
+        """Return the circuit-number id circuit-numbers mode creates this sensor with.
+
+        None on a charger's device, in either mode: the id is the one Core
+        would compose were the circuit's device named by its number, and this
+        sensor is not on the circuit's device.
+        """
+        if self._is_sub_device:
+            return None
+        circuit = _get_circuit_data_source(self.circuit_id, snapshot)
+        return self._circuit_number_entity_id(
+            self.coordinator,
+            snapshot,
+            self.circuit_id,
+            domain="sensor",
+            unique_id=unique_id,
+            id_identifier=self._id_identifier(circuit),
+            suffix=get_user_friendly_suffix(self._api_key),
+        )
+
+    def _id_identifier(self, circuit: SpanCircuitSnapshot) -> str:
+        """Return the identifier the naming flag resolves for this sensor's circuit."""
+        return _resolve_circuit_identifier(
+            circuit, self.circuit_id, self.coordinator.config_entry.options
         )
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:

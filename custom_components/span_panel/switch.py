@@ -125,19 +125,36 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         # `entity_id_parts`. The suffix is named outright rather than mapped:
         # `get_user_friendly_suffix` has no entry for a switch at all.
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        id_identifier = (
+            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+            if use_circuit_numbers
+            else circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
+        )
         self._span_object_id_base = self._circuit_object_id_base(
             coordinator,
             snapshot,
             circuit,
             circuit_id,
-            id_identifier=(
-                construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
-                if use_circuit_numbers
-                else circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
-            ),
+            id_identifier=id_identifier,
             suffix="breaker",
             existing_entity_id=existing_entity_id,
         )
+
+        # The one exception is a switch being created in circuit-numbers mode,
+        # which is given its circuit number as its id, once. Core keeps the
+        # preset only until the entity is next added, and composes from the
+        # base above from then on.
+        creation_entity_id = self._circuit_number_entity_id(
+            coordinator,
+            snapshot,
+            circuit_id,
+            domain="switch",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix="breaker",
+        )
+        if creation_entity_id is not None:
+            self.entity_id = creation_entity_id
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant

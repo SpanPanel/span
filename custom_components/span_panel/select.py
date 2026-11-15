@@ -164,19 +164,36 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         # `get_user_friendly_suffix` maps `circuit_priority` to `priority`, which
         # is the unique_id's spelling and not this entity's.
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        id_identifier = (
+            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+            if use_circuit_numbers
+            else circuit.name or _unnamed_select_fallback(circuit, circuit_id)
+        )
         self._span_object_id_base = self._circuit_object_id_base(
             coordinator,
             snapshot,
             circuit,
             circuit_id,
-            id_identifier=(
-                construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
-                if use_circuit_numbers
-                else circuit.name or _unnamed_select_fallback(circuit, circuit_id)
-            ),
+            id_identifier=id_identifier,
             suffix=description.entity_description.key,
             existing_entity_id=existing_entity_id,
         )
+
+        # The one exception is a select being created in circuit-numbers mode,
+        # which is given its circuit number as its id, once. Core keeps the
+        # preset only until the entity is next added, and composes from the
+        # base above from then on.
+        creation_entity_id = self._circuit_number_entity_id(
+            coordinator,
+            snapshot,
+            circuit_id,
+            domain="select",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix=description.entity_description.key,
+        )
+        if creation_entity_id is not None:
+            self.entity_id = creation_entity_id
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant

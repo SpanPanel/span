@@ -158,6 +158,16 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     snapshot, description, existing_entity_id
                 )
 
+                # The one exception is a circuit sensor being created in
+                # circuit-numbers mode, which is given its circuit number as
+                # its id, once. Core keeps the preset only until the entity is
+                # next added, and composes from the base above from then on.
+                creation_entity_id = self._entity_id_at_creation(
+                    snapshot, description, self._attr_unique_id
+                )
+                if creation_entity_id is not None:
+                    self.entity_id = creation_entity_id
+
                 if existing_entity_id:
                     self._release_synced_registry_name(
                         snapshot, description, entity_registry, existing_entity_id
@@ -221,6 +231,17 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         `existing_entity_id` is the id the entity's registry row has, or None
         for an entity being created, which a circuit sensor reads its suffix's
         spelling back from.
+        """
+        return None
+
+    def _entity_id_at_creation(
+        self, snapshot: SpanPanelSnapshot, description: T, unique_id: str
+    ) -> str | None:
+        """Return the id to create this entity with, or None to leave it to Core.
+
+        `None` -- the default -- for every entity Core composes the id of,
+        which is every one but a circuit sensor being created in
+        circuit-numbers mode.
         """
         return None
 
