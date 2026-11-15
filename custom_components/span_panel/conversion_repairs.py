@@ -10,22 +10,32 @@ changed area, and which circuits kept their entities' areas as they were.
   one Home Assistant composes for the entity as it now stands, by the same
   function that composed the name before it (`async_get_full_entity_name`).
   Only the names that differ are listed.
-- **Persistent.** The conversion moves each entity once, so nothing re-derives
-  the notice at the next setup, and a notice that is not persistent comes back
-  inactive after a restart.
+- **Persistent.** The conversion moves each entity once, so nothing can derive
+  its lines again at a later setup, and a notice that is not persistent comes
+  back inactive after a restart.
 - **Not fixable.** There is nothing to repair. The user dismisses it once read.
 - **Severity `WARNING`.** Everything keeps working, and names the user sees
   have changed.
 - **One per config entry,** its id carrying the entry's, so two panels each
   report their own circuits. Cleared when the entry is removed, because Home
   Assistant deletes no issue with its entry.
-- **Raised only when there is something to list.** A run that converted
-  nothing, as every setup after the first is, leaves an earlier notice exactly
-  as it stands.
+- **Raised only when there is something to list.** A run with nothing to
+  list, as most setups after the first are, leaves an earlier notice exactly as
+  it stands, dismissed or not.
+- **Added to by a later run, and shown again.** A setup after the first still
+  converts the entities it is the first to build: a breaker switch or priority
+  select once controls are switched on, a Net Energy sensor once those are, a
+  Current or Breaker Rating sensor whose value the panel publishes again, a
+  circuit that returns. Its lines follow the earlier run's, which no setup can
+  derive again, and the earlier notice is deleted before this one is raised.
+  Raised over it instead, Home Assistant would keep a dismissal, hiding the new
+  lines from the user who had read the old ones, and would replace the lists,
+  losing the old lines for the user who had not.
 
 The lists reach the description as placeholders, already formatted as markdown
-lists. A panel can change hundreds of names at once, so each list stops at
-`_MAX_LINES` and says how many more there are.
+lists, and every line is listed however many there are: the notice is the only
+record of what a name or an area was. The lines themselves are kept in the
+issue's data, which is what a later run adds to.
 
 ## The breaker switch notice
 
@@ -102,11 +112,17 @@ _TRANSLATION_KEY: Final = "circuit_devices_converted"
 
 _BREAKER_SWITCH_AREA_TRANSLATION_KEY: Final = "breaker_switch_in_area"
 
-_MAX_LINES: Final = 50
-"""How many lines one list shows before it counts the rest."""
-
 _NOTHING_LISTED: Final = "—"
 """What stands in for a list with nothing in it."""
+
+_RENAMED: Final = "renamed"
+_AREA_CHANGES: Final = "area_changes"
+_CIRCUITS_LEFT_IN_AREAS: Final = "circuits_left_in_areas"
+"""The conversion notice's lists.
+
+Each is the name of the placeholder the list fills and the key its lines are
+kept under in the issue's data.
+"""
 
 
 def conversion_notice_issue_id(entry_id: str) -> str:
@@ -134,18 +150,21 @@ def _area_name(areas: ar.AreaRegistry, area_id: str) -> str:
 
 
 def _markdown_list(lines: Iterable[str]) -> str:
-    """Format lines as a markdown list of at most `_MAX_LINES` items, or a dash for none.
+    """Format lines as a markdown list, or a dash for none."""
+    return "\n".join(f"- {line}" for line in lines) or _NOTHING_LISTED
 
-    The count of the rest is a paragraph of its own. Directly under the list,
-    markdown would read it as more of the last item.
-    """
-    items = [f"- {line}" for line in lines]
-    if not items:
-        return _NOTHING_LISTED
-    listed = "\n".join(items[:_MAX_LINES])
-    if len(items) > _MAX_LINES:
-        return f"{listed}\n\nand {len(items) - _MAX_LINES} more"
-    return listed
+
+def _one_line(text: str) -> str:
+    """Return text on one line, which is what a list item and a kept line each are."""
+    return " ".join(text.splitlines())
+
+
+def _lines_kept(issue: ir.IssueEntry | None, listed: str) -> list[str]:
+    """Return the lines an earlier notice kept for one of its lists, or none."""
+    if issue is None or issue.data is None:
+        return []
+    kept = issue.data.get(listed)
+    return kept.split("\n") if isinstance(kept, str) and kept else []
 
 
 def _panel_name(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> str:
@@ -167,6 +186,11 @@ def async_raise_conversion_notice(
     Call it once the platforms are set up. An entity the platforms removed in
     between, a control the panel no longer offers, has no name now and is left
     out.
+
+    Where an earlier run's notice stands, this run's lines are added after the
+    lines it kept, and it is deleted before the notice is raised again, so the
+    user who dismissed it sees what is new and nobody loses what was listed.
+    A circuit already listed as left in its areas is not listed twice.
     """
     if report.empty:
         return
@@ -179,7 +203,9 @@ def async_raise_conversion_notice(
     }
 
     renamed = [
-        f"{converted.name_before or converted.entity_id} → {name_after or converted.entity_id}"
+        _one_line(
+            f"{converted.name_before or converted.entity_id} → {name_after or converted.entity_id}"
+        )
         for converted in report.entities
         if (name_after := names_after.get(converted.entity_id)) is not None
         and converted.name_before != name_after
@@ -192,30 +218,45 @@ def async_raise_conversion_notice(
         return _NOTHING_LISTED if area_id is None else _area_name(areas, area_id)
 
     area_changes = [
-        f"{name_after or change.entity_id}: "
-        f"{area_name(change.area_before)} → {area_name(change.area_after)}"
+        _one_line(
+            f"{name_after or change.entity_id}: "
+            f"{area_name(change.area_before)} → {area_name(change.area_after)}"
+        )
         for change in report.area_changes
         if (name_after := names_after.get(change.entity_id)) is not None
     ]
+    circuits_left_in_areas = [_one_line(name) for name in report.circuits_left_in_areas]
 
-    if not (renamed or area_changes or report.circuits_left_in_areas):
+    if not (renamed or area_changes or circuits_left_in_areas):
         return
 
+    issue_id = conversion_notice_issue_id(entry.entry_id)
+    earlier = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    lists = {
+        _RENAMED: [*_lines_kept(earlier, _RENAMED), *renamed],
+        _AREA_CHANGES: [*_lines_kept(earlier, _AREA_CHANGES), *area_changes],
+        _CIRCUITS_LEFT_IN_AREAS: list(
+            dict.fromkeys([*_lines_kept(earlier, _CIRCUITS_LEFT_IN_AREAS), *circuits_left_in_areas])
+        ),
+    }
+
+    ir.async_delete_issue(hass, DOMAIN, issue_id)
     ir.async_create_issue(
         hass,
         DOMAIN,
-        conversion_notice_issue_id(entry.entry_id),
+        issue_id,
         is_fixable=False,
         is_persistent=True,
         severity=ir.IssueSeverity.WARNING,
         translation_key=_TRANSLATION_KEY,
         translation_placeholders={
             "panel": _panel_name(hass, entry),
-            "renamed": _markdown_list(renamed),
-            "area_changes": _markdown_list(area_changes),
-            "circuits_left_in_areas": _markdown_list(report.circuits_left_in_areas),
+            **{listed: _markdown_list(lines) for listed, lines in lists.items()},
         },
-        data={"entry_id": entry.entry_id},
+        data={
+            "entry_id": entry.entry_id,
+            **{listed: "\n".join(lines) for listed, lines in lists.items()},
+        },
     )
 
 

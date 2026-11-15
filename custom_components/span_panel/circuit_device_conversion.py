@@ -106,18 +106,28 @@ class ConvertedEntity:
 
 @dataclass(frozen=True)
 class AreaChange:
-    """One entity the conversion moved to another area, by taking its own area away.
+    """One entity the conversion left in another area than it was in.
 
-    Recorded only where the area the entity is in changed. An entity whose own
-    area was the one its circuit's device took is in the same area as before.
+    The area an entity is in is its own, or failing that its device's, and a
+    circuit's device with no area of its own is in the panel's. So the move
+    changes it in two ways, and both are recorded: an entity gives up an area
+    of its own for its circuit's device's, or it had none, was in the panel's,
+    and is now in the one its circuit's device has.
+
+    Recorded only where the two differ. An entity whose own area was the one
+    its circuit's device took is in the same area as before, and so is one
+    with no area on a device that has none or has the panel's.
     """
 
     entity_id: str
-    area_before: str
-    """The id of the area the entity had of its own."""
+    area_before: str | None
+    """The id of the area it was in: its own, or else the panel's device's. None for no area."""
 
     area_after: str | None
-    """The id of its circuit's device's area, which it now inherits."""
+    """The id of the area it is in now: the one it kept, or else its circuit's device's.
+
+    The panel's device's where that device has none, and None for no area.
+    """
 
 
 @dataclass(frozen=True)
@@ -143,7 +153,12 @@ class ConversionReport:
 
     @property
     def empty(self) -> bool:
-        """Whether the run converted nothing, as every run after the first does."""
+        """Whether the run converted nothing, as a run does once no entity is left to move.
+
+        Not every run after the first: one that builds an entity the earlier
+        setups did not, a control or a Net Energy sensor switched on since,
+        converts it then.
+        """
         return not self.entities
 
 
@@ -342,6 +357,10 @@ def async_convert_circuit_entities(
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     serial = snapshot.serial_number
+    # Where every entity with no area of its own was until now, and where one
+    # is still whose circuit's device has none.
+    panel = device_registry.async_get(panel_device_id)
+    panel_area = panel.area_id if panel is not None else None
 
     converted: list[ConvertedEntity] = []
     area_changes: list[AreaChange] = []
@@ -394,8 +413,16 @@ def async_convert_circuit_entities(
         for row in rows:
             own_area = row.area_id
             area_id = _own_area_on_the_device(row, switch, device_area)
-            if own_area is not None and area_id is None and own_area != device_area:
-                area_changes.append(AreaChange(row.entity_id, own_area, device_area))
+            area_before = own_area if own_area is not None else panel_area
+            area_after = (
+                area_id
+                if area_id is not None
+                else device_area
+                if device_area is not None
+                else panel_area
+            )
+            if area_before != area_after:
+                area_changes.append(AreaChange(row.entity_id, area_before, area_after))
             # The one way the move puts a breaker in a room: the switch had no
             # area, and its circuit's device was given one before it got here.
             if (

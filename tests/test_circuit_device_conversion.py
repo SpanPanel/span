@@ -26,7 +26,7 @@ composed names are checked on 2026.11 by hand.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping
 import contextlib
 from dataclasses import dataclass, replace
 from typing import Final
@@ -493,6 +493,33 @@ def _area(hass: HomeAssistant, name: str) -> str:
     return ar.async_get(hass).async_create(name).id
 
 
+def _listed(lines: Iterable[str]) -> str:
+    """Return lines as the notice lists them."""
+    return "\n".join(f"- {line}" for line in lines)
+
+
+def _joined_lines(
+    install: _Install,
+    circuit_id: str,
+    device_name: str,
+    area: str,
+    *,
+    before: str = NONE_LISTED,
+    but: Collection[_Kind] = (),
+) -> list[str]:
+    """Return the "Areas moved" lines of a circuit's entities that had no area of their own.
+
+    Each was in the panel's area, `before`, and is in its circuit's device's
+    now. One line for every entity the integration creates for the circuit, in
+    the order the registry holds them, `but` those a case accounts for itself.
+    """
+    return [
+        f"{device_name} {kind.label}: {before} → {area}"
+        for kind in install.kinds(circuit_id)
+        if kind not in but
+    ]
+
+
 # ---------------------------------------------------------------------------
 # The move
 # ---------------------------------------------------------------------------
@@ -954,9 +981,106 @@ async def test_switch_area_moves_to_the_device(hass: HomeAssistant) -> None:
         assert install.circuit_device(KITCHEN).area_id == kitchen
         assert [row.area_id for row in install.rows(KITCHEN)] == [None] * len(install.rows(KITCHEN))
         lists = install.notice_lists()
-        assert lists["area_changes"] == "- Kitchen Outlets Power: Garage → Kitchen"
+        assert lists["area_changes"] == _listed(
+            [
+                "Kitchen Outlets Power: Garage → Kitchen",
+                *_joined_lines(
+                    install, KITCHEN, KITCHEN_OUTLETS, "Kitchen", but=(POWER, PRODUCED, BREAKER)
+                ),
+            ]
+        )
         assert lists["circuits_left_in_areas"] == NONE_LISTED
         assert power.entity_id == install.row(KITCHEN, POWER).entity_id
+
+
+@pytest.mark.parametrize(
+    ("panel_area", "before"),
+    [
+        pytest.param(None, NONE_LISTED, id="panel-in-no-area"),
+        pytest.param("Garage", "Garage", id="panel-in-an-area"),
+    ],
+)
+async def test_entities_with_no_area_of_their_own_are_listed_where_their_area_changed(
+    hass: HomeAssistant, panel_area: str | None, before: str
+) -> None:
+    """A device that takes an area takes its circuit's entities there, and each is listed.
+
+    An entity with no area of its own was in the panel's, or in none. On a
+    device with an area it is in that one, which is as much a move for an
+    area-wide action or an area template as losing an area of its own.
+    """
+    install = _install(hass, _tree())
+    kitchen = _area(hass, "Kitchen")
+    panel_area_id = _area(hass, panel_area) if panel_area is not None else None
+    if panel_area_id is not None:
+        dr.async_get(hass).async_update_device(install.panel_device_id, area_id=panel_area_id)
+    install.update(KITCHEN, BREAKER, area_id=kitchen)
+    for row in install.rows(KITCHEN):
+        if row.domain != "switch":
+            assert er.async_get_effective_area_id(hass, row) == panel_area_id
+
+    async with _set_up(install):
+        assert install.circuit_device(KITCHEN).area_id == kitchen
+        for row in install.rows(KITCHEN):
+            assert row.area_id is None
+            assert er.async_get_effective_area_id(hass, row) == kitchen
+        assert install.notice_lists()["area_changes"] == _listed(
+            _joined_lines(
+                install, KITCHEN, KITCHEN_OUTLETS, "Kitchen", before=before, but=(BREAKER,)
+            )
+        )
+
+
+async def test_an_entity_whose_inherited_area_is_unchanged_is_not_listed(
+    hass: HomeAssistant,
+) -> None:
+    """An entity in the same area after the move as before it has not moved.
+
+    The panel is in the Kitchen, and so is one circuit's breaker switch. That
+    circuit's device takes the Kitchen, where its entities already were. Every
+    other circuit's device has no area and is in the panel's, where its
+    entities were too.
+    """
+    install = _install(hass, _tree())
+    kitchen = _area(hass, "Kitchen")
+    dr.async_get(hass).async_update_device(install.panel_device_id, area_id=kitchen)
+    install.update(KITCHEN, BREAKER, area_id=kitchen)
+
+    async with _set_up(install):
+        assert install.circuit_device(KITCHEN).area_id == kitchen
+        assert install.circuit_device(UNSWITCHED).area_id is None
+        for row in install.all_rows():
+            assert er.async_get_effective_area_id(hass, row) == kitchen
+        assert install.notice_lists()["area_changes"] == NONE_LISTED
+
+
+async def test_the_report_records_each_area_an_entity_was_in_and_is_in(
+    hass: HomeAssistant,
+) -> None:
+    """The report gives the area before and after, an entity's own or the one it inherits."""
+    install = _install(hass, _tree())
+    kitchen, garage, basement = (_area(hass, name) for name in ("Kitchen", "Garage", "Basement"))
+    dr.async_get(hass).async_update_device(install.panel_device_id, area_id=garage)
+    install.update(KITCHEN, BREAKER, area_id=kitchen)
+    install.update(KITCHEN, POWER, area_id=kitchen)
+    install.update(KITCHEN, CONSUMED, area_id=basement)
+    install.update(LIGHTS, POWER, area_id=basement)
+
+    report = install.convert()
+
+    inherited = [kind for kind in install.kinds(KITCHEN) if kind not in (BREAKER, POWER, CONSUMED)]
+    assert inherited
+    assert {change.entity_id: change for change in report.area_changes} == {
+        install.row(KITCHEN, CONSUMED).entity_id: AreaChange(
+            install.row(KITCHEN, CONSUMED).entity_id, basement, kitchen
+        ),
+        **{
+            install.row(KITCHEN, kind).entity_id: AreaChange(
+                install.row(KITCHEN, kind).entity_id, garage, kitchen
+            )
+            for kind in inherited
+        },
+    }
 
 
 async def test_power_area_moves_when_the_circuit_has_no_switch(hass: HomeAssistant) -> None:
@@ -986,8 +1110,11 @@ async def test_power_area_moves_when_the_circuit_has_no_switch(hass: HomeAssista
     async with _set_up(install):
         assert install.circuit_device(UNSWITCHED).area_id == garage
         assert {row.area_id for row in install.rows(UNSWITCHED)} == {None}
-        assert install.notice_lists()["area_changes"] == (
-            "- Workshop Produced Energy: Basement → Garage"
+        assert install.notice_lists()["area_changes"] == _listed(
+            [
+                "Workshop Produced Energy: Basement → Garage",
+                *_joined_lines(install, UNSWITCHED, WORKSHOP, "Garage", but=(POWER, PRODUCED)),
+            ]
         )
 
 
@@ -1072,8 +1199,14 @@ async def test_other_areas_are_cleared_renamed_entities_included(hass: HomeAssis
         assert {row.area_id for row in install.rows(KITCHEN)} == {None}
         power = install.row(KITCHEN, POWER)
         assert power.name == "Fridge Power"
-        assert install.notice_lists()["area_changes"] == (
-            "- Fridge Power: Garage → Kitchen\n- Kitchen Outlets Consumed Energy: Basement → Kitchen"
+        assert install.notice_lists()["area_changes"] == _listed(
+            "Fridge Power: Garage → Kitchen"
+            if kind is POWER
+            else "Kitchen Outlets Consumed Energy: Basement → Kitchen"
+            if kind is CONSUMED
+            else f"Kitchen Outlets {kind.label}: {NONE_LISTED} → Kitchen"
+            for kind in install.kinds(KITCHEN)
+            if kind is not BREAKER
         )
 
 
@@ -1109,7 +1242,10 @@ async def test_a_late_entity_joins_the_area_its_circuit_device_has(hass: HomeAss
     async with _set_up(install):
         assert install.circuit_device(UNSWITCHED).area_id == garage
         assert install.row(UNSWITCHED, NET).area_id == basement
-        assert install.notice_lists()["area_changes"] == NONE_LISTED
+        first = install.notice_lists()
+        joined = _joined_lines(install, UNSWITCHED, WORKSHOP, "Garage", but=(POWER, NET))
+        assert first["renamed"] != NONE_LISTED
+        assert first["area_changes"] == _listed(joined)
 
         await _change_options(install, NAMES_MODE)
 
@@ -1117,11 +1253,11 @@ async def test_a_late_entity_joins_the_area_its_circuit_device_has(hass: HomeAss
         net = install.row(UNSWITCHED, NET)
         assert device.area_id == garage
         assert (net.device_id, net.area_id) == (device.id, None)
+        # The first setup's notice was never dismissed, so its lines are still
+        # there, and the late entity's follow them.
         assert install.notice_lists() == {
-            "panel": PANEL_NAME,
-            "renamed": NONE_LISTED,
-            "area_changes": "- Workshop Net Energy: Basement → Garage",
-            "circuits_left_in_areas": NONE_LISTED,
+            **first,
+            "area_changes": _listed([*joined, "Workshop Net Energy: Basement → Garage"]),
         }
 
 
@@ -1152,6 +1288,32 @@ async def test_an_area_the_user_gave_a_circuit_device_outlasts_a_late_entity(
         assert lists["circuits_left_in_areas"] == NONE_LISTED
 
 
+async def test_a_late_entity_with_no_area_is_listed_where_its_device_has_one(
+    hass: HomeAssistant,
+) -> None:
+    """A late entity was in the panel's area and is in the one its user gave the device.
+
+    Nothing was listed at the upgrade, where no entity had an area. Only the
+    circuit whose device has one since is listed: every other late entity is in
+    the panel's area still.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **NET_ENERGY_OFF})
+    kitchen = _area(hass, "Kitchen")
+
+    async with _set_up(install):
+        assert install.notice() is None
+        device = install.circuit_device(KITCHEN)
+        dr.async_get(hass).async_update_child_device(device.id, area_id=kitchen)
+
+        await _change_options(install, NAMES_MODE)
+
+        net = install.row(KITCHEN, NET)
+        assert (net.device_id, net.area_id) == (device.id, None)
+        assert install.notice_lists()["area_changes"] == (
+            f"- Kitchen Outlets Net Energy: {NONE_LISTED} → Kitchen"
+        )
+
+
 @pytest.mark.parametrize(
     "device_moved", [pytest.param(False, id="device-where-the-switch-is"), True]
 )
@@ -1173,6 +1335,10 @@ async def test_a_late_breaker_switch_stays_in_the_area_it_is_in(
         device = install.circuit_device(KITCHEN)
         assert device.area_id == kitchen
         assert install.row(KITCHEN, BREAKER).device_id == install.panel_device_id
+        at_the_upgrade = _joined_lines(
+            install, KITCHEN, KITCHEN_OUTLETS, "Kitchen", but=(BREAKER, PRIORITY)
+        )
+        assert install.notice_lists()["area_changes"] == _listed(at_the_upgrade)
         if device_moved:
             dr.async_get(hass).async_update_child_device(device.id, area_id=garage)
 
@@ -1187,7 +1353,12 @@ async def test_a_late_breaker_switch_stays_in_the_area_it_is_in(
             assert install.circuit_device(KITCHEN).area_id == kitchen
             assert switch.area_id is None
         assert select.area_id is None
-        assert install.notice_lists()["area_changes"] == NONE_LISTED
+        # The switch is where it was. The select had no area of its own, so it
+        # was in the panel's, and is in its circuit's device's now.
+        joined = "Garage" if device_moved else "Kitchen"
+        assert install.notice_lists()["area_changes"] == _listed(
+            [*at_the_upgrade, f"Kitchen Outlets Circuit Priority: {NONE_LISTED} → {joined}"]
+        )
 
 
 async def test_the_report_lists_a_late_breaker_switch_that_joins_its_device_s_area(
@@ -1406,8 +1577,8 @@ async def test_the_notice_names_the_panel_as_the_user_named_its_device(
         assert install.notice_lists()["panel"] == "Garage Panel"
 
 
-async def test_the_notice_lists_fifty_names_then_counts_the_rest(hass: HomeAssistant) -> None:
-    """A panel's worth of changed names would bury the notice, so the list stops at 50."""
+async def test_the_notice_lists_every_changed_name(hass: HomeAssistant) -> None:
+    """However many names changed, each is listed: nothing else records what they were."""
     entry = add_panel_entry(hass, "entry-many", "sp3-242424-001")
     register_panel_device(hass, entry, "sp3-242424-001")
     registry = er.async_get(hass)
@@ -1418,7 +1589,7 @@ async def test_the_notice_lists_fifty_names_then_counts_the_rest(hass: HomeAssis
             ).entity_id,
             f"Old {index}",
         )
-        for index in range(53)
+        for index in range(120)
     )
 
     async_raise_conversion_notice(hass, entry, ConversionReport(converted, (), (), ()))
@@ -1426,10 +1597,9 @@ async def test_the_notice_lists_fifty_names_then_counts_the_rest(hass: HomeAssis
     issue = ir.async_get(hass).async_get_issue(DOMAIN, "circuit_devices_converted_entry-many")
     assert issue is not None
     assert issue.translation_placeholders is not None
-    lines = issue.translation_placeholders["renamed"].split("\n")
-    assert lines[:2] == ["- Old 0 → New 0", "- Old 1 → New 1"]
-    # A paragraph of its own: straight under the list it would join the last item.
-    assert lines[49:] == ["- Old 49 → New 49", "", "and 3 more"]
+    assert issue.translation_placeholders["renamed"].split("\n") == [
+        f"- Old {index} → New {index}" for index in range(120)
+    ]
 
 
 async def test_the_notice_shows_an_area_it_cannot_name(hass: HomeAssistant) -> None:
@@ -1455,8 +1625,134 @@ async def test_the_notice_shows_an_area_it_cannot_name(hass: HomeAssistant) -> N
     assert issue.translation_placeholders["area_changes"] == "- Power: area_since_deleted → —"
 
 
+def _renamed_report(hass: HomeAssistant, entry: MockConfigEntry, *names: str) -> ConversionReport:
+    """Return the report of a run that renamed one new entity for each of `names`."""
+    registry = er.async_get(hass)
+    return ConversionReport(
+        tuple(
+            ConvertedEntity(
+                registry.async_get_or_create(
+                    "sensor",
+                    DOMAIN,
+                    f"uid-{name}",
+                    config_entry=entry,
+                    original_name=f"New {name}",
+                ).entity_id,
+                f"Old {name}",
+            )
+            for name in names
+        ),
+        (),
+        (),
+        (),
+    )
+
+
+@pytest.mark.parametrize("dismissed", [pytest.param(True, id="dismissed"), False])
+async def test_a_later_run_adds_its_lines_to_the_notice_and_shows_it_again(
+    hass: HomeAssistant, dismissed: bool
+) -> None:
+    """A second run with something to list keeps the first run's lines and is not hidden.
+
+    Home Assistant raises an issue again over a dismissed one by keeping the
+    dismissal, and over any by replacing what it lists. Left to that, a late
+    conversion's changes would be written where nobody sees them, and an
+    unread notice would lose what the upgrade changed.
+    """
+    entry = add_panel_entry(hass, "entry-twice", "sp3-242424-001")
+    register_panel_device(hass, entry, "sp3-242424-001")
+    issues = ir.async_get(hass)
+    issue_id = "circuit_devices_converted_entry-twice"
+    first = replace(_renamed_report(hass, entry, "a", "b"), circuits_left_in_areas=("Lights",))
+    late = replace(_renamed_report(hass, entry, "c"), circuits_left_in_areas=("Lights", "Workshop"))
+
+    async_raise_conversion_notice(hass, entry, first)
+    if dismissed:
+        issues.async_ignore(DOMAIN, issue_id, True)
+        earlier = issues.async_get_issue(DOMAIN, issue_id)
+        assert earlier is not None
+        assert earlier.dismissed_version is not None
+    async_raise_conversion_notice(hass, entry, late)
+
+    issue = issues.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.dismissed_version is None
+    assert issue.translation_placeholders == {
+        "panel": PANEL_NAME,
+        "renamed": "- Old a → New a\n- Old b → New b\n- Old c → New c",
+        "area_changes": NONE_LISTED,
+        "circuits_left_in_areas": "- Lights\n- Workshop",
+    }
+
+
+async def test_a_later_run_with_nothing_to_list_leaves_a_dismissed_notice_dismissed(
+    hass: HomeAssistant,
+) -> None:
+    """Only something new to read brings a notice back."""
+    entry = add_panel_entry(hass, "entry-quiet-later", "sp3-242424-001")
+    register_panel_device(hass, entry, "sp3-242424-001")
+    issues = ir.async_get(hass)
+    issue_id = "circuit_devices_converted_entry-quiet-later"
+    async_raise_conversion_notice(hass, entry, _renamed_report(hass, entry, "a"))
+    dismissed = issues.async_ignore(DOMAIN, issue_id, True)
+    unchanged = er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, "uid-unchanged", config_entry=entry, original_name="Same"
+    )
+
+    async_raise_conversion_notice(
+        hass, entry, ConversionReport((ConvertedEntity(unchanged.entity_id, "Same"),), (), (), ())
+    )
+
+    assert issues.async_get_issue(DOMAIN, issue_id) == dismissed
+
+
+async def test_a_dismissed_notice_comes_back_for_a_late_conversion(hass: HomeAssistant) -> None:
+    """Controls switched on after the upgrade move entities too, and the user is told again.
+
+    The first notice was read and dismissed, as it asks. The breaker switch and
+    the priority select convert when controls are switched on, onto a device
+    its user has put in the Kitchen by then, and the select gives up the area
+    it had of its own. That is listed where the user sees it, after what the
+    upgrade listed.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **CONTROLS_OFF})
+    kitchen, garage, pantry = (_area(hass, name) for name in ("Kitchen", "Garage", "Pantry"))
+    install.update(KITCHEN, POWER, area_id=garage)
+    install.update(KITCHEN, PRIORITY, area_id=pantry)
+
+    async with _set_up(install):
+        first = install.notice_lists()
+        assert first == {
+            "panel": PANEL_NAME,
+            "renamed": "- Kitchen Outlets Power → Power",
+            "area_changes": NONE_LISTED,
+            "circuits_left_in_areas": "- Kitchen Outlets",
+        }
+        ir.async_get(hass).async_ignore(
+            DOMAIN, f"circuit_devices_converted_{install.entry.entry_id}", True
+        )
+        dr.async_get(hass).async_update_child_device(
+            install.circuit_device(KITCHEN).id, area_id=kitchen
+        )
+
+        await _change_options(install, NAMES_MODE)
+
+        notice = install.notice()
+        assert notice is not None
+        assert notice.dismissed_version is None
+        lists = install.notice_lists()
+        assert lists["renamed"].split("\n")[0] == "- Kitchen Outlets Power → Power"
+        assert lists["area_changes"] == _listed(
+            [
+                f"Kitchen Outlets Breaker: {NONE_LISTED} → Kitchen",
+                "Kitchen Outlets Circuit Priority: Pantry → Kitchen",
+            ]
+        )
+        assert lists["circuits_left_in_areas"] == "- Kitchen Outlets"
+
+
 async def test_a_conversion_that_changed_nothing_raises_no_notice(hass: HomeAssistant) -> None:
-    """A report with nothing in it, as every setup after the first makes, leaves no notice."""
+    """A report with nothing in it, as a setup with nothing left to convert makes, leaves no notice."""
     entry = add_panel_entry(hass, "entry-quiet", "sp3-242424-001")
     register_panel_device(hass, entry, "sp3-242424-001")
 

@@ -904,7 +904,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
         # Before the forward, so the platforms add every circuit entity onto its
         # circuit's own device: an install from before circuits had devices still
-        # has them on the panel's. Nothing to do on any setup after the first.
+        # has them on the panel's. A later setup converts only the entities it is
+        # the first to build, such as controls switched on since.
         conversion = async_convert_circuit_entities(
             hass, entry, snapshot, entry.runtime_data.panel_device_id
         )
