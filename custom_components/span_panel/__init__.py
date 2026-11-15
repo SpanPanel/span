@@ -919,8 +919,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # Assistant composes for the entities as the platforms left them.
         async_raise_conversion_notice(hass, entry, conversion)
 
-        # After the forward too: only then is a new breaker switch in the
-        # registry, on its circuit's device, where it may have joined an area.
+        # After the forward too: only then is a new breaker switch certain to be
+        # in the registry, on its circuit's device, where it may have joined an
+        # area. The conversion's switches are checked here with the new ones.
         async_raise_breaker_switch_area_notices(
             hass,
             entry,

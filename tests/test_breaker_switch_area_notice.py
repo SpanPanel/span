@@ -26,6 +26,7 @@ registries.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Mapping
 import contextlib
 from dataclasses import dataclass
@@ -41,11 +42,13 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 
+from custom_components.span_panel import switch as switch_platform
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -71,6 +74,8 @@ from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_VERSION,
 )
 from custom_components.span_panel.options import CONTROL_MODE
+from custom_components.span_panel.runtime import SpanPanelConfigEntry
+from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .captures_replay import ReplayClient, RetainedTree, capture, replay
 from .helpers import PANEL_NAME, add_panel_entry
@@ -482,6 +487,52 @@ async def test_a_new_switch_registered_disabled_raises_the_notice(hass: HomeAssi
         assert switch.disabled_by is er.RegistryEntryDisabler.INTEGRATION
         assert hass.states.get(switch.entity_id) is None
         assert set(panel.notices()) == {panel.notice_id(KITCHEN)}
+
+
+async def test_a_switch_registered_after_its_platform_returns_raises_the_notice(
+    hass: HomeAssistant,
+) -> None:
+    """A switch Home Assistant has yet to register when the switch platform returns is new too.
+
+    Home Assistant promises a platform's entities registered only once the
+    platform's setup has returned to the forward. Here a breaker switch yields
+    while it is added, so the switches after it are registered later than the
+    platform's own return, and each is reported all the same.
+    """
+    panel = _panel(hass, CONTROLS_OFF)
+    kitchen, hallway = _area(hass, "Kitchen"), _area(hass, "Hallway")
+    switched = {KITCHEN, LIGHTS}
+    registered_as_the_platform_returned: list[set[str]] = []
+    set_up_the_platform = switch_platform.async_setup_entry
+    added_to_hass = SpanPanelCircuitsSwitch.async_added_to_hass
+
+    async def set_up_and_read_the_registry(
+        hass: HomeAssistant,
+        config_entry: SpanPanelConfigEntry,
+        async_add_entities: AddConfigEntryEntitiesCallback,
+    ) -> None:
+        await set_up_the_platform(hass, config_entry, async_add_entities)
+        registered_as_the_platform_returned.append(
+            {circuit_id for circuit_id in switched if panel.find_switch(circuit_id) is not None}
+        )
+
+    async def yield_while_added(switch: SpanPanelCircuitsSwitch) -> None:
+        await asyncio.sleep(0)
+        await added_to_hass(switch)
+
+    async with _set_up(panel):
+        panel.put_circuit_device_in(KITCHEN, kitchen)
+        panel.put_circuit_device_in(LIGHTS, hallway)
+
+        with (
+            patch.object(switch_platform, "async_setup_entry", set_up_and_read_the_registry),
+            patch.object(SpanPanelCircuitsSwitch, "async_added_to_hass", yield_while_added),
+        ):
+            await panel.save_options(CONTROLS_ON)
+
+        (registered,) = registered_as_the_platform_returned
+        assert switched - registered, "every switch was registered before the platform returned"
+        assert set(panel.notices()) == {panel.notice_id(KITCHEN), panel.notice_id(LIGHTS)}
 
 
 async def test_a_notice_is_raised_once(hass: HomeAssistant) -> None:

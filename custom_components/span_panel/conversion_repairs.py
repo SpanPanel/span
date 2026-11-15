@@ -53,10 +53,14 @@ area, where every breaker switch was while it sat on the panel's device, so the
 switch is where a new one has always been.
 
 - **Decided after the platforms are set up,** from the registry as they left
-  it. A platform's call to add its entities only schedules the add, which Home
-  Assistant finishes after the platform's own setup has returned, so the
-  platform cannot see the row it asked for. The registry is read once before
-  the platforms are forwarded (`async_registered_breaker_switches`) and again
+  it. Home Assistant starts a platform's add as a task and promises it finished
+  only once the platform's setup has returned to the forward. The task usually
+  registers every entity before the platform's own call returns, but an entity
+  whose add yields leaves those after it unregistered, so the platform cannot
+  rely on seeing the rows it asked for. After the forward is also where both
+  kinds of switch are known, the new ones and those the conversion reported, so
+  one check decides for all of them. The registry is read once before the
+  platforms are forwarded (`async_registered_breaker_switches`) and again
   after, and a switch in the second reading alone is new. Read from the
   registry, a switch registered disabled counts: enabling it is all it takes
   for the area to reach it.
