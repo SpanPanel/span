@@ -1287,7 +1287,13 @@ async def test_a_withdrawn_switch_counts_as_the_circuit_switch(
 
 
 async def test_other_areas_are_cleared_renamed_entities_included(hass: HomeAssistant) -> None:
-    """Once the device has the area, no entity keeps one of its own, whoever named it."""
+    """Once the device has the area, no entity keeps one of its own, whoever named it.
+
+    The renamed entity is held to its stored fields and to the areas on its
+    line of the notice. The name on that line is the one Home Assistant
+    displays, which for a name the user set differs between the release the
+    suite runs on and the one the integration requires.
+    """
     install = _install(hass, _tree())
     kitchen, garage, basement = (_area(hass, name) for name in ("Kitchen", "Garage", "Basement"))
     install.update(KITCHEN, BREAKER, area_id=kitchen)
@@ -1297,15 +1303,21 @@ async def test_other_areas_are_cleared_renamed_entities_included(hass: HomeAssis
     async with _set_up(install):
         assert {row.area_id for row in install.rows(KITCHEN)} == {None}
         power = install.row(KITCHEN, POWER)
-        assert power.name == "Fridge Power"
-        assert install.notice_lists()["area_changes"] == _listed(
-            "Fridge Power: Garage → Kitchen"
-            if kind is POWER
-            else "Kitchen Outlets Consumed Energy: Basement → Kitchen"
+        assert (power.name, power.original_name) == ("Fridge Power", "Power")
+        assert power.device_id == install.circuit_device(KITCHEN).id
+
+        kinds = [kind for kind in install.kinds(KITCHEN) if kind is not BREAKER]
+        lines = install.notice_lists()["area_changes"].splitlines()
+        assert len(lines) == len(kinds)
+        renamed = lines.pop(kinds.index(POWER))
+        assert renamed.startswith("- ")
+        assert renamed.endswith("Fridge Power: Garage → Kitchen")
+        assert "\n".join(lines) == _listed(
+            "Kitchen Outlets Consumed Energy: Basement → Kitchen"
             if kind is CONSUMED
             else f"Kitchen Outlets {kind.label}: {NONE_LISTED} → Kitchen"
-            for kind in install.kinds(KITCHEN)
-            if kind is not BREAKER
+            for kind in kinds
+            if kind is not POWER
         )
 
 
