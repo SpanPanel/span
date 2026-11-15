@@ -66,7 +66,7 @@
         "data_description": {
           "entity_naming_pattern": "Les deux choix construisent l'identifiant de chaque nouvelle entité une seule fois, à sa création : les noms de circuit à partir du nom du circuit dans l'application SPAN, les numéros de circuit à partir de la position de son disjoncteur. Dans les deux cas, les noms affichés suivent l'application SPAN."
         },
-        "description": "Choisissez comment les entités liées aux circuits sont nommées dans Home Assistant.",
+        "description": "Choisissez comment sont construits les identifiants d'entité des nouvelles entités de circuit.",
         "title": "Nommage des entités de circuit"
       },
       "choose_v2_auth": {

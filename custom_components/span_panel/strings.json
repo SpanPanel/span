@@ -66,7 +66,7 @@
         "data_description": {
           "entity_naming_pattern": "Both choices build each new entity's ID once, when it is created: circuit names from the circuit's name in the SPAN app, circuit numbers from its breaker's position. Displayed names follow the SPAN app either way."
         },
-        "description": "Choose how circuit-related entities are named in Home Assistant.",
+        "description": "Choose how the entity IDs of new circuit entities are built.",
         "title": "Circuit entity naming"
       },
       "choose_v2_auth": {

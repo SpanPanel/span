@@ -73,8 +73,9 @@ _FALLBACK: Final[dict[str, str]] = {
     "enabled_heading": "Added and ready to use",
     "disabled_heading": "Added but switched off",
     "how_to_enable": (
-        "Switched-off entities record nothing until you turn them on. Open the SPAN Panel "
-        "device page, show its disabled entities, and enable the ones you want."
+        "Switched-off entities record nothing until you turn them on. Open the device page "
+        "of the circuit they belong to, or the panel's for panel-wide readings, show its "
+        "disabled entities, and enable the ones you want."
     ),
     "nothing_broken": "Nothing is broken and no action is required.",
 }

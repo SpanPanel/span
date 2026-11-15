@@ -18,7 +18,8 @@ All notable changes to this project will be documented in this file.
 - **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
   correctly only from 2026.11.
 - **Each circuit is now a device under the panel, named by the circuit's name in the SPAN app**, and its entities are named by what they measure, such as Power;
-  entity IDs do not change, and names you never changed display as before.
+  entity IDs do not change, and a name you never changed displays as before unless the move changed the entity's area or left it with an area of its own, as the
+  repair lists.
 - **A circuit's area moves to its device**, taken from its breaker switch, or on a circuit with no switch from its power sensor or else the first of its other
   entities that has an area, and the circuit's other entities then share it instead of keeping areas of their own.
 - **A circuit whose breaker switch has no area keeps its entities' areas as they were**, so a room-wide turn-off still cannot reach its breaker.

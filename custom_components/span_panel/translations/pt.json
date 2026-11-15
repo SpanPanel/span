@@ -66,7 +66,7 @@
         "data_description": {
           "entity_naming_pattern": "Ambas as opções constroem o ID de cada nova entidade uma única vez, quando é criada: os nomes de circuito a partir do nome do circuito na aplicação SPAN, os números de circuito a partir da posição do seu disjuntor. Os nomes apresentados seguem a aplicação SPAN em ambos os casos."
         },
-        "description": "Escolha como as entidades relacionadas com circuitos são nomeadas no Home Assistant.",
+        "description": "Escolha como são construídos os IDs de entidade das novas entidades de circuito.",
         "title": "Nomenclatura de entidades de circuito"
       },
       "choose_v2_auth": {

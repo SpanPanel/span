@@ -66,7 +66,7 @@
         "data_description": {
           "entity_naming_pattern": "どちらを選んでも、新しいエンティティのIDは作成時に一度だけ作られます。回路名は SPAN アプリでの回路名から、回路番号はブレーカーの位置から作られます。表示名はどちらの場合も SPAN アプリに従います。"
         },
-        "description": "Home Assistantでの回路関連エンティティの命名方法を選択してください。",
+        "description": "新しい回路エンティティのエンティティIDの作り方を選択してください。",
         "title": "回路エンティティの命名"
       },
       "choose_v2_auth": {

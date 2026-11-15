@@ -1,6 +1,7 @@
 """The text circuit devices brought, in every language the integration ships.
 
-Two repair notices and the reworded naming option. The English is approved
+Two repair notices, the reworded naming option, and where the new-entities
+notification sends the user for an entity that is switched off. The English is approved
 verbatim and pinned here. The sync hook holds each other language to the same
 keys and nothing more, so a notice copied across in English, a placeholder
 lost in translation, or a label left on a retired term passes it. These hold
@@ -16,6 +17,9 @@ from pathlib import Path
 from string import Formatter
 
 import pytest
+
+from custom_components.span_panel.additions import _FALLBACK
+from custom_components.span_panel.notices import read_translations
 
 _COMPONENT = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
 
@@ -42,6 +46,7 @@ _NAMING_HELP = (
     "data_description",
     "entity_naming_pattern",
 )
+_NAMING_STEP = ("config", "step", "choose_entity_naming_initial", "description")
 _CIRCUIT_NAMES = ("selector", "entity_naming_pattern", "options", "friendly_names")
 _CIRCUIT_NUMBERS = ("selector", "entity_naming_pattern", "options", "circuit_numbers")
 
@@ -79,12 +84,38 @@ _APPROVED_ENGLISH: dict[tuple[str, ...], str] = {
         " the circuit's name in the SPAN app, circuit numbers from its breaker's position."
         " Displayed names follow the SPAN app either way."
     ),
+    _NAMING_STEP: "Choose how the entity IDs of new circuit entities are built.",
     _CIRCUIT_NAMES: "Circuit names (e.g., span_panel_kitchen_outlets_power)",
     _CIRCUIT_NUMBERS: "Circuit numbers (e.g., span_panel_circuit_15_power)",
 }
 
 _NOTICE_TEXTS = [_CONVERTED_TITLE, _CONVERTED, _SWITCH_TITLE, _SWITCH]
-_NAMING_TEXTS = [_NAMING_HELP, _CIRCUIT_NAMES, _CIRCUIT_NUMBERS]
+_NAMING_TEXTS = [_NAMING_HELP, _NAMING_STEP, _CIRCUIT_NAMES, _CIRCUIT_NUMBERS]
+
+_HOW_TO_ENABLE = (
+    "Switched-off entities record nothing until you turn them on. Open the device page of"
+    " the circuit they belong to, or the panel's for panel-wide readings, show its disabled"
+    " entities, and enable the ones you want."
+)
+"""Approved verbatim. A notification is not a category Home Assistant translates,
+so it is read from the component's own `notifications/` files, not `strings.json`."""
+
+_CIRCUIT_WORD: dict[str, str] = {
+    "es": "circuito",
+    "fr": "circuit",
+    "ja": "回路",
+    "pt": "circuito",
+}
+"""Each language's word for a circuit, as its other strings spell it."""
+
+_ENTITY_ID_WORDS: dict[str, str] = {
+    "en": "entity IDs",
+    "es": "ID de entidad",
+    "fr": "identifiants d'entité",
+    "ja": "エンティティID",
+    "pt": "IDs de entidade",
+}
+"""How each language's other strings write "entity ID"."""
 
 _RETIRED_NAMING_TERMS = (
     "friendly",
@@ -208,3 +239,30 @@ def test_the_naming_labels_still_show_an_entity_id(language: str) -> None:
     assert "span_panel_circuit_15_power" in _text(language, _CIRCUIT_NUMBERS)
     assert "span_panel_" in _text(language, _CIRCUIT_NAMES)
     assert _text(language, _CIRCUIT_NAMES).endswith(("_power)", "_power）"))
+
+
+def test_the_notification_sends_the_user_to_the_circuit_s_device_page() -> None:
+    """A circuit's switched-off entity is on its circuit's device, not the panel's."""
+    assert read_translations("en", "new_entities")["how_to_enable"] == _HOW_TO_ENABLE
+
+
+def test_the_notification_s_fallback_is_the_approved_text() -> None:
+    """The English kept in code, for a file that cannot be read, says the same."""
+    assert _FALLBACK["how_to_enable"] == _HOW_TO_ENABLE
+
+
+@pytest.mark.parametrize("language", _TRANSLATED)
+def test_every_language_sends_the_user_to_the_circuit_s_device_page(language: str) -> None:
+    """Each language has its own text, and none still names the panel's page alone."""
+    english = read_translations("en", "new_entities")["how_to_enable"]
+    text = read_translations(language, "new_entities")["how_to_enable"]
+
+    assert text != english
+    assert _placeholders(text) == []
+    assert _CIRCUIT_WORD[language] in text.casefold()
+
+
+@pytest.mark.parametrize("language", list(_LANGUAGE_FILES))
+def test_the_naming_step_says_the_choice_builds_entity_ids(language: str) -> None:
+    """The choice builds IDs; it names nothing, so no language says it names entities."""
+    assert _ENTITY_ID_WORDS[language] in _text(language, _NAMING_STEP)
