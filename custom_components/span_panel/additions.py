@@ -360,10 +360,10 @@ def _extension_device_name(
 def _label(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry) -> str:
     """Return what to call an entity the user has never seen.
 
-    A disabled entity has no state, so there is no friendly name on the state
-    machine -- only what the registry recorded when the platform added it. The
-    entity_id is the last resort rather than the first choice, because it is the
-    name the user will *not* see in the device's entity list.
+    A disabled entity has no state, so the name comes from the registry: what
+    it recorded when the platform added the entity, or what the user has called
+    it since. The entity_id is the last resort rather than the first choice,
+    because it is the name the user will *not* see in the device's entity list.
 
     **An entity on a device of its own carries that device's name.** Every
     platform here sets `_attr_has_entity_name`, so the registry stores only the

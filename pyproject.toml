@@ -212,6 +212,11 @@ ignore = [
 exclude_dirs = ["tests", "scripts"]
 skips = ["B101", "B108"]  # Skip assert_used and hardcoded_tmp_directory for test files
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Home Assistant plans to retire the `friendly_name` state attribute. Names come
+# from the entity and device registries (`er.async_get_full_entity_name`).
+"homeassistant.const.ATTR_FRIENDLY_NAME".msg = "The friendly_name state attribute is being retired. Read the name from the entity registry, for example with er.async_get_full_entity_name."
+
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 

@@ -56,7 +56,8 @@ def format_notification(
     `{breaker_rating_a}` placeholder carries.
 
     Available placeholders:
-        {name}            - Circuit/mains friendly name
+        {name}            - The circuit's name in the SPAN app, or the mains leg
+                            (e.g. "Mains Upstream L1")
         {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
         {alert_type}      - "spike" or "continuous_overload"
         {current_a}       - Current draw in amps (e.g. 18.3)

@@ -6,7 +6,9 @@ import asyncio
 from collections.abc import Callable
 import dataclasses
 import ipaddress
+import json
 import logging
+from pathlib import Path
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +22,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.selector import SelectSelector
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
@@ -59,6 +62,7 @@ from custom_components.span_panel.const import (
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
     DOMAIN,
+    ENTITY_NAMING_PATTERN,
     PANEL_CA_PENDING,
 )
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
@@ -5127,3 +5131,105 @@ async def test_a_configured_flat_panel_still_takes_the_ports_its_add_on_publishe
     assert result["reason"] == "already_configured"
     assert existing.data[CONF_HTTP_PORT] == 9090
     panel_schema.assert_not_awaited()
+
+
+# ---------- the naming choice's labels ----------
+
+STRINGS_PATH = Path(__file__).resolve().parent.parent / "custom_components/span_panel/strings.json"
+
+NAMING_OPTION_LABELS = {
+    "friendly_names": "Circuit names (e.g., span_panel_kitchen_outlets_power)",
+    "circuit_numbers": "Circuit numbers (e.g., span_panel_circuit_15_power)",
+}
+"""The stored value of each naming choice, and the label the user reads for it.
+
+`friendly_names` is the value entries have stored since the option existed, so
+it stays, while its label no longer uses the term.
+"""
+
+
+def _naming_fields(form: ConfigFlowResult) -> list[object]:
+    """Return the fields of a shown form that offer the naming choice."""
+    schema = form["data_schema"]
+    assert schema is not None
+    return [field for key, field in schema.schema.items() if str(key) == ENTITY_NAMING_PATTERN]
+
+
+async def _first_setup_naming_form(hass: HomeAssistant) -> ConfigFlowResult:
+    """Drive a passphrase flow to the form that asks for the naming choice."""
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+    ):
+        result = await flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+        result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+        result = await flow.async_configure(result["flow_id"], {"next_step_id": "auth_passphrase"})
+        result = await flow.async_configure(
+            result["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+    assert result["step_id"] == "choose_entity_naming_initial"
+    return result
+
+
+async def test_naming_option_labels_come_from_strings(hass: HomeAssistant) -> None:
+    """First setup offers the stored values and leaves their labels to `strings.json`.
+
+    The form names a translation key and carries no label of its own, so the
+    frontend reads each label from `selector.entity_naming_pattern`, in the
+    user's language.
+    """
+    (naming,) = _naming_fields(await _first_setup_naming_form(hass))
+
+    assert isinstance(naming, SelectSelector)
+    assert naming.config["translation_key"] == ENTITY_NAMING_PATTERN
+    assert naming.config["options"] == list(NAMING_OPTION_LABELS)
+
+    strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
+    assert strings["selector"][ENTITY_NAMING_PATTERN]["options"] == NAMING_OPTION_LABELS
+
+
+async def test_naming_option_labels_come_from_strings_in_the_options_flow(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow has no naming labels of its own to disagree with first setup.
+
+    The naming choice is made at first setup, and the options flow carries the
+    stored choice through without offering it. Should it offer the choice, the
+    field must be the same translated selector, which this test then has to
+    say.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={}, entry_id="entry-with-options")
+    entry.add_to_hass(hass)
+
+    form = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert form["type"] is FlowResultType.FORM
+    assert _naming_fields(form) == []
+
+
+def test_first_setup_explains_the_naming_choice_without_the_retired_term() -> None:
+    """No English text about the naming choice calls a circuit's name "friendly"."""
+    strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
+    step = strings["config"]["step"]["choose_entity_naming_initial"]
+    shown = [
+        *step["data"].values(),
+        *step["data_description"].values(),
+        step["description"],
+        step["title"],
+        *strings["selector"][ENTITY_NAMING_PATTERN]["options"].values(),
+    ]
+
+    assert [text for text in shown if "friendly" in text.lower()] == []
+    assert step["data_description"][ENTITY_NAMING_PATTERN] == (
+        "Both choices build each new entity's ID once, when it is created: circuit names from "
+        "the circuit's name in the SPAN app, circuit numbers from its breaker's position. "
+        "Displayed names follow the SPAN app either way."
+    )

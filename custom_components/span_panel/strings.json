@@ -64,7 +64,7 @@
           "entity_naming_pattern": "Naming pattern"
         },
         "data_description": {
-          "entity_naming_pattern": "Friendly names use circuit labels from the panel. Tab-based names use breaker tab numbers for stable entity IDs."
+          "entity_naming_pattern": "Both choices build each new entity's ID once, when it is created: circuit names from the circuit's name in the SPAN app, circuit numbers from its breaker's position. Displayed names follow the SPAN app either way."
         },
         "description": "Choose how circuit-related entities are named in Home Assistant.",
         "title": "Circuit entity naming"
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Circuit Numbers (e.g., span_panel_circuit_15_power)",
-        "friendly_names": "Friendly Names (e.g., span_panel_kitchen_outlets_power)"
+        "circuit_numbers": "Circuit numbers (e.g., span_panel_circuit_15_power)",
+        "friendly_names": "Circuit names (e.g., span_panel_kitchen_outlets_power)"
       }
     }
   },

@@ -19,6 +19,11 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
@@ -122,6 +127,29 @@ def _rate_limited(err: SpanPanelRateLimitError) -> tuple[str, dict[str, str]]:
 
 class ConfigFlowError(Exception):
     """Custom exception for config flow internal errors."""
+
+
+ENTITY_NAMING_SCHEMA: vol.Schema = vol.Schema(
+    {
+        vol.Required(
+            ENTITY_NAMING_PATTERN, default=EntityNamingPattern.FRIENDLY_NAMES.value
+        ): SelectSelector(
+            SelectSelectorConfig(
+                # The stored values only. Their labels are
+                # `selector.entity_naming_pattern` in `strings.json`, so the
+                # choice is translated, and reads the same wherever a flow
+                # offers it.
+                options=[
+                    EntityNamingPattern.FRIENDLY_NAMES.value,
+                    EntityNamingPattern.CIRCUIT_NUMBERS.value,
+                ],
+                translation_key=ENTITY_NAMING_PATTERN,
+                mode=SelectSelectorMode.LIST,
+            )
+        )
+    }
+)
+"""The naming choice first setup asks for, circuit names being the default."""
 
 
 def get_user_data_schema(default_host: str = "") -> vol.Schema:
@@ -1627,7 +1655,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             self.power_display_precision,
             self.energy_display_precision,
         )
-        # Determine initial naming flags with default to Friendly Names
+        # Determine initial naming flags with default to circuit names
         use_device_prefix = (
             True if self._chosen_use_device_prefix is None else self._chosen_use_device_prefix
         )
@@ -1760,28 +1788,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Pre-setup choice of Entity ID naming pattern.
 
-        Default to Friendly Names; both choices imply device prefix enabled.
+        Default to circuit names; both choices imply device prefix enabled.
         """
 
         self.ensure_flow_is_set_up()
 
-        pattern_options = {
-            EntityNamingPattern.FRIENDLY_NAMES.value: "Circuit Friendly Names",
-            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Tab Based Names",
-        }
-
         if user_input is None:
-            schema = vol.Schema(
-                {
-                    vol.Required(
-                        ENTITY_NAMING_PATTERN,
-                        default=EntityNamingPattern.FRIENDLY_NAMES.value,
-                    ): vol.In(pattern_options)
-                }
-            )
             return self.async_show_form(
                 step_id="choose_entity_naming_initial",
-                data_schema=schema,
+                data_schema=ENTITY_NAMING_SCHEMA,
             )
 
         selected = user_input.get(ENTITY_NAMING_PATTERN, EntityNamingPattern.FRIENDLY_NAMES.value)
