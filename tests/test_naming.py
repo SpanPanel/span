@@ -9,6 +9,7 @@ from custom_components.span_panel.naming import (
     ENTITY_ID_SUFFIX_FORMS,
     NEW_ENTITY_ID_SUFFIX_WORDS,
     circuit_object_id_suffix,
+    suffix_wordings,
 )
 
 
@@ -519,6 +520,99 @@ def test_the_trim_is_core_s_own_rule(name: str, circuit_name: str) -> None:
     change to Core's rule is seen here and not as two names that disagree.
     """
     assert trim_leading_circuit_name(name, circuit_name) == core_strip_prefix(name, circuit_name)
+
+
+# --- Formats that do not end with the device and then the entity --------------
+#
+# An id's tail is where the entity's part is only under a format that ends
+# (device, entity). The cases below are ids no wording reproduces under the
+# format in force, which is when the suffix is read from the id at all.
+
+
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "suffix", "existing", "expected"),
+    [
+        # The id ends on the device's name because the format ends on the
+        # device. It is not an id that left the suffix out.
+        ("Kitchen Outlets", "Kitchen Outlets", "power", "sensor.power_kitchen_outlets", "power"),
+        ("Circuit 15", "Kitchen Outlets", "power", "sensor.power_circuit_15", "power"),
+        ("Circuit 15", "Circuit 15", "breaker", "switch.breaker_span_panel_circuit_15", "breaker"),
+        # The wording is the one the id spells, wherever it spells it.
+        (
+            "Refrigerator",
+            "Refrigerator",
+            "energy_consumed",
+            "sensor.basement_energy_consumed_refrigerator",
+            "energy consumed",
+        ),
+        (
+            "Refrigerator",
+            "Refrigerator",
+            "energy_consumed",
+            "sensor.refrigerator_consumed_energy_span_panel",
+            "consumed energy",
+        ),
+        # An id an older release preset still reads as the name and then a form.
+        (
+            "Refrigerator",
+            "Refrigerator",
+            "energy_consumed",
+            "sensor.span_panel_refrigerator_energy_consumed",
+            "energy consumed",
+        ),
+        ("Current", "Current", "power", "sensor.span_panel_current_power", "power"),
+        # The name's own words are not the suffix's: the device says "current
+        # power" and the entity says "power".
+        (
+            "Current Power Meter",
+            "Current Power Meter",
+            "power",
+            "sensor.power_current_power_meter",
+            "power",
+        ),
+        # Nothing but the name, on a device whose name ends on the suffix words.
+        ("Solar Power", "Solar Power", "power", "sensor.solar_power", ""),
+        # An id that spells no form gets the wording a new entity does.
+        (
+            "Refrigerator",
+            "Refrigerator",
+            "energy_consumed",
+            "sensor.fridge_usage",
+            "consumed energy",
+        ),
+    ],
+)
+def test_an_id_is_read_for_its_suffix_wherever_another_format_puts_it(
+    identifier: str, device_name: str, suffix: str, existing: str, expected: str
+) -> None:
+    assert (
+        circuit_object_id_suffix(
+            identifier, device_name, suffix, existing, device_then_entity=False
+        )
+        == expected
+    )
+
+
+def test_an_id_ending_on_the_device_name_left_the_suffix_out_only_under_device_then_entity() -> (
+    None
+):
+    """The same id, read under the two kinds of format."""
+    stops = ("Kitchen Outlets", "Kitchen Outlets", "power", "sensor.span_panel_kitchen_outlets")
+    assert circuit_object_id_suffix(*stops) == ""
+    assert circuit_object_id_suffix(*stops, device_then_entity=False) == "power"
+
+
+@pytest.mark.parametrize("suffix", sorted(ENTITY_ID_SUFFIX_FORMS))
+def test_every_wording_of_a_suffix_is_tried_longest_first_in_one_order(suffix: str) -> None:
+    """Two wordings of one length must not swap places from one run to the next."""
+    wordings = suffix_wordings(suffix)
+    assert set(wordings) == {form.replace("_", " ") for form in ENTITY_ID_SUFFIX_FORMS[suffix]}
+    assert list(wordings) == sorted(wordings, key=lambda words: (-len(words), words))
+    assert NEW_ENTITY_ID_SUFFIX_WORDS[suffix] in wordings
+
+
+def test_a_suffix_with_no_shipped_form_has_its_own_words() -> None:
+    assert suffix_wordings("phase_angle") == ("phase angle",)
 
 
 from unittest.mock import MagicMock

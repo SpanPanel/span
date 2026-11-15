@@ -135,6 +135,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             snapshot,
             circuit,
             circuit_id,
+            domain="switch",
+            unique_id=self._attr_unique_id,
             id_identifier=id_identifier,
             suffix="breaker",
             existing_entity_id=existing_entity_id,

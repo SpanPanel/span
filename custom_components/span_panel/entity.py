@@ -8,16 +8,13 @@ from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import PublishOutcome, SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
-from .circuit_number_ids import (
-    compose_circuit_number_object_id,
-    preset_circuit_number_entity_id,
-)
+from .circuit_number_ids import preset_circuit_number_entity_id
+from .circuit_object_ids import CircuitIdBase, circuit_object_id_base, compose_circuit_object_id
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import (
     CONTROL_CALLER,
@@ -29,7 +26,7 @@ from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
 from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix
-from .util import circuit_device_info, effective_circuit_device_name, snapshot_to_device_info
+from .util import circuit_device_info, snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -324,28 +321,38 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         circuit: SpanCircuitSnapshot,
         circuit_id: str,
         *,
+        domain: str,
+        unique_id: str,
         id_identifier: str,
         suffix: str,
         existing_entity_id: str | None,
     ) -> str:
         """Return the base of a circuit entity's id on its circuit's device: the suffix alone.
 
-        `naming.circuit_object_id_suffix` reads it back from the id the entity
-        already has, against two names. `id_identifier` is what the naming flag
-        resolves today, the name ids were built from before the circuit had a
-        device: its tabs in circuit-numbers mode, its name or an unnamed
-        circuit's fallback otherwise. The other is the name Core composes the
-        id from, the circuit device's, as `effective_circuit_device_name`
-        gives it.
+        The base under which Core composes the id the entity already has, as
+        `circuit_object_ids.circuit_object_id_base` finds it. `id_identifier`
+        is what the naming flag resolves today, the name ids were built from
+        before the circuit had a device: its tabs in circuit-numbers mode, its
+        name or an unnamed circuit's fallback otherwise.
+
+        What the base was worked out from is recorded with the entry, under
+        the entity's `domain` and `unique_id`, so it can be worked out again
+        if the circuit's device is renamed in Home Assistant, which builds no
+        entity again (`circuit_object_ids.async_keep_circuit_id_bases_current`).
         """
-        device_name = effective_circuit_device_name(
-            dr.async_get(coordinator.hass),
-            snapshot.serial_number,
-            circuit,
-            circuit_id,
-            config_entry_id=coordinator.config_entry.entry_id,
+        entry = coordinator.config_entry
+        recipe = CircuitIdBase(domain, unique_id, id_identifier, suffix)
+        entry.runtime_data.circuit_id_bases.setdefault(circuit_id, []).append(recipe)
+        return circuit_object_id_base(
+            coordinator.hass,
+            panel_device_id=entry.runtime_data.panel_device_id,
+            config_entry_id=entry.entry_id,
+            serial=snapshot.serial_number,
+            circuit=circuit,
+            circuit_id=circuit_id,
+            recipe=recipe,
+            existing_entity_id=existing_entity_id,
         )
-        return circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)
 
     @staticmethod
     def _circuit_number_entity_id(
@@ -384,14 +391,14 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             coordinator.hass,
             domain=domain,
             unique_id=unique_id,
-            object_id=compose_circuit_number_object_id(
+            object_id=compose_circuit_object_id(
                 coordinator.hass,
                 panel_device_id=entry.runtime_data.panel_device_id,
                 circuit_device_identifier=(
                     DOMAIN,
                     build_circuit_device_identifier(snapshot.serial_number, circuit_id),
                 ),
-                circuit_number=id_identifier,
+                device_name=id_identifier,
                 suffix_words=circuit_object_id_suffix(id_identifier, id_identifier, suffix, None),
                 config_entry_id=entry.entry_id,
             ),

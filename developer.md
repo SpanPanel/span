@@ -398,12 +398,18 @@ one `entity_id` it presets is a circuit entity's in circuit-numbers mode, once, 
 (`circuit_number_ids`). `developer_entity_id_and_name_handling.md` holds the rules, R1 to R5, and is the document to check a naming change against.
 
 `naming.py` is the only place the wording of a circuit id is written down. Each circuit's entities live on the circuit's own device, a child of the panel's, so
-Core composes the panel's name and the circuit's from the two devices and the base is the suffix alone:
-`circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)` answers `power` or `energy consumed`, or nothing where the existing id stops
-at the circuit's name. It is the base, not the display name: the two are decoupled on purpose so a label can be reworded without a migration. The suffix wording
-is read back from the id an entity already has, because two spellings have shipped (`consumed_energy` before ids were preset, `energy_consumed` after); a new
-entity gets the noun-last form, matching the panel-level ids. `ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another
-is _discovered_, never to introduce one.
+Core composes the panel's name and the circuit's from the two devices and the base is the suffix alone: `power` or `energy consumed`, or nothing where the
+existing id leaves the suffix out. It is the base, not the display name: the two are decoupled on purpose so a label can be reworded without a migration. The
+suffix wording is read back from the id an entity already has, because two spellings have shipped (`consumed_energy` before ids were preset, `energy_consumed`
+after); a new entity gets the noun-last form, matching the panel-level ids. `ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only
+when another is _discovered_, never to introduce one.
+
+`circuit_object_ids.py` is where the base meets Core's composition. `circuit_object_id_base` gives an entity the wording under which Core composes the id it
+already has, tried under the user's entity-id format as it stands, so an id Core composes is offered nothing whatever order the format puts its parts in. An id
+no wording reproduces, such as one an older release preset, is read by
+`naming.circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)`, which is told whether the format ends with the device and then the
+entity. The base depends on the device's name, and a device renamed in Home Assistant reloads nothing, so each circuit entity records what its base was worked
+out from and `async_keep_circuit_id_bases_current` works it out again as the rename is stored.
 
 `SpanPanelEntity.suggested_object_id` hands Core that base. It reads `_span_object_id_base`, which circuit entities set and every other entity leaves `None`, in
 which case the property falls through to Core's own answer — composition from the display name, exactly as before. Core consults `suggested_object_id` only for
@@ -431,7 +437,7 @@ One consequence worth naming: a circuit sensor on a sub-device card supplies **n
 composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity is on its
 circuit's device and sets its base.
 
-**The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_suffix`, and a sub-device
+**The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_base`, and a sub-device
 sensor never calls it — with no base, Core composes the entity half from the description label, which is the current one. So an existing feed energy sensor
 spelled `…_energy_consumed` is offered `sensor.<charger>_consumed_energy`: the device half changes (panel → charger) and so does the suffix wording
 (`energy_consumed` → `consumed_energy`, the label being `Consumed Energy`). **That is by design, not a bug.** These sensors belong to the charger's card, and

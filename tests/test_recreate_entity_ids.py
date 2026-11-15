@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import ClassVar
 from unittest.mock import MagicMock
 
+import attr
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
@@ -36,6 +37,7 @@ from pytest_homeassistant_custom_component.common import (
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
+from custom_components.span_panel.circuit_object_ids import async_keep_circuit_id_bases_current
 from custom_components.span_panel.const import (
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
@@ -1664,3 +1666,454 @@ async def test_recreate_offers_the_renamed_id_after_a_pushed_rename_in_both_mode
     assert registry_entry.original_name == "Power"
     assert er.async_get_full_entity_name(hass, registry_entry) == f"SPAN Panel {RENAMED} Power"
     assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID
+
+
+# --- Entity-id formats that do not end with the device and then the entity ----
+#
+# The format is the user's to reorder, and Core asks only that it name the
+# device and the entity. Composed in another order, an id ends wherever that
+# order ends, on the device's name under (entity, device). Each case creates an
+# entity, reloads, accepts whatever Recreate offers and reloads again: an offer
+# that changes once taken, or one made to an id nothing changed, is a rename
+# the user did not cause (R1).
+
+OTHER_FORMATS: dict[str, tuple[list[EntityNamePart], str]] = {
+    "entity-device": (
+        [EntityNamePart.ENTITY, EntityNamePart.DEVICE],
+        "{suffix}_{device}",
+    ),
+    "parent-entity-device": (
+        [EntityNamePart.PARENT_DEVICE, EntityNamePart.ENTITY, EntityNamePart.DEVICE],
+        "span_panel_{suffix}_{device}",
+    ),
+    "device-entity-parent": (
+        [EntityNamePart.DEVICE, EntityNamePart.ENTITY, EntityNamePart.PARENT_DEVICE],
+        "{device}_{suffix}_span_panel",
+    ),
+    "area-entity-parent-device": (
+        [
+            EntityNamePart.AREA,
+            EntityNamePart.ENTITY,
+            EntityNamePart.PARENT_DEVICE,
+            EntityNamePart.DEVICE,
+        ],
+        "{suffix}_span_panel_{device}",
+    ),
+}
+"""Formats with the entity somewhere other than last, and the object id each composes."""
+
+INSTALLS: dict[str, tuple[_CircuitInstall, str, str]] = {
+    "sensor": (_SensorInstall, "sensor", "power"),
+    "switch": (_SwitchInstall, "switch", "breaker"),
+    "select": (_SelectInstall, "select", "circuit_priority"),
+}
+"""Each platform's install, its domain and the suffix its ids carry."""
+
+
+def _save_format(hass: HomeAssistant, format_id: str) -> str:
+    """Save one of `OTHER_FORMATS` as the user's, and return the object id it composes."""
+    parts, shape = OTHER_FORMATS[format_id]
+    er.async_get(hass).async_update_settings(entity_id_parts=parts)
+    return shape
+
+
+async def _accept_what_recreate_offers(
+    hass: HomeAssistant, install: _Install[SpanPanelEntity], circuit_name: str, entity_id: str
+) -> str:
+    """Reload, take Recreate's offer for the entity, and return the id it then has."""
+    await install.load(circuit_name)
+    registry = er.async_get(hass)
+    row = registry.async_get(entity_id)
+    assert row is not None
+    offered = registry.async_regenerate_entity_id(row)
+    if offered != entity_id:
+        registry.async_update_entity(entity_id, new_entity_id=offered)
+        await hass.async_block_till_done()
+    return offered
+
+
+async def _assert_recreate_offers_nothing(
+    hass: HomeAssistant, install: _Install[SpanPanelEntity], circuit_name: str, entity_id: str
+) -> er.RegistryEntry:
+    """Reload, and hold Recreate to offering the entity the id it has."""
+    reloaded = await install.load(circuit_name)
+    assert reloaded.entity_id == entity_id
+    registry = er.async_get(hass)
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert registry.async_regenerate_entity_id(row) == entity_id
+    return row
+
+
+@pytest.mark.parametrize("format_id", OTHER_FORMATS)
+@pytest.mark.parametrize("platform", INSTALLS)
+@pytest.mark.parametrize(
+    "mode",
+    [
+        pytest.param(FRIENDLY_NAMES, id="friendly"),
+        pytest.param(CIRCUIT_NUMBERS, id="circuit_numbers"),
+    ],
+)
+async def test_an_id_composed_under_another_format_reads_back_to_its_base(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    format_id: str,
+    platform: str,
+    mode: dict[str, bool],
+) -> None:
+    """An entity created under a reordered format is offered the id that format composes.
+
+    In circuit-names mode that is the id it was created with, at every reload.
+    In circuit-numbers mode it is the circuit-names id, once, and nothing after
+    it is accepted. Read as ending on the device's name with the suffix left
+    out, every entity of the circuit was offered the device's bare id.
+    """
+    shape = _save_format(hass, format_id)
+    make_install, domain, suffix = INSTALLS[platform]
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    named = f"{domain}.{shape.format(suffix=suffix, device='kitchen_outlets')}"
+    numbered = f"{domain}.{shape.format(suffix=suffix, device='circuit_15')}"
+
+    install = make_install(hass, entry)
+    created = (await install.load("Kitchen Outlets")).entity_id
+    assert created == (numbered if mode is CIRCUIT_NUMBERS else named)
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Kitchen Outlets", created)
+
+    assert accepted == named
+    row = await _assert_recreate_offers_nothing(hass, install, "Kitchen Outlets", named)
+    assert row.object_id_base == suffix.replace("_", " ")
+
+
+@pytest.mark.parametrize(
+    ("mode", "created"),
+    [
+        pytest.param(FRIENDLY_NAMES, "sensor.solar_power", id="friendly"),
+        pytest.param(CIRCUIT_NUMBERS, "sensor.power_circuit_15", id="circuit_numbers"),
+    ],
+)
+async def test_a_name_ending_on_the_suffix_leaves_it_out_under_another_format(
+    hass: HomeAssistant, entry: MockConfigEntry, mode: dict[str, bool], created: str
+) -> None:
+    """A circuit named "Solar Power" is `sensor.solar_power` whichever part comes first."""
+    _save_format(hass, "entity-device")
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = _SensorInstall(hass, entry)
+    assert (await install.load("Solar Power")).entity_id == created
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Solar Power", created)
+
+    assert accepted == "sensor.solar_power"
+    row = await _assert_recreate_offers_nothing(hass, install, "Solar Power", accepted)
+    assert row.object_id_base == ""
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        pytest.param(FRIENDLY_NAMES, id="friendly"),
+        pytest.param(CIRCUIT_NUMBERS, id="circuit_numbers"),
+    ],
+)
+async def test_an_unnamed_circuit_keeps_its_suffix_under_another_format(
+    hass: HomeAssistant, entry: MockConfigEntry, mode: dict[str, bool]
+) -> None:
+    """An unnamed circuit's device is named by its position, and its ids keep their suffix."""
+    shape = _save_format(hass, "area-entity-parent-device")
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("")).entity_id
+    assert created == f"sensor.{shape.format(suffix='power', device='circuit_15')}"
+
+    row = await _assert_recreate_offers_nothing(hass, install, "", created)
+
+    assert row.object_id_base == "power"
+
+
+def _seed_preset_era_energy_sensor(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    """Register the energy sensor under the id a release that preset ids gave it."""
+    seeded = er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, "consumedEnergyWh"),
+        suggested_object_id="span_panel_refrigerator_energy_consumed",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == PRESET_ERA_ENTITY_ID
+    return seeded.entity_id
+
+
+@pytest.mark.parametrize(
+    ("format_id", "offered"),
+    [
+        ("entity-device", "sensor.energy_consumed_refrigerator"),
+        ("parent-entity-device", "sensor.span_panel_energy_consumed_refrigerator"),
+        ("device-entity-parent", "sensor.refrigerator_energy_consumed_span_panel"),
+    ],
+)
+async def test_an_older_release_s_id_keeps_its_wording_under_another_format(
+    hass: HomeAssistant, entry: MockConfigEntry, format_id: str, offered: str
+) -> None:
+    """The user's format reorders an id an older release preset, in the wording it has.
+
+    The offer is the format's doing, which the user chose. Once accepted it is
+    the entity's id and nothing more is offered: read from its end alone, an id
+    with a part after the entity's lost its wording and was offered
+    `consumed_energy` for `energy_consumed`.
+    """
+    _save_format(hass, format_id)
+    seeded = _seed_preset_era_energy_sensor(hass, entry)
+    install = _LegacyInstall(hass, entry)
+
+    accepted = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, seeded)
+
+    assert accepted == offered
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, offered)
+    assert row.object_id_base == "energy consumed"
+
+
+async def test_an_area_assigned_later_keeps_the_wording_under_another_format(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An id no wording reproduces any more is still read for the wording it spells.
+
+    The panel is given an area after the id was accepted, so the id is not what
+    the format composes now. The offer gains the area, which the user caused,
+    and keeps both the suffix and its wording.
+    """
+    er.async_get(hass).async_update_settings(
+        entity_id_parts=[EntityNamePart.AREA, EntityNamePart.ENTITY, EntityNamePart.DEVICE]
+    )
+    seeded = _seed_preset_era_energy_sensor(hass, entry)
+    install = _LegacyInstall(hass, entry)
+    accepted = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, seeded)
+    assert accepted == "sensor.energy_consumed_refrigerator"
+    await install.load(ORIGINAL_NAME)
+
+    basement = ar.async_get(hass).async_create("Basement")
+    dr.async_get(hass).async_update_device(entry.runtime_data.panel_device_id, area_id=basement.id)
+    with_the_area = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, accepted)
+
+    assert with_the_area == "sensor.basement_energy_consumed_refrigerator"
+    await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, with_the_area)
+
+
+async def test_a_panel_name_that_runs_into_the_suffix_is_not_read_as_part_of_it(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An id Core composes today is never offered another, whatever its parts spell together.
+
+    A panel the user named "Shop Current" sits in front of the entity's part
+    under this format, so a power sensor's id spells `current_power`, which is
+    also a wording the suffix once shipped with. Read for the words it spells,
+    the id was offered `..._current_current_power_...`. Composed for each
+    wording in turn, only `power` gives the id the entity has.
+    """
+    _save_format(hass, "parent-entity-device")
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Kitchen Outlets")).entity_id
+    assert created == "sensor.span_panel_power_kitchen_outlets"
+    dr.async_get(hass).async_update_device(
+        entry.runtime_data.panel_device_id, name_by_user="Shop Current"
+    )
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Kitchen Outlets", created)
+
+    assert accepted == "sensor.shop_current_power_kitchen_outlets"
+    row = await _assert_recreate_offers_nothing(hass, install, "Kitchen Outlets", accepted)
+    assert row.object_id_base == "power"
+
+
+async def test_an_id_core_numbered_keeps_the_wording_it_has(
+    hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
+) -> None:
+    """An id with a number after it, because the composed one was taken, is that composition.
+
+    Two circuits of one name share every composed id, and the second's carry
+    `_2`. Read from its end, such an id spells no wording at all, so one in an
+    older release's wording was offered the new one.
+    """
+    registry = er.async_get(hass)
+    taken = registry.async_get_or_create(
+        "sensor", "other", "taken", suggested_object_id="span_panel_refrigerator_energy_consumed"
+    )
+    assert taken.entity_id == PRESET_ERA_ENTITY_ID
+    numbered = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, "consumedEnergyWh"),
+        suggested_object_id="span_panel_refrigerator_energy_consumed",
+        config_entry=entry,
+    ).entity_id
+    assert numbered == f"{PRESET_ERA_ENTITY_ID}_2"
+    install = _LegacyInstall(hass, entry)
+    await install.load(ORIGINAL_NAME)
+
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, numbered)
+
+    assert row.object_id_base == "energy consumed"
+
+
+# --- A circuit's device renamed in Home Assistant ------------------------------
+#
+# Core composes ids from the name the user gave a device ahead of the device's
+# own, and the base depends on that name: it is empty where the name already
+# ends on the suffix words. The rename reloads nothing, so the bases of the
+# circuit's entities are worked out again as the rename is stored
+# (`circuit_object_ids.async_keep_circuit_id_bases_current`).
+
+RENAMED_DEVICES = [
+    pytest.param(
+        _SensorInstall,
+        FRIENDLY_NAMES,
+        "Solar Power",
+        "sensor.span_panel_solar_power",
+        "Roof Array",
+        "sensor.span_panel_roof_array_power",
+        id="the-new-name-no-longer-ends-on-the-suffix",
+    ),
+    pytest.param(
+        _SwitchInstall,
+        FRIENDLY_NAMES,
+        "Main Breaker",
+        "switch.span_panel_main_breaker",
+        "Whole House",
+        "switch.span_panel_whole_house_breaker",
+        id="switch",
+    ),
+    pytest.param(
+        _SensorInstall,
+        FRIENDLY_NAMES,
+        "Solar",
+        "sensor.span_panel_solar_power",
+        "Solar Power",
+        "sensor.span_panel_solar_power",
+        id="the-new-name-ends-on-the-suffix",
+    ),
+    pytest.param(
+        _SensorInstall,
+        CIRCUIT_NUMBERS,
+        "Garage Power",
+        CIRCUIT_NUMBERS_ENTITY_ID,
+        "Garage Subpanel",
+        "sensor.span_panel_garage_subpanel_power",
+        id="circuit-numbers",
+    ),
+]
+"""An install, its mode, a circuit and its entity's id, a new device name, and the offer."""
+
+
+def _rename_the_circuit_device(hass: HomeAssistant, entity_id: str, name: str | None) -> None:
+    """Rename the device an entity is on, as its user would in Home Assistant."""
+    row = er.async_get(hass).async_get(entity_id)
+    assert row is not None
+    assert row.device_id is not None
+    dr.async_get(hass).async_update_child_device(row.device_id, name_by_user=name)
+
+
+@pytest.mark.parametrize(
+    ("make_install", "mode", "circuit_name", "entity_id", "device_name", "offered"),
+    RENAMED_DEVICES,
+)
+async def test_a_device_the_user_renamed_decides_what_recreate_offers(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts_without_area: None,
+    make_install: _CircuitInstall,
+    mode: dict[str, bool],
+    circuit_name: str,
+    entity_id: str,
+    device_name: str,
+    offered: str,
+) -> None:
+    """After a reload, the offer is the id a new entity on the renamed device gets.
+
+    A circuit named "Solar Power" left the suffix out of its id. Renamed "Roof
+    Array" in Home Assistant, its device no longer says "power", so the offer
+    is `..._roof_array_power`, and it is the entity's own id once accepted.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = make_install(hass, entry)
+    assert (await install.load(circuit_name)).entity_id == entity_id
+    await install.load(circuit_name)
+
+    _rename_the_circuit_device(hass, entity_id, device_name)
+    accepted = await _accept_what_recreate_offers(hass, install, circuit_name, entity_id)
+
+    assert accepted == offered
+    await _assert_recreate_offers_nothing(hass, install, circuit_name, offered)
+
+
+@pytest.mark.parametrize(
+    ("make_install", "mode", "circuit_name", "entity_id", "device_name", "offered"),
+    RENAMED_DEVICES,
+)
+async def test_a_device_rename_reaches_recreate_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts_without_area: None,
+    make_install: _CircuitInstall,
+    mode: dict[str, bool],
+    circuit_name: str,
+    entity_id: str,
+    device_name: str,
+    offered: str,
+) -> None:
+    """The offer is right the moment the rename is stored, which is when the user is asked.
+
+    Home Assistant asks whether to rename a device's entity ids straight after
+    the device is renamed, and composes the answer from each row as stored.
+    Left as decided for the old name, the base offered `..._roof_array` for a
+    power sensor, and that id stayed once accepted.
+
+    Taking the user's name away again brings back the offer the circuit's own
+    name composes.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = make_install(hass, entry)
+    assert (await install.load(circuit_name)).entity_id == entity_id
+    await install.load(circuit_name)
+    registry = er.async_get(hass)
+    row = registry.async_get(entity_id)
+    assert row is not None
+    before = registry.async_regenerate_entity_id(row)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _rename_the_circuit_device(hass, entity_id, device_name)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert registry.async_regenerate_entity_id(row) == offered
+
+    _rename_the_circuit_device(hass, entity_id, None)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert registry.async_regenerate_entity_id(row) == before
+    stop()
+
+
+async def test_a_device_rename_moves_no_entity_and_stores_only_a_changed_base(
+    hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
+) -> None:
+    """The refresh writes a row's base and nothing else, and leaves an unchanged base alone."""
+    install = _SensorInstall(hass, entry)
+    await install.load("Solar Power")
+    await install.load("Solar Power")
+    registry = er.async_get(hass)
+    entity_id = "sensor.span_panel_solar_power"
+    before = registry.async_get(entity_id)
+    assert before is not None
+    assert before.object_id_base == ""
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _rename_the_circuit_device(hass, entity_id, "Roof Power")
+    unchanged = registry.async_get(entity_id)
+    _rename_the_circuit_device(hass, entity_id, "Roof Array")
+    after = registry.async_get(entity_id)
+    stop()
+
+    assert unchanged is before
+    assert after is not None
+    assert after.object_id_base == "power"
+    assert attr.evolve(after, object_id_base="", modified_at=before.modified_at) == before

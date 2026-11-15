@@ -61,6 +61,7 @@ from .ca_repairs import (
     async_raise_rest_tls_untrusted,
 )
 from .circuit_device_conversion import async_convert_circuit_entities
+from .circuit_object_ids import async_keep_circuit_id_bases_current
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
@@ -915,6 +916,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         breaker_switches_before = async_registered_breaker_switches(hass, entry, snapshot)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # A circuit entity's id base depends on its device's name, and renaming
+        # that device in Home Assistant builds no entity again. After the
+        # forward, where every circuit entity has recorded what its base is
+        # worked out from.
+        entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
 
         # After the forward, so the names it lists as changed are the ones Home
         # Assistant composes for the entities as the platforms left them.

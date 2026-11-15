@@ -12,8 +12,8 @@ none, so from the first reload "Recreate entity IDs" composes from the
 circuit's device and offers the circuit's name. An entity Core already has a
 row for, live or deleted, is never given one.
 
-The composer mirrors Core's own composition, which is private. The first test
-here is the guard against that: it asks Core for the id of an entity on a real
+The composer (`circuit_object_ids.compose_circuit_object_id`) mirrors Core's own
+composition, which is private. The first test here is the guard against that: it asks Core for the id of an entity on a real
 child device named "Circuit 15" and fails wherever the composer disagrees, so a
 Home Assistant release that changes the rules fails here instead of handing
 new installs ids Core would not have composed.
@@ -45,10 +45,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEn
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
-from custom_components.span_panel.circuit_number_ids import (
-    compose_circuit_number_object_id,
-    preset_circuit_number_entity_id,
-)
+from custom_components.span_panel.circuit_number_ids import preset_circuit_number_entity_id
+from custom_components.span_panel.circuit_object_ids import compose_circuit_object_id
 from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.id_builder import (
@@ -104,6 +102,24 @@ FORMATS: Final[dict[str, list[EntityNamePart] | None]] = {
         EntityNamePart.DEVICE,
         EntityNamePart.ENTITY,
     ],
+    # The order is the user's, and the read-back composes under whichever it is.
+    "entity-device": [EntityNamePart.ENTITY, EntityNamePart.DEVICE],
+    "parent-entity-device": [
+        EntityNamePart.PARENT_DEVICE,
+        EntityNamePart.ENTITY,
+        EntityNamePart.DEVICE,
+    ],
+    "device-entity-parent": [
+        EntityNamePart.DEVICE,
+        EntityNamePart.ENTITY,
+        EntityNamePart.PARENT_DEVICE,
+    ],
+    "area-entity-parent-device": [
+        EntityNamePart.AREA,
+        EntityNamePart.ENTITY,
+        EntityNamePart.PARENT_DEVICE,
+        EntityNamePart.DEVICE,
+    ],
 }
 AREAS: Final = ("no-area", "panel-area", "circuit-area")
 PANEL_RENAMES: Final[dict[str, str | None]] = {
@@ -121,11 +137,11 @@ class _Arranged:
 
     def compose(self, hass: HomeAssistant, suffix_words: str = "power") -> str:
         """Ask the composer for this panel's circuit, numbered `CIRCUIT_NUMBER`."""
-        return compose_circuit_number_object_id(
+        return compose_circuit_object_id(
             hass,
             panel_device_id=self.panel_device_id,
             circuit_device_identifier=CIRCUIT_DEVICE,
-            circuit_number=CIRCUIT_NUMBER,
+            device_name=CIRCUIT_NUMBER,
             suffix_words=suffix_words,
             config_entry_id=self.entry.entry_id,
         )

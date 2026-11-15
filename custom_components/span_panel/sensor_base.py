@@ -155,7 +155,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                 # supplies at most its base; `entity_id` is left unset so Core
                 # assembles the rest from the user's `entity_id_parts`.
                 self._span_object_id_base = self._object_id_base(
-                    snapshot, description, existing_entity_id
+                    snapshot, description, self._attr_unique_id, existing_entity_id
                 )
 
                 # The one exception is a circuit sensor being created in
@@ -219,7 +219,11 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         """
 
     def _object_id_base(
-        self, snapshot: SpanPanelSnapshot, description: T, existing_entity_id: str | None
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: T,
+        unique_id: str,
+        existing_entity_id: str | None,
     ) -> str | None:
         """Return the base this entity's id is composed from, or None to leave it to Core.
 
@@ -230,7 +234,8 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         `existing_entity_id` is the id the entity's registry row has, or None
         for an entity being created, which a circuit sensor reads its suffix's
-        spelling back from.
+        spelling back from. `unique_id` is the entity's own, which a circuit
+        sensor records its base under.
         """
         return None
 

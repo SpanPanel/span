@@ -4,9 +4,9 @@ This document is the permanent statement of how this integration names entities 
 re-derived from scratch more than once. The rules below are the maintainer's intent; they outrank any single design document, review note or older comment. A
 change to naming is checked against them first, and a change that cannot satisfy them is not made.
 
-Every claim here is grounded in the code as of 2.3.0 (`naming.py`, `circuit_number_ids.py`, `entity.py`, `sensor_base.py`, `sensor_circuit.py`, `switch.py`,
-`select.py`, `circuit_device_conversion.py`) and in Home Assistant Core 2026.11 (`helpers/entity_registry.py`, `helpers/entity_platform.py`,
-`helpers/device_registry.py`). When the code and this document disagree, one of them is wrong — fix it, do not paper over it.
+Every claim here is grounded in the code as of 2.3.0 (`naming.py`, `circuit_object_ids.py`, `circuit_number_ids.py`, `entity.py`, `sensor_base.py`,
+`sensor_circuit.py`, `switch.py`, `select.py`, `circuit_device_conversion.py`) and in Home Assistant Core 2026.11 (`helpers/entity_registry.py`,
+`helpers/entity_platform.py`, `helpers/device_registry.py`). When the code and this document disagree, one of them is wrong — fix it, do not paper over it.
 
 Since 2.3.0 each circuit has a device of its own, a child of the panel's device and named by the circuit. The circuit's name moved from every entity's name and
 ID base to that device, and R1, R2 and R3 were amended on 2026-11-14 to say what follows from it.
@@ -157,14 +157,23 @@ Each entity names its canonical suffix:
 
 `CIRCUIT_SUFFIX_MAPPING` in `id_builder` builds **unique IDs** and is closed. The tables in `naming.py` govern **entity IDs only**. Do not cross them.
 
-### 4.3 The base — `naming.circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)`
+### 4.3 The base — `circuit_object_ids.circuit_object_id_base` and `naming.circuit_object_id_suffix`
 
-The base is the suffix alone. It returns the suffix words, or an empty string where the ID stops at the circuit's name, and Core composes the circuit's name
-from the device. It never returns the circuit's name.
+The base is the suffix alone: the suffix words, or an empty string where the ID leaves them out, and Core composes the circuit's name from the device. It is
+never the circuit's name.
 
-It reads an existing ID against two names. `device_name` is the name Core composes from, as `util.effective_circuit_device_name` gives it: the user's own name
-for the circuit's device where they set one, otherwise the name the device takes on this load, which after a rename on the panel is not yet the one the registry
-holds. `id_identifier` is §4.1's. The words are decided in this order:
+`device_name` below is the name Core composes from, as `util.effective_circuit_device_name` gives it: the user's own name for the circuit's device where they
+set one, otherwise the name the device takes on this load, which after a rename on the panel is not yet the one the registry holds. `id_identifier` is §4.1's.
+
+**An ID Core composes today is given the base that composes it.** `circuit_object_ids.circuit_object_id_base` composes the ID for each wording the suffix has
+shipped with, and for the empty base, under the user's entity-ID format, the areas and the names as they stand (`circuit_object_ids.compose_circuit_object_id`,
+§4.7's composer with `device_name` in the device's place). The wording that spells the ID the entity has is its base, as it stands or under the number Core
+appends where an ID is taken. Nothing is assumed about where in the ID the entity's part sits, so this holds for any format the user saves, with the entity
+before the device or a part after it.
+
+**Any other ID is read by `naming.circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id, device_then_entity=...)`.** No wording
+reproduces an ID an older release preset, the circuit-number preset of a named circuit, or an ID composed before a circuit, a device or an area was renamed or
+the format changed. Those are read against two names, and the words are decided in this order:
 
 1. **The existing ID names the device** (`..._{device_slug}_{form}` or `..._{device_slug}`): what follows the name settles both the form the ID carries and
    whether the ID left the suffix out. They are one question, answered together — answering them separately produced `..._current_current_power` for a circuit
@@ -184,8 +193,16 @@ also reads as an ID that stops at a device named "Power"; the tabs account for m
 Under rules 2 to 4 the suffix is left out only where the device's name ends with the suffix words after another word: "Solar Power" composes `..._solar_power`.
 A device named exactly "Power" repeats nothing and keeps both halves, `..._power_power`.
 
-An offer the user accepts reads back to the base it was composed from, so the next restart offers nothing more
-(`test_an_accepted_offer_reads_back_to_the_same_suffix`).
+Those four rules read an ID's tail, which is where the entity's part is under a format that ends with the device and then the entity, as the default does and as
+every ID a release preset is shaped. `device_then_entity` says whether the user's format ends that way. Where it does not:
+
+- an ID that ends on a name is not read as stopping there, because under `(ENTITY, DEVICE)` every composed ID ends on the device's name. Read so,
+  `sensor.power_kitchen_outlets` gave the empty base and each entity of the circuit was offered the device's bare ID;
+- an ID that spells a name and then a form is still read by rules 1 and 2;
+- otherwise the form is the one the ID spells as whole words anywhere outside the name it carries, and the omission is decided from `device_name`.
+
+An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
+(`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
 
 `ENTITY_ID_SUFFIX_FORMS` lists every suffix form ever shipped (`consumed_energy` before the preset era, `energy_consumed` after; `current_power` and `power`).
 **An entry is added only when another form is discovered to have shipped, never to introduce one.** An existing entity is offered whichever spelling it already
@@ -217,7 +234,8 @@ Circuit-numbers mode, same parts, the circuit on tab 15:
 `SpanPanelEntity` (`entity.py`) carries `_span_object_id_base: str | None = None` and overrides the `suggested_object_id` property to return it when set, or
 `super().suggested_object_id` (the display name) when not. An empty base is a base: Core then composes the ID from the other parts alone. Core's
 `type.__getattribute__` guard covers the `name` property only, so this override is supported. Circuit sensors, the switch and the select set the base at
-construction, through `SpanPanelEntity._circuit_object_id_base`. Every other entity leaves it `None` and composes from its label as it always has.
+construction, through `SpanPanelEntity._circuit_object_id_base`, which also records what the base was worked out from (§5.3). Every other entity leaves it
+`None` and composes from its label as it always has.
 
 `entity_id` is preset in one case only: a circuit entity being created in circuit-numbers mode (§4.7). Nothing else in this integration assigns
 `self.entity_id`, and nothing assigns `_attr_entity_id`.
@@ -252,11 +270,11 @@ position instead (R3), and keeps the promise with the one `entity_id` this integ
   against the number and not the device's name, so a circuit named "Solar Power" is created as `..._circuit_15_power`. Where the ID is taken, Core's own clash
   suffix is added (`async_get_available_entity_id`).
 - **How it is composed.** Core has no public function that composes an ID with another name in the device's place, so
-  `circuit_number_ids.compose_circuit_number_object_id` mirrors Core's private composer from its public parts: the user's saved format or the default; the area
-  of the circuit's device, or the panel's where that device has none or is not registered yet; that area's floor; the panel's name as the parent device, only
-  while the circuit's device has no area of its own; the circuit number as the device; the suffix words as the entity. `tests/test_circuit_number_ids.py` holds
-  the composer to Core's own answer for each format and area case (`test_composer_matches_core`), so a change in Core fails there on the next Home Assistant
-  bump instead of drifting silently.
+  `circuit_object_ids.compose_circuit_object_id` mirrors Core's private composer from its public parts: the user's saved format or the default; the area of the
+  circuit's device, or the panel's where that device has none or is not registered yet; that area's floor; the panel's name as the parent device, only while the
+  circuit's device has no area of its own; the circuit number as the device; the suffix words as the entity. `tests/test_circuit_number_ids.py` holds the
+  composer to Core's own answer for each format and area case (`test_composer_matches_core`), the formats that put the entity before the device among them, so a
+  change in Core fails there on the next Home Assistant bump instead of drifting silently. The read-back of §4.3 uses the same composer.
 - **How it is spent.** Core stores the preset as the row's `suggested_object_id` and uses it verbatim. The entity's next add supplies none, so Core clears it
   (§3.3). A new entity asks for a reload on its first update (§5.2), so that add follows its creation directly. The ID stays where it is (R5), and from then on
   Recreate composes from the circuit's device and the base, and offers the circuit's name.
@@ -304,6 +322,20 @@ There is one name path, in both modes:
 A name the user gave the circuit's _device_ in Home Assistant (`name_by_user`) outranks the panel's in every displayed name and composed ID. That is Core's
 rule, not a check made here: the reload still stores the panel's new name underneath it.
 
+### 5.3 A circuit's device renamed in Home Assistant
+
+The base depends on the device's name: it is empty where the name already ends on the suffix words, and an ID is read against the name (§4.3). A rename in the
+SPAN app reloads the entry, which builds every entity again. A rename of the device in Home Assistant reloads nothing, and Recreate composes from the stored row
+(§3.4), so a base decided for the old name would be offered under the new one. A circuit named "Solar Power" on `sensor.span_panel_solar_power`, whose base is
+empty, renamed "Roof Array" would be offered `sensor.span_panel_roof_array`, an ID no entity on that device is created with, and the ID would stay once
+accepted.
+
+So each circuit entity records what its base is worked out from as it is built, enabled or not (`SpanPanelRuntimeData.circuit_id_bases`), and
+`circuit_object_ids.async_keep_circuit_id_bases_current`, registered at setup, works a circuit's bases out again when its device's `name_by_user` changes and
+stores those that differ. It runs inside the device registry's update event, before the rename returns, because Home Assistant asks whether to rename the
+device's entity IDs straight after it; a reload would answer too late. The base is stored by registering the entity again with it, which is how the platform's
+own add refreshes a row (§3.3). No entity ID moves (R5): "Solar Power" renamed "Roof Array" is then offered `sensor.span_panel_roof_array_power`.
+
 The rename therefore reaches:
 
 | What                      | Circuit names                                                | Circuit numbers                                                                                                                   |
@@ -335,8 +367,9 @@ device, so 2.0.8's `Kitchen Outlets Consumed Energy` would propose `sensor.span_
 
 Releases before 2.3.0 put every circuit entity on the panel's device, named `"{circuit name} {label}"`.
 `circuit_device_conversion.async_convert_circuit_entities` carries an existing registry across. It runs at every setup, once the panel's data has loaded and
-before the platforms are forwarded, and acts only on circuit entities still on the panel's device, so it does nothing once done. The config entry's step to
-version 8 changes nothing itself: it is there so that Home Assistant refuses a downgrade to a release that would put the circuits back on the panel's device.
+before the platforms are forwarded, and acts only on circuit entities still on the panel's device, so it does nothing once done. A later setup converts only the
+entities it is the first to build, such as a breaker switch once controls are switched on. The config entry's step to version 8 changes nothing itself: it is
+there so that Home Assistant refuses a downgrade to a release that would put the circuits back on the panel's device.
 
 For each circuit with such an entity, and only for the entities this setup's platforms build, in this order:
 
@@ -347,8 +380,9 @@ For each circuit with such an entity, and only for the entities this setup's pla
 5. a user's name that begins with the circuit's name is trimmed, since the device now says it;
 6. each entity is moved to the device, its `original_name` set to its label, and its area and name written, in one registry update.
 
-No entity ID and no unique ID changes (R5). The platform add that follows gives each row its suffix-only base. A one-time repair lists every displayed name and
-area that changed (`conversion_repairs`).
+No entity ID and no unique ID changes (R5). The platform add that follows gives each row its suffix-only base. A repair lists every displayed name and area that
+changed (`conversion_repairs`): an entity that gave up an area of its own, and one that had none, was in the panel's area and is now in the one its circuit's
+device has. A later setup that converts more adds its lines to the notice and shows it again, dismissed or not.
 
 **The area rule** (`_area_for_the_device`). An entity with no area of its own is in its device's, and an area-wide turn-off reaches every switch in the area, so
 the breaker switch decides:
@@ -406,15 +440,19 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
 - [ ] `_attr_name` is the label alone in both modes; nothing puts the circuit's name in it, and nothing branches on `use_circuit_numbers` to name a circuit's
       device or its entities. Every function the flag is passed to is named in §4.1, which `tests/test_docs_agree_with_code.py` holds to the code.
 - [ ] A circuit's device is named by `helpers.circuit_device_name` wherever it is registered, in both modes.
-- [ ] The base is the suffix alone, computed from `(id_identifier, device_name, canonical suffix, existing_entity_id)` and nothing else — never from the display
-      label, and never carrying the circuit's name.
+- [ ] The base is the suffix alone, computed from `(id_identifier, device_name, canonical suffix, existing_entity_id)` and what Core composes under the user's
+      entity-ID format, and nothing else — never from the display label, and never carrying the circuit's name.
+- [ ] Nothing reads an ID as though the format ended with the device and then the entity without being told it does (`device_then_entity`), and an ID Core
+      composes today is offered nothing under any format (§4.3).
+- [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant (§5.3).
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
       (`test_every_form_table_entry_has_a_new_wording_and_vice_versa`).
 - [ ] A reworded description label adds the old label to `legacy_names` so §6.1 still recognizes what 2.0.8 wrote.
 - [ ] Unique IDs and circuit device identifiers are untouched by any of this; `CIRCUIT_SUFFIX_MAPPING` is closed.
 - [ ] `tests/test_naming.py`, `tests/test_recreate_entity_ids.py` and `tests/test_circuit_number_ids.py` pass. The last two drive a real `EntityPlatform` and
       the real registries, so a composition regression fails there rather than in a unit test of a builder.
-- [ ] Run the `entity-id-auditor` agent after editing `id_builder.py`, `entity_resolver.py`, `naming.py`, `circuit_number_ids.py` or any circuit platform file.
+- [ ] Run the `entity-id-auditor` agent after editing `id_builder.py`, `entity_resolver.py`, `naming.py`, `circuit_object_ids.py`, `circuit_number_ids.py` or
+      any circuit platform file.
 
 ## 9. Diagnosing "Recreate offered nothing" on a live install
 
@@ -430,7 +468,7 @@ In circuit-numbers mode an offer of the circuit's name is expected (R3), and aft
    circuit. A `name_by_user` there outranks it. A row still on the panel's device has not been converted (§6.2).
 5. Confirm the rename-triggered reload happened: the log carries `Auto-sync detected circuit name change from '…' to '…'` followed by the entry reload.
 6. Only then look at `circuit_object_id_suffix` with the row's exact `entity_id`, the identifier, the device's name and the suffix — `tests/test_naming.py`
-   shows how to call it directly.
+   shows how to call it directly. It is reached only for an ID no wording composes under the saved entity-ID format (§4.3), so check that format first.
 
 ## 10. Where the history lives
 

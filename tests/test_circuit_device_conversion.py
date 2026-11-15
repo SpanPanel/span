@@ -964,6 +964,59 @@ async def test_recreate_offers_every_circuit_entity_the_id_it_has(
             assert registry.async_regenerate_entity_id(row) == row.entity_id
 
 
+async def test_a_setup_keeps_id_bases_current_with_a_device_rename(hass: HomeAssistant) -> None:
+    """Renaming a circuit's device in Home Assistant refreshes its entities' ID bases at once.
+
+    Through the real setup, for every entity it built, the one registered
+    disabled included: no platform added that one, and its row is offered an ID
+    like any other. The device's new name ends on each suffix in turn, so the
+    base that carried the suffix is empty while it does. Nothing listens once
+    the entry is unloaded.
+    """
+    install = _install(hass, _tree())
+    registry = er.async_get(hass)
+    devices = dr.async_get(hass)
+    circuit_id = next(
+        circuit_id for circuit_id in install.circuits if BREAKER_RATING in install.kinds(circuit_id)
+    )
+
+    def listening() -> int:
+        return hass.bus.async_listeners().get(dr.EVENT_DEVICE_REGISTRY_UPDATED, 0)
+
+    listening_before = listening()
+
+    async with _set_up(install):
+        assert listening() > listening_before
+        device_id = install.circuit_device(circuit_id).id
+        power, rating = install.row(circuit_id, POWER), install.row(circuit_id, BREAKER_RATING)
+        assert rating.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert (power.object_id_base, rating.object_id_base) == ("power", "breaker rating")
+        ids = (power.entity_id, rating.entity_id)
+
+        devices.async_update_child_device(device_id, name_by_user="Shed Power")
+
+        power, rating = install.row(circuit_id, POWER), install.row(circuit_id, BREAKER_RATING)
+        assert (power.object_id_base, rating.object_id_base) == ("", "breaker rating")
+        assert registry.async_regenerate_entity_id(power) == "sensor.span_panel_shed_power"
+        assert (power.entity_id, rating.entity_id) == ids
+
+        devices.async_update_child_device(device_id, name_by_user="Shed Breaker Rating")
+
+        power, rating = install.row(circuit_id, POWER), install.row(circuit_id, BREAKER_RATING)
+        assert (power.object_id_base, rating.object_id_base) == ("power", "")
+        assert (
+            registry.async_regenerate_entity_id(rating) == "sensor.span_panel_shed_breaker_rating"
+        )
+
+        # The panel's own device is not a circuit's, and renaming it stores nothing.
+        devices.async_update_device(install.panel_device_id, name_by_user="Garage Panel")
+        assert install.row(circuit_id, POWER) is power
+
+    assert listening() == listening_before
+    devices.async_update_child_device(device_id, name_by_user="Shed Power")
+    assert install.row(circuit_id, POWER) is power
+
+
 # ---------------------------------------------------------------------------
 # Areas
 # ---------------------------------------------------------------------------
@@ -1286,6 +1339,29 @@ async def test_an_area_the_user_gave_a_circuit_device_outlasts_a_late_entity(
         lists = install.notice_lists()
         assert lists["area_changes"] == "- Kitchen Outlets Net Energy: Basement → Kitchen"
         assert lists["circuits_left_in_areas"] == NONE_LISTED
+
+
+async def test_a_late_entity_s_name_is_trimmed_by_the_name_its_user_gave_the_device(
+    hass: HomeAssistant,
+) -> None:
+    """The name in front of a late entity's is the device's as its user named it.
+
+    Home Assistant displays the device's user-given name ahead of the name the
+    panel gave it, so that is the name an entity's own would repeat.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **NET_ENERGY_OFF})
+    install.update(KITCHEN, NET, name="Galley Net usage")
+    install.update(LIGHTS, NET, name="Galley Net usage")
+
+    async with _set_up(install):
+        dr.async_get(hass).async_update_child_device(
+            install.circuit_device(KITCHEN).id, name_by_user="Galley"
+        )
+
+        await _change_options(install, NAMES_MODE)
+
+        assert install.row(KITCHEN, NET).name == "Net usage"
+        assert install.row(LIGHTS, NET).name == "Galley Net usage"
 
 
 async def test_a_late_entity_with_no_area_is_listed_where_its_device_has_one(

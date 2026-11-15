@@ -205,6 +205,7 @@ class SpanCircuitSensorBase(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
+        unique_id: str,
         existing_entity_id: str | None,
     ) -> str | None:
         """Return the suffix this sensor's id is composed from on its circuit's device.
@@ -220,6 +221,8 @@ class SpanCircuitSensorBase(
             snapshot,
             circuit,
             self.circuit_id,
+            domain="sensor",
+            unique_id=unique_id,
             id_identifier=self._id_identifier(circuit),
             suffix=get_user_friendly_suffix(self._api_key),
             existing_entity_id=existing_entity_id,

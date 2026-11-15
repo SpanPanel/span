@@ -13,7 +13,8 @@ Nothing here imports anything from this package at runtime except
 `SpanPanelCoordinator` is needed only as an annotation, so it is imported under
 `TYPE_CHECKING`: a module that wants to say "this is a SPAN entry" should not
 have to pull in the coordinator and, through it, the schema and sensor
-machinery.
+machinery. `CircuitIdBase` is imported the same way, and its module imports
+this one.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from .curation import CurationOverlay
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
 
+    from .circuit_object_ids import CircuitIdBase
     from .coordinator import SpanPanelCoordinator
     from .pv_binding import PvBinding
 
@@ -87,6 +89,12 @@ class SpanPanelRuntimeData:
     # is the default policy's lock rather than a bare `ControlLock()`, whose
     # disarmed state would be a promise this class is in no position to make.
     control_lock: ControlLock = field(default_factory=_default_control_lock)
+    # What each circuit entity's id base is worked out from, by circuit id.
+    # Recorded by every circuit entity on a circuit's device as it is built,
+    # enabled or not, so the bases of a circuit can be worked out again when
+    # its device is renamed in Home Assistant, which reloads nothing. See
+    # `circuit_object_ids`.
+    circuit_id_bases: dict[str, list[CircuitIdBase]] = field(default_factory=dict)
 
 
 type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]

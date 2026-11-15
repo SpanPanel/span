@@ -38,6 +38,7 @@ HACS = REPO / "hacs.json"
 CITED_MODULES = (
     "circuit_device_conversion",
     "circuit_number_ids",
+    "circuit_object_ids",
     "entity_resolver",
     "helpers",
     "id_builder",

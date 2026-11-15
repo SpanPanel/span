@@ -33,7 +33,7 @@ tables here govern entity ids only.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from homeassistant.helpers import entity_registry as er
@@ -69,8 +69,22 @@ NEW_ENTITY_ID_SUFFIX_WORDS: dict[str, str] = {
 
 
 def _known_forms(suffix: str) -> list[str]:
-    """Return every form of `suffix`, longest first so `current_power` outranks `power`."""
-    return sorted(ENTITY_ID_SUFFIX_FORMS.get(suffix, ()), key=len, reverse=True)
+    """Return every form of `suffix`, longest first so `current_power` outranks `power`.
+
+    Forms of one length come in alphabetical order, so two that an id could
+    both be read as are tried in the same order on every run.
+    """
+    return sorted(ENTITY_ID_SUFFIX_FORMS.get(suffix, ()), key=lambda form: (-len(form), form))
+
+
+def suffix_wordings(suffix: str) -> tuple[str, ...]:
+    """Return every wording a base has carried for `suffix`: each form ever shipped, as words.
+
+    The wording a new entity gets is one of them. A suffix the table does not
+    know has only its own words.
+    """
+    forms = _known_forms(suffix) or [suffix]
+    return tuple(form.replace("_", " ") for form in forms)
 
 
 def _ends_on_segment(object_id: str, segment: str) -> bool:
@@ -112,26 +126,72 @@ class _NameReading:
     """The suffix form spelled after the name, or None where the id stops at it."""
 
 
-def _read_after_the_name(object_id: str, name: str, suffix: str) -> _NameReading | None:
-    """Read this id's tail as `name` then a form, or as `name` alone; None if it is neither."""
+def _read_after_the_name(
+    object_id: str, name: str, suffix: str, *, may_stop_at_the_name: bool
+) -> _NameReading | None:
+    """Read this id's tail as `name` then a form, or as `name` alone; None if it is neither.
+
+    An id that ends on the name is read as stopping there, with the form left
+    out, only where `may_stop_at_the_name`: where ids are composed with the
+    entity's part after the device's. Composed in another order, an id ends on
+    the device's name whatever it spells for the entity.
+    """
     name_slug = slugify(name)
     form = _form_after_the_identifier(object_id, name_slug, suffix)
     if form is not None:
         return _NameReading(len(f"{name_slug}_{form}"), form)
-    if _ends_on_segment(object_id, name_slug):
+    if may_stop_at_the_name and _ends_on_segment(object_id, name_slug):
         return _NameReading(len(name_slug), None)
     return None
 
 
+def _without_the_first_run(words: Sequence[str], run: Sequence[str]) -> list[Sequence[str]] | None:
+    """Return the words on either side of the first place `run` occurs whole, or None if nowhere."""
+    for start in range(len(words) - len(run) + 1):
+        if words[start : start + len(run)] == run:
+            return [words[:start], words[start + len(run) :]]
+    return None
+
+
+def _form_spelled_apart_from_the_name(
+    object_id: str, names: Iterable[str], suffix: str
+) -> str | None:
+    """Return the form an id spells as whole words anywhere outside the name it carries.
+
+    For an id composed with the entity's part somewhere other than its end,
+    `power_kitchen_outlets`. The first of `names` the id spells is set aside
+    before the search, so a word of the name is not read as the suffix: the id
+    of a device named "Power Strip" spells `power` once for the entity and once
+    for the device. Where the id spells none of them, all of it is searched.
+    """
+    words = object_id.split("_")
+    pieces: list[Sequence[str]] = [words]
+    for name in names:
+        apart = _without_the_first_run(words, slugify(name).split("_"))
+        if apart is not None:
+            pieces = apart
+            break
+    for form in _known_forms(suffix):
+        run = form.split("_")
+        if any(_without_the_first_run(piece, run) is not None for piece in pieces):
+            return form
+    return None
+
+
 def circuit_object_id_suffix(
-    id_identifier: str, device_name: str, suffix: str, existing_entity_id: str | None
+    id_identifier: str,
+    device_name: str,
+    suffix: str,
+    existing_entity_id: str | None,
+    *,
+    device_then_entity: bool = True,
 ) -> str:
     """Return the base for one circuit entity on its circuit's device: the suffix alone.
 
     Home Assistant composes the circuit's name from the device, so the base
     carries only the suffix words (`power`, `energy consumed`). It is empty --
     Core then composes the id from the other parts of the user's entity-id
-    format, the devices under the default one -- in two cases: the existing id
+    format, the area and the devices under the default one -- in two cases: the existing id
     is read (below) as stopping at the device's name, or, where the id does not
     name the device or there is no id, the device name already ends with the
     words.
@@ -202,12 +262,37 @@ def circuit_object_id_suffix(
     The omission test carries a leading underscore because the builder's did: a
     circuit named exactly "Power" is not a repetition of anything and kept both
     halves, `..._power_power`.
+
+    All of that reads an id's tail, which is where the entity's part is while
+    `device_then_entity`: the user's entity-id format ends with the device and
+    then the entity, as the default does and as every id this integration
+    preset did. The format is the user's to reorder, and under another order
+    an id Core composes ends wherever that order ends, on the device's name
+    under `(entity, device)`. So where the format is another:
+
+    - an id that ends on a name is not read as stopping there. Read so,
+      `sensor.power_kitchen_outlets` gave the empty base, and every entity of
+      the circuit was offered the device's bare id;
+    - an id that does spell a name and then a form is still read that way. It
+      is one a release preset, or one composed before the format was changed;
+    - otherwise the form is the one the id spells as whole words anywhere
+      outside the name it carries (`_form_spelled_apart_from_the_name`), and
+      the omission is decided from `device_name`, as for a new entity.
+
+    `circuit_object_ids.circuit_object_id_base` asks first which wording
+    reproduces the id under the format as it stands, and comes here for the
+    ids none does.
     """
     form: str | None = None
+    object_id: str | None = None
     if existing_entity_id is not None:
         object_id = existing_entity_id.split(".", 1)[-1]
-        by_device = _read_after_the_name(object_id, device_name, suffix)
-        by_identifier = _read_after_the_name(object_id, id_identifier, suffix)
+        by_device = _read_after_the_name(
+            object_id, device_name, suffix, may_stop_at_the_name=device_then_entity
+        )
+        by_identifier = _read_after_the_name(
+            object_id, id_identifier, suffix, may_stop_at_the_name=device_then_entity
+        )
         # `>=`, so the device wins a tie.
         if by_device is not None and (
             by_identifier is None or by_device.tail_length >= by_identifier.tail_length
@@ -218,6 +303,8 @@ def circuit_object_id_suffix(
 
     if form is None:
         form = _existing_suffix_form(existing_entity_id, suffix)
+    if form is None and object_id is not None and not device_then_entity:
+        form = _form_spelled_apart_from_the_name(object_id, (device_name, id_identifier), suffix)
     words = (
         form.replace("_", " ")
         if form

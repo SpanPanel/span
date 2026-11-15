@@ -174,6 +174,8 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             snapshot,
             circuit,
             circuit_id,
+            domain="select",
+            unique_id=self._attr_unique_id,
             id_identifier=id_identifier,
             suffix=description.entity_description.key,
             existing_entity_id=existing_entity_id,
