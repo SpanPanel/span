@@ -1,8 +1,8 @@
 # Upgrading to Circuit Devices
 
 From 2.3.0, each circuit is a device of its own in Home Assistant, under the panel's device. The first time 2.3.0 sets a panel up, it moves each circuit's
-entities from the panel's device to the circuit's own. This page says what that move changes and what it leaves alone. 2.3.0 requires Home Assistant 2026.11 or
-later, the first release that shows the resulting names correctly.
+entities from the panel's device to the circuit's own. This page describes what that move changes and what it leaves alone. 2.3.0 requires Home Assistant
+2026.11 or later, the first release that shows the resulting names correctly.
 
 How circuit devices and their entities are named from then on is described under [Entity Naming Pattern](README.md#entity-naming-pattern).
 
@@ -10,7 +10,7 @@ How circuit devices and their entities are named from then on is described under
 
 - **Entity IDs and unique IDs.** No entity ID changes, so automations, scripts and dashboards that use entity IDs keep working, and each entity keeps its
   history.
-- **Names you gave entities.** A name you set stays yours. The one change is that a name that already began with the circuit's name drops it, so it does not
+- **Names you gave entities.** A name you set is retained. The one change is that a name that already began with the circuit's name drops it, so it does not
   show twice once Home Assistant puts the circuit's name in front.
 
 ## What changes
