@@ -103,10 +103,10 @@ The following terms appear throughout this document and in the integration's sen
 | Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                           |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                           |
-| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                        |
+| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced. Off by default                                                                                        |
 | Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                    |
 | Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                    |
-| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                         |
+| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy. Off by default                                                                                         |
 | DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals. Diagnostic, off by default |
 | Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown         |
 | Grid Forming Entity          | —            | —    | GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See [Grid Forming Entity](#grid-forming-entity)                                   |
@@ -121,8 +121,8 @@ The following terms appear throughout this document and in the integration's sen
 | -------------------------- | ------------ | ---- | ------------------------------------------------------------------------------------------------------ |
 | L1 Voltage                 | Voltage      | V    | L1 leg actual voltage                                                                                  |
 | L2 Voltage                 | Voltage      | V    | L2 leg actual voltage                                                                                  |
-| Upstream L1 Current        | Current      | A    | Upstream lugs L1 current                                                                               |
-| Upstream L2 Current        | Current      | A    | Upstream lugs L2 current                                                                               |
+| Upstream L1 Current        | Current      | A    | Upstream lugs L1 current. Off by default                                                               |
+| Upstream L2 Current        | Current      | A    | Upstream lugs L2 current. Off by default                                                               |
 | Downstream L1 Current      | Current      | A    | Downstream lugs L1 current. Off by default — see below                                                 |
 | Downstream L2 Current      | Current      | A    | Downstream lugs L2 current. Off by default — see below                                                 |
 | Main Breaker Rating        | —            | A    | Main breaker amperage. Off by default                                                                  |
@@ -245,15 +245,15 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 | `voltage`  | string | Nominal panel voltage ("240")                                     |
 | `amperage` | string | Calculated current (power / voltage); null while power is unknown |
 
-**Grid Power** carries one more, because its name is only true in some wiring:
+**Current Power** carries one more, because whether it reads grid flow depends on the wiring:
 
 | Attribute             | Type    | Notes                                                                      |
 | --------------------- | ------- | -------------------------------------------------------------------------- |
 | `at_service_entrance` | boolean | Whether this panel's upstream lugs are where the utility actually connects |
 
-Grid Power reads the upstream lugs. That is grid flow when those lugs are the utility connection point, which is the ordinary case. Put a battery between the
-utility and your main lugs, or feed this panel from another panel, and the same reading becomes **this panel's** supply while **Grid Power Flow** stays the
-whole-site figure — so the two legitimately disagree. When `at_service_entrance` is `false`, use Grid Power Flow for site-level grid import and export.
+Current Power reads the upstream lugs. That is grid flow when those lugs are the utility connection point, which is the ordinary case. Put a battery between the
+utility and your main lugs, or feed this panel from another panel, and the same reading becomes **this panel's** supply while **Grid Power** stays the
+whole-site figure — so the two legitimately disagree. When `at_service_entrance` is `false`, use Grid Power for site-level grid import and export.
 
 ### Software Version Sensor Attributes
 
@@ -434,10 +434,10 @@ outside the breaker grid.
 
 ### Circuit Controls (per user-controllable circuit)
 
-| Entity           | Type   | Notes                                                                     |
-| ---------------- | ------ | ------------------------------------------------------------------------- |
-| Breaker          | Switch | On/off relay control                                                      |
-| Circuit Priority | Select | Controls when the circuit is shed during off-grid (translated, see below) |
+| Entity           | Type   | Notes                                             |
+| ---------------- | ------ | ------------------------------------------------- |
+| Breaker          | Switch | On/off relay control                              |
+| Circuit Priority | Select | Controls when the circuit is shed during off-grid |
 
 ### Panel Controls
 
@@ -553,9 +553,8 @@ The button is available only while the panel is not already on grid and the batt
 accepts the override. On firmware that does not publish that state, it is available unless **BESS Connected** is on.
 
 **Risk asymmetry** — Telling the panel to shed (conservative direction) is low-risk; worst case is unnecessary circuit disruption. Telling the panel the grid is
-back when it is not means unmanaged battery drain and reduced runtime, which could affect critical equipment. The battery protects itself by disconnecting when
-depleted, so there is no overload risk, but runtime will be reduced. Use the override button only with confidence that the grid has actually been restored — via
-a utility-side sensor or manual confirmation.
+back when it is not means unmanaged battery drain and reduced runtime, which could affect critical equipment. Use the override button only with confidence that
+the grid has actually been restored — via a utility-side sensor or manual confirmation.
 
 **WARNING** — Do _not_ automate the GFE override button based on `DSM State` — it inherits the same MID blind spot described above and will read `dsm_off_grid`
 even after the grid is restored. Manual confirmation or an external sensor is required before pressing the button.
@@ -638,7 +637,8 @@ Upgrading from a release before 2.3.0: see [Upgrading to Circuit Devices](circui
 ### Energy Dip Compensation
 
 SPAN panels occasionally report lower energy readings for cumulative energy sensors after firmware updates or resets. Home Assistant's statistics engine
-interprets any decrease as a counter reset, creating negative spikes in the energy dashboard.
+interprets a drop of more than a tenth as a counter reset and adds the lower reading to the energy dashboard as new energy, creating a spike. A smaller drop is
+recorded as negative energy.
 
 When enabled, the integration automatically detects these dips and maintains a cumulative offset per sensor so Home Assistant sees a monotonically increasing
 value.
