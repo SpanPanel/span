@@ -64,7 +64,7 @@
           "entity_naming_pattern": "Modèle de nommage"
         },
         "data_description": {
-          "entity_naming_pattern": "Les noms conviviaux utilisent les étiquettes de circuit du panneau. Les noms basés sur les onglets utilisent les numéros d'onglets de disjoncteur pour des identifiants d'entité stables."
+          "entity_naming_pattern": "Les deux choix construisent l'identifiant de chaque nouvelle entité une seule fois, à sa création : les noms de circuit à partir du nom du circuit dans l'application SPAN, les numéros de circuit à partir de la position de son disjoncteur. Dans les deux cas, les noms affichés suivent l'application SPAN."
         },
         "description": "Choisissez comment les entités liées aux circuits sont nommées dans Home Assistant.",
         "title": "Nommage des entités de circuit"
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Numéros de Circuit (ex., span_panel_circuit_15_power)",
-        "friendly_names": "Noms Conviviaux (ex., span_panel_cuisine_prises_power)"
+        "circuit_numbers": "Numéros de circuit (ex., span_panel_circuit_15_power)",
+        "friendly_names": "Noms de circuit (ex., span_panel_cuisine_prises_power)"
       }
     }
   },

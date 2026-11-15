@@ -64,7 +64,7 @@
           "entity_naming_pattern": "命名パターン"
         },
         "data_description": {
-          "entity_naming_pattern": "フレンドリ名はパネルの回路ラベルを使用します。タブベースの名前はブレーカータブ番号を使用し、安定したエンティティIDを提供します。"
+          "entity_naming_pattern": "どちらを選んでも、新しいエンティティのIDは作成時に一度だけ作られます。回路名は SPAN アプリでの回路名から、回路番号はブレーカーの位置から作られます。表示名はどちらの場合も SPAN アプリに従います。"
         },
         "description": "Home Assistantでの回路関連エンティティの命名方法を選択してください。",
         "title": "回路エンティティの命名"
@@ -661,7 +661,7 @@
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）",
-        "friendly_names": "フレンドリ名（例：span_panel_kitchen_outlets_power）"
+        "friendly_names": "回路名（例：span_panel_kitchen_outlets_power）"
       }
     }
   },

@@ -64,7 +64,7 @@
           "entity_naming_pattern": "Padrão de nomenclatura"
         },
         "data_description": {
-          "entity_naming_pattern": "Os nomes amigáveis usam as etiquetas dos circuitos do painel. Os nomes baseados em posições usam os números das posições dos disjuntores para IDs de entidade estáveis."
+          "entity_naming_pattern": "Ambas as opções constroem o ID de cada nova entidade uma única vez, quando é criada: os nomes de circuito a partir do nome do circuito na aplicação SPAN, os números de circuito a partir da posição do seu disjuntor. Os nomes apresentados seguem a aplicação SPAN em ambos os casos."
         },
         "description": "Escolha como as entidades relacionadas com circuitos são nomeadas no Home Assistant.",
         "title": "Nomenclatura de entidades de circuito"
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Números de Circuito (ex., span_panel_circuit_15_power)",
-        "friendly_names": "Nomes Amigáveis (ex., span_panel_cozinha_tomadas_power)"
+        "circuit_numbers": "Números de circuito (ex., span_panel_circuit_15_power)",
+        "friendly_names": "Nomes de circuito (ex., span_panel_cozinha_tomadas_power)"
       }
     }
   },

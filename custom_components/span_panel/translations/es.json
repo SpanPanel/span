@@ -64,7 +64,7 @@
           "entity_naming_pattern": "Patrón de nomenclatura"
         },
         "data_description": {
-          "entity_naming_pattern": "Los nombres amigables usan etiquetas de circuito del panel. Los nombres basados en pestañas usan números de pestaña de interruptor para IDs de entidad estables."
+          "entity_naming_pattern": "Ambas opciones construyen el ID de cada entidad nueva una sola vez, cuando se crea: los nombres de circuito a partir del nombre del circuito en la app de SPAN, los números de circuito a partir de la posición de su interruptor. Los nombres mostrados siguen a la app de SPAN en ambos casos."
         },
         "description": "Elija cómo se nombran las entidades relacionadas con circuitos en Home Assistant.",
         "title": "Nomenclatura de entidades de circuito"
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Números de Circuito (ej., span_panel_circuit_15_power)",
-        "friendly_names": "Nombres Amigables (ej., span_panel_cocina_tomacorrientes_power)"
+        "circuit_numbers": "Números de circuito (ej., span_panel_circuit_15_power)",
+        "friendly_names": "Nombres de circuito (ej., span_panel_cocina_tomacorrientes_power)"
       }
     }
   },

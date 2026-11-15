@@ -1,9 +1,11 @@
 """The text circuit devices brought, in every language the integration ships.
 
-Two repair notices. The English is approved verbatim and pinned here. The sync
-hook holds each other language to the same keys and nothing more, so a notice
-copied across in English or a placeholder lost in translation passes it. These
-hold each language to what the frontend needs to render the text.
+Two repair notices and the reworded naming option. The English is approved
+verbatim and pinned here. The sync hook holds each other language to the same
+keys and nothing more, so a notice copied across in English, a placeholder
+lost in translation, or a label left on a retired term passes it. These hold
+each language to what the frontend needs to render the text and to the terms
+the English settled on.
 """
 
 from __future__ import annotations
@@ -32,6 +34,16 @@ _CONVERTED_TITLE = ("issues", "circuit_devices_converted", "title")
 _CONVERTED = ("issues", "circuit_devices_converted", "description")
 _SWITCH_TITLE = ("issues", "breaker_switch_in_area", "title")
 _SWITCH = ("issues", "breaker_switch_in_area", "description")
+
+_NAMING_HELP = (
+    "config",
+    "step",
+    "choose_entity_naming_initial",
+    "data_description",
+    "entity_naming_pattern",
+)
+_CIRCUIT_NAMES = ("selector", "entity_naming_pattern", "options", "friendly_names")
+_CIRCUIT_NUMBERS = ("selector", "entity_naming_pattern", "options", "circuit_numbers")
 
 _APPROVED_ENGLISH: dict[tuple[str, ...], str] = {
     _CONVERTED_TITLE: "SPAN Panel circuits now have their own devices",
@@ -62,9 +74,30 @@ _APPROVED_ENGLISH: dict[tuple[str, ...], str] = {
         " a different area of its own or remove the area from its circuit's device. Dismiss"
         " this notice once you have read it."
     ),
+    _NAMING_HELP: (
+        "Both choices build each new entity's ID once, when it is created: circuit names from"
+        " the circuit's name in the SPAN app, circuit numbers from its breaker's position."
+        " Displayed names follow the SPAN app either way."
+    ),
+    _CIRCUIT_NAMES: "Circuit names (e.g., span_panel_kitchen_outlets_power)",
+    _CIRCUIT_NUMBERS: "Circuit numbers (e.g., span_panel_circuit_15_power)",
 }
 
 _NOTICE_TEXTS = [_CONVERTED_TITLE, _CONVERTED, _SWITCH_TITLE, _SWITCH]
+_NAMING_TEXTS = [_NAMING_HELP, _CIRCUIT_NAMES, _CIRCUIT_NUMBERS]
+
+_RETIRED_NAMING_TERMS = (
+    "friendly",
+    "amigabl",
+    "amigáve",
+    "convivia",
+    "フレンドリ",
+    "tab-based",
+    "pestaña",
+    "onglet",
+    "タブ",
+)
+"""The words the option's two choices went by before, in each language's own."""
 
 
 def _strings(language: str) -> dict[str, object]:
@@ -101,7 +134,7 @@ def test_the_english_is_the_approved_text(location: tuple[str, ...]) -> None:
 
 
 @pytest.mark.parametrize("language", _TRANSLATED)
-@pytest.mark.parametrize("location", _NOTICE_TEXTS, ids=".".join)
+@pytest.mark.parametrize("location", [*_NOTICE_TEXTS, *_NAMING_TEXTS], ids=".".join)
 def test_every_language_has_its_own_text(language: str, location: tuple[str, ...]) -> None:
     """A text left in English reads as a notice the integration forgot to translate."""
     assert _text(language, location) != _APPROVED_ENGLISH[location]
@@ -157,3 +190,21 @@ def test_no_text_puts_an_apostrophe_against_a_brace(language: str) -> None:
         key for key, text in _every_text(_strings(language)) if "'{" in text or "'}" in text
     ]
     assert offenders == []
+
+
+@pytest.mark.parametrize("language", list(_LANGUAGE_FILES))
+@pytest.mark.parametrize("location", _NAMING_TEXTS, ids=".".join)
+def test_the_naming_option_no_longer_uses_the_retired_terms(
+    language: str, location: tuple[str, ...]
+) -> None:
+    """The two choices are circuit names and circuit numbers, in every language."""
+    text = _text(language, location).casefold()
+    assert [term for term in _RETIRED_NAMING_TERMS if term in text] == []
+
+
+@pytest.mark.parametrize("language", list(_LANGUAGE_FILES))
+def test_the_naming_labels_still_show_an_entity_id(language: str) -> None:
+    """Each label ends with an example, and the circuit-number one is the same everywhere."""
+    assert "span_panel_circuit_15_power" in _text(language, _CIRCUIT_NUMBERS)
+    assert "span_panel_" in _text(language, _CIRCUIT_NAMES)
+    assert _text(language, _CIRCUIT_NAMES).endswith(("_power)", "_power）"))
