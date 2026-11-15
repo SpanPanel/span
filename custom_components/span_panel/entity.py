@@ -383,23 +383,33 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         the wording a new entity gets, decided against the number and not the
         device's name, so a circuit named "Solar Power" is created as
         `..._circuit_15_power`.
+
+        None as well where the user's entity-id format holds a part the
+        composer does not know, as one saved under a later Home Assistant
+        could. The entity is then created with the id Core composes, which
+        carries the circuit's name, rather than not created at all.
         """
         entry = coordinator.config_entry
         if not entry.options.get(USE_CIRCUIT_NUMBERS, False):
             return None
-        return preset_circuit_number_entity_id(
+        object_id = compose_circuit_object_id(
             coordinator.hass,
-            domain=domain,
-            unique_id=unique_id,
-            object_id=compose_circuit_object_id(
-                coordinator.hass,
-                panel_device_id=entry.runtime_data.panel_device_id,
-                circuit_device_identifier=(
-                    DOMAIN,
-                    build_circuit_device_identifier(snapshot.serial_number, circuit_id),
-                ),
-                device_name=id_identifier,
-                suffix_words=circuit_object_id_suffix(id_identifier, id_identifier, suffix, None),
-                config_entry_id=entry.entry_id,
+            panel_device_id=entry.runtime_data.panel_device_id,
+            circuit_device_identifier=(
+                DOMAIN,
+                build_circuit_device_identifier(snapshot.serial_number, circuit_id),
             ),
+            device_name=id_identifier,
+            suffix_words=circuit_object_id_suffix(id_identifier, id_identifier, suffix, None),
+            config_entry_id=entry.entry_id,
+        )
+        if object_id is None:
+            _LOGGER.debug(
+                "No circuit-number ID is preset for %s %s: Home Assistant composes its ID",
+                domain,
+                unique_id,
+            )
+            return None
+        return preset_circuit_number_entity_id(
+            coordinator.hass, domain=domain, unique_id=unique_id, object_id=object_id
         )

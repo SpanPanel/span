@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 import logging
 from typing import Final
 from unittest.mock import MagicMock
@@ -44,9 +45,16 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
+from custom_components.span_panel import (
+    SpanPanelRuntimeData,
+    circuit_object_ids,
+    ensure_device_registered,
+)
 from custom_components.span_panel.circuit_number_ids import preset_circuit_number_entity_id
-from custom_components.span_panel.circuit_object_ids import compose_circuit_object_id
+from custom_components.span_panel.circuit_object_ids import (
+    COMPOSED_PARTS,
+    compose_circuit_object_id,
+)
 from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.id_builder import (
@@ -135,7 +143,7 @@ class _Arranged:
     entry: MockConfigEntry
     panel_device_id: str
 
-    def compose(self, hass: HomeAssistant, suffix_words: str = "power") -> str:
+    def compose(self, hass: HomeAssistant, suffix_words: str = "power") -> str | None:
         """Ask the composer for this panel's circuit, numbered `CIRCUIT_NUMBER`."""
         return compose_circuit_object_id(
             hass,
@@ -210,7 +218,58 @@ async def test_composer_matches_core(
         object_id_base="power",
     )
 
-    assert f"sensor.{slugify(arranged.compose(hass))}" == registry.async_regenerate_entity_id(row)
+    composed = arranged.compose(hass)
+    assert composed is not None
+    assert f"sensor.{slugify(composed)}" == registry.async_regenerate_entity_id(row)
+
+
+def test_composer_knows_every_part_core_composes_an_id_from() -> None:
+    """The other half of the drift guard: a part a later Home Assistant adds fails here.
+
+    The formats above are written out by hand, so a new member of Core's enum
+    passes them. The composer refuses a format holding a part it does not know
+    (below), which is safe and silent, so this is what says the composer needs
+    the new part taught to it.
+    """
+    assert set(EntityNamePart) == COMPOSED_PARTS
+
+
+class _LaterPart(StrEnum):
+    """A part of an entity id a later Home Assistant might add, which the composer never met."""
+
+    ROOM = "room"
+
+
+def _a_format_with_a_part_the_composer_does_not_know(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Have the integration read a saved format that holds a part it was never taught.
+
+    Only the integration's reading is replaced. Core cannot be given the part,
+    since its own composition knows the same five.
+    """
+    monkeypatch.setattr(
+        circuit_object_ids,
+        "entity_id_parts",
+        lambda _hass: (
+            EntityNamePart.PARENT_DEVICE,
+            _LaterPart.ROOM,
+            EntityNamePart.DEVICE,
+            EntityNamePart.ENTITY,
+        ),
+    )
+
+
+async def test_composer_answers_nothing_for_a_format_part_it_does_not_know(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An id composed without a part the user's format names would not be Core's id."""
+    arranged = _arrange(hass, None, None)
+    assert arranged.compose(hass) == "SPAN Panel Circuit 15 power"
+
+    _a_format_with_a_part_the_composer_does_not_know(hass, monkeypatch)
+
+    assert arranged.compose(hass) is None
 
 
 @pytest.mark.parametrize(
@@ -655,3 +714,83 @@ async def test_a_meter_without_a_breaker_space_is_created_with_its_label(
         )
         == "sensor.span_panel_remote_ct_3_power"
     )
+
+
+# ---------------------------------------------------------------------------
+# A saved format that holds a part the composer does not know
+# ---------------------------------------------------------------------------
+
+
+async def test_a_format_part_the_composer_does_not_know_leaves_the_new_id_to_core(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The three platforms set up, and each new entity gets the id Core composes for it.
+
+    Home Assistant has added a part before. A user who saves a format with a
+    part this release never met must not lose every circuit sensor, switch and
+    select to a lookup that fails: the entity is created without a preset, so
+    its id carries the circuit's name, and the log says why at debug.
+    """
+    entry = _entry(hass, NUMBERS_MODE)
+    _a_format_with_a_part_the_composer_does_not_know(hass, monkeypatch)
+    caplog.set_level(logging.DEBUG, logger="custom_components.span_panel")
+
+    await _set_up(hass, entry, _panel(KITCHEN_OUTLETS))
+
+    assert _circuit_entity_ids(hass, entry, KITCHEN) == {
+        "sensor.span_panel_kitchen_outlets_power",
+        "sensor.span_panel_kitchen_outlets_current",
+        "sensor.span_panel_kitchen_outlets_breaker_rating",
+        "sensor.span_panel_kitchen_outlets_produced_energy",
+        "sensor.span_panel_kitchen_outlets_consumed_energy",
+        "sensor.span_panel_kitchen_outlets_net_energy",
+        "switch.span_panel_kitchen_outlets_breaker",
+        "select.span_panel_kitchen_outlets_circuit_priority",
+    }
+    row = er.async_get(hass).async_get("sensor.span_panel_kitchen_outlets_power")
+    assert row is not None
+    assert row.suggested_object_id is None
+    explained = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.DEBUG and "room" in record.getMessage()
+    ]
+    assert explained
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize(
+    "options", [pytest.param(NAMES_MODE, id="names"), pytest.param(NUMBERS_MODE, id="numbers")]
+)
+async def test_a_format_part_the_composer_does_not_know_moves_no_existing_id(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, options: dict[str, bool]
+) -> None:
+    """An install whose user saves such a format later reloads with every entity where it was.
+
+    The id each entity has is then read for its wording by its tail, the way
+    an id no composition reproduces is.
+    """
+    entry = _entry(hass, options)
+    loaded = await _set_up(hass, entry, _panel(KITCHEN_OUTLETS))
+    before = _circuit_entity_ids(hass, entry, KITCHEN)
+    assert len(before) == 8
+
+    _a_format_with_a_part_the_composer_does_not_know(hass, monkeypatch)
+    await _reload(hass, entry, loaded, _panel(KITCHEN_OUTLETS))
+
+    assert _circuit_entity_ids(hass, entry, KITCHEN) == before
+    registry = er.async_get(hass)
+    assert {
+        row.object_id_base
+        for entity_id in before
+        if (row := registry.async_get(entity_id)) is not None
+    } == {
+        "power",
+        "current",
+        "breaker rating",
+        "produced energy",
+        "consumed energy",
+        "net energy",
+        "breaker",
+        "circuit priority",
+    }

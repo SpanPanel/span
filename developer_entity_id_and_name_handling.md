@@ -275,11 +275,15 @@ position instead (R3), and keeps the promise with the one `entity_id` this integ
   circuit's device has no area of its own; the circuit number as the device; the suffix words as the entity. `tests/test_circuit_number_ids.py` holds the
   composer to Core's own answer for each format and area case (`test_composer_matches_core`), the formats that put the entity before the device among them, so a
   change in Core fails there on the next Home Assistant bump instead of drifting silently. The read-back of §4.3 uses the same composer.
+- **A part it does not know.** The composer names the five parts Core has today (`circuit_object_ids.COMPOSED_PARTS`), and
+  `test_composer_knows_every_part_core_composes_an_id_from` holds that set to Core's enum, so a part a later Home Assistant adds fails the suite at the bump. At
+  run time a saved format holding any other part gets no composition: the entity is created without a preset, with the ID Core composes, which is logged at
+  debug, and an existing ID is read by its tail (§4.3). No platform fails to set up over it.
 - **How it is spent.** Core stores the preset as the row's `suggested_object_id` and uses it verbatim. The entity's next add supplies none, so Core clears it
   (§3.3). A new entity asks for a reload on its first update (§5.2), so that add follows its creation directly. The ID stays where it is (R5), and from then on
   Recreate composes from the circuit's device and the base, and offers the circuit's name.
-- **Where there is none.** In circuit-names mode, for a sub-device sensor (§4.5), and where the user's format composes nothing for the entity, which is left to
-  Core's own fallback.
+- **Where there is none.** In circuit-names mode, for a sub-device sensor (§4.5), where the user's format composes nothing for the entity, which is left to
+  Core's own fallback, and where it holds a part the composer does not know.
 
 Presetting on every load was rejected. It would keep Recreate offering nothing in this mode, and it would make R2's exception permanent (§3.4).
 
@@ -452,6 +456,8 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
 - [ ] Nothing reads an ID as though the format ended with the device and then the entity without being told it does (`device_then_entity`), and an ID Core
       composes today is offered nothing under any format (§4.3).
 - [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant (§5.3).
+- [ ] The composer answers nothing for an entity-ID format holding a part outside `COMPOSED_PARTS`, and nothing indexes a table of parts by a part it may not
+      hold (§4.7).
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
       (`test_every_form_table_entry_has_a_new_wording_and_vice_versa`).
 - [ ] A reworded description label adds the old label to `legacy_names` so §6.1 still recognizes what 2.0.8 wrote.

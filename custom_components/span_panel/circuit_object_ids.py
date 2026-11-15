@@ -18,6 +18,13 @@ circuit-numbers mode creates an entity with, where the device is named by the
 circuit's number (`circuit_number_ids`), and the read-back below, where it is
 named as it will be once the entity is added.
 
+It composes from the parts it knows (`COMPOSED_PARTS`), which are all Core has
+today, and a test holds the two sets equal. A format that holds any other
+part, as one saved under a later Home Assistant could, gets no answer: an id
+composed without a part the user asked for would not be the id Core composes.
+The entity is then created without a preset, with the id Core gives it, and an
+existing id is read by its tail.
+
 ## The base that reproduces an id
 
 An entity that has an id is given the base under which Core composes that same
@@ -59,6 +66,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+import logging
 from typing import Final
 
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
@@ -77,6 +85,23 @@ from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix, suffix_wordings
 from .runtime import SpanPanelConfigEntry, loaded_runtime_data
 from .util import circuit_id_of_device, effective_circuit_device_name
+
+_LOGGER = logging.getLogger(__name__)
+
+COMPOSED_PARTS: Final = frozenset(
+    {
+        EntityNamePart.AREA,
+        EntityNamePart.DEVICE,
+        EntityNamePart.ENTITY,
+        EntityNamePart.FLOOR,
+        EntityNamePart.PARENT_DEVICE,
+    }
+)
+"""The parts of an entity-id format the composer knows how to name.
+
+Every part Core has today. A test holds this to Core's enum, so a part a later
+Home Assistant adds fails the suite at the bump instead of passing unnoticed.
+"""
 
 _DEFAULT_ENTITY_ID_PARTS: Final = (
     EntityNamePart.AREA,
@@ -118,7 +143,7 @@ def compose_circuit_object_id(
     device_name: str,
     suffix_words: str,
     config_entry_id: str,
-) -> str:
+) -> str | None:
     """Return the object id Core would compose were the circuit's device named `device_name`.
 
     The parts, joined by a space in the order of the user's entity-id format
@@ -139,7 +164,19 @@ def compose_circuit_object_id(
     - the entity is `suffix_words`, the entity's base.
 
     A part the format leaves out, or that has nothing to say, is skipped.
+
+    None where the format holds a part that is not among `COMPOSED_PARTS`:
+    what Core composes from it is not known here.
     """
+    parts = entity_id_parts(hass)
+    if unknown := [part for part in parts if part not in COMPOSED_PARTS]:
+        _LOGGER.debug(
+            "The entity ID format holds parts this integration cannot compose (%s),"
+            " so no ID is composed for a circuit entity under it",
+            ", ".join(str(part) for part in unknown),
+        )
+        return None
+
     device_registry = dr.async_get(hass)
     panel = device_registry.async_get(panel_device_id, include_child_devices=False)
     circuit_device = device_registry.async_get_child_device_by_identifier(
@@ -170,7 +207,7 @@ def compose_circuit_object_id(
         EntityNamePart.FLOOR: floor_name,
         EntityNamePart.PARENT_DEVICE: panel_name,
     }
-    return " ".join(part_name for part in entity_id_parts(hass) if (part_name := part_names[part]))
+    return " ".join(part_name for part in parts if (part_name := part_names.get(part)))
 
 
 def _is_the_id_core_registers(object_id: str, composed: str, *, numbered: bool) -> bool:
@@ -218,8 +255,9 @@ def circuit_object_id_base(
     For an entity that has an id, the base under which Core composes that id
     from the circuit's device as it will be named once the entity is added
     (`util.effective_circuit_device_name`), under the user's entity-id format.
-    Where no base does, and for an entity with no id yet,
-    `naming.circuit_object_id_suffix` decides.
+    Where no base does, where the format holds a part the composer does not
+    know, and for an entity with no id yet, `naming.circuit_object_id_suffix`
+    decides.
 
     The compositions tried are for an entity with no area and no name of its
     own. One with an area composes without its device and one with a name
@@ -234,15 +272,19 @@ def circuit_object_id_base(
         reproducing = _base_reproducing(
             existing_entity_id.split(".", 1)[-1],
             {
-                base: compose_circuit_object_id(
-                    hass,
-                    panel_device_id=panel_device_id,
-                    circuit_device_identifier=circuit_device_identifier,
-                    device_name=device_name,
-                    suffix_words=base,
-                    config_entry_id=config_entry_id,
-                )
+                base: composed
                 for base in (*suffix_wordings(recipe.suffix), "")
+                if (
+                    composed := compose_circuit_object_id(
+                        hass,
+                        panel_device_id=panel_device_id,
+                        circuit_device_identifier=circuit_device_identifier,
+                        device_name=device_name,
+                        suffix_words=base,
+                        config_entry_id=config_entry_id,
+                    )
+                )
+                is not None
             },
         )
         if reproducing is not None:
