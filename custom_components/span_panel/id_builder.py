@@ -1,6 +1,7 @@
 """Pure ID construction and suffix mapping functions for Span Panel integration.
 
-This module contains functions that build unique IDs and map suffixes.
+This module contains functions that build unique IDs and map suffixes, and
+the device identifier of each circuit's own device.
 It has NO dependency on Home Assistant, coordinator, or entity registry --
 only logging and span_panel_api types.
 """
@@ -9,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 import logging
+from typing import Final
 
 from span_panel_api import SpanPanelSnapshot
 
@@ -484,3 +486,49 @@ def construct_select_unique_id(snapshot: SpanPanelSnapshot, select_id: str) -> s
 
     """
     return build_select_unique_id(snapshot.serial_number, select_id)
+
+
+# ---------------------------------------------------------------------------
+# Device identifiers. A device identifier keys a device in the device registry,
+# as a unique ID keys an entity in the entity registry, and the same rule holds:
+# a changed return string here orphans every live device it named.
+# ---------------------------------------------------------------------------
+
+
+CIRCUIT_DEVICE_TOKEN: Final = "circuit"
+"""The infix marking a device identifier as a circuit's own: `{panel serial}_circuit_{circuit id}`.
+
+Clear of every token `util.classify_sub_device_identifier` reserves (`_adopted_`,
+`_evse_`, `_pv_`, and the endings `_bess`, `_mid` and `_pv`), so the token
+never makes a circuit's device read as a sub-device. Changing it re-creates
+every circuit device without the name and area a user gave it.
+"""
+
+
+def build_circuit_device_identifier(serial: str, circuit_id: str) -> str:
+    """Build the device registry identifier of a circuit's own device (pure function).
+
+    Returns: "{serial}_circuit_{circuit_id}"
+
+    `serial` is the panel's serial unchanged, as the panel device's own
+    identifier carries it, and never lower-cased as `build_circuit_unique_id`
+    lower-cases it. `circuit_id` is the snapshot's circuit key, taken whole and
+    never reshaped. Read back by `circuit_id_from_device_identifier`.
+    """
+    return f"{serial}_{CIRCUIT_DEVICE_TOKEN}_{circuit_id}"
+
+
+def circuit_id_from_device_identifier(serial: str, identifier: str) -> str | None:
+    """Return the circuit id a device identifier names on this panel, or None.
+
+    The reading end of `build_circuit_device_identifier`. It answers only for an
+    identifier of exactly the form `{serial}_circuit_{circuit id}`, with `serial`
+    spelled as given and a non-empty id, and returns the id whole, whatever it
+    contains. It never infers a circuit from an identifier's shape, so another
+    panel's circuit device, the panel's own device and every sub-device all
+    answer None, even where a sub-device's key is a circuit's id.
+    """
+    prefix = f"{serial}_{CIRCUIT_DEVICE_TOKEN}_"
+    if not identifier.startswith(prefix):
+        return None
+    return identifier[len(prefix) :] or None

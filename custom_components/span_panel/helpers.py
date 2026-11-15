@@ -82,6 +82,7 @@ __all__ = [
     "build_select_unique_id_for_entry",
     "build_switch_unique_id",
     "build_switch_unique_id_for_entry",
+    "circuit_device_name",
     "circuit_has_a_breaker_switch",
     "circuit_has_a_priority_select",
     "circuit_has_a_relay",
@@ -268,6 +269,32 @@ def outside_meter_label(circuit_id: str) -> str:
     """
     match = _TRAILING_DIGITS.search(circuit_id)
     return OUTSIDE_METER_LABEL_FORMAT.format(match.group(1) if match else circuit_id)
+
+
+def circuit_device_name(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
+    """Name a circuit's own device, which Home Assistant composes each of its entities' names from.
+
+    One helper for everything that registers a circuit's device, so the device
+    is named the same whichever of them registers it. In order:
+
+    1. a meter outside the panel takes `outside_meter_label`, whatever name it
+       carries, as its entities and topology row do;
+    2. otherwise the panel's name for the circuit;
+    3. otherwise "Solar" for an unnamed solar circuit, as its entities have
+       been named since v1;
+    4. otherwise its breaker positions, such as "Circuit 30 32".
+
+    An unnamed charger circuit takes its positions, not "EV Charger": its
+    sensors live on the charger's device, so its circuit device holds only the
+    breaker switch and priority select, whose names already use the positions.
+    """
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
+    if circuit.name:
+        return circuit.name
+    if circuit.device_type == "pv":
+        return "Solar"
+    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
 
 def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str) -> str:

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 import logging
 from typing import Final
 
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from span_panel_api import (
     SpanBatterySnapshot,
+    SpanCircuitSnapshot,
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
@@ -14,6 +15,8 @@ from span_panel_api import (
 )
 
 from .const import DOMAIN
+from .helpers import circuit_device_name
+from .id_builder import build_circuit_device_identifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -396,4 +399,29 @@ def pv_inverter_device_info(
         model=pv.model or "Solar Inverter",
         sw_version=pv.software_version,
         via_device_id=panel_device_id,
+    )
+
+
+def circuit_device_info(
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    circuit_id: str,
+    *,
+    panel_device_id: str,
+) -> ChildDeviceInfo:
+    """Create ChildDeviceInfo for a circuit's own device, a child of the panel device.
+
+    A child device rather than a sub-device. A circuit is a part of the panel,
+    not hardware with an identity of its own, so it links to the panel with
+    `parent_device_id` and carries no manufacturer, model or serial, which
+    `ChildDeviceInfo` has no field for. The parent is the panel device's
+    registry id, as `via_device_id` is for a sub-device.
+
+    `serial` is the panel's serial as its own device identifier carries it, and
+    `circuit_id` the snapshot's circuit key. Named by `circuit_device_name`.
+    """
+    return ChildDeviceInfo(
+        identifiers={(DOMAIN, build_circuit_device_identifier(serial, circuit_id))},
+        name=circuit_device_name(circuit, circuit_id),
+        parent_device_id=panel_device_id,
     )
