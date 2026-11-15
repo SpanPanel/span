@@ -3,6 +3,7 @@
     "circuit-17": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-17",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_1_breaker_rating",
@@ -38,6 +39,7 @@
     "circuit-18": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-18",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_2_breaker_rating",
@@ -73,6 +75,7 @@
     "circuit-19": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-19",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_3_breaker_rating",
@@ -108,6 +111,7 @@
     "circuit-20": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-20",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_4_breaker_rating",
@@ -143,6 +147,7 @@
     "circuit-21": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-21",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_5_breaker_rating",
@@ -178,6 +183,7 @@
     "circuit-22": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-22",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_6_breaker_rating",
@@ -213,6 +219,7 @@
     "circuit-23": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-23",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_7_breaker_rating",
@@ -248,6 +255,7 @@
     "circuit-24": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-24",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_8_breaker_rating",
@@ -283,6 +291,7 @@
     "circuit-25": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-25",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_9_breaker_rating",
@@ -318,6 +327,7 @@
     "circuit-26": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-26",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_10_breaker_rating",
@@ -353,6 +363,7 @@
     "circuit-27": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-27",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_11_breaker_rating",
@@ -388,6 +399,7 @@
     "circuit-28": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-28",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_12_breaker_rating",
@@ -423,6 +435,7 @@
     "circuit-29": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-29",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_13_breaker_rating",
@@ -458,6 +471,7 @@
     "circuit-30": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-30",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_14_breaker_rating",
@@ -493,6 +507,7 @@
     "circuit-31": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-31",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_15_breaker_rating",
@@ -528,6 +543,7 @@
     "circuit-32": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-1155-18fkf_circuit_circuit-32",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_breaker_16_breaker_rating",
@@ -563,6 +579,7 @@
     "remote-ct-3": {
       "always_on": null,
       "breaker_rating_a": null,
+      "device_id": "xg-1155-18fkf_circuit_remote-ct-3",
       "device_type": "circuit",
       "entities": {
         "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",

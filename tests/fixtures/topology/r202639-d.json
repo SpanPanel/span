@@ -3,6 +3,7 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-1",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_kitchen_lights_breaker_rating",
@@ -38,6 +39,7 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-2",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_office_outlets_breaker_rating",
@@ -73,6 +75,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-3",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_lights_outlets_breaker_rating",
@@ -108,6 +111,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 60.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-4",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_oven_breaker_rating",
@@ -144,6 +148,7 @@
     "circuit-5": {
       "always_on": false,
       "breaker_rating_a": 60.0,
+      "device_id": null,
       "device_type": "evse",
       "entities": {
         "breaker_rating": "sensor.span_panel_ev_charger_flex_breaker_rating",
@@ -178,6 +183,7 @@
     "circuit-8": {
       "always_on": true,
       "breaker_rating_a": 40.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-8",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_lucid_charger_breaker_rating",
@@ -212,6 +218,7 @@
     "circuit-9": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-1334-066e8_circuit_circuit-9",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_neutral_forming_transformer_nft_breaker_rating",

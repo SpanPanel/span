@@ -287,11 +287,13 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
     here would be a second implementation of `util`'s builders, free to drift and
     able to rename a user's device by disagreeing with them.
 
-    A circuit's entities live on the panel's own card in this integration, so a
-    circuit subject resolves there too -- the entity's *name* is what says which
-    circuit it came from. Lugs are the same: two devices for identity, one card
-    for rendering, which is why this mapping and `extension_scope` are separate
-    functions rather than one. Identity must distinguish what placement merges.
+    A circuit's own entities live on the circuit's device, a child of the
+    panel's. A circuit's extension stays on the panel's card by design, so a
+    circuit subject resolves to the panel -- the entity's *name* is what says
+    which circuit it came from. Lugs are the same: two devices for identity, one
+    card for rendering, which is why this mapping and `extension_scope` are
+    separate functions rather than one. Identity must distinguish what placement
+    merges.
     """
     if subject.kind in ("panel", "circuit", "lugs"):
         return panel_identifier

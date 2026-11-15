@@ -39,6 +39,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
+    async_remove_config_entry_device,
     async_remove_entry,
     async_setup_entry,
 )
@@ -65,8 +66,12 @@ from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
 from .conftest import FLAT_PANEL_SCHEMA, PARENT_CHILD_PANEL_SCHEMA
-from .factories import SpanPanelSnapshotFactory, pv_binding_for
-from .helpers import ensure_device_registered_stand_in
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import (
+    ensure_device_registered_stand_in,
+    register_circuit_device,
+    register_panel_device,
+)
 
 
 def _create_v2_entry(**data_overrides) -> MockConfigEntry:
@@ -1503,3 +1508,38 @@ async def test_removing_a_refused_entry_clears_the_flat_firmware_repair(
     await hass.config_entries.async_remove(entry.entry_id)
 
     assert _flat_firmware_issue(hass) is None
+
+
+async def test_a_live_circuit_device_cannot_be_deleted(hass: HomeAssistant) -> None:
+    """A circuit's device goes only once the panel no longer publishes the circuit.
+
+    Deleting the device of a circuit the panel still publishes would take its
+    entities with it until the next reload put them back, so it is refused as
+    deleting the panel is. A device left behind by a circuit that has gone from
+    the panel is the user's to delete.
+    """
+    serial = "sp3-242424-001"
+    kitchen = SpanCircuitSnapshotFactory.create(circuit_id="circuit-7", name="Kitchen Outlets")
+    gone = SpanCircuitSnapshotFactory.create(circuit_id="circuit-9", name="Old Workshop")
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number=serial, circuits={kitchen.circuit_id: kitchen}
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-devices", unique_id=serial)
+    entry.add_to_hass(hass)
+    panel_device_id = register_panel_device(hass, entry, serial)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=panel_device_id,
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    live, orphaned = (
+        register_circuit_device(hass, entry, serial, circuit, panel_device_id=panel_device_id)
+        for circuit in (kitchen, gone)
+    )
+
+    assert await async_remove_config_entry_device(hass, entry, live) is False
+    assert await async_remove_config_entry_device(hass, entry, orphaned) is True

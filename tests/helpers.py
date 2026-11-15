@@ -14,10 +14,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.dt import utcnow
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import SpanPanelSnapshot
+from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import package_ratings
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.util import circuit_device_info
 
 type WebSocketHandler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
 """A websocket command's own coroutine, as a test awaits it with a mock connection."""
@@ -172,6 +173,24 @@ def register_panel_device(hass: HomeAssistant, entry: MockConfigEntry, serial: s
     device_info = DeviceInfo(identifiers={(DOMAIN, serial)}, name=PANEL_NAME)
     device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **device_info)
     return device.id
+
+
+def register_circuit_device(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    *,
+    panel_device_id: str,
+) -> dr.ChildDeviceEntry:
+    """Register `circuit`'s own device under the panel device, as its first entity would.
+
+    The device a circuit entity's `device_info` names: a child of the panel
+    device `register_panel_device` answered with, under the circuit's
+    identifier and name.
+    """
+    info = circuit_device_info(serial, circuit, circuit.circuit_id, panel_device_id=panel_device_id)
+    return dr.async_get(hass).async_get_or_create_child(config_entry_id=entry.entry_id, **info)
 
 
 async def ensure_device_registered_stand_in(

@@ -35,7 +35,12 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
-from .helpers import count_panel_describes_breakers, register_panel_device, unwrap_websocket_command
+from .helpers import (
+    count_panel_describes_breakers,
+    register_circuit_device,
+    register_panel_device,
+    unwrap_websocket_command,
+)
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -873,6 +878,7 @@ class TestHandlePanelTopology:
         result = connection.send_result.call_args[0][1]
 
         assert set(result["circuits"]["uuid_kitchen"]) == {
+            "device_id",
             "tabs",
             "name",
             "outside_panel",
@@ -896,6 +902,35 @@ class TestHandlePanelTopology:
             "is_never_backup",
             "entities",
         }
+
+    async def test_topology_circuit_records_carry_the_device_id(self, hass: HomeAssistant) -> None:
+        """Each circuit record names the circuit's own device, by its registry ID.
+
+        The card reads a circuit's name and area from the device its entities
+        sit on, and takes the device from here rather than working it out from
+        an identifier. A circuit with no device of its own, as before its first
+        entity is added, carries null.
+        """
+        serial = "sp3-242424-001"
+        kitchen = SpanCircuitSnapshotFactory.create(
+            circuit_id="circuit-7", name="Kitchen Outlets", tabs=[7]
+        )
+        garage = SpanCircuitSnapshotFactory.create(circuit_id="circuit-9", name="Garage", tabs=[9])
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number=serial,
+            circuits={circuit.circuit_id: circuit for circuit in (kitchen, garage)},
+        )
+        panel_device_id = await _panel_holding(hass, snapshot, {})
+        entry = hass.config_entries.async_get_entry("span_entry")
+        assert entry is not None
+        kitchen_device = register_circuit_device(
+            hass, entry, serial, kitchen, panel_device_id=panel_device_id
+        )
+
+        circuits = await _ask_topology(hass, panel_device_id)
+
+        assert circuits["circuit-7"]["device_id"] == kitchen_device.id
+        assert circuits["circuit-9"]["device_id"] is None
 
     @pytest.mark.asyncio
     async def test_topology_keeps_the_panel_breaker_rating_beside_what_the_package_gives(

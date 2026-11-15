@@ -359,8 +359,9 @@ async def _topology(
 
     Device registry ids are minted afresh by every installation, so each one is
     replaced by its device's identifier wherever it appears, as a key or as a
-    value. The card treats them as opaque handles, so the substitution changes
-    nothing it renders.
+    value: the panel's, each sub-device's, and each circuit's own device's,
+    which a circuit record carries as its `device_id`. The card treats them as
+    opaque handles, so the substitution changes nothing it renders.
     """
     devices = dr.async_get(hass)
     panel = devices.async_get_device_by_identifier((DOMAIN, str(entry.unique_id)), entry.entry_id)
@@ -371,7 +372,10 @@ async def _topology(
     assert response["success"], response
     aliases = {
         device.id: _device_identifier(device)
-        for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+        for device in (
+            *dr.async_entries_for_config_entry(devices, entry.entry_id),
+            *dr.async_child_entries_for_config_entry(devices, entry.entry_id),
+        )
     }
     return _normalised(response["result"], aliases)
 

@@ -36,6 +36,9 @@ from custom_components.span_panel.additions import (
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.notices import read_translations
 
+from .factories import SpanCircuitSnapshotFactory
+from .helpers import register_circuit_device, register_panel_device
+
 _PART_NUMBER = "sp3-001_bess_part_number"
 
 
@@ -404,6 +407,62 @@ async def test_two_sub_devices_with_one_entity_name_are_told_apart(
     assert "SPAN Drive 1 Charge Current Limit" in message
     assert "SPAN Drive 2 Charge Current Limit" in message
     assert message.count("Charge Current Limit") == 2
+
+
+def _circuit_device(hass: HomeAssistant, entry: MockConfigEntry, circuit_id: str, name: str) -> str:
+    """Register a circuit's own device under the panel's and return its registry ID."""
+    return register_circuit_device(
+        hass,
+        entry,
+        "sp3-001",
+        SpanCircuitSnapshotFactory.create(circuit_id=circuit_id, name=name),
+        panel_device_id=register_panel_device(hass, entry, "sp3-001"),
+    ).id
+
+
+async def test_new_circuit_entity_is_announced_with_its_device_name(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A circuit entity's own name is its label, and the device says which circuit.
+
+    Named by the label alone, every circuit a release gives a new sensor would
+    contribute the same line -- "Power" once per circuit -- with nothing to tell
+    them apart. The line is the name Home Assistant shows for the entity: the
+    circuit device's, then the label.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    for circuit_id, circuit_name in (("circuit-7", "Kitchen Outlets"), ("circuit-9", "Garage")):
+        _register(
+            hass,
+            entry,
+            f"span_sp3-001_{circuit_id}_power",
+            name="Power",
+            disabled=False,
+            device_id=_circuit_device(hass, entry, circuit_id, circuit_name),
+        )
+    await async_announce_new_entities(hass, entry)
+
+    lines = _text(_announcement(hass, entry)).splitlines()
+    assert "- Kitchen Outlets Power" in lines
+    assert "- Garage Power" in lines
+    assert "- Power" not in lines
+
+
+async def test_a_circuit_entity_is_announced_under_the_name_the_user_gave_its_device(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The name a user gave the circuit's device in Home Assistant is the one they know it by."""
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    device_id = _circuit_device(hass, entry, "circuit-7", "Kitchen Outlets")
+    dr.async_get(hass).async_update_child_device(device_id, name_by_user="Galley")
+    _register(hass, entry, "span_sp3-001_circuit-7_current", name="Current", device_id=device_id)
+    await async_announce_new_entities(hass, entry)
+
+    assert "- Galley Current" in _text(_announcement(hass, entry)).splitlines()
 
 
 async def test_a_panel_entity_is_not_prefixed(hass: HomeAssistant, entry: MockConfigEntry) -> None:

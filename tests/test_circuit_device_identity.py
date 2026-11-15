@@ -25,12 +25,14 @@ from custom_components.span_panel.util import (
     SUB_DEVICE_EVSE,
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
+    circuit_device,
     circuit_device_info,
+    circuit_id_of_device,
     classify_sub_device_identifier,
 )
 
 from .factories import SpanCircuitSnapshotFactory
-from .helpers import add_panel_entry, register_panel_device
+from .helpers import add_panel_entry, register_circuit_device, register_panel_device
 
 SERIAL = "sp3-242424-001"
 """A synthetic serial, never a real panel's."""
@@ -210,3 +212,71 @@ async def test_child_device_info_names_the_panel_as_parent(hass: HomeAssistant) 
     assert device.name == "Kitchen Outlets"
     assert registry.async_get_child_device_by_identifier(identifier, entry.entry_id) == device
     assert dr.async_entries_for_parent_device(registry, panel_device_id) == [device]
+
+
+async def test_a_circuits_device_is_found_by_its_circuit_and_read_back_to_it(
+    hass: HomeAssistant,
+) -> None:
+    """The registry answers a circuit with its device, and the device with its circuit.
+
+    Both ways round over the real registry, so the lookup and its reading end
+    are shown to agree with what `circuit_device_info` registers. A circuit
+    with no device registered answers None rather than another circuit's.
+    """
+    entry = add_panel_entry(hass, "entry-circuit-device", SERIAL)
+    panel_device_id = register_panel_device(hass, entry, SERIAL)
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="circuit-7", name="Kitchen Outlets", tabs=[7]
+    )
+    device = register_circuit_device(hass, entry, SERIAL, circuit, panel_device_id=panel_device_id)
+    registry = dr.async_get(hass)
+
+    found = circuit_device(registry, SERIAL, "circuit-7", config_entry_id=entry.entry_id)
+
+    assert found == device
+    assert circuit_id_of_device(SERIAL, device) == "circuit-7"
+    assert circuit_device(registry, SERIAL, "circuit-9", config_entry_id=entry.entry_id) is None
+
+
+@pytest.mark.parametrize(
+    ("identifiers", "circuit_id"),
+    [
+        pytest.param({(DOMAIN, f"{SERIAL}_outlet_circuit-7")}, None, id="not-a-circuit-device"),
+        pytest.param(
+            {(DOMAIN, build_circuit_device_identifier("sp3-242424-002", "circuit-7"))},
+            None,
+            id="another-panels-circuit",
+        ),
+        pytest.param(
+            {("other_domain", build_circuit_device_identifier(SERIAL, "circuit-7"))},
+            None,
+            id="another-integrations-identifier",
+        ),
+        pytest.param(
+            {
+                ("other_domain", "strip-1_outlet-1"),
+                (DOMAIN, build_circuit_device_identifier(SERIAL, "circuit-7")),
+            },
+            "circuit-7",
+            id="beside-another-integrations-identifier",
+        ),
+    ],
+)
+async def test_a_child_device_is_a_circuits_only_by_this_panels_identifier(
+    hass: HomeAssistant, identifiers: set[tuple[str, str]], circuit_id: str | None
+) -> None:
+    """A child device names a circuit only through this integration's identifier for this panel.
+
+    Hanging off the panel does not make a child device a circuit's, and
+    neither does an identifier of the right shape in another domain or for
+    another panel.
+    """
+    entry = add_panel_entry(hass, "entry-circuit-device", SERIAL)
+    device = dr.async_get(hass).async_get_or_create_child(
+        config_entry_id=entry.entry_id,
+        identifiers=identifiers,
+        name="Part",
+        parent_device_id=register_panel_device(hass, entry, SERIAL),
+    )
+
+    assert circuit_id_of_device(SERIAL, device) == circuit_id

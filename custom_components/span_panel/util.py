@@ -4,7 +4,12 @@ from dataclasses import dataclass
 import logging
 from typing import Final
 
-from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo, DeviceRegistry
+from homeassistant.helpers.device_registry import (
+    ChildDeviceEntry,
+    ChildDeviceInfo,
+    DeviceInfo,
+    DeviceRegistry,
+)
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
@@ -16,7 +21,7 @@ from span_panel_api import (
 
 from .const import DOMAIN
 from .helpers import circuit_device_name
-from .id_builder import build_circuit_device_identifier
+from .id_builder import build_circuit_device_identifier, circuit_id_from_device_identifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -427,6 +432,42 @@ def circuit_device_info(
     )
 
 
+def circuit_device(
+    device_registry: DeviceRegistry,
+    serial: str,
+    circuit_id: str,
+    *,
+    config_entry_id: str,
+) -> ChildDeviceEntry | None:
+    """Return a circuit's own device, or None where the registry holds none for it.
+
+    Looked up by the identifier `circuit_device_info` registers it under, within
+    the entry that owns the panel. A circuit has no device until its first
+    entity is added, and a charger's feed circuit has none at all where it has
+    neither a breaker switch nor a priority select.
+    """
+    return device_registry.async_get_child_device_by_identifier(
+        (DOMAIN, build_circuit_device_identifier(serial, circuit_id)), config_entry_id
+    )
+
+
+def circuit_id_of_device(serial: str, device: ChildDeviceEntry) -> str | None:
+    """Return the circuit a child device is the device of, on the panel with this serial, or None.
+
+    The reading end of `circuit_device_info`. A child device is a circuit's
+    only when an identifier of this integration's says so for this panel, so
+    another panel's circuit device and a child device of any other kind answer
+    None, whatever they are called and whatever they hang off.
+    """
+    for domain, identifier in device.identifiers:
+        if domain != DOMAIN:
+            continue
+        circuit_id = circuit_id_from_device_identifier(serial, identifier)
+        if circuit_id is not None:
+            return circuit_id
+    return None
+
+
 def effective_circuit_device_name(
     device_registry: DeviceRegistry,
     serial: str,
@@ -448,9 +489,7 @@ def effective_circuit_device_name(
     this reload follows. An id read against the old name is answered for a
     device that no longer carries it.
     """
-    device = device_registry.async_get_child_device_by_identifier(
-        (DOMAIN, build_circuit_device_identifier(serial, circuit_id)), config_entry_id
-    )
+    device = circuit_device(device_registry, serial, circuit_id, config_entry_id=config_entry_id)
     if device is not None and device.name_by_user:
         return device.name_by_user
     return circuit_device_name(circuit, circuit_id)

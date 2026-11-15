@@ -165,7 +165,7 @@ from .services import (  # noqa: F401
     _build_set_mains_threshold_schema,
     rotation_in_progress,
 )
-from .util import snapshot_to_device_info
+from .util import circuit_id_of_device, snapshot_to_device_info
 from .websocket import async_register_commands
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -1025,12 +1025,15 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
-    device_entry: dr.DeviceEntry,
+    device_entry: dr.AnyDeviceEntry,
 ) -> bool:
-    """Allow manual removal of a device (e.g., stale EVSE sub-device).
+    """Allow manual removal of a device the panel no longer has.
 
-    The main panel device cannot be removed — only sub-devices (like EVSE
-    chargers) that are no longer present can be removed by the user.
+    The main panel device cannot be removed, and neither can the device of a
+    circuit the panel still publishes: its entities would go with it, and the
+    next reload would register both again. What the user may remove is what
+    has gone from the panel: a stale sub-device, such as a charger, and the
+    device of a circuit the panel no longer publishes.
     """
     runtime_data = loaded_runtime_data(config_entry)
     if runtime_data is None:
@@ -1038,6 +1041,11 @@ async def async_remove_config_entry_device(
 
     coordinator = runtime_data.coordinator
     snapshot = coordinator.data
+
+    # A child device is a circuit's own device, which stays while its circuit does.
+    if isinstance(device_entry, dr.ChildDeviceEntry):
+        circuit_id = circuit_id_of_device(snapshot.serial_number, device_entry)
+        return circuit_id is None or circuit_id not in snapshot.circuits
 
     # Identify the main panel device identifier
     panel_identifier = snapshot.serial_number

@@ -3,6 +3,7 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 35.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-1",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hvac_breaker_rating",
@@ -39,6 +40,7 @@
     "circuit-12": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-12",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_sink_garbage_disposal_breaker_rating",
@@ -74,6 +76,7 @@
     "circuit-13": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-13",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dishwasher_breaker_rating",
@@ -109,6 +112,7 @@
     "circuit-14": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-14",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_main_office_fam_tv_breaker_rating",
@@ -144,6 +148,7 @@
     "circuit-15": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-15",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_outlets_french_door_wall_breaker_rating",
@@ -179,6 +184,7 @@
     "circuit-16": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-16",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating",
@@ -214,6 +220,7 @@
     "circuit-17": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-17",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_breaker_rating",
@@ -249,6 +256,7 @@
     "circuit-18": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-18",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hood_breaker_rating",
@@ -284,6 +292,7 @@
     "circuit-19": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-19",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_lights_outlets_breaker_rating_2",
@@ -319,6 +328,7 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-2",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_heat_pump_water_heater_breaker_rating",
@@ -355,6 +365,7 @@
     "circuit-21": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-21",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_infared_sauna_breaker_rating",
@@ -390,6 +401,7 @@
     "circuit-22": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-22",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_main_office_dedicated_outlets_breaker_rating",
@@ -425,6 +437,7 @@
     "circuit-23": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-23",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bidet_outlets_basement_main_floor_breaker_rating",
@@ -460,6 +473,7 @@
     "circuit-24": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-24",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_lights_outlets_breaker_rating",
@@ -495,6 +509,7 @@
     "circuit-25": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-25",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_fr_door_isle_alt_outlets_breaker_rating",
@@ -530,6 +545,7 @@
     "circuit-26": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-26",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_furnace_breaker_rating",
@@ -565,6 +581,7 @@
     "circuit-27": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-27",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bed_2_shared_bath_lights_outlets_breaker_rating",
@@ -600,6 +617,7 @@
     "circuit-28": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-28",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bedroom_lights_outlets_breaker_rating",
@@ -635,6 +653,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 40.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-3",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_double_oven_breaker_rating",
@@ -671,6 +690,7 @@
     "circuit-30": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-30",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bath_closets_breaker_rating",
@@ -706,6 +726,7 @@
     "circuit-31": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-31",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_smoke_co_detectors_breaker_rating",
@@ -741,6 +762,7 @@
     "circuit-32": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-32",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_basement_outlets_exit_door_wall_breaker_rating",
@@ -776,6 +798,7 @@
     "circuit-33": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-33",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_outlets_breaker_rating",
@@ -811,6 +834,7 @@
     "circuit-34": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-34",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_sump_pump_breaker_rating",
@@ -846,6 +870,7 @@
     "circuit-35": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-35",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating",
@@ -881,6 +906,7 @@
     "circuit-36": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-36",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_security_system_breaker_rating",
@@ -916,6 +942,7 @@
     "circuit-37": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-37",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_refrigerator_breaker_rating",
@@ -951,6 +978,7 @@
     "circuit-38": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-38",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_freezer_breaker_rating",
@@ -986,6 +1014,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-4",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_laundry_room_breaker_rating",
@@ -1022,6 +1051,7 @@
     "circuit-41": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-41",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_utility_room_dedicated_breaker_rating",
@@ -1057,6 +1087,7 @@
     "circuit-48": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-48",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating",
@@ -1092,6 +1123,7 @@
     "circuit-49": {
       "always_on": false,
       "breaker_rating_a": 10.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-49",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
@@ -1127,6 +1159,7 @@
     "circuit-5": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-5",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_electric_range_breaker_rating",
@@ -1162,6 +1195,7 @@
     "circuit-50": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-50",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating_2",
@@ -1197,6 +1231,7 @@
     "circuit-51": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-51",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_lights_breaker_rating_2",
@@ -1232,6 +1267,7 @@
     "circuit-52": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-52",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
@@ -1267,6 +1303,7 @@
     "circuit-53": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-53",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating_2",
@@ -1302,6 +1339,7 @@
     "circuit-54": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-54",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_outlets_breaker_rating",
@@ -1337,6 +1375,7 @@
     "circuit-55": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-55",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
@@ -1372,6 +1411,7 @@
     "circuit-56": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-56",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_outlets_breaker_rating",
@@ -1407,6 +1447,7 @@
     "circuit-57": {
       "always_on": false,
       "breaker_rating_a": 10.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-57",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_dining_room_lights_breaker_rating",
@@ -1442,6 +1483,7 @@
     "circuit-6": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-6",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_microwave_breaker_rating",
@@ -1477,6 +1519,7 @@
     "circuit-60": {
       "always_on": false,
       "breaker_rating_a": 60.0,
+      "device_id": null,
       "device_type": "evse",
       "entities": {
         "breaker_rating": "sensor.span_panel_ev_charger_span_drive_breaker_rating",
@@ -1511,6 +1554,7 @@
     "circuit-7": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-7",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_primary_bath_outlets_breaker_rating",
@@ -1546,6 +1590,7 @@
     "circuit-8": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-8",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating",
@@ -1581,6 +1626,7 @@
     "circuit-9": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-6159-74dlx_circuit_circuit-9",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_family_room_breaker_rating",

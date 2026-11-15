@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from homeassistant.core import SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN
@@ -18,10 +18,15 @@ from custom_components.span_panel.frontend import (
     async_get_favorites,
     async_set_favorite,
 )
+from custom_components.span_panel.id_builder import (
+    build_circuit_device_identifier,
+    build_circuit_unique_id,
+)
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import _async_register_favorites_services
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import add_panel_entry, register_circuit_device, register_panel_device
 
 
 class _FakeStore:
@@ -325,6 +330,15 @@ def _make_device_entry(
     return device
 
 
+def _device_registry_module(device_reg: MagicMock) -> MagicMock:
+    """Stand in for the `dr` module: the fake registry, and the real classes a device is told apart by."""
+    return MagicMock(
+        async_get=MagicMock(return_value=device_reg),
+        DeviceEntry=dr.DeviceEntry,
+        ChildDeviceEntry=dr.ChildDeviceEntry,
+    )
+
+
 def _patch_registries(entity: MagicMock | None, device: MagicMock | None) -> Any:
     """Patch services.er.async_get and services.dr.async_get for a single call.
 
@@ -338,7 +352,7 @@ def _patch_registries(entity: MagicMock | None, device: MagicMock | None) -> Any
     return patch.multiple(
         "custom_components.span_panel.services",
         er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-        dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
+        dr=_device_registry_module(device_reg),
     )
 
 
@@ -364,7 +378,7 @@ def _patch_registries_for_subdevice(
     return patch.multiple(
         "custom_components.span_panel.services",
         er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-        dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
+        dr=_device_registry_module(device_reg),
     )
 
 
@@ -694,33 +708,6 @@ class TestFavoritesServiceHandlers:
                 await handler(_make_service_call({"entity_id": "sensor.orphan"}))
 
     @pytest.mark.asyncio
-    async def test_add_favorite_rejects_an_entity_on_a_child_device(
-        self, _patched_store: Any
-    ) -> None:
-        """A child device is not a SPAN Panel device, whatever identifier it carries.
-
-        From Home Assistant 2026.9 ``async_get`` can answer with a child device --
-        a part of another device, with no ``via_device_id`` to walk to a panel.
-        SPAN registers none, so an entity on one is refused rather than followed.
-        The fake is deliberately not a ``DeviceEntry``, which is what sets a child
-        device apart, and it carries a SPAN identifier so only that can refuse it.
-        """
-        hass = MagicMock()
-        registered = _capture_registered_handlers(hass)
-        handler = registered["handlers"]["add_favorite"]
-
-        entity = _make_entity_entry(device_id="d_child")
-        child_device = MagicMock()
-        child_device.id = "d_child"
-        child_device.identifiers = {(DOMAIN, "serial_a_outlet")}
-
-        with _patch_registries(entity, child_device):
-            with pytest.raises(ServiceValidationError) as refused:
-                await handler(_make_service_call({"entity_id": "switch.outlet_1"}))
-
-        assert refused.value.translation_key == "favorite_not_span_entity"
-
-    @pytest.mark.asyncio
     async def test_add_favorite_rejects_subdevice_with_non_span_parent(
         self, _patched_store: Any
     ) -> None:
@@ -776,9 +763,162 @@ class TestFavoritesServiceHandlers:
         with patch.multiple(
             "custom_components.span_panel.services",
             er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-            dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
+            dr=_device_registry_module(device_reg),
         ):
             with pytest.raises(ServiceValidationError):
                 await handler(
                     _make_service_call({"entity_id": "sensor.bess_orphaned"})
                 )
+
+
+# ---------------------------------------------------------------------------
+# A circuit entity on its circuit's own device, over the real registries
+# ---------------------------------------------------------------------------
+
+SERIAL = "sp3-242424-001"
+OTHER_SERIAL = "sp3-242424-002"
+KITCHEN = "circuit-7"
+GARAGE = "circuit-9"
+
+
+class _CircuitDevicePanel:
+    """A loaded panel whose circuit entities sit on their circuits' own devices.
+
+    The real device and entity registries and the real service registry, so a
+    favorite is resolved exactly as a service call resolves it: from the
+    entity's row to the child device it sits on, and from that device to the
+    panel it is a part of.
+    """
+
+    def __init__(self, hass: HomeAssistant, *live_circuit_ids: str) -> None:
+        self.hass = hass
+        self.entry = add_panel_entry(hass, "panel_entry", SERIAL)
+        self.panel_device_id = register_panel_device(hass, self.entry, SERIAL)
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number=SERIAL,
+            circuits={
+                circuit_id: SpanCircuitSnapshotFactory.create(circuit_id=circuit_id)
+                for circuit_id in live_circuit_ids
+            },
+        )
+        coordinator = MagicMock()
+        coordinator.data = snapshot
+        self.entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator,
+            panel_device_id=self.panel_device_id,
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
+        )
+        _async_register_favorites_services(hass)
+
+    def power_sensor_on_circuit_device(self, circuit_id: str, name: str) -> str:
+        """Register the circuit's device and its power sensor on it, and return the sensor's entity ID."""
+        device = register_circuit_device(
+            self.hass,
+            self.entry,
+            SERIAL,
+            SpanCircuitSnapshotFactory.create(circuit_id=circuit_id, name=name),
+            panel_device_id=self.panel_device_id,
+        )
+        return self.power_sensor(circuit_id, device.id)
+
+    def power_sensor(self, circuit_id: str, device_id: str) -> str:
+        """Register a circuit's power sensor on a device and return its entity ID."""
+        return (
+            er.async_get(self.hass)
+            .async_get_or_create(
+                "sensor",
+                DOMAIN,
+                build_circuit_unique_id(SERIAL, circuit_id, "instantPowerW"),
+                config_entry=self.entry,
+                device_id=device_id,
+                original_name="Power",
+            )
+            .entity_id
+        )
+
+    async def call(self, service: str, entity_id: str) -> ServiceResponse:
+        """Call a favorites service on the entity, as the card does."""
+        return await self.hass.services.async_call(
+            DOMAIN, service, {"entity_id": entity_id}, blocking=True, return_response=True
+        )
+
+
+async def test_add_favorite_accepts_a_circuit_entity_on_its_circuit_device(
+    hass: HomeAssistant, _patched_store: None
+) -> None:
+    """The circuit is favorited under the panel its device is a part of.
+
+    A circuit entity sits on a child device of the panel, which has no
+    ``via_device_id`` to walk: the panel is the child's parent, and the circuit
+    is the one the device's identifier names.
+    """
+    panel = _CircuitDevicePanel(hass, KITCHEN, GARAGE)
+    entity_id = panel.power_sensor_on_circuit_device(KITCHEN, "Kitchen Outlets")
+
+    result = await panel.call("add_favorite", entity_id)
+
+    assert result == {"favorites": {panel.panel_device_id: _panel_entry([KITCHEN])}}
+
+
+async def test_add_favorite_on_a_circuit_device_whose_circuit_left_the_panel_is_refused(
+    hass: HomeAssistant, _patched_store: None
+) -> None:
+    """Adding matches only what the panel publishes now, on a circuit device as on the panel."""
+    panel = _CircuitDevicePanel(hass, GARAGE)
+    entity_id = panel.power_sensor_on_circuit_device(KITCHEN, "Kitchen Outlets")
+
+    with pytest.raises(ServiceValidationError) as refused:
+        await panel.call("add_favorite", entity_id)
+
+    assert refused.value.translation_key == "favorite_no_circuit_uuid"
+
+
+async def test_remove_favorite_on_a_circuit_device_whose_circuit_left_the_panel(
+    hass: HomeAssistant, _patched_store: None
+) -> None:
+    """A stored favorite still resolves for removal through the device its entity is left on."""
+    panel = _CircuitDevicePanel(hass, GARAGE)
+    entity_id = panel.power_sensor_on_circuit_device(KITCHEN, "Kitchen Outlets")
+    _FakeStore.preload(
+        "span_panel_settings",
+        {"favorites": {panel.panel_device_id: _panel_entry([KITCHEN, GARAGE])}},
+    )
+
+    result = await panel.call("remove_favorite", entity_id)
+
+    assert result == {"favorites": {panel.panel_device_id: _panel_entry([GARAGE])}}
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        pytest.param(f"{SERIAL}_outlet_{KITCHEN}", id="not-a-circuit-device"),
+        pytest.param(
+            build_circuit_device_identifier(OTHER_SERIAL, KITCHEN), id="another-panels-circuit"
+        ),
+    ],
+)
+async def test_add_favorite_rejects_an_entity_on_a_foreign_child_device(
+    hass: HomeAssistant, _patched_store: None, identifier: str
+) -> None:
+    """A child device is followed to a circuit only when it is one of its panel's circuit devices.
+
+    The entity's unique ID names a live circuit and the child hangs off the
+    panel, so only the child's identifier can refuse it: it is not a circuit
+    device's, or it names a circuit of a panel that is not its parent.
+    """
+    panel = _CircuitDevicePanel(hass, KITCHEN)
+    foreign = dr.async_get(hass).async_get_or_create_child(
+        config_entry_id=panel.entry.entry_id,
+        identifiers={(DOMAIN, identifier)},
+        name="Outlet",
+        parent_device_id=panel.panel_device_id,
+    )
+    entity_id = panel.power_sensor(KITCHEN, foreign.id)
+
+    with pytest.raises(ServiceValidationError) as refused:
+        await panel.call("add_favorite", entity_id)
+
+    assert refused.value.translation_key == "favorite_not_span_entity"

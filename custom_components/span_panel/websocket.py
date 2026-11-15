@@ -33,7 +33,7 @@ from .package_ratings import (
 )
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
-from .util import classify_sub_device_identifier, pv_device_ref
+from .util import circuit_device, classify_sub_device_identifier, pv_device_ref
 from .websocket_adopted import handle_adopted_curate, handle_adopted_list
 from .websocket_panel import resolve_panel_device
 
@@ -105,8 +105,9 @@ async def handle_panel_topology(
     """Return the full panel topology with entity mappings.
 
     Admin users must pass the HA device registry ID for the **main SPAN panel**
-    device only (not a sub-device). Returns panel metadata, circuits with
-    tabs/entity mappings, and sub-devices -- every kind
+    device only (not a sub-device or a circuit's device). Returns panel
+    metadata, circuits with tabs/entity mappings and the registry ID of each
+    circuit's own device, and sub-devices -- every kind
     `classify_sub_device_identifier` names, which is BESS, MID, EVSE and PV.
     A PV sub-device also carries a `solar` block, the inverter it describes and
     the circuit reading that is its power; see `solar_topology`.
@@ -150,8 +151,9 @@ async def handle_panel_topology(
         panel_entities["panel_status"] = panel_status_entity
 
     # Single pass over all entities to build circuit_id to role to entity_id
-    # map. EVSE feed circuit sensors live on the EVSE sub-device, so we
-    # search all entities for the config entry, not just panel-device ones.
+    # map. A circuit's entities live on the circuit's own device, and an EVSE
+    # feed circuit's sensors on the EVSE sub-device, so we search all entities
+    # for the config entry, whatever device each is on.
     circuit_ids = set(snapshot.circuits)
     entity_map = _build_circuit_entity_map(circuit_ids, all_entities)
     # The `power` role of every circuit, for the `solar` blocks below.
@@ -187,7 +189,14 @@ async def handle_panel_topology(
 
         tabs = sorted(circuit.tabs) if circuit.tabs else []
         rating = coordinator.package_rating_manager.resolve(circuit_id, snapshot)
+        own_device = circuit_device(
+            device_registry, snapshot.serial_number, circuit_id, config_entry_id=config_entry_id
+        )
         circuits[circuit_id] = {
+            # The circuit's own device, a child of the panel's, by its registry
+            # id; null where the circuit has none. A consumer reads the name and
+            # area Home Assistant holds for the circuit from that device.
+            "device_id": own_device.id if own_device is not None else None,
             "tabs": tabs,
             # A meter without a breaker space publishes no name; it carries the
             # label its entities are named by, so the card never shows it nameless.

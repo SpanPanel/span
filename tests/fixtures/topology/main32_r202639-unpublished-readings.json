@@ -3,6 +3,7 @@
     "266eb903e50116147fb212879e812cd7": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "nt-9874-s7rxt_circuit_266eb903e50116147fb212879e812cd7",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_attic_back_outlet_breaker_rating",
@@ -38,6 +39,7 @@
     "31f1d56b0926276e04c84360b1a31a6c": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_31f1d56b0926276e04c84360b1a31a6c",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hvac_air_handler_breaker_rating",
@@ -74,6 +76,7 @@
     "390351d21af25d6409aba2b210928f7f": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_390351d21af25d6409aba2b210928f7f",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_clothes_dryer_breaker_rating",
@@ -110,6 +113,7 @@
     "48c572b0051eaddaf85e1c26ef0f52be": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "nt-9874-s7rxt_circuit_48c572b0051eaddaf85e1c26ef0f52be",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_espresso_machine_breaker_rating",
@@ -146,6 +150,7 @@
     "56def60d3bbd177fc8856cca8713c05a": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_56def60d3bbd177fc8856cca8713c05a",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_shed_240vac_outlet_breaker_rating",
@@ -182,6 +187,7 @@
     "704b457f76e9451eb44fbc8287e67f9f": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_704b457f76e9451eb44fbc8287e67f9f",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_future_240vac_1_breaker_rating",
@@ -218,6 +224,7 @@
     "8a562bd10fb843842670080af2bbb983": {
       "always_on": true,
       "breaker_rating_a": null,
+      "device_id": "nt-9874-s7rxt_circuit_8a562bd10fb843842670080af2bbb983",
       "device_type": "pv",
       "entities": {
         "consumed_energy": "sensor.span_panel_commissioned_pv_system_consumed_energy",
@@ -251,6 +258,7 @@
     "9498a44c930374d2ea1e9508c3def44e": {
       "always_on": false,
       "breaker_rating_a": 50.0,
+      "device_id": "nt-9874-s7rxt_circuit_9498a44c930374d2ea1e9508c3def44e",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_cooktop_stove_breaker_rating",
@@ -287,6 +295,7 @@
     "a6f39ecc6a8bf3453b9487dba9581b2c": {
       "always_on": false,
       "breaker_rating_a": 50.0,
+      "device_id": "nt-9874-s7rxt_circuit_a6f39ecc6a8bf3453b9487dba9581b2c",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hvac_heat_pump_breaker_rating",
@@ -323,6 +332,7 @@
     "aa47c5f799def01ce9ed945a4200b544": {
       "always_on": false,
       "breaker_rating_a": 50.0,
+      "device_id": "nt-9874-s7rxt_circuit_aa47c5f799def01ce9ed945a4200b544",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_ovens_breaker_rating",
@@ -359,6 +369,7 @@
     "c00a7e2e5d468da627d084071177d865": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_c00a7e2e5d468da627d084071177d865",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_studio_hvac_breaker_rating",
@@ -395,6 +406,7 @@
     "c0161381e50e069b9fd063a0ca1df808": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_c0161381e50e069b9fd063a0ca1df808",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_future_240vac_2_breaker_rating",
@@ -431,6 +443,7 @@
     "caff3023f569495b2a36bf9354a8cd38": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "nt-9874-s7rxt_circuit_caff3023f569495b2a36bf9354a8cd38",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_kitchen_outlets_1_outlets_2_breaker_rating",
@@ -467,6 +480,7 @@
     "cb26f4260adebb7b71de48682618db0a": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "nt-9874-s7rxt_circuit_cb26f4260adebb7b71de48682618db0a",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_wine_refrigerator_breaker_rating",
@@ -502,6 +516,7 @@
     "f66769009923287a83be6740bd0bbfbd": {
       "always_on": false,
       "breaker_rating_a": 45.0,
+      "device_id": "nt-9874-s7rxt_circuit_f66769009923287a83be6740bd0bbfbd",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_hvac_heating_coil_breaker_rating",
@@ -538,6 +553,7 @@
     "f84ad966ee15cec0c359d151af8157e2": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "nt-9874-s7rxt_circuit_f84ad966ee15cec0c359d151af8157e2",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_water_heater_breaker_rating",
