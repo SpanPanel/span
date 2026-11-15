@@ -17,7 +17,7 @@ the old device's primary.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -291,3 +291,59 @@ async def test_another_integrations_child_device_is_not_a_span_panel(hass: HomeA
     connection.send_error.assert_called_once_with(
         1, "not_span_panel", "Device is not a SPAN Panel device"
     )
+
+
+async def test_the_panel_device_id_answers_with_the_panel_and_its_entry(
+    hass: HomeAssistant,
+) -> None:
+    """The id of the panel's own device is the one request this accepts."""
+    await _empty_registries(hass)
+    entry = add_panel_entry(hass, SPAN_ENTRY_ID, SERIAL)
+    panel_device_id = register_panel_device(hass, entry, SERIAL)
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": panel_device_id})
+
+    assert resolved is not None
+    device, owner = resolved
+    assert device.id == panel_device_id
+    assert owner is entry
+    connection.send_error.assert_not_called()
+
+
+async def test_an_id_no_device_has_is_not_found(hass: HomeAssistant) -> None:
+    await _empty_registries(hass)
+    add_panel_entry(hass, SPAN_ENTRY_ID, SERIAL)
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": "no-such-device"})
+
+    assert resolved is None
+    connection.send_error.assert_called_once_with(1, "device_not_found", "Device not found")
+
+
+@pytest.mark.parametrize("primary", [SPAN_ENTRY_ID, HELPER_ENTRY_ID])
+async def test_the_device_is_looked_up_by_home_assistant_s_own_helper(
+    hass: HomeAssistant, hass_storage: dict[str, Any], primary: str
+) -> None:
+    """One lookup, Core's, answers an id from before 2026.8 and a current one alike.
+
+    Home Assistant resolves a device id to the device an integration's entry
+    owns, an old id's split included. A second copy of that kept here could
+    drift from it, so the request is handed to the helper and to nothing else.
+    """
+    panel = await _split_panel(hass, hass_storage, primary=primary)
+    connection = MagicMock()
+
+    with patch.object(
+        dr,
+        "async_get_device_and_config_entry_for_domain",
+        wraps=dr.async_get_device_and_config_entry_for_domain,
+    ) as lookup:
+        resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": OLD_PANEL_ID})
+
+    lookup.assert_called_once_with(hass, OLD_PANEL_ID, domain=DOMAIN)
+    assert resolved is not None
+    assert resolved[0].id == panel.id
+    assert resolved[1].entry_id == SPAN_ENTRY_ID
+    connection.send_error.assert_not_called()
