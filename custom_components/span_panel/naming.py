@@ -96,57 +96,78 @@ def _form_after_the_identifier(object_id: str, identifier_slug: str, suffix: str
     return None
 
 
+def _words_after_the_name(object_id: str, name: str, suffix: str) -> str | None:
+    """Return the suffix words this id spells after `name`, "" if it stops there, else None.
+
+    None means the id does not name `name` at all, so it answers nothing.
+    """
+    name_slug = slugify(name)
+    form = _form_after_the_identifier(object_id, name_slug, suffix)
+    if form is not None:
+        return form.replace("_", " ")
+    if _ends_on_segment(object_id, name_slug):
+        return ""
+    return None
+
+
 def circuit_object_id_suffix(
     id_identifier: str, device_name: str, suffix: str, existing_entity_id: str | None
 ) -> str:
     """Return the base for one circuit entity on its circuit's device: the suffix alone.
 
     Home Assistant composes the circuit's name from the device, so the base
-    carries only the suffix words (`power`, `energy consumed`). It carries
-    nothing at all where the existing id omitted them, or where they would
-    repeat what the device name already says; Core then composes the id from
-    the devices alone.
+    carries only the suffix words (`power`, `energy consumed`). It is empty --
+    Core then composes the id from the devices alone -- in two cases: the
+    existing id stops at the name it is read against (below), or, where the id
+    names neither name or there is none, the device name already ends with the
+    words.
 
-    `id_identifier` is what the existing id was built from: the tabs in
-    circuit-numbers mode (`Circuit 15`), the circuit's name in names mode
-    (`Kitchen Outlets`). `device_name` is the circuit device's name, which Core
-    composes ahead of the base. `suffix` is this entity's canonical suffix,
-    which the sensors derive from their description key via
-    `id_builder.get_user_friendly_suffix` while the switch and the select --
-    which have no such key -- name theirs outright ("breaker",
-    "circuit_priority").
+    `id_identifier` is the identifier the naming flag resolves today: the tabs
+    in circuit-numbers mode (`Circuit 15`), the circuit's current name in names
+    mode (`Kitchen Outlets`). `device_name` is the name Core composes the id
+    from: the circuit device's, or the user's rename of it where there is one.
+    `suffix` is this entity's canonical suffix, which the sensors derive from
+    their description key via `id_builder.get_user_friendly_suffix` while the
+    switch and the select -- which have no such key -- name theirs outright
+    ("breaker", "circuit_priority").
 
-    Where the existing id still names the identifier, what follows it settles
-    two things at once -- which form the id carries, and whether the preset
-    builder omitted it. They are one question: an id reading
-    `..._solar_power_power` carries `power` and omitted nothing, while
-    `..._solar_power` omitted it. Answering each on its own -- the form by a
-    plain `endswith`, the omission from the name alone -- disagreed with the id
-    in both directions. A circuit named "Current" had `..._current_power` read
-    as the `current_power` form and was offered `..._current_current_power`; a
-    circuit named "Solar Power" whose id kept both halves was offered
-    `..._solar_power`. Both are renames the user did not cause, which R1
-    forbids.
+    An existing id is read against two names, the device's first and then the
+    identifier. Where it names either, what follows that name settles two
+    things at once -- which form the id carries, and whether it left the form
+    out. They are one question: an id reading `..._solar_power_power` carries
+    `power` and omitted nothing, while `..._solar_power` omitted it. Answering
+    each on its own -- the form by a plain `endswith`, the omission from the
+    name alone -- disagreed with the id in both directions. A circuit named
+    "Current" had `..._current_power` read as the `current_power` form and was
+    offered `..._current_current_power`; a circuit named "Solar Power" whose id
+    kept both halves was offered `..._solar_power`. Both are renames the user
+    did not cause, which R1 forbids.
 
-    Only where the id no longer names the identifier -- the circuit was renamed
-    on the panel, issue #252 -- is the form read back by itself, from the end
-    of the id. There, and for a new entity, which gets the noun-last wording,
-    the omission is decided from `device_name`, the name Core composes the id
-    from now. That is the whole point of the rename: the name half follows the
-    panel and the suffix half does not.
+    The device's name comes first because every id Core composes now carries
+    it: an offer the user accepts reads back to the base it was composed from,
+    so the restart after it offers nothing more. The identifier covers ids
+    built from it rather than from the device -- the circuit-numbers preset
+    `..._circuit_15_power`, and a names-mode id whose device the user has since
+    renamed. Read against the identifier alone, a numbers-mode circuit named
+    "Current" accepted `..._current_power`, which then named neither, and the
+    next restart offered `..._current_current_power`.
+
+    Only where the id names neither -- the circuit was renamed on the panel,
+    issue #252 -- is the form read back by itself, from the end of the id.
+    There, and for a new entity, which gets the noun-last wording, the omission
+    is decided from `device_name`. That is the whole point of the rename: the
+    name half follows the panel and the suffix half does not.
 
     The omission test carries a leading underscore because the builder's did: a
     circuit named exactly "Power" is not a repetition of anything and kept both
     halves, `..._power_power`.
     """
-    identifier_slug = slugify(id_identifier)
     if existing_entity_id is not None:
         object_id = existing_entity_id.split(".", 1)[-1]
-        form = _form_after_the_identifier(object_id, identifier_slug, suffix)
-        if form is not None:
-            return form.replace("_", " ")
-        if _ends_on_segment(object_id, identifier_slug):
-            return ""
+        for name in (device_name, id_identifier):
+            words_after_the_name = _words_after_the_name(object_id, name, suffix)
+            if words_after_the_name is not None:
+                return words_after_the_name
 
     form = _existing_suffix_form(existing_entity_id, suffix)
     words = (

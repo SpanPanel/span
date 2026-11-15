@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from homeassistant.util import slugify
 import pytest
 
 from custom_components.span_panel.naming import (
@@ -369,8 +370,83 @@ def test_omission_follows_the_device_name() -> None:
 def test_an_id_that_names_the_identifier_decides_the_omission_over_the_device_name(
     identifier: str, device_name: str, existing: str, expected: str
 ) -> None:
-    """The device name decides only where the id gives no answer of its own."""
+    """The device name's ending decides the omission only where the id gives no answer."""
     assert circuit_object_id_suffix(identifier, device_name, "power", existing) == expected
+
+
+@pytest.mark.parametrize(
+    "id_identifier",
+    [pytest.param("Solar Power", id="names"), pytest.param("Circuit 15", id="numbers")],
+)
+def test_a_renamed_circuit_omits_the_suffix_its_new_device_name_ends_on(
+    id_identifier: str,
+) -> None:
+    """Issue #252 with an id to read: the id settles the form, the device name the omission.
+
+    The id names the circuit's old name, so it no longer answers whether the
+    form was left out; the device the id is composed from now does.
+    """
+    assert (
+        circuit_object_id_suffix(
+            id_identifier, "Solar Power", "power", "sensor.span_panel_kitchen_outlets_power"
+        )
+        == ""
+    )
+
+
+def _id_core_composes(domain: str, device_name: str, base: str) -> str:
+    """Return the id Core composes by default: the panel, the circuit's device, the base."""
+    parts = ("Span Panel", device_name, base)
+    return f"{domain}.{slugify(' '.join(part for part in parts if part))}"
+
+
+@pytest.mark.parametrize(
+    ("device_name", "domain", "suffix", "form_words"),
+    [
+        ("Solar Power", "sensor", "power", "power"),
+        ("Current", "sensor", "power", "power"),
+        ("Main Breaker", "switch", "breaker", "breaker"),
+        ("Kitchen Outlets", "sensor", "energy_consumed", "energy consumed"),
+    ],
+)
+@pytest.mark.parametrize(
+    "id_identifier",
+    # None is names mode, where the identifier is the circuit's name, as the device's is.
+    [pytest.param(None, id="names"), pytest.param("Circuit 15", id="numbers")],
+)
+@pytest.mark.parametrize(
+    "named_before",
+    [
+        pytest.param(None, id="new"),
+        # The circuit-numbers preset, or a circuit unnamed until now.
+        pytest.param("Circuit 15", id="tabs-built"),
+        # A circuit renamed on the panel since (#252).
+        pytest.param("Old Name", id="renamed"),
+    ],
+)
+def test_an_accepted_offer_reads_back_to_the_same_suffix(
+    device_name: str,
+    domain: str,
+    suffix: str,
+    form_words: str,
+    id_identifier: str | None,
+    named_before: str | None,
+) -> None:
+    """Recreate is idempotent: the id it offers, once accepted, offers nothing more.
+
+    The existing id is read from the registry each time the entity is built, so
+    the restart after the user accepts an offer hands this function the id Core
+    just composed from it. Any other answer then is a second rename the user did
+    not cause (R1) -- `..._current_power` offered `..._current_current_power`,
+    and `..._solar_power_power` offered `..._solar_power`.
+    """
+    identifier = device_name if id_identifier is None else id_identifier
+    existing = None if named_before is None else _id_core_composes(domain, named_before, form_words)
+
+    offered = circuit_object_id_suffix(identifier, device_name, suffix, existing)
+    accepted = _id_core_composes(domain, device_name, offered)
+
+    assert circuit_object_id_suffix(identifier, device_name, suffix, accepted) == offered
 
 
 # --- Releasing the registry name an older release wrote ----------------------
