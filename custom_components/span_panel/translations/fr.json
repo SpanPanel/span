@@ -1053,6 +1053,10 @@
     "panel_firmware_flat": {
       "title": "Le micrologiciel du SPAN Panel doit être mis à jour",
       "description": "{panel} utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat que cette intégration ne prend plus en charge. Mettez à jour le micrologiciel du panneau ; une fois à jour, le panneau se reconnectera de lui-même."
+    },
+    "circuit_devices_converted": {
+      "title": "SPAN Panel circuits now have their own devices",
+      "description": "Each circuit of {panel} is now a device of its own under the panel, named by the circuit's name in the SPAN app, and its entities are named by what they measure, such as Power. No entity ID has changed, so automations, scripts and dashboards that use entity IDs keep working.\n\n**Displayed names that changed:**\n\n{renamed}\n\n**Areas moved to the circuit's device**, so a circuit's entities now share one area:\n\n{area_changes}\n\n**Circuits whose areas were left as they were**, because their breaker switch has no area. Their entities show without the circuit's name. To restore it, set an area on the circuit's device and clear the entities' own areas, knowing that the breaker switch then joins that area too, where an area-wide turn-off reaches it.\n\n{circuits_left_in_areas}\n\nTemplates that read an entity's device, such as `device_name` or `device_entities`, now see the circuit's device instead of the panel. Dismiss this notice once you have read it."
     }
   }
 }

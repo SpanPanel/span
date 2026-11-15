@@ -428,6 +428,73 @@ async def test_an_unknown_entity_is_a_no_op(hass: HomeAssistant) -> None:
     )
 
 
+# --- Trimming a leading circuit name from a name the user set ----------------
+#
+# Once a circuit has a device named after it, Home Assistant puts that name in
+# front of a name the user gave one of its entities, so a name that already
+# began with it would show it twice. The conversion to circuit devices trims
+# it, by the rule Home Assistant's own migration used for device names.
+
+from homeassistant.helpers.entity_registry import (
+    _async_strip_prefix_from_entity_name as core_strip_prefix,
+)
+
+from custom_components.span_panel.naming import trim_leading_circuit_name
+
+CIRCUIT = "Kitchen Outlets"
+
+
+def test_a_leading_circuit_name_is_trimmed() -> None:
+    assert trim_leading_circuit_name("Kitchen Outlets Power usage", CIRCUIT) == "Power usage"
+
+
+def test_the_trim_ignores_case_takes_the_separator_and_capitalizes() -> None:
+    assert trim_leading_circuit_name("kitchen outlets: power usage", CIRCUIT) == "Power usage"
+
+
+def test_a_name_that_is_the_circuit_name_trims_to_nothing() -> None:
+    """Empty, not None: the entity is then named by its device alone, as it was."""
+    assert trim_leading_circuit_name("Kitchen Outlets", CIRCUIT) == ""
+
+
+def test_a_name_the_circuit_name_runs_into_is_not_trimmed() -> None:
+    """No separator follows the circuit's name, so it is not a prefix but part of a word."""
+    assert trim_leading_circuit_name("Kitchen OutletsPower", CIRCUIT) is None
+
+
+def test_a_name_that_does_not_start_with_the_circuit_name_is_not_trimmed() -> None:
+    assert trim_leading_circuit_name("Fridge Power", CIRCUIT) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "circuit_name"),
+    [
+        ("Kitchen Outlets Power usage", "Kitchen Outlets"),
+        ("kitchen outlets: power usage", "Kitchen Outlets"),
+        ("KITCHEN OUTLETS - iPhone charger", "Kitchen Outlets"),
+        ("Kitchen Outlets -: ", "Kitchen Outlets"),
+        ("Kitchen Outlets", "Kitchen Outlets"),
+        ("Kitchen OutletsPower", "Kitchen Outlets"),
+        ("Kitchen", "Kitchen Outlets"),
+        ("Fridge Power", "Kitchen Outlets"),
+        ("Stra\u00dfe Licht", "STRASSE"),
+        ("STRASSE Licht", "Stra\u00dfe"),
+        ("\u0130stanbul lights", "i\u0307stanbul"),
+        ("Stra\u00dfe Licht", "Stras"),
+        ("", "Kitchen Outlets"),
+        ("Kitchen Outlets Power", ""),
+    ],
+)
+def test_the_trim_is_core_s_own_rule(name: str, circuit_name: str) -> None:
+    """The copy answers as Home Assistant's private function does, case folding included.
+
+    Core's function is private, so the integration carries the rule. This holds
+    the copy to the original on the Home Assistant the suite runs on, so a
+    change to Core's rule is seen here and not as two names that disagree.
+    """
+    assert trim_leading_circuit_name(name, circuit_name) == core_strip_prefix(name, circuit_name)
+
+
 from unittest.mock import MagicMock
 
 from custom_components.span_panel.entity import SpanPanelEntity

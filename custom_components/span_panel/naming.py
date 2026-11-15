@@ -250,3 +250,63 @@ def release_registry_name_written_by_older_release(
     ours = {f"{circuit_name} {description_name}" for description_name in description_names}
     if entry.name in ours:
         registry.async_update_entity(entity_id, name=None)
+
+
+def trim_leading_circuit_name(name: str, circuit_name: str) -> str | None:
+    """Return a user-set name without the circuit name it starts with, or None if it starts with none.
+
+    A circuit's device carries the circuit's name, and Home Assistant puts the
+    device's name in front of an entity's, so a name the user wrote as "Kitchen
+    Outlets Power usage" would display the circuit twice. The conversion to
+    circuit devices stores it as "Power usage".
+
+    The rule is Home Assistant's own, the one its registry migration applied to
+    names that began with their device's: a copy of
+    `entity_registry._async_strip_prefix_from_entity_name`, which is private.
+    `tests/test_naming.py` holds this copy to that function.
+
+    - Case is ignored, by case folding.
+    - At least one of a space, a hyphen or a colon must follow the circuit's
+      name, so "Kitchen OutletsPower" is not trimmed.
+    - A first word left in lower case is capitalized, and one in mixed case,
+      such as "iPhone", is kept as written.
+    - A name that is the circuit's name and nothing more answers `""`: the
+      entity is then named by its device alone, as it was displayed before.
+    """
+    if not name or not circuit_name:
+        return None
+
+    folded_circuit_name = circuit_name.casefold()
+    folded_length = len(folded_circuit_name)
+
+    candidate = name[:folded_length]
+    matched_length = len(candidate)
+    candidate = candidate.casefold()
+
+    if not candidate.startswith(folded_circuit_name):
+        return None
+
+    # Case folding can lengthen a string ("ß" folds to "ss"), so the folded
+    # match may cover fewer of the name's characters than it has itself.
+    excess = len(candidate) - folded_length
+    while excess > 0:
+        matched_length -= 1
+        excess -= len(name[matched_length].casefold())
+
+    # The match ended inside one character's folding, so it is not a prefix.
+    if excess < 0:
+        return None
+
+    rest = name[matched_length:].lstrip(" -:")
+
+    if not rest:
+        return ""
+
+    # Nothing was stripped, so no separator followed the circuit's name.
+    if len(rest) == len(name) - matched_length:
+        return None
+
+    first_word = rest.partition(" ")[0]
+    if not first_word.islower():
+        return rest
+    return rest[0].upper() + rest[1:]

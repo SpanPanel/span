@@ -122,6 +122,17 @@ duplicate of each other.
 """
 
 
+def circuit_sensor_api_key(description_key: str) -> str:
+    """Return the wire key a circuit sensor's unique id is built from, by its catalog key.
+
+    For whatever has to name a circuit sensor's unique id without the sensor
+    itself, as the conversion to circuit devices does to recognise the rows an
+    older release left on the panel's device. A key the table does not hold is
+    its own wire key.
+    """
+    return _API_KEY_MAP.get(description_key, description_key)
+
+
 class SpanCircuitSensorBase(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
 ):
@@ -178,7 +189,7 @@ class SpanCircuitSensorBase(
     @property
     def _api_key(self) -> str:
         """The wire key this sensor's unique id and entity-id suffix are built from."""
-        return _API_KEY_MAP.get(self.original_key, self.original_key)
+        return circuit_sensor_api_key(self.original_key)
 
     def _generate_unique_id(
         self,

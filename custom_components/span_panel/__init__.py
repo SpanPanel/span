@@ -60,6 +60,7 @@ from .ca_repairs import (
     async_raise_ca_unusable,
     async_raise_rest_tls_untrusted,
 )
+from .circuit_device_conversion import async_convert_circuit_entities
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
@@ -85,6 +86,7 @@ from .const import (
     PANEL_CA_PENDING,
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
+from .conversion_repairs import async_clear_conversion_notice, async_raise_conversion_notice
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
@@ -895,7 +897,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             hass, entry.entry_id, snapshot, panel_device_id=entry.runtime_data.panel_device_id
         )
 
+        # Before the forward, so the platforms add every circuit entity onto its
+        # circuit's own device: an install from before circuits had devices still
+        # has them on the panel's. Nothing to do on any setup after the first.
+        conversion = async_convert_circuit_entities(
+            hass, entry, snapshot, entry.runtime_data.panel_device_id
+        )
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # After the forward, so the names it lists as changed are the ones Home
+        # Assistant composes for the entities as the platforms left them.
+        async_raise_conversion_notice(hass, entry, conversion)
 
         # After the forward, because it reports on what the platforms just built
         # -- and once, rather than from each platform's own call to `adoptable`.
@@ -981,6 +994,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_leaf_name_mismatch(hass, entry)
     async_clear_unvalidated_hardware(hass, entry)
     async_clear_flat_firmware(hass, entry)
+    async_clear_conversion_notice(hass, entry.entry_id)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)

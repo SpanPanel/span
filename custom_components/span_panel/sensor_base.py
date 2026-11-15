@@ -81,7 +81,7 @@ _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
 )
 
 
-def _description_label(description: SensorEntityDescription) -> str:
+def description_label(description: SensorEntityDescription) -> str:
     """Return the description's own label, or a neutral word where it declares none.
 
     A description with a `translation_key` declares no `name` -- it declares
@@ -262,7 +262,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             Panel name string
 
         """
-        return _description_label(description)
+        return description_label(description)
 
     def _release_synced_registry_name(
         self,
@@ -303,7 +303,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             entity_registry,
             existing_entity_id,
             circuit.name,
-            (_description_label(description), *legacy_names),
+            (description_label(description), *legacy_names),
         )
 
     def _sync_circuit_name(self) -> None:
