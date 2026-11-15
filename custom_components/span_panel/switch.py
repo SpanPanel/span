@@ -14,7 +14,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanPanelSnapshot
 
 from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
@@ -28,6 +28,7 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
+    circuit_device_name,
     circuit_has_a_breaker_switch,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
@@ -47,22 +48,8 @@ PARALLEL_UPDATES = 1
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
-# Device types that use "Solar" as the fallback identifier when unnamed.
-_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
-
 BREAKER_LABEL: Final = "Breaker"
 """A breaker switch's name: its label alone, since its circuit's device says which breaker."""
-
-
-def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return the identifier an unnamed circuit's switch id was built from.
-
-    Kept only for the base to read an existing id back against; the circuit's
-    device is named by `helpers.circuit_device_name`.
-    """
-    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
-        return "Solar"
-    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
 
 class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
@@ -124,11 +111,16 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         # leaves `entity_id` unset so Core assembles the rest from the user's
         # `entity_id_parts`. The suffix is named outright rather than mapped:
         # `get_user_friendly_suffix` has no entry for a switch at all.
+        #
+        # The identifier is the name the id was built from before the circuit
+        # had a device: its tabs in circuit-numbers mode, otherwise the name
+        # its device has, the unnamed circuit's fallback included. That is
+        # one rule, and `circuit_device_name` owns it.
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         id_identifier = (
             construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
             if use_circuit_numbers
-            else circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
+            else circuit_device_name(circuit, circuit_id)
         )
         self._span_object_id_base = self._circuit_object_id_base(
             coordinator,

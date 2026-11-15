@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from types import MappingProxyType
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
@@ -15,6 +15,7 @@ from .coordinator import SpanPanelCoordinator
 from .counter_plausibility import exceeds_lifetime_bound
 from .energy_orientation import CircuitMeter, EnergyBinding
 from .helpers import (
+    circuit_device_name,
     circuit_has_a_relay,
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
@@ -22,7 +23,6 @@ from .helpers import (
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_user_friendly_suffix,
-    outside_meter_label,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
@@ -36,30 +36,15 @@ def _get_circuit_data_source(circuit_id: str, snapshot: SpanPanelSnapshot) -> Sp
     return circuit
 
 
-# Device types that use "Solar" as the fallback identifier when unnamed,
-# matching v1 naming conventions (e.g., "Solar Power", "Solar Produced Energy").
-_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
+UNNAMED_CHARGER_CIRCUIT_IDENTIFIER: Final = "EV Charger"
+"""The name the sensors of an unnamed charger circuit were built from, and no other entity's.
 
-# Device types that use "EV Charger" as the fallback identifier when unnamed.
-_EVSE_DEVICE_TYPES: frozenset[str] = frozenset({"evse"})
-
-
-def _unnamed_circuit_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return a descriptive identifier for an unnamed circuit.
-
-    PV circuits use "Solar" (matching v1 naming), EVSE circuits use "EV Charger",
-    all others use tab-based naming.
-
-    Kept only as the name an unnamed circuit's ids were built from, which the
-    base reads an existing id back against. The circuit's device is named by
-    `helpers.circuit_device_name`, which has no "EV Charger" branch: a charger's
-    feed circuit keeps its sensors on the charger's device.
-    """
-    if circuit.device_type in _SOLAR_DEVICE_TYPES:
-        return "Solar"
-    if circuit.device_type in _EVSE_DEVICE_TYPES:
-        return "EV Charger"
-    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+The one place a circuit's identifier in circuit-names mode is not the name of
+its device, which `helpers.circuit_device_name` gives by the circuit's tabs.
+It is kept so the ids those sensors have, `..._ev_charger_power`, are still
+read for what they are. Such a circuit's breaker switch and priority select
+were always built from its tabs.
+"""
 
 
 def _resolve_circuit_identifier(
@@ -78,22 +63,26 @@ def _resolve_circuit_identifier(
     order they were added. The tab fallback named them after the breaker
     position they occupy instead.
 
+    In circuit-names mode that name is the one the circuit's device has, so
+    `helpers.circuit_device_name` answers: the circuit's name, "Solar" for an
+    unnamed solar circuit, otherwise its tabs. The sensors of an unnamed
+    charger circuit are the exception, built from "EV Charger"
+    (`UNNAMED_CHARGER_CIRCUIT_IDENTIFIER`).
+
     A meter without a breaker space has neither a name nor a position, so it is
-    named by `outside_meter_label` in both modes.
+    named by `outside_meter_label` in both modes, which is its device's name
+    too.
     """
     if circuit.measures_outside_panel:
-        return outside_meter_label(circuit_id)
+        return circuit_device_name(circuit, circuit_id)
 
-    use_circuit_numbers = options.get(USE_CIRCUIT_NUMBERS, False)
-
-    if use_circuit_numbers:
+    if options.get(USE_CIRCUIT_NUMBERS, False):
         return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
-    name: str = circuit.name
-    if name:
-        return name
+    if not circuit.name and circuit.device_type == "evse":
+        return UNNAMED_CHARGER_CIRCUIT_IDENTIFIER
 
-    return _unnamed_circuit_fallback(circuit, circuit_id)
+    return circuit_device_name(circuit, circuit_id)
 
 
 _API_KEY_MAP: Mapping[str, str] = MappingProxyType(

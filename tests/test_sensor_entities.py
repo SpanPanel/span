@@ -39,7 +39,7 @@ from custom_components.span_panel.sensor_base import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
-    _unnamed_circuit_fallback,
+    _resolve_circuit_identifier,
 )
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
@@ -483,12 +483,13 @@ def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab(hass: HomeA
 
 
 def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
-    """Unnamed PV and EVSE circuits should use special fallback labels."""
+    """Unnamed PV and EVSE circuits' sensor ids were built from special fallback labels."""
     solar_circuit = SpanCircuitSnapshotFactory.create(circuit_id="pv1", name="", device_type="pv")
     evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
+    names_mode = {USE_CIRCUIT_NUMBERS: False}
 
-    assert _unnamed_circuit_fallback(solar_circuit, "pv1") == "Solar"
-    assert _unnamed_circuit_fallback(evse_circuit, "ev1") == "EV Charger"
+    assert _resolve_circuit_identifier(solar_circuit, "pv1", names_mode) == "Solar"
+    assert _resolve_circuit_identifier(evse_circuit, "ev1", names_mode) == "EV Charger"
 
 
 def test_circuit_power_sensor_subdevice_uses_short_name(hass: HomeAssistant) -> None:

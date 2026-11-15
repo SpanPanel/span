@@ -136,14 +136,17 @@ For a circuit, the flag resolves an _identifier_, by `sensor_circuit._resolve_ci
 is used for two things only: an existing ID is read back against it (§4.3), and in circuit-numbers mode it stands in the device's place in the creation preset
 (§4.7).
 
-| Mode                                    | Identifier                                                                  | Source                                                                     |
-| --------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Either, for a meter outside the panel   | `Remote CT 1`                                                               | `helpers.outside_meter_label(circuit_id)`                                  |
-| Circuit numbers (`use_circuit_numbers`) | `Circuit 15`, `Circuit 30 32` (every tab, sorted)                           | `helpers.construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)` |
-| Circuit names, circuit has a name       | the panel's name, verbatim                                                  | `circuit.name`                                                             |
-| Circuit names, circuit unnamed          | `Solar` (PV), `EV Charger` (EVSE, the sensors only), else `Circuit 7` (tab) | `_unnamed_circuit_fallback` and its switch and select counterparts         |
+| Mode                                    | Identifier                                           | Source                                                                     |
+| --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| Either, for a meter outside the panel   | `Remote CT 1`                                        | `helpers.circuit_device_name(circuit, circuit_id)`                         |
+| Circuit numbers (`use_circuit_numbers`) | `Circuit 15`, `Circuit 30 32` (every tab, sorted)    | `helpers.construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)` |
+| Circuit names                           | the name of the circuit's device, as the table above | `helpers.circuit_device_name(circuit, circuit_id)`                         |
+| Circuit names, unnamed charger circuit  | `EV Charger`, for its sensors only                   | `sensor_circuit.UNNAMED_CHARGER_CIRCUIT_IDENTIFIER`                        |
 
-The unnamed fallbacks in the last row are kept only as the names older IDs were built from. They name no device.
+In circuit-names mode the identifier is the device's name, from the same helper, so a change to how a device is named cannot leave a platform reading IDs
+against the old rule (`test_circuit_names_mode_reads_ids_back_against_the_device_s_name`). The last row is the one exception: the sensors of an unnamed charger
+circuit were built from "EV Charger" while its switch, its select and now its device are named by its tabs. It is kept only as the name those sensors' IDs were
+built from (§7), and names no device.
 
 ### 4.2 The suffix
 

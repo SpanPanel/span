@@ -18,6 +18,7 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
     build_select_unique_id_for_entry,
+    circuit_device_name,
     circuit_has_a_priority_select,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
@@ -27,21 +28,6 @@ from .helpers import (
 )
 from .naming import release_registry_name_written_by_older_release
 from .runtime import SpanPanelConfigEntry
-
-# Device types that use "Solar" as the fallback identifier when unnamed.
-_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
-
-
-def _unnamed_select_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return the identifier an unnamed circuit's select id was built from.
-
-    Kept only for the base to read an existing id back against; the circuit's
-    device is named by `helpers.circuit_device_name`.
-    """
-    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
-        return "Solar"
-    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -163,11 +149,16 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         # `entity_id_parts`. The key is used as the suffix verbatim:
         # `get_user_friendly_suffix` maps `circuit_priority` to `priority`, which
         # is the unique_id's spelling and not this entity's.
+        #
+        # The identifier is the name the id was built from before the circuit
+        # had a device: its tabs in circuit-numbers mode, otherwise the name
+        # its device has, the unnamed circuit's fallback included. That is
+        # one rule, and `circuit_device_name` owns it.
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         id_identifier = (
             construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
             if use_circuit_numbers
-            else circuit.name or _unnamed_select_fallback(circuit, circuit_id)
+            else circuit_device_name(circuit, circuit_id)
         )
         self._span_object_id_base = self._circuit_object_id_base(
             coordinator,

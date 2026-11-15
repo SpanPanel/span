@@ -26,7 +26,7 @@ registries.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 import logging
 from typing import Final
@@ -57,6 +57,7 @@ from custom_components.span_panel.circuit_object_ids import (
 )
 from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.helpers import circuit_device_name
 from custom_components.span_panel.id_builder import (
     build_circuit_device_identifier,
     build_circuit_unique_id,
@@ -837,3 +838,89 @@ async def test_a_format_part_the_composer_does_not_know_moves_no_existing_id(
         "breaker",
         "circuit priority",
     }
+
+
+# ---------------------------------------------------------------------------
+# The identifier an existing id is read back against
+# ---------------------------------------------------------------------------
+
+UNNAMED: Final = "unnamed"
+UNNAMED_SOLAR: Final = "unnamed-solar"
+UNNAMED_CHARGER: Final = "unnamed-charger"
+
+
+def _identifier_panel() -> SpanPanelSnapshot:
+    """Build a panel with a named circuit and each kind of unnamed one, all with a relay."""
+    return _panel(
+        KITCHEN_OUTLETS,
+        _circuit(UNNAMED, "", [3]),
+        # Solar and charger circuits have a breaker switch only at a breaker of their own.
+        replace(
+            _circuit(UNNAMED_SOLAR, "", [5, 7]), device_type="pv", relative_position="DOWNSTREAM"
+        ),
+        # A charger circuit no charger device takes its sensors from, as the
+        # second circuit of a charger fed by two is.
+        replace(
+            _circuit(UNNAMED_CHARGER, "", [9]), device_type="evse", relative_position="DOWNSTREAM"
+        ),
+    )
+
+
+def _identifiers(entry: MockConfigEntry, circuit_id: str) -> dict[str, set[str]]:
+    """Return the identifiers one circuit's entities read their ids back against, by domain."""
+    by_domain: dict[str, set[str]] = {}
+    for recipe in entry.runtime_data.circuit_id_bases[circuit_id]:
+        by_domain.setdefault(recipe.domain, set()).add(recipe.id_identifier)
+    return by_domain
+
+
+async def test_circuit_names_mode_reads_ids_back_against_the_device_s_name(
+    hass: HomeAssistant,
+) -> None:
+    """One rule names a circuit's device and the name its ids were built from.
+
+    Each platform asks `circuit_device_name`, so a change to how a device is
+    named cannot leave one of them reading ids against the old rule. The
+    sensors of an unnamed charger circuit are the one exception: their ids
+    were built from "EV Charger", while that circuit's switch and select were
+    always built from its tabs.
+    """
+    entry = _entry(hass, NAMES_MODE)
+    snapshot = _identifier_panel()
+
+    await _set_up(hass, entry, snapshot)
+
+    expected = {
+        KITCHEN: "Kitchen Outlets",
+        UNNAMED: "Circuit 3",
+        UNNAMED_SOLAR: "Solar",
+        UNNAMED_CHARGER: "Circuit 9",
+    }
+    for circuit_id, name in expected.items():
+        assert circuit_device_name(snapshot.circuits[circuit_id], circuit_id) == name
+        sensors = "EV Charger" if circuit_id == UNNAMED_CHARGER else name
+        assert _identifiers(entry, circuit_id) == {
+            "sensor": {sensors},
+            "switch": {name},
+            "select": {name},
+        }, circuit_id
+
+
+async def test_circuit_numbers_mode_reads_ids_back_against_the_tabs(hass: HomeAssistant) -> None:
+    """The identifier is the breaker positions, whatever the circuit is named or feeds."""
+    entry = _entry(hass, NUMBERS_MODE)
+
+    await _set_up(hass, entry, _identifier_panel())
+
+    expected = {
+        KITCHEN: "Circuit 15",
+        UNNAMED: "Circuit 3",
+        UNNAMED_SOLAR: "Circuit 5 7",
+        UNNAMED_CHARGER: "Circuit 9",
+    }
+    for circuit_id, tabs in expected.items():
+        assert _identifiers(entry, circuit_id) == {
+            "sensor": {tabs},
+            "switch": {tabs},
+            "select": {tabs},
+        }, circuit_id
