@@ -14,6 +14,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.json import JsonObjectType, JsonValueType
 import httpx
+import probatio as vol
 from span_panel_api import rotate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -24,7 +25,6 @@ from span_panel_api.exceptions import (
     SpanPanelTimeoutError,
     SpanPanelTLSVerificationError,
 )
-import voluptuous as vol
 
 from .config_flow_validation import PanelCaUnusableError, panel_rest_transport
 from .const import (

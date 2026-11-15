@@ -13,6 +13,7 @@ import logging
 from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+import probatio as vol
 from span_panel_api import ca_fingerprint
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -20,7 +21,6 @@ from span_panel_api.exceptions import (
     SpanPanelTimeoutError,
     SpanPanelValidationError,
 )
-import voluptuous as vol
 
 from .ca_repairs import CA_CHANGED_ISSUE_PREFIX, CA_UNUSABLE_ISSUE_PREFIX
 from .config_flow_validation import (

@@ -30,7 +30,6 @@ updates:
           - "python-direnv"
           - "*-cov"
           - "types-*"
-          - "voluptuous-stubs"
           - "pyright"
     reviewers:
       - "cayossarian"

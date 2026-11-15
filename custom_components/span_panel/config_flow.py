@@ -23,6 +23,7 @@ from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 import httpx
+import probatio as vol
 from span_panel_api import (
     V2AuthResponse,
     build_panel_ssl_context,
@@ -41,7 +42,6 @@ from span_panel_api.exceptions import (
     SpanPanelTimeoutError,
     SpanPanelValidationError,
 )
-import voluptuous as vol
 
 from .config_flow_options import (
     GENERAL_OPTIONS_SCHEMA,

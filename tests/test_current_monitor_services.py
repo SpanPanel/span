@@ -8,10 +8,10 @@ from unittest.mock import MagicMock
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+import probatio as vol
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
-import voluptuous as vol
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay

@@ -1,7 +1,7 @@
 """Tests for set_global_monitoring service schema."""
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 
 
 class TestSetGlobalMonitoringSchema:

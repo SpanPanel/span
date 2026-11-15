@@ -9,8 +9,8 @@ from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+import probatio as vol
 from span_panel_api import shared_meter_groups
-import voluptuous as vol
 
 from .const import DOMAIN
 from .control_gate import ControlMode

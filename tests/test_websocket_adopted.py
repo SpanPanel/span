@@ -796,7 +796,7 @@ async def test_device_id_is_required_by_the_schema(
     """Constrained at the schema rather than checked in the handler.
 
     A missing device id is refused by the websocket layer, so the handler never
-    runs and never has to answer for a request shape voluptuous can reject.
+    runs and never has to answer for a request shape probatio can reject.
     """
     async_register_commands(hass)
     client = await hass_ws_client(hass)

@@ -33,7 +33,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-import voluptuous as vol
+import probatio as vol
 
 from .adoption import (
     adopted_curation_key,
