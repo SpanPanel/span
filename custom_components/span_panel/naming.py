@@ -101,18 +101,25 @@ def without_core_number(object_id: str) -> str | None:
 
 
 def _ends_on_segment(object_id: str, segment: str) -> bool:
-    """Report whether `object_id` ends on `segment` at a word boundary.
+    """Report whether `object_id` ends on `segment` at a word boundary: an underscore, or its start.
 
-    The equality arm is the install with no device prefix, whose object id *is*
-    the circuit half and so has no underscore in front of it.
+    The equality arm is an object id that is the segment and nothing more, with
+    no underscore in front of it: the install with no device prefix, whose id
+    *is* the circuit half, and the label-only id an entity with an area of its
+    own accepts under a format with no area part, which is the suffix alone.
     """
     return object_id == segment or object_id.endswith(f"_{segment}")
 
 
 def _existing_suffix_form(object_id: str, suffix: str) -> str | None:
-    """Return the suffix form an existing id ends on, or None if it ends on none we know."""
+    """Return the suffix form an existing id ends on, or None if it ends on none we know.
+
+    It ends on one at a word boundary (`_ends_on_segment`), so an id that is the
+    form alone, `energy_consumed`, ends on it. Read after an underscore only,
+    such an id ended on no form, and `current_power` on the `power` it ends with.
+    """
     for form in _known_forms(suffix):
-        if object_id.endswith(f"_{form}"):
+        if _ends_on_segment(object_id, form):
             return form
     return None
 
@@ -328,6 +335,12 @@ def circuit_object_id_suffix(
     `device_name` too. That is the whole point of the rename: the name half
     follows the panel and the suffix half does not.
 
+    An id that is the form and nothing else ends on it too. Under a format
+    with no area part it is the label-only id an entity with an area of its
+    own accepts, `sensor.energy_consumed`, and once the area is cleared it
+    names neither name. Read as ending on no form, under `(device, entity)` it
+    was offered `sensor.refrigerator_consumed_energy`.
+
     The omission test carries a leading underscore because the builder's did: a
     circuit named exactly "Power" is not a repetition of anything and kept both
     halves, `..._power_power`.
@@ -356,7 +369,10 @@ def circuit_object_id_suffix(
     Read only as it stands, `..._refrigerator_energy_consumed_2` on a circuit
     renamed in the SPAN app was offered `consumed energy`, a wording it never
     had. The id as it stands comes first because a name can end on a number
-    of its own: `sensor.span_panel_pump_2` stops at a device named "Pump 2".
+    of its own, and under a format ending with the device every id ends on the
+    device's name: under `(entity, device)` a circuit named "Solar Power 2" has
+    `sensor.current_power_solar_power_2`, which without its `2` would be read
+    for the name's `power`.
 
     `circuit_object_ids.circuit_object_id_base` asks first which wording
     reproduces the id under the format as it stands, and comes here for the

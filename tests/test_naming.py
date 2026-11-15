@@ -789,6 +789,83 @@ def test_an_id_that_ends_on_a_number_is_read_as_it_stands_first(
     )
 
 
+# --- An id that is the suffix alone ---------------------------------------------
+#
+# Under a format with no area part, Core composes an entity with an area of its
+# own from its label alone, so the label-only id it accepts is a form of the
+# suffix and nothing else: `sensor.energy_consumed`, or `sensor.energy_consumed_2`
+# where another entity had that first. Once the entity has no area of its own
+# again, nothing composes the id and it is read by its tail.
+
+
+@pytest.mark.parametrize("device_in_front", [True, False], ids=["device-in-front", "own-area"])
+@pytest.mark.parametrize(
+    "device_then_entity", [True, False], ids=["device-then-entity", "entity-first"]
+)
+@pytest.mark.parametrize(
+    ("suffix", "existing", "expected"),
+    [
+        ("energy_consumed", "sensor.energy_consumed", "energy consumed"),
+        ("energy_consumed", "sensor.energy_consumed_2", "energy consumed"),
+        ("energy_consumed", "sensor.consumed_energy", "consumed energy"),
+        ("energy_consumed", "sensor.consumed_energy_2", "consumed energy"),
+        ("power", "sensor.current_power", "current power"),
+        ("power", "sensor.current_power_2", "current power"),
+        ("power", "sensor.power", "power"),
+        ("power", "sensor.power_2", "power"),
+    ],
+)
+def test_an_id_that_is_the_suffix_alone_keeps_its_wording(
+    suffix: str, existing: str, expected: str, device_then_entity: bool, device_in_front: bool
+) -> None:
+    """The start of an object id is a word boundary, as an underscore is, so the id ends on its form.
+
+    Read as ending on no form, `energy_consumed` took the wording a new entity
+    gets, and `current_power` was read for the `power` it ends on.
+    """
+    assert (
+        circuit_object_id_suffix(
+            "Refrigerator",
+            "Refrigerator",
+            suffix,
+            existing,
+            device_then_entity=device_then_entity,
+            device_in_front=device_in_front,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("existing", "device_in_front", "expected"),
+    [
+        # The device's name in front already says `power`.
+        ("sensor.power", True, ""),
+        ("sensor.power_2", True, ""),
+        # It does not say `current power`, so that wording stays whole.
+        ("sensor.current_power", True, "current power"),
+        # With no device in front, nothing else says the suffix.
+        ("sensor.power", False, "power"),
+        ("sensor.current_power", False, "current power"),
+    ],
+)
+def test_the_suffix_alone_is_left_out_only_where_the_device_s_name_ends_on_it(
+    existing: str, device_in_front: bool, expected: str
+) -> None:
+    """The omission is decided from the device's name, as for any id that names neither name.
+
+    Under `(DEVICE, ENTITY)` a "Solar Power" sensor on `sensor.solar_power`
+    accepts `sensor.power` in an area of its own, and is offered
+    `sensor.solar_power` again once the area is cleared.
+    """
+    assert (
+        circuit_object_id_suffix(
+            "Solar Power", "Solar Power", "power", existing, device_in_front=device_in_front
+        )
+        == expected
+    )
+
+
 @pytest.mark.parametrize("suffix", sorted(ENTITY_ID_SUFFIX_FORMS))
 def test_every_wording_of_a_suffix_is_tried_longest_first_in_one_order(suffix: str) -> None:
     """Two wordings of one length must not swap places from one run to the next."""

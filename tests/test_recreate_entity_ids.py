@@ -2682,3 +2682,199 @@ async def test_a_renamed_circuit_keeps_its_spelling_past_the_number_core_added(
     assert accepted == offered
     row = await _assert_recreate_offers_nothing(hass, install, RENAMED, offered)
     assert row.object_id_base == words
+
+
+# --- An id that is the suffix alone -------------------------------------------
+#
+# Under a format with no area part, Core composes an entity with an area of its
+# own from its label alone, so the label-only id it accepts is the suffix and
+# nothing else: `sensor.energy_consumed`, or `sensor.energy_consumed_2` where
+# another circuit's entity had that first. Once its area is cleared, or set on
+# the circuit's device instead as the README advises to show the circuit's name
+# again, the entity is composed with its device in front, nothing composes the
+# id, and it is read by its tail. Read as ending on no form, `energy_consumed`
+# was offered `consumed_energy` and `current_power` was offered `power`. Under
+# the default format no offer is such an id, but one accepted under another
+# format is read the same way, in the area and out of it.
+
+
+@dataclass(frozen=True, slots=True)
+class _FormatForTheSuffixAlone:
+    """An entity-id format, and what it offers an entity whose id is the suffix alone.
+
+    Each offer is an object-id shape: `{form}` is the suffix form the id is, and
+    `{object_id}` the id itself, number and all.
+    """
+
+    parts: tuple[EntityNamePart, ...] | None
+    """The format the user saved, or None for Core's default."""
+
+    in_the_area: str
+    """The offer while the entity is in Garage."""
+
+    cleared: str
+    """The offer once the entity's area is cleared, with no area anywhere."""
+
+    on_the_device: str
+    """The offer once the circuit's device is in Kitchen and the entity's own area is cleared."""
+
+
+FORMATS_FOR_THE_SUFFIX_ALONE = [
+    pytest.param(
+        _FormatForTheSuffixAlone(
+            (EntityNamePart.PARENT_DEVICE, EntityNamePart.DEVICE, EntityNamePart.ENTITY),
+            in_the_area="{object_id}",
+            cleared="span_panel_refrigerator_{form}",
+            on_the_device="refrigerator_{form}",
+        ),
+        id="no-area-part",
+    ),
+    # The entity's part first. `current_power` was read for the `power` it ends
+    # on here too.
+    pytest.param(
+        _FormatForTheSuffixAlone(
+            (EntityNamePart.ENTITY, EntityNamePart.DEVICE),
+            in_the_area="{object_id}",
+            cleared="{form}_refrigerator",
+            on_the_device="{form}_refrigerator",
+        ),
+        id="entity-first",
+    ),
+    # Core's default puts the area in front, so the entity is offered it.
+    pytest.param(
+        _FormatForTheSuffixAlone(
+            None,
+            in_the_area="garage_{form}",
+            cleared="span_panel_refrigerator_{form}",
+            on_the_device="kitchen_refrigerator_{form}",
+        ),
+        id="default",
+    ),
+]
+
+SUFFIXES_ALONE = [
+    pytest.param(_LegacyInstall, "consumedEnergyWh", "energy_consumed", id="energy-consumed"),
+    pytest.param(_LegacyInstall, "consumedEnergyWh", "consumed_energy", id="consumed-energy"),
+    pytest.param(_SensorInstall, "instantPowerW", "current_power", id="current-power"),
+    pytest.param(_SensorInstall, "instantPowerW", "power", id="power"),
+]
+"""An install, its sensor's API key, and a form of its suffix that is the whole object id."""
+
+
+async def _load_the_suffix_alone_in_garage(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    the_format: _FormatForTheSuffixAlone,
+    make_install: type[_LegacyInstall] | type[_SensorInstall],
+    api_key: str,
+    form: str,
+    *,
+    numbered: bool,
+) -> tuple[_LegacyInstall | _SensorInstall, str]:
+    """Register the entity on the id that is `form`, give it the area Garage, and load it.
+
+    With `numbered`, another entity holds that id first, so Core numbers this
+    one's. Returns the install and the entity's id.
+    """
+    registry = er.async_get(hass)
+    if the_format.parts is not None:
+        registry.async_update_settings(entity_id_parts=list(the_format.parts))
+    if numbered:
+        taken = registry.async_get_or_create("sensor", "other", "taken", suggested_object_id=form)
+        assert taken.entity_id == f"sensor.{form}"
+    entity_id = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, api_key),
+        suggested_object_id=form,
+        config_entry=entry,
+    ).entity_id
+    assert entity_id == (f"sensor.{form}_2" if numbered else f"sensor.{form}")
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, entity_id, garage.id)
+
+    install = make_install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    return install, entity_id
+
+
+@pytest.mark.parametrize("numbered", [False, True], ids=["as-composed", "numbered"])
+@pytest.mark.parametrize(("make_install", "api_key", "form"), SUFFIXES_ALONE)
+@pytest.mark.parametrize("the_format", FORMATS_FOR_THE_SUFFIX_ALONE)
+async def test_an_id_that_is_the_suffix_alone_keeps_its_wording_once_the_area_is_the_device_s(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    the_format: _FormatForTheSuffixAlone,
+    make_install: type[_LegacyInstall] | type[_SensorInstall],
+    api_key: str,
+    form: str,
+    numbered: bool,
+) -> None:
+    """The README's way back to the circuit's name keeps the wording the id has (R1).
+
+    In Garage the entity is offered its label alone, which under a format with
+    no area part is the id it has. With the area set on the circuit's device
+    and the entity's own cleared, it is offered the circuit's id in that
+    wording after a reload, and once accepted that id reads back to the same
+    base.
+    """
+    install, entity_id = await _load_the_suffix_alone_in_garage(
+        hass, entry, the_format, make_install, api_key, form, numbered=numbered
+    )
+    registry = er.async_get(hass)
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert row.device_id is not None
+    in_the_area = the_format.in_the_area.format(form=form, object_id=entity_id.split(".", 1)[1])
+    assert registry.async_regenerate_entity_id(row) == f"sensor.{in_the_area}"
+
+    kitchen = ar.async_get(hass).async_create("Kitchen")
+    dr.async_get(hass).async_update_child_device(row.device_id, area_id=kitchen.id)
+    _give_the_entity_an_area(hass, entity_id, None)
+    accepted = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, entity_id)
+
+    assert accepted == f"sensor.{the_format.on_the_device.format(form=form)}"
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, accepted)
+    assert row.object_id_base == form.replace("_", " ")
+
+
+@pytest.mark.parametrize("numbered", [False, True], ids=["as-composed", "numbered"])
+@pytest.mark.parametrize(("make_install", "api_key", "form"), SUFFIXES_ALONE)
+@pytest.mark.parametrize("the_format", FORMATS_FOR_THE_SUFFIX_ALONE)
+async def test_an_id_that_is_the_suffix_alone_keeps_its_wording_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    the_format: _FormatForTheSuffixAlone,
+    make_install: type[_LegacyInstall] | type[_SensorInstall],
+    api_key: str,
+    form: str,
+    numbered: bool,
+) -> None:
+    """The listener's refresh reads the id as a reload does, as the area is cleared and set again."""
+    _, entity_id = await _load_the_suffix_alone_in_garage(
+        hass, entry, the_format, make_install, api_key, form, numbered=numbered
+    )
+    registry = er.async_get(hass)
+    row = registry.async_get(entity_id)
+    assert row is not None
+    garage_id = row.area_id
+    assert garage_id is not None
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, entity_id, None)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert row.area_id is None
+    assert registry.async_regenerate_entity_id(row) == (
+        f"sensor.{the_format.cleared.format(form=form)}"
+    )
+
+    _give_the_entity_an_area(hass, entity_id, garage_id)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert row.area_id == garage_id
+    in_the_area = the_format.in_the_area.format(form=form, object_id=entity_id.split(".", 1)[1])
+    assert registry.async_regenerate_entity_id(row) == f"sensor.{in_the_area}"
+    stop()

@@ -186,7 +186,10 @@ the format changed. Those are read against two names, and the words are decided 
    decided from `device_name`, as it is for a new entity, because the offer is composed from the device. That is what makes the offer in circuit-numbers mode
    the ID the circuit has under circuit names: a circuit named "Solar Power" on `..._circuit_15_power` is offered `..._solar_power`.
 3. **The existing ID names neither** (renamed on the panel, #252): the form is read back from the _end_ of the ID by itself (`_existing_suffix_form`), and the
-   omission is decided from `device_name`. The name half follows the panel; the suffix half does not.
+   omission is decided from `device_name`. The name half follows the panel; the suffix half does not. An ID that is the form alone ends on it too. Under
+   `(PARENT_DEVICE, DEVICE, ENTITY)`, which has no area part, the label-only ID an entity with an area of its own accepts is the form alone, such as
+   `sensor.energy_consumed`. Once the area is set on the circuit's device and the entity's own is cleared, it is offered `sensor.refrigerator_energy_consumed`.
+   Read as ending on no form, it was offered `sensor.refrigerator_consumed_energy`.
 4. **No existing ID**: the noun-last wording from `NEW_ENTITY_ID_SUFFIX_WORDS` (`consumed energy`, matching the panel-level `main_meter_consumed_energy`),
    omitted where `device_name` already ends with it.
 
@@ -208,23 +211,23 @@ every ID a release preset is shaped. `device_then_entity` says whether the user'
 `_3` and on, so the ID ends on the number and none of the readings above finds a name or a form there. Where the ID as it stands gives no reading, it is read
 again without the number (`naming.without_core_number`). On a circuit renamed "Beer Fridge" in the SPAN app, `sensor.span_panel_refrigerator_energy_consumed_2`
 keeps `energy consumed` and is offered `sensor.span_panel_beer_fridge_energy_consumed`. Read only as it stands, it spelled no wording and was offered
-`sensor.span_panel_beer_fridge_consumed_energy`. The ID as it stands is read first because a name can end on a number of its own: `sensor.span_panel_pump_2`
-stops at a device named "Pump 2".
+`sensor.span_panel_beer_fridge_consumed_energy`. The ID as it stands is read first because a name can end on a number of its own, and under a format that ends
+with the device every ID ends on the device's name: under `(ENTITY, DEVICE)` a circuit named "Solar Power 2" has `sensor.current_power_solar_power_2`, which
+without its `2` would be read for the name's `power`.
 
 **An entity with an area of its own never has an empty base.** Every omission above rests on Core composing the device's name in front of the base, and Core
 names neither device for an entity that has an area of its own (§3.1): it composes the area and the base. So for such an entity the empty base is not tried, and
 each wording is composed twice. It is composed first from that area, as Core composes the entity now, so that an ID Core composes today, such as a label-only ID
 the entity has accepted, is offered nothing. Under `(DEVICE, ENTITY)` a circuit named "Current" in an area of its own therefore keeps `sensor.current_power`,
 its label alone in the `current_power` wording, though its device once composed that ID from `power`. It is composed then with the device in front, as Core
-composed it before it had the area, which reads an ID from then exactly, number and all, where reading its words would not: under
-`(PARENT_DEVICE, ENTITY, DEVICE)` a panel named "Shop Current" makes `sensor.shop_current_power_kitchen_outlets` spell `current_power`, though it was composed
-from `power`. In the area Garage it is offered `sensor.power`, and `sensor.span_panel_refrigerator_energy_consumed_2` is offered
-`sensor.garage_energy_consumed`.
+composed it before it had the area, which reads an ID from then exactly, number and all, where reading its words would give another wording, as it does for one
+whose panel's name runs into the suffix: under `(PARENT_DEVICE, ENTITY, DEVICE)` a panel named "Shop Current" makes `sensor.shop_current_power_kitchen_outlets`
+spell `current_power`, though it was composed from `power`. In the area Garage it is offered `sensor.power`.
 
-Where neither composes the ID, `circuit_object_id_suffix` is told so with `device_in_front=False` and leaves nothing out. The words are the form the ID spells
-after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard is offered `sensor.backyard_power`,
-its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no area part Core's fallback of the
-platform and the unique ID.
+Where neither composes the ID, it is read by `circuit_object_id_suffix`, told with `device_in_front=False` that no device is in front, and nothing is left out.
+The words are the form the ID spells after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard
+is offered `sensor.backyard_power`, its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no
+area part Core's fallback of the platform and the unique ID.
 
 An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
 (`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
