@@ -52,46 +52,49 @@ which is what Core composes today. An id from then is read exactly, number
 and all, where reading its words would give another wording, as it does for
 one whose panel's name runs into the suffix.
 
-An entity with no area of its own may have the id Core composed while it had
-one: its label alone, which R1's own-area exception offered and the user
-accepted. Nothing composes that id once the area is taken off the entity, so
-it is read by its tail, and on a circuit named for what the entity measures,
-"Power", the tail is the device's name as well. So the reader is handed what
-composes the label in each area the registry holds (`_the_label_alone`), and
-an id that is the label alone is read as the label, not as an id that stops
-at the device's name.
-
 ## Keeping the base current
 
 The base depends on the name of the circuit's device: it is empty where the
 name already ends on the suffix words, and an id is read against the name. It
 depends too on whether the entity has an area of its own, which decides
-whether Core puts that name in front at all. A
-rename in the SPAN app reloads the entry, which builds every entity again. A
-rename of the device in Home Assistant reloads nothing, and Core composes
-"Recreate entity IDs" from the row as stored, so a base decided for the old
-name would be offered under the new one: a circuit named "Solar Power", on
-`sensor.span_panel_solar_power` with an empty base, renamed "Roof Array" would
-be offered `sensor.span_panel_roof_array`, an id no entity on that device is
-created with.
+whether Core puts that name in front at all, and on every other part a
+composition reads, since an id Core composes today is given the base that
+composes it: the circuit device's area, and the panel device's name and area,
+which a circuit device with no area of its own takes. A rename in the SPAN app
+reloads the entry, which builds every entity again. A rename of the device in
+Home Assistant reloads nothing, and Core composes "Recreate entity IDs" from
+the row as stored, so a base decided for the old name would be offered under
+the new one: a circuit named "Solar Power", on `sensor.span_panel_solar_power`
+with an empty base, renamed "Roof Array" would be offered
+`sensor.span_panel_roof_array`, an id no entity on that device is created
+with.
 
-An area set on an entity, or taken off it, reloads nothing either: a "Solar
-Power" sensor given the area Backyard would be offered `sensor.backyard`, and
-one whose area was taken away `sensor.span_panel_solar_power_power`.
+An area set or cleared reloads nothing either. On an entity: a "Solar Power"
+sensor given the area Backyard would be offered `sensor.backyard`, and one
+whose area was taken away `sensor.span_panel_solar_power_power`. On a device:
+a circuit named "Power" whose label-only id `sensor.garage_power` is composed
+from its device in Garage with the suffix left out has the empty base while
+the device is there, and `power` once it is not, so a base kept from before
+the device's area was set offered `sensor.garage_power_power` for an id Core
+composes today.
 
 So each circuit entity records what its base is worked out from
 (`CircuitIdBase`) when it is built, enabled or not, and
-`async_keep_circuit_id_bases_current` works the bases of a circuit out again
-when its device's `name_by_user` changes, and an entity's when its own area
-does, and stores those that differ. It does so inside the registry's update
-event, before the change has returned, because Home Assistant asks whether to
-rename the device's entity ids straight after a rename. A reload would answer
-too late.
+`async_keep_circuit_id_bases_current` works the bases out again and stores
+those that differ: a circuit's when its device's `name_by_user` or `area_id`
+changes, every circuit's when the panel device's do, and an entity's when its
+own area does. It does so inside the registry's update event, before the
+change has returned, because Home Assistant asks whether to rename the
+device's entity ids straight after a rename. A reload would answer too late.
+
+Two changes are not followed until the next restart. Core announces no event
+for a saved entity-id format. A renamed area or floor is announced, for any
+edit to it, and is not watched.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 import logging
 from typing import Final
@@ -110,7 +113,7 @@ from span_panel_api import SpanCircuitSnapshot
 from .const import DOMAIN
 from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix, suffix_wordings, without_core_number
-from .runtime import SpanPanelConfigEntry, loaded_runtime_data
+from .runtime import SpanPanelConfigEntry, SpanPanelRuntimeData, loaded_runtime_data
 from .util import circuit_id_of_device, effective_circuit_device_name
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,6 +143,14 @@ _DEFAULT_ENTITY_ID_PARTS: Final = (
 
 _DEVICE_THEN_ENTITY: Final = (EntityNamePart.DEVICE, EntityNamePart.ENTITY)
 """How the default format ends, and the shape of every id a release preset."""
+
+_COMPOSED_DEVICE_CHANGES: Final = ("name_by_user", "area_id")
+"""What of a device's registry row a circuit entity's id is composed from, apart from its own name.
+
+The circuit's device and the panel's both: the user's name for it, which Core
+reads ahead of the device's own, and its area, which a circuit device with no
+area of its own takes from the panel.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,67 +271,17 @@ def _is_the_id_core_registers(object_id: str, composed: str, *, numbered: bool) 
     return (without_core_number(object_id) if numbered else object_id) == slug
 
 
-def _base_reproducing(object_id: str, compositions: Sequence[tuple[str, str]]) -> str | None:
+def _base_reproducing(object_id: str, composed_by_base: dict[str, str]) -> str | None:
     """Return the base whose composition is the id an entity has, or None if none is.
 
-    `compositions` pairs each base with what it composes. An id that is a
-    composition as it stands outranks one that is a composition with a number
-    after it, and the first pair that spells it wins.
+    An id that is a composition as it stands outranks one that is a
+    composition with a number after it.
     """
     for numbered in (False, True):
-        for base, composed in compositions:
+        for base, composed in composed_by_base.items():
             if _is_the_id_core_registers(object_id, composed, numbered=numbered):
                 return base
     return None
-
-
-def _the_label_alone(
-    hass: HomeAssistant,
-    *,
-    panel_device_id: str,
-    circuit_device_identifier: tuple[str, str],
-    device_name: str,
-    config_entry_id: str,
-    wordings: Sequence[str],
-) -> Callable[[str], str | None]:
-    """Return what tells which wording an object id spells as the entity's label alone.
-
-    The label alone is the id Core composes for the entity in an area of its
-    own: that area and the base, with no device in front. It is what R1's
-    own-area exception offers, and it stays the entity's id once the area is
-    taken off it, until the user accepts another. The area it was composed in
-    is then no longer on the entity, so the label is composed in each area the
-    registry holds, as it stands and under Core's number. The answer is the
-    wording whose composition spells the id, or None where none does.
-
-    `naming.circuit_object_id_suffix` asks only about an id it would otherwise
-    read as stopping at the device's name, so the compositions, one for each
-    area and wording, are made for that id alone.
-    """
-
-    def wording_of_the_label(object_id: str) -> str | None:
-        return _base_reproducing(
-            object_id,
-            [
-                (wording, composed)
-                for area in ar.async_get(hass).async_list_areas()
-                for wording in wordings
-                if (
-                    composed := compose_circuit_object_id(
-                        hass,
-                        panel_device_id=panel_device_id,
-                        circuit_device_identifier=circuit_device_identifier,
-                        device_name=device_name,
-                        suffix_words=wording,
-                        config_entry_id=config_entry_id,
-                        entity_area_id=area.id,
-                    )
-                )
-                is not None
-            ],
-        )
-
-    return wording_of_the_label
 
 
 def circuit_object_id_base(
@@ -358,17 +319,16 @@ def circuit_object_id_base(
     one whose panel's name runs into the suffix, "Shop Current" in front of
     `power`, spells `current_power`.
 
-    An entity with no area of its own may have the label-only id it accepted
-    while it had one. The reader is handed what composes the label in each
-    area the registry holds (`_the_label_alone`), so that on a circuit named
-    "Power" such an id, `sensor.garage_power`, keeps its measurement rather
-    than being read as stopping at the device's name.
+    The answer depends on every part a composition reads: the circuit
+    device's name and area, the panel's name and area, and the entity's own
+    area. On a circuit named for what its entity measures, `sensor.garage_power`
+    is the device "Power" in Garage with the suffix left out while the device
+    is there, and is read for its `power` once it is not.
     """
     device_name = effective_circuit_device_name(
         dr.async_get(hass), serial, circuit, circuit_id, config_entry_id=config_entry_id
     )
     entity_area_id: str | None = None
-    label_alone: Callable[[str], str | None] | None = None
     if existing_entity_id is not None:
         row = er.async_get(hass).async_get(existing_entity_id)
         entity_area_id = row.area_id if row is not None else None
@@ -382,8 +342,8 @@ def circuit_object_id_base(
         for composed_area_id in composed_area_ids:
             reproducing = _base_reproducing(
                 object_id,
-                [
-                    (base, composed)
+                {
+                    base: composed
                     for base in bases
                     if (
                         composed := compose_circuit_object_id(
@@ -397,19 +357,10 @@ def circuit_object_id_base(
                         )
                     )
                     is not None
-                ],
+                },
             )
             if reproducing is not None:
                 return reproducing
-        if entity_area_id is None:
-            label_alone = _the_label_alone(
-                hass,
-                panel_device_id=panel_device_id,
-                circuit_device_identifier=circuit_device_identifier,
-                device_name=device_name,
-                config_entry_id=config_entry_id,
-                wordings=wordings,
-            )
     return circuit_object_id_suffix(
         recipe.id_identifier,
         device_name,
@@ -417,7 +368,6 @@ def circuit_object_id_base(
         existing_entity_id,
         device_then_entity=entity_id_parts(hass)[-2:] == _DEVICE_THEN_ENTITY,
         device_in_front=entity_area_id is None,
-        label_alone=label_alone,
     )
 
 
@@ -465,13 +415,16 @@ def async_keep_circuit_id_bases_current(
 ) -> CALLBACK_TYPE:
     """Refresh circuit entities' id bases when what they were decided from changes without a reload.
 
-    Two changes do that, and each is refreshed inside the registry's own
+    Three changes do that, and each is refreshed inside the registry's own
     update event:
 
-    - a circuit's device renamed in Home Assistant, which refreshes every
-      entity of the circuit. Only a change of `name_by_user` counts: the
-      device's own name changes with the circuit's in the SPAN app, which
-      reloads the entry;
+    - a circuit's device renamed in Home Assistant, or its area set, changed
+      or cleared, which refreshes every entity of the circuit. Only the
+      user's `name_by_user` counts as a rename: the device's own name changes
+      with the circuit's in the SPAN app, which reloads the entry;
+    - the panel's device renamed, or its area changed, which refreshes every
+      circuit, since a circuit device with no area of its own takes the
+      panel's and every id names the panel under a parent-device part;
     - an area set on a circuit entity or taken off it, which refreshes that
       entity.
 
@@ -481,15 +434,15 @@ def async_keep_circuit_id_bases_current(
     """
 
     @callback
-    def _refresh(device_id: str, *, only: tuple[str, str] | None = None) -> None:
-        """Refresh the bases of the circuit whose device this is: all, or `only` (domain, unique id)."""
-        runtime_data = loaded_runtime_data(entry)
-        device = dr.async_get(hass).async_get(device_id)
-        if runtime_data is None or not isinstance(device, dr.ChildDeviceEntry):
-            return
+    def _refresh_circuit(
+        runtime_data: SpanPanelRuntimeData,
+        circuit_id: str,
+        *,
+        only: tuple[str, str] | None = None,
+    ) -> None:
+        """Refresh the bases of one circuit's entities: all, or `only` (domain, unique id)."""
         snapshot = runtime_data.setup_snapshot
-        circuit_id = circuit_id_of_device(snapshot.serial_number, device)
-        if circuit_id is None or (circuit := snapshot.circuits.get(circuit_id)) is None:
+        if (circuit := snapshot.circuits.get(circuit_id)) is None:
             return
         async_refresh_circuit_id_bases(
             hass,
@@ -506,8 +459,26 @@ def async_keep_circuit_id_bases_current(
         )
 
     @callback
+    def _refresh(device_id: str, *, only: tuple[str, str] | None = None) -> None:
+        """Refresh the bases of the circuit whose device this is: all, or `only` (domain, unique id)."""
+        runtime_data = loaded_runtime_data(entry)
+        device = dr.async_get(hass).async_get(device_id)
+        if runtime_data is None or not isinstance(device, dr.ChildDeviceEntry):
+            return
+        circuit_id = circuit_id_of_device(runtime_data.setup_snapshot.serial_number, device)
+        if circuit_id is not None:
+            _refresh_circuit(runtime_data, circuit_id, only=only)
+
+    @callback
     def _device_updated(event: Event[dr.EventDeviceRegistryUpdatedData]) -> None:
-        if event.data["action"] != "update" or "name_by_user" not in event.data["changes"]:
+        if event.data["action"] != "update" or not any(
+            change in event.data["changes"] for change in _COMPOSED_DEVICE_CHANGES
+        ):
+            return
+        runtime_data = loaded_runtime_data(entry)
+        if runtime_data is not None and event.data["device_id"] == runtime_data.panel_device_id:
+            for circuit_id in list(runtime_data.circuit_id_bases):
+                _refresh_circuit(runtime_data, circuit_id)
             return
         _refresh(event.data["device_id"])
 

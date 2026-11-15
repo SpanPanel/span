@@ -2887,10 +2887,11 @@ async def test_an_id_that_is_the_suffix_alone_keeps_its_wording_without_a_reload
 # is cleared or moved to the circuit's device. On a circuit named "Power",
 # "Energy" or "Consumed Energy" that id also ends on the device's name, and read
 # as stopping there it lost the measurement: `sensor.span_panel_power`, where
-# the circuit's own id is `sensor.span_panel_power_power`. A circuit renamed
-# "Power" in the SPAN app has an id of the same shape, `sensor.span_panel_solar_power`,
-# which keeps stopping there. What tells them apart is that Core composes the
-# first for the entity in an area the registry holds.
+# the circuit's own id is `sensor.span_panel_power_power`. It is read for the
+# form at its end instead, as the id of a circuit renamed "Power" in the SPAN
+# app is. Where Core composes the id today from the device with the suffix left
+# out, as it does with the device in the area the label was composed in, the id
+# is offered nothing, so the base follows the device's area and the panel's.
 
 PARENT_DEVICE_ENTITY = (EntityNamePart.PARENT_DEVICE, EntityNamePart.DEVICE, EntityNamePart.ENTITY)
 DEVICE_ENTITY = (EntityNamePart.DEVICE, EntityNamePart.ENTITY)
@@ -3153,10 +3154,15 @@ NAMED_FOR_THE_MEASUREMENT = [
 ]
 
 WHERE_THE_AREA_GOES = [
-    pytest.param(False, id="cleared"),
-    pytest.param(True, id="onto-the-device"),
+    pytest.param("cleared", id="cleared"),
+    pytest.param("device-then-entity", id="onto-the-device"),
+    pytest.param("entity-then-device", id="onto-the-device-entity-first"),
 ]
-"""Whether the circuit's device is put in Kitchen as the entity's own area is cleared."""
+"""How the area leaves the entity: cleared, or the README's remedy in either order.
+
+The README gives its two steps, set the area on the circuit's device and clear
+the entity's own, in no order, and the listener sees each as it happens.
+"""
 
 
 async def _accept_the_label_alone_in_garage(
@@ -3188,7 +3194,7 @@ async def _accept_the_label_alone_in_garage(
             domain, "other", "taken", suggested_object_id=object_id.rpartition("_")[0]
         )
         assert taken.entity_id == case.in_the_area.rpartition("_")[0]
-    garage = ar.async_get(hass).async_create("Garage")
+    garage = ar.async_get(hass).async_get_or_create("Garage")
     _give_the_entity_an_area(hass, case.created, garage.id)
     accepted = await _accept_what_recreate_offers(hass, install, case.circuit_name, case.created)
     assert accepted == case.in_the_area
@@ -3196,24 +3202,40 @@ async def _accept_the_label_alone_in_garage(
     return install, accepted
 
 
-def _put_the_device_in_kitchen(hass: HomeAssistant, entity_id: str) -> None:
-    """Set the area on the device an entity is on, as the README's remedy does."""
+def _put_the_device_in(hass: HomeAssistant, entity_id: str, area_name: str | None) -> None:
+    """Set the area on the device an entity is on, or clear it, as its user would."""
     row = er.async_get(hass).async_get(entity_id)
     assert row is not None
     assert row.device_id is not None
-    kitchen = ar.async_get(hass).async_create("Kitchen")
-    dr.async_get(hass).async_update_child_device(row.device_id, area_id=kitchen.id)
+    area_id = None if area_name is None else ar.async_get(hass).async_get_or_create(area_name).id
+    dr.async_get(hass).async_update_child_device(row.device_id, area_id=area_id)
 
 
-@pytest.mark.parametrize("onto_the_device", WHERE_THE_AREA_GOES)
+def _take_the_area_off(hass: HomeAssistant, entity_id: str, where: str, area_name: str) -> None:
+    """Clear the entity's own area, and put its device in `area_name` before or after as `where` says."""
+    if where == "device-then-entity":
+        _put_the_device_in(hass, entity_id, area_name)
+    _give_the_entity_an_area(hass, entity_id, None)
+    if where == "entity-then-device":
+        _put_the_device_in(hass, entity_id, area_name)
+
+
+def _offer_as_stored(hass: HomeAssistant, entity_id: str) -> er.RegistryEntry:
+    """Return the entity's row as stored, which Recreate composes its offer from (§3.4)."""
+    row = er.async_get(hass).async_get(entity_id)
+    assert row is not None
+    return row
+
+
+@pytest.mark.parametrize("where", WHERE_THE_AREA_GOES)
 @pytest.mark.parametrize("case", NAMED_FOR_THE_MEASUREMENT)
 async def test_a_circuit_named_for_its_measurement_keeps_it_once_the_area_leaves_the_entity(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     case: _NamedForTheMeasurement,
-    onto_the_device: bool,
+    where: str,
 ) -> None:
-    """The label alone is read as the label, not as an id stopping at the device's name.
+    """The label-only id is read for its form, not as an id stopping at the device's name.
 
     Once the area is cleared, or set on the circuit's device and cleared from
     the entity as the README advises, the offer after a reload carries the
@@ -3223,51 +3245,58 @@ async def test_a_circuit_named_for_its_measurement_keeps_it_once_the_area_leaves
     the README's remedy.
     """
     install, accepted = await _accept_the_label_alone_in_garage(hass, entry, case)
-    if onto_the_device:
-        _put_the_device_in_kitchen(hass, accepted)
-    _give_the_entity_an_area(hass, accepted, None)
+    _take_the_area_off(hass, accepted, where, "Kitchen")
 
     offered = await _accept_what_recreate_offers(hass, install, case.circuit_name, accepted)
 
-    assert offered == (case.on_the_device if onto_the_device else case.cleared)
+    assert offered == (case.cleared if where == "cleared" else case.on_the_device)
     await _assert_recreate_offers_nothing(hass, install, case.circuit_name, offered)
 
 
-@pytest.mark.parametrize("onto_the_device", WHERE_THE_AREA_GOES)
+@pytest.mark.parametrize("where", WHERE_THE_AREA_GOES)
 @pytest.mark.parametrize("case", NAMED_FOR_THE_MEASUREMENT)
 async def test_a_circuit_named_for_its_measurement_keeps_it_without_a_reload(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     case: _NamedForTheMeasurement,
-    onto_the_device: bool,
+    where: str,
 ) -> None:
-    """The listener's refresh reads the label alone as a reload does, the moment the area is cleared."""
-    _, accepted = await _accept_the_label_alone_in_garage(hass, entry, case)
-    if onto_the_device:
-        _put_the_device_in_kitchen(hass, accepted)
+    """The listener stores, as each step happens, the base a reload then gives too.
+
+    With the entity's own area cleared before the device's is set, a base
+    stored for the device with no area offered `sensor.power_power` under
+    `(PARENT_DEVICE, DEVICE, ENTITY)`, for an id Core composes today.
+    """
+    install, accepted = await _accept_the_label_alone_in_garage(hass, entry, case)
+    expected = case.cleared if where == "cleared" else case.on_the_device
     registry = er.async_get(hass)
     stop = async_keep_circuit_id_bases_current(hass, entry)
 
-    _give_the_entity_an_area(hass, accepted, None)
+    _take_the_area_off(hass, accepted, where, "Kitchen")
 
-    row = registry.async_get(accepted)
+    row = _offer_as_stored(hass, accepted)
     stop()
-    assert row is not None
     assert row.area_id is None
-    assert registry.async_regenerate_entity_id(row) == (
-        case.on_the_device if onto_the_device else case.cleared
-    )
+    assert registry.async_regenerate_entity_id(row) == expected
+    await install.load(case.circuit_name)
+    assert registry.async_regenerate_entity_id(_offer_as_stored(hass, accepted)) == expected
 
 
+@pytest.mark.parametrize(
+    "where", [param for param in WHERE_THE_AREA_GOES if param.values[0] != "cleared"]
+)
 async def test_the_label_alone_is_kept_where_the_device_s_name_alone_composes_it(
-    hass: HomeAssistant, entry: MockConfigEntry
+    hass: HomeAssistant, entry: MockConfigEntry, where: str
 ) -> None:
     """An id Core composes today is offered nothing, even where it is the label alone too.
 
     With the circuit's device put in Garage, the area its "Power" sensor had,
     `sensor.garage_power` is what Core composes from that area and the device
-    with the suffix left out. So the README's remedy offers nothing here, and
-    the id does not take the measurement back.
+    with the suffix left out. So the README's remedy offers nothing here, in
+    either order, before a restart and after it, and the id does not take the
+    measurement back. Before the device's area was watched, clearing the
+    entity's area first stored `power`, and `sensor.garage_power_power` was
+    offered until the next restart.
     """
     install = _SensorInstall(hass, entry)
     created = (await install.load("Power")).entity_id
@@ -3275,17 +3304,23 @@ async def test_the_label_alone_is_kept_where_the_device_s_name_alone_composes_it
     _give_the_entity_an_area(hass, created, garage.id)
     accepted = await _accept_what_recreate_offers(hass, install, "Power", created)
     assert accepted == "sensor.garage_power"
-    row = er.async_get(hass).async_get(accepted)
-    assert row is not None
-    assert row.device_id is not None
+    await install.load("Power")
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
 
-    dr.async_get(hass).async_update_child_device(row.device_id, area_id=garage.id)
-    _give_the_entity_an_area(hass, accepted, None)
+    _take_the_area_off(hass, accepted, where, "Garage")
 
+    row = _offer_as_stored(hass, accepted)
+    stop()
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", accepted)
     row = await _assert_recreate_offers_nothing(hass, install, "Power", accepted)
     assert row.object_id_base == ""
 
 
+@pytest.mark.parametrize(
+    "parts",
+    [pytest.param(None, id="default"), pytest.param(PARENT_DEVICE_ENTITY, id="no-area-part")],
+)
 @pytest.mark.parametrize(
     ("before", "created"),
     [
@@ -3295,23 +3330,277 @@ async def test_the_label_alone_is_kept_where_the_device_s_name_alone_composes_it
         ),
     ],
 )
-async def test_a_circuit_renamed_to_its_measurement_is_offered_the_id_that_stops_at_its_name(
-    hass: HomeAssistant, entry: MockConfigEntry, before: str, created: str
+async def test_a_circuit_renamed_to_its_measurement_is_offered_the_id_a_new_entity_gets(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    before: str,
+    created: str,
 ) -> None:
-    """The ruling for a circuit renamed "Power" in the SPAN app stands beside the label's reading.
+    """Renamed "Power" in the SPAN app, a circuit keeps the `power` its id ends on.
 
-    Its id ends on the new name, as a label-only id does, but it is no label:
-    the label composed in each area the registry holds spells some other id.
-    So it is read as stopping at the name and offered `sensor.span_panel_power`,
-    which reads back to the same base once accepted.
+    The omission is decided from the new name, as for any rename on the panel,
+    and a name that is exactly the suffix word leaves nothing out, so the offer
+    is `sensor.span_panel_power_power`, the id a new entity on that device
+    gets. Once accepted it reads back to the same base. Read as stopping at
+    the new name, the offer was `sensor.span_panel_power`.
     """
-    ar.async_get(hass).async_create("Garage")
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
     install = _SensorInstall(hass, entry)
     assert (await install.load(before)).entity_id == created
     await _assert_recreate_offers_nothing(hass, install, before, created)
 
     accepted = await _accept_what_recreate_offers(hass, install, "Power", created)
 
-    assert accepted == "sensor.span_panel_power"
+    assert accepted == "sensor.span_panel_power_power"
+    row = await _assert_recreate_offers_nothing(hass, install, "Power", accepted)
+    assert row.object_id_base == "power"
+
+
+def _seed_the_id_that_stops_at_power(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    """Register the power sensor of a circuit named "Power" on `sensor.span_panel_power`."""
+    seeded = er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, "instantPowerW"),
+        suggested_object_id="span_panel_power",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == "sensor.span_panel_power"
+    return seeded.entity_id
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [pytest.param(None, id="default"), pytest.param(PARENT_DEVICE_ENTITY, id="no-area-part")],
+)
+async def test_an_id_that_stops_at_the_measurement_and_is_composed_today_is_offered_nothing(
+    hass: HomeAssistant, entry: MockConfigEntry, parts: tuple[EntityNamePart, ...] | None
+) -> None:
+    """`sensor.span_panel_power` on a circuit named "Power" keeps its id, on reload and in the listener.
+
+    An install may have it: accepted when a circuit renamed "Power" was
+    offered the id that stopped at its name, or carried from 2.2.x. Core
+    composes it today from the panel and the device with the suffix left out,
+    so its base is empty and nothing is offered. An area set and cleared again,
+    on the entity or on its device, brings that back.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    entity_id = _seed_the_id_that_stops_at_power(hass, entry)
+    install = _SensorInstall(hass, entry)
+    await install.load("Power")
+    row = await _assert_recreate_offers_nothing(hass, install, "Power", entity_id)
+    assert row.object_id_base == ""
+    registry = er.async_get(hass)
+    garage = ar.async_get(hass).async_create("Garage")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, entity_id, garage.id)
+    _give_the_entity_an_area(hass, entity_id, None)
+    after_the_entity = _offer_as_stored(hass, entity_id)
+    _put_the_device_in(hass, entity_id, "Kitchen")
+    _put_the_device_in(hass, entity_id, None)
+    after_the_device = _offer_as_stored(hass, entity_id)
+    stop()
+
+    for row in (after_the_entity, after_the_device):
+        assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", entity_id)
+    row = await _assert_recreate_offers_nothing(hass, install, "Power", entity_id)
+    assert row.object_id_base == ""
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [pytest.param(None, id="default"), pytest.param(PARENT_DEVICE_ENTITY, id="no-area-part")],
+)
+async def test_a_panel_renamed_reaches_an_id_that_stops_at_the_measurement_without_a_reload(
+    hass: HomeAssistant, entry: MockConfigEntry, parts: tuple[EntityNamePart, ...] | None
+) -> None:
+    """Under the panel's new name, `sensor.span_panel_power` is no composition, and keeps `power`.
+
+    The offer is the id a new entity on the device gets under that name, and
+    the listener stores the base as the rename happens. Left as it was, the
+    base offered `sensor.main_panel_power` until the next restart, and
+    `sensor.main_panel_power_power` after it.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    entity_id = _seed_the_id_that_stops_at_power(hass, entry)
+    install = _SensorInstall(hass, entry)
+    await install.load("Power")
+    await _assert_recreate_offers_nothing(hass, install, "Power", entity_id)
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    dr.async_get(hass).async_update_device(
+        entry.runtime_data.panel_device_id, name_by_user="Main Panel"
+    )
+
+    row = _offer_as_stored(hass, entity_id)
+    stop()
+    assert registry.async_regenerate_entity_id(row) == "sensor.main_panel_power_power"
+    await install.load("Power")
+    assert (
+        registry.async_regenerate_entity_id(_offer_as_stored(hass, entity_id))
+        == "sensor.main_panel_power_power"
+    )
+
+
+async def test_the_panel_s_area_reaches_a_circuit_named_for_its_measurement_without_a_reload(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A circuit device with no area takes the panel's, so the panel's area decides the base too.
+
+    Under `(AREA, DEVICE, ENTITY)` the "Power" sensor's label-only id in
+    Garage, `sensor.garage_power`, is offered `sensor.power_power` once its area
+    is cleared. Put the panel in Garage and Core composes that id again from
+    the panel's area and the device with the suffix left out, so nothing is
+    offered. A base left as it was offered `sensor.garage_power_power` until
+    the next restart.
+    """
+    er.async_get(hass).async_update_settings(
+        entity_id_parts=[EntityNamePart.AREA, EntityNamePart.DEVICE, EntityNamePart.ENTITY]
+    )
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Power")).entity_id
+    assert created == "sensor.power_power"
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, created, garage.id)
+    accepted = await _accept_what_recreate_offers(hass, install, "Power", created)
+    assert accepted == "sensor.garage_power"
+    await install.load("Power")
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, accepted, None)
+    cleared = registry.async_regenerate_entity_id(_offer_as_stored(hass, accepted))
+    dr.async_get(hass).async_update_device(entry.runtime_data.panel_device_id, area_id=garage.id)
+
+    row = _offer_as_stored(hass, accepted)
+    stop()
+    assert cleared == "sensor.power_power"
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", accepted)
     row = await _assert_recreate_offers_nothing(hass, install, "Power", accepted)
     assert row.object_id_base == ""
+
+
+async def test_a_device_renamed_for_the_measurement_keeps_it_in_the_label_alone_without_a_reload(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A label-only id read against a device the user renamed "Power" keeps its `power`.
+
+    "Refrigerator" accepted `sensor.garage_power` in Garage and its area was
+    cleared. Renamed "Power" in Home Assistant, the device's name ends the id
+    as `power` does, and the offer is the id a new entity on that device gets,
+    the same through the listener and after a restart.
+    """
+    install = _SensorInstall(hass, entry)
+    created = (await install.load(ORIGINAL_NAME)).entity_id
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, created, garage.id)
+    accepted = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, created)
+    assert accepted == "sensor.garage_power"
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+    _give_the_entity_an_area(hass, accepted, None)
+    assert (
+        registry.async_regenerate_entity_id(_offer_as_stored(hass, accepted)) == ORIGINAL_ENTITY_ID
+    )
+
+    _rename_the_circuit_device(hass, accepted, "Power")
+
+    row = _offer_as_stored(hass, accepted)
+    stop()
+    assert registry.async_regenerate_entity_id(row) == "sensor.span_panel_power_power"
+    await install.load(ORIGINAL_NAME)
+    assert (
+        registry.async_regenerate_entity_id(_offer_as_stored(hass, accepted))
+        == "sensor.span_panel_power_power"
+    )
+
+
+@pytest.mark.parametrize(
+    ("parts", "in_kitchen", "renamed", "moved_to", "moved"),
+    [
+        pytest.param(
+            None,
+            "sensor.kitchen_kitchen_outlets_power",
+            "sensor.kitchen_power_power",
+            "Utility",
+            "sensor.utility_power_power",
+            id="default-to-another-area",
+        ),
+        pytest.param(
+            None,
+            "sensor.kitchen_kitchen_outlets_power",
+            "sensor.kitchen_power_power",
+            None,
+            "sensor.span_panel_power_power",
+            id="default-to-no-area",
+        ),
+        # With no area part a device's area names nothing, so moving it
+        # between areas changes nothing.
+        pytest.param(
+            PARENT_DEVICE_ENTITY,
+            "sensor.kitchen_outlets_power",
+            "sensor.power_power",
+            "Utility",
+            "sensor.power_power",
+            id="no-area-part-to-another-area",
+        ),
+        pytest.param(
+            PARENT_DEVICE_ENTITY,
+            "sensor.kitchen_outlets_power",
+            "sensor.power_power",
+            None,
+            "sensor.span_panel_power_power",
+            id="no-area-part-to-no-area",
+        ),
+        pytest.param(
+            (EntityNamePart.AREA, EntityNamePart.DEVICE, EntityNamePart.ENTITY),
+            "sensor.kitchen_kitchen_outlets_power",
+            "sensor.kitchen_power_power",
+            None,
+            "sensor.power_power",
+            id="area-device-entity-to-no-area",
+        ),
+    ],
+)
+async def test_a_circuit_renamed_to_its_measurement_follows_its_device_s_area_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    in_kitchen: str,
+    renamed: str,
+    moved_to: str | None,
+    moved: str,
+) -> None:
+    """A circuit whose device is in Kitchen, renamed "Power", keeps `power` wherever the device goes.
+
+    Renamed in the SPAN app, it is offered the id a new entity on that device
+    in Kitchen gets. Once that is accepted and the device is moved, the offer
+    follows the device's area through the listener, and a restart gives the
+    same.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Kitchen Outlets")).entity_id
+    _put_the_device_in(hass, created, "Kitchen")
+    assert await _accept_what_recreate_offers(hass, install, "Kitchen Outlets", created) == (
+        in_kitchen
+    )
+    assert await _accept_what_recreate_offers(hass, install, "Power", in_kitchen) == renamed
+    await _assert_recreate_offers_nothing(hass, install, "Power", renamed)
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _put_the_device_in(hass, renamed, moved_to)
+
+    row = _offer_as_stored(hass, renamed)
+    stop()
+    assert registry.async_regenerate_entity_id(row) == moved
+    await install.load("Power")
+    assert registry.async_regenerate_entity_id(_offer_as_stored(hass, renamed)) == moved

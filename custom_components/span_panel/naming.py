@@ -12,10 +12,9 @@ Each circuit's entities live on a device of the circuit's own, named by the
 circuit and a child of the panel's, so Core composes the panel's name and the
 circuit's from the two devices. The base is the suffix alone -- `power`,
 `energy consumed` -- or empty where the existing id stops at the circuit's
-name (`circuit_object_id_suffix`). An id that is the entity's label alone,
-which Core composed in an area of the entity's own with no device in front,
-does not stop there, even on a circuit named "Power", except where the
-circuit's name leaves the suffix out.
+name (`circuit_object_id_suffix`). An id whose end is both the circuit's name
+and a form of the suffix, `sensor.garage_power` on a circuit named "Power",
+is read for the form, except where the circuit's name leaves the suffix out.
 
 The base must reproduce an existing entity's id *where Home Assistant composes
 it under the entity-id options that match how that install was built*: it
@@ -36,7 +35,7 @@ tables here govern entity ids only.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from homeassistant.helpers import entity_registry as er
@@ -223,24 +222,23 @@ def _leaves_the_suffix_out(device_name: str, suffix: str) -> bool:
     )
 
 
-def _base_stopping_at_the_device(
-    object_id: str,
-    device_name: str,
-    suffix: str,
-    label_alone: Callable[[str], str | None] | None,
-) -> str:
-    """Return the base of an id that ends on the device's name, with the device in front of it.
+def _stops_at_the_device(object_id: str, device_name: str, suffix: str, stop: _NameReading) -> bool:
+    """Report whether an id that ends on the device's name stops there, the suffix left out.
 
-    Empty, for the id stops there, unless the id is the entity's label alone
-    (`label_alone`): that was composed with no device in front, so its base is
-    the label's words. Where the device's name leaves the suffix out, the id
-    reads either way and stays empty, which is what a new entity on that
-    device gets, and the label is not composed.
+    The stop is ranked against the form of the suffix at the id's end by the
+    tail each accounts for, as the device's reading is ranked against the
+    identifier's. It wins where no form ends the id or the one that does is
+    shorter, as `power` is inside `..._solar_power`. A longer form wins over
+    it, as `current_power` does on a device named "Power". A form as long as
+    the name is the same characters read two ways, `power` on a device named
+    "Power", and they stop only where the device's name leaves the suffix
+    out, as "Current Power" does: then the empty base is what a new entity on
+    that device gets.
     """
-    if label_alone is None or _leaves_the_suffix_out(device_name, suffix):
-        return ""
-    words = label_alone(object_id)
-    return "" if words is None else words
+    end_form = _existing_suffix_form(object_id, suffix)
+    if end_form is None or len(end_form) < stop.tail_length:
+        return True
+    return len(end_form) == stop.tail_length and _leaves_the_suffix_out(device_name, suffix)
 
 
 def _base_an_id_spells(
@@ -251,7 +249,6 @@ def _base_an_id_spells(
     *,
     device_then_entity: bool,
     device_in_front: bool,
-    label_alone: Callable[[str], str | None] | None,
 ) -> str | None:
     """Return the base one object id reads as, or None where nothing here reads it.
 
@@ -272,8 +269,8 @@ def _base_an_id_spells(
     ):
         if by_device.form:
             return by_device.form.replace("_", " ")
-        if device_in_front:
-            return _base_stopping_at_the_device(object_id, device_name, suffix, label_alone)
+        if device_in_front and _stops_at_the_device(object_id, device_name, suffix, by_device):
+            return ""
     elif by_identifier is not None:
         form = by_identifier.form
 
@@ -298,7 +295,6 @@ def circuit_object_id_suffix(
     *,
     device_then_entity: bool = True,
     device_in_front: bool = True,
-    label_alone: Callable[[str], str | None] | None = None,
 ) -> str:
     """Return the base for one circuit entity on its circuit's device: the suffix alone.
 
@@ -317,8 +313,7 @@ def circuit_object_id_suffix(
     `suffix` is this entity's canonical suffix, which the sensors derive from
     their description key via `id_builder.get_user_friendly_suffix` while the
     switch and the select -- which have no such key -- name theirs outright
-    ("breaker", "circuit_priority"). `label_alone`, for an entity with no area
-    of its own, tells whether an id is its label alone (below).
+    ("breaker", "circuit_priority").
 
     An existing id is read against two names, the device's and the identifier.
     Each reading says what follows the name: a known form of the suffix, or
@@ -380,28 +375,20 @@ def circuit_object_id_suffix(
     names neither name. Read as ending on no form, under `(device, entity)` it
     was offered `sensor.refrigerator_consumed_energy`.
 
-    An id that ends on the device's name is not read as stopping there where
-    it is the entity's label alone: the id Core composes for the entity in an
-    area of its own, that area and the label with no device in front, which
-    the user may have accepted and which stays the entity's id once the area
-    is taken off it. `label_alone` gives, for an id, the wording it spells as
-    the label alone; `circuit_object_ids` supplies it, composing the label in
-    each area the registry holds. Composed with no device in front,
-    the label alone does not stop at the device's name, so its base is the
-    label's words. On a circuit named "Power", under Core's default format,
-    `sensor.garage_power` is that label in Garage, and it ends on the device's
-    name too. Read as stopping there, it was offered `sensor.span_panel_power`
-    once its area was cleared, where the circuit's own id, and a new
-    entity's, is `sensor.span_panel_power_power`. Where the device's name
-    leaves the suffix out, as "Current Power" does, the id reads either way,
-    and the stop is kept, since the empty base is what a new entity on that
-    device gets; the label is not composed then. The label is asked about
-    only where it decides, since composing it takes every area.
-
-    Without `label_alone`, or where it answers nothing, such an id stops at
-    the name. The id of a circuit renamed "Power" in the SPAN app has the same
-    shape, `sensor.span_panel_solar_power`, and is no label in any area, so it
-    keeps being offered `sensor.span_panel_power`.
+    An id that ends on the device's name is read as stopping there only where
+    the stop accounts for more of its tail than the form of the suffix at its
+    end does (`_stops_at_the_device`). Where the two are the same characters,
+    as on a circuit named for what its entity measures, the form wins unless
+    the device's name leaves the suffix out. The label-only id an entity with
+    an area of its own accepts, `sensor.garage_power`, ends on the device's
+    name "Power" as well as on `power`. Read as stopping there, it was offered
+    `sensor.span_panel_power` once its area was cleared, where the circuit's
+    own id, and a new entity's, is `sensor.span_panel_power_power`. A circuit
+    renamed "Power" in the SPAN app, on `sensor.span_panel_solar_power`, is
+    read the same way and offered `sensor.span_panel_power_power`, the form
+    its id ends on with the omission decided from the new name, as for any
+    rename. "Current Power" leaves `power` out, so its `sensor.current_power`
+    stops at the name, the empty base a new entity on that device gets.
 
     The omission test carries a leading underscore because the builder's did: a
     circuit named exactly "Power" is not a repetition of anything and kept both
@@ -461,7 +448,6 @@ def circuit_object_id_suffix(
                 suffix,
                 device_then_entity=device_then_entity,
                 device_in_front=device_in_front,
-                label_alone=label_alone,
             )
             if base is not None:
                 return base
