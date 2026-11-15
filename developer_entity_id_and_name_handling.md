@@ -180,7 +180,8 @@ the format changed. Those are read against two names, and the words are decided 
 
 1. **The existing ID names the device** (`..._{device_slug}_{form}` or `..._{device_slug}`): what follows the name settles both the form the ID carries and
    whether the ID left the suffix out. They are one question, answered together — answering them separately produced `..._current_current_power` for a circuit
-   named "Current" and `..._solar_power` for one named "Solar Power", both uncaused renames (R1).
+   named "Current" and `..._solar_power` for one named "Solar Power", both uncaused renames (R1). An ID that stops at the name left the suffix out, unless it is
+   the entity's label alone and the device's name keeps the suffix (below).
 2. **The existing ID names the identifier but not the device** (a circuit-number ID such as `..._circuit_15_power`, or a circuit-names ID whose device the user
    has since renamed): what follows the identifier settles the form only, and where nothing follows it the end of the ID does. Whether the suffix is left out is
    decided from `device_name`, as it is for a new entity, because the offer is composed from the device. That is what makes the offer in circuit-numbers mode
@@ -228,6 +229,20 @@ Where neither composes the ID, it is read by `circuit_object_id_suffix`, told wi
 The words are the form the ID spells after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard
 is offered `sensor.backyard_power`, its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no
 area part Core's fallback of the platform and the unique ID.
+
+**An ID that is the entity's label alone is read as the label.** An entity that accepted its label alone keeps that ID once its area is cleared, or set on the
+circuit's device and cleared from the entity as the README advises. Nothing composes it then, so it is read by the rules above. On a circuit named for what the
+entity measures, "Power", "Energy" or "Consumed Energy", it also ends on the device's name: `sensor.garage_power` under the default format, `sensor.power` under
+one with no area part. Read by rule 1 as stopping there, it was offered `sensor.span_panel_power`, or `sensor.kitchen_power` after the README's remedy, where
+the circuit's own ID is `sensor.span_panel_power_power`. A circuit renamed "Power" in the SPAN app has an ID of the same shape, `sensor.span_panel_solar_power`,
+which does stop there and is offered `sensor.span_panel_power`, so the string alone cannot decide. The label alone is what Core composes for the entity in an
+area of its own, so `circuit_object_ids` composes each wording that way in each area the registry holds, as it stands and under Core's number, and hands
+`circuit_object_id_suffix` the wording that spells the ID (`label_alone`). Where rule 1 would read an ID as stopping at the device's name, one that is the label
+alone is read as the label instead. Its base is those words, so the "Power" sensor is offered `sensor.span_panel_power_power`, the ID a new entity on that
+device gets. Where the device's name leaves the suffix out, as "Current Power" does, the ID reads either way, and the stop is kept, because the empty base is
+what a new entity on that device gets. The label is composed for no other ID, because composing it takes one composition for each area and wording, and every
+circuit-number ID is read on every load until its offer is accepted. An area deleted or renamed since the ID was accepted cannot be composed, and such an ID
+stops at the name.
 
 An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
 (`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
@@ -432,8 +447,19 @@ the breaker switch decides:
 
 Under rules 1 and 2 every other entity of the circuit gives up its own area and inherits the device's. Under rule 3 the entities that have areas of their own
 keep them, so Core displays them without their devices, as just "Power", and Recreate offers them their label alone, such as `sensor.kitchen_power`. That offer
-is R1's stated exception: it matches the displayed name, and setting an area on the circuit's device and clearing the entities' own restores both. A switch the
-integration withdrew, which Core keeps among its deleted entities, counts as the circuit's switch. A device that already has an area keeps it.
+is R1's stated exception: it matches the displayed name. Setting an area on the circuit's device and clearing the entities' own restores both the displayed name
+and, once Recreate's offer is accepted, the ID, with three exceptions:
+
+- A circuit named exactly what its entity measures, such as "Power", keeps its label-only ID where Core composes that ID today from the device's name with
+  nothing after it: under `(DEVICE, ENTITY)`, under `(PARENT_DEVICE, DEVICE, ENTITY)` once the device has an area, and under the default once the device has the
+  area the entity had, `sensor.kitchen_power`. An ID Core composes today is offered nothing (§4.3), so it does not take the measurement back.
+- An ID that kept both halves on a circuit whose name ends on the suffix, `sensor.span_panel_solar_power_power`, comes back without the repeat,
+  `sensor.span_panel_solar_power`. Its label alone, `sensor.kitchen_power`, carries nothing of the device's name, so the suffix is left out by the device's
+  name, as it is for a new entity (§7).
+- An area deleted or renamed since the label-only ID was accepted cannot be composed, so on a circuit named like the label the ID is read as stopping at the
+  name and is offered `sensor.span_panel_power` (§4.3).
+
+A switch the integration withdrew, which Core keeps among its deleted entities, counts as the circuit's switch. A device that already has an area keeps it.
 
 **The trim** (`naming.trim_leading_circuit_name`) is R4's second exception. "Kitchen Outlets Power usage" is stored as "Power usage" and still displays as "Span
 Panel Kitchen Outlets Power usage". The rule is Core's own, the one its 2026.11 migration applied to names that began with their device's: case is ignored, a
@@ -457,6 +483,7 @@ circuit-numbers offer. The other rows, the two uncaused ones among them, are spe
 | Panel device in an area, `entity_id_parts` includes AREA (the default)                                            | area-prefixed ID                                                                    | user assigned the area                                                                                                                    |
 | Circuit device in an area of its own, including one the conversion moved there                                    | the area in front and the panel's name gone: `sensor.kitchen_kitchen_outlets_power` | user assigned the area                                                                                                                    |
 | Entity with an area of its own, including the conversion's rule-3 circuits (§6.2)                                 | its label alone: `sensor.kitchen_power`                                             | user assigned the area; R1's stated exception                                                                                             |
+| That entity's area cleared, on a circuit whose name ends on the suffix and whose ID kept both halves              | the ID with the suffix left out: `sensor.span_panel_solar_power`                    | user moved the area; the label alone cannot say the ID kept both halves, so the device's name decides, as for a new entity (§6.2)         |
 | Panel device renamed by the user (`name_by_user`)                                                                 | ID carrying that name                                                               | user renamed the device                                                                                                                   |
 | Circuit device renamed by the user (`name_by_user`)                                                               | ID carrying that name                                                               | user renamed the device                                                                                                                   |
 | Entity renamed by the user (registry `name`)                                                                      | ID built from their name, with the circuit's device in front                        | user renamed the entity                                                                                                                   |
@@ -516,7 +543,9 @@ In circuit-numbers mode an offer of the circuit's name is expected (R3), and aft
    circuit. A `name_by_user` there outranks it. A row still on the panel's device has not been converted (§6.2).
 5. Confirm the rename-triggered reload happened: the log carries `Auto-sync detected circuit name change from '…' to '…'` followed by the entry reload.
 6. Only then look at `circuit_object_id_suffix` with the row's exact `entity_id`, the identifier, the device's name and the suffix — `tests/test_naming.py`
-   shows how to call it directly. It is reached only for an ID no wording composes under the saved entity-ID format (§4.3), so check that format first.
+   shows how to call it directly. It is reached only for an ID no wording composes under the saved entity-ID format (§4.3), so check that format first. Called
+   without `label_alone`, it reads an ID that ends on a device named like the entity's label as stopping there, which an install does not where that ID is the
+   label composed in one of its areas (§4.3).
 
 ## 10. Where the history lives
 

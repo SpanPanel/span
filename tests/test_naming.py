@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from homeassistant.util import slugify
 import pytest
 
@@ -864,6 +866,201 @@ def test_the_suffix_alone_is_left_out_only_where_the_device_s_name_ends_on_it(
         )
         == expected
     )
+
+
+# --- An id that is the entity's label alone, on a device named like the label --
+#
+# Core composes an entity with an area of its own from that area and its label,
+# with no device in front, so the label-only id R1's exception offers it is
+# `sensor.garage_power`, or `sensor.power` under a format with no area part. It
+# stays the entity's id once the area is cleared. On a circuit named for what
+# the entity measures, "Power", that id also ends on the device's name, and read
+# as stopping there it lost the measurement: `sensor.span_panel_power`, where
+# the circuit's own id is `sensor.span_panel_power_power`. The string alone
+# cannot tell it from the id of a circuit renamed "Power" in the SPAN app,
+# `sensor.span_panel_solar_power`, which keeps stopping there. The reader is
+# told which it is by `label_alone`, which `circuit_object_ids` answers by
+# composing the label in each area.
+
+
+def _the_label_alone(object_id: str, words: str) -> Callable[[str], str | None]:
+    """Answer `words` for `object_id` and nothing for any other id, as the label's composition does."""
+
+    def label_alone(read: str) -> str | None:
+        return words if read == object_id else None
+
+    return label_alone
+
+
+def _never_asked(read: str) -> str | None:
+    """Stand for the label's composition where the reader must not need it."""
+    raise AssertionError(f"the label's composition was asked about {read!r}")
+
+
+@pytest.mark.parametrize(
+    ("device_name", "suffix", "existing", "label_id", "words"),
+    [
+        # Under a format with no area part, the label alone is the form alone.
+        ("Power", "power", "sensor.power", "power", "power"),
+        ("Power", "power", "sensor.current_power", "current_power", "current power"),
+        (
+            "Energy",
+            "energy_consumed",
+            "sensor.consumed_energy",
+            "consumed_energy",
+            "consumed energy",
+        ),
+        (
+            "Consumed Energy",
+            "energy_consumed",
+            "sensor.consumed_energy",
+            "consumed_energy",
+            "consumed energy",
+        ),
+        # Under Core's default, the area is in front of it.
+        ("Power", "power", "sensor.garage_power", "garage_power", "power"),
+        ("Power", "power", "sensor.garage_current_power", "garage_current_power", "current power"),
+        (
+            "Consumed Energy",
+            "energy_consumed",
+            "sensor.garage_consumed_energy",
+            "garage_consumed_energy",
+            "consumed energy",
+        ),
+        # Another entity in Garage had the label first, so Core numbered this one's.
+        ("Power", "power", "sensor.garage_power_2", "garage_power", "power"),
+        # The breaker switch of a circuit named "Breaker".
+        ("Breaker", "breaker", "switch.garage_breaker", "garage_breaker", "breaker"),
+    ],
+)
+def test_an_id_that_is_the_label_alone_keeps_the_measurement_on_a_device_named_like_it(
+    device_name: str, suffix: str, existing: str, label_id: str, words: str
+) -> None:
+    """The label alone was composed with no device in front, so it does not stop at the device's name.
+
+    Its base is the label's words, in the wording the id has (R2). A new
+    entity on that device keeps its suffix too: a device named exactly "Power"
+    keeps both halves. Told nothing, the reader still reads the id as stopping
+    at the name.
+    """
+    assert (
+        circuit_object_id_suffix(
+            device_name,
+            device_name,
+            suffix,
+            existing,
+            label_alone=_the_label_alone(label_id, words),
+        )
+        == words
+    )
+    assert circuit_object_id_suffix(device_name, device_name, suffix, None) != ""
+    assert circuit_object_id_suffix(device_name, device_name, suffix, existing) == ""
+
+
+@pytest.mark.parametrize(
+    ("device_name", "existing"),
+    [
+        ("Current Power", "sensor.current_power"),
+        ("Current Power", "sensor.garage_current_power"),
+        # A device named like the area and the label together.
+        ("Garage Power", "sensor.garage_power"),
+    ],
+)
+def test_the_label_alone_stops_at_a_device_whose_name_leaves_the_suffix_out(
+    device_name: str, existing: str
+) -> None:
+    """Where the device's name ends on the suffix words, the id reads either way and stops at it.
+
+    A new entity on "Current Power" leaves `power` out, so its id stops at the
+    name, and the label-only id it accepted is offered that id back once its
+    area is cleared. The label is not composed at all.
+    """
+    assert (
+        circuit_object_id_suffix(
+            device_name, device_name, "power", existing, label_alone=_never_asked
+        )
+        == ""
+    )
+    assert circuit_object_id_suffix(device_name, device_name, "power", None) == ""
+
+
+@pytest.mark.parametrize(
+    ("device_name", "suffix", "existing"),
+    [
+        # A circuit renamed "Power" in the SPAN app, from a name its id stopped
+        # at and from one its id named before the suffix (the Task 4 ruling).
+        ("Power", "power", "sensor.span_panel_solar_power"),
+        ("Power", "power", "sensor.span_panel_kitchen_outlets_power"),
+        # "Garage" is no area here, so the id is not the switch's label alone.
+        ("Breaker", "breaker", "switch.garage_breaker"),
+    ],
+)
+def test_an_id_that_is_not_the_label_alone_still_stops_at_a_device_named_like_the_label(
+    device_name: str, suffix: str, existing: str
+) -> None:
+    """Rule 1 reads an id that ends on the device's name as stopping there, label or no label.
+
+    The label's composition in every area spells some other id, so it answers
+    nothing, and the base is empty, as it is with nothing to ask.
+    """
+
+    def in_no_area(read: str) -> str | None:
+        return None
+
+    assert (
+        circuit_object_id_suffix(device_name, device_name, suffix, existing, label_alone=in_no_area)
+        == ""
+    )
+    assert circuit_object_id_suffix(device_name, device_name, suffix, existing) == ""
+
+
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "existing", "device_in_front", "expected", "asked"),
+    [
+        # The id names the tabs, or the device and then a form.
+        ("Circuit 15", "Kitchen Outlets", "sensor.span_panel_circuit_15_power", True, "power", []),
+        ("Power", "Power", "sensor.span_panel_power_power", True, "power", []),
+        # The device's name leaves the suffix out.
+        ("Solar Power", "Solar Power", "sensor.span_panel_solar_power", True, "", []),
+        # No device in front, so the id is not read as stopping at it.
+        ("Power", "Power", "sensor.garage_power", False, "power", []),
+        # The one id the label's composition decides.
+        ("Power", "Power", "sensor.garage_power", True, "power", ["garage_power"]),
+    ],
+)
+def test_the_label_is_composed_only_for_an_id_that_stops_at_a_name_keeping_the_suffix(
+    identifier: str,
+    device_name: str,
+    existing: str,
+    device_in_front: bool,
+    expected: str,
+    asked: list[str],
+) -> None:
+    """Composing the label takes every area the registry holds, so it is asked only where it decides.
+
+    Every circuit-number id reaches the reader on every load until its offer is
+    accepted, so asking for each of them would compose every area for every
+    circuit entity.
+    """
+    reads: list[str] = []
+    answer = _the_label_alone("garage_power", "power")
+
+    def label_alone(read: str) -> str | None:
+        reads.append(read)
+        return answer(read)
+
+    assert (
+        circuit_object_id_suffix(
+            identifier,
+            device_name,
+            "power",
+            existing,
+            device_in_front=device_in_front,
+            label_alone=label_alone,
+        )
+        == expected
+    )
+    assert reads == asked
 
 
 @pytest.mark.parametrize("suffix", sorted(ENTITY_ID_SUFFIX_FORMS))

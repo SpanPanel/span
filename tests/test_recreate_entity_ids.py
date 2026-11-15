@@ -2878,3 +2878,440 @@ async def test_an_id_that_is_the_suffix_alone_keeps_its_wording_without_a_reload
     in_the_area = the_format.in_the_area.format(form=form, object_id=entity_id.split(".", 1)[1])
     assert registry.async_regenerate_entity_id(row) == f"sensor.{in_the_area}"
     stop()
+
+
+# --- A circuit named for what its entity measures -----------------------------
+#
+# The label-only id an entity with an area of its own accepts, `sensor.garage_power`
+# or under a format with no area part `sensor.power`, stays its id once the area
+# is cleared or moved to the circuit's device. On a circuit named "Power",
+# "Energy" or "Consumed Energy" that id also ends on the device's name, and read
+# as stopping there it lost the measurement: `sensor.span_panel_power`, where
+# the circuit's own id is `sensor.span_panel_power_power`. A circuit renamed
+# "Power" in the SPAN app has an id of the same shape, `sensor.span_panel_solar_power`,
+# which keeps stopping there. What tells them apart is that Core composes the
+# first for the entity in an area the registry holds.
+
+PARENT_DEVICE_ENTITY = (EntityNamePart.PARENT_DEVICE, EntityNamePart.DEVICE, EntityNamePart.ENTITY)
+DEVICE_ENTITY = (EntityNamePart.DEVICE, EntityNamePart.ENTITY)
+
+
+@dataclass(frozen=True, slots=True)
+class _NamedForTheMeasurement:
+    """A circuit named for what its entity measures, and what Recreate offers as its area moves."""
+
+    make_install: type[_SensorInstall] | type[_LegacyInstall] | type[_SwitchInstall]
+    parts: tuple[EntityNamePart, ...] | None
+    """The entity-id format the user saved, or None for Core's default."""
+
+    circuit_name: str
+    created: str
+    """The entity's id before it has an area."""
+
+    in_the_area: str
+    """The offer in Garage, its label alone, which the case accepts."""
+
+    cleared: str
+    """The offer once the entity's area is cleared, with no area anywhere."""
+
+    on_the_device: str
+    """The offer once the circuit's device is in Kitchen and the entity's own area is cleared."""
+
+    seed_api_key: str | None = None
+    """Where set, the sensor is registered on `created` first, under this key's unique id."""
+
+    label_taken: bool = False
+    """Whether another entity has the label-only id first, so Core numbers this one's."""
+
+
+NAMED_FOR_THE_MEASUREMENT = [
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            PARENT_DEVICE_ENTITY,
+            "Power",
+            "sensor.span_panel_power_power",
+            "sensor.power",
+            "sensor.span_panel_power_power",
+            # The device alone composes the label-only id, so it is offered nothing.
+            "sensor.power",
+        ),
+        id="no-area-part-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            PARENT_DEVICE_ENTITY,
+            "Power",
+            "sensor.span_panel_power_current_power",
+            "sensor.current_power",
+            "sensor.span_panel_power_current_power",
+            "sensor.power_current_power",
+            seed_api_key="instantPowerW",
+        ),
+        id="no-area-part-current-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            PARENT_DEVICE_ENTITY,
+            "Energy",
+            "sensor.span_panel_energy_consumed_energy",
+            "sensor.consumed_energy",
+            "sensor.span_panel_energy_consumed_energy",
+            "sensor.energy_consumed_energy",
+        ),
+        id="no-area-part-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            PARENT_DEVICE_ENTITY,
+            "Consumed Energy",
+            "sensor.span_panel_consumed_energy_consumed_energy",
+            "sensor.consumed_energy",
+            "sensor.span_panel_consumed_energy_consumed_energy",
+            "sensor.consumed_energy",
+        ),
+        id="no-area-part-consumed-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SwitchInstall,
+            PARENT_DEVICE_ENTITY,
+            "Breaker",
+            "switch.span_panel_breaker_breaker",
+            "switch.breaker",
+            "switch.span_panel_breaker_breaker",
+            "switch.breaker",
+        ),
+        id="no-area-part-breaker",
+    ),
+    # The device's name leaves `power` out, so the id stops at it again.
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            PARENT_DEVICE_ENTITY,
+            "Current Power",
+            "sensor.span_panel_current_power",
+            "sensor.current_power",
+            "sensor.span_panel_current_power",
+            "sensor.current_power",
+        ),
+        id="no-area-part-current-power-circuit",
+    ),
+    # With no parent device part the device alone composes the label-only id
+    # wherever its area is, so the two that keep both halves are offered nothing.
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            DEVICE_ENTITY,
+            "Power",
+            "sensor.power_power",
+            "sensor.power",
+            "sensor.power",
+            "sensor.power",
+        ),
+        id="device-entity-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            DEVICE_ENTITY,
+            "Power",
+            "sensor.power_current_power",
+            "sensor.current_power",
+            "sensor.power_current_power",
+            "sensor.power_current_power",
+            seed_api_key="instantPowerW",
+        ),
+        id="device-entity-current-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            DEVICE_ENTITY,
+            "Energy",
+            "sensor.energy_consumed_energy",
+            "sensor.consumed_energy",
+            "sensor.energy_consumed_energy",
+            "sensor.energy_consumed_energy",
+        ),
+        id="device-entity-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            DEVICE_ENTITY,
+            "Consumed Energy",
+            "sensor.consumed_energy_consumed_energy",
+            "sensor.consumed_energy",
+            "sensor.consumed_energy",
+            "sensor.consumed_energy",
+        ),
+        id="device-entity-consumed-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SwitchInstall,
+            DEVICE_ENTITY,
+            "Breaker",
+            "switch.breaker_breaker",
+            "switch.breaker",
+            "switch.breaker",
+            "switch.breaker",
+        ),
+        id="device-entity-breaker",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            None,
+            "Power",
+            "sensor.span_panel_power_power",
+            "sensor.garage_power",
+            "sensor.span_panel_power_power",
+            "sensor.kitchen_power_power",
+        ),
+        id="default-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            None,
+            "Power",
+            "sensor.span_panel_power_current_power",
+            "sensor.garage_current_power",
+            "sensor.span_panel_power_current_power",
+            "sensor.kitchen_power_current_power",
+            seed_api_key="instantPowerW",
+        ),
+        id="default-current-power",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            None,
+            "Energy",
+            "sensor.span_panel_energy_consumed_energy",
+            "sensor.garage_consumed_energy",
+            "sensor.span_panel_energy_consumed_energy",
+            "sensor.kitchen_energy_consumed_energy",
+        ),
+        id="default-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _LegacyInstall,
+            None,
+            "Consumed Energy",
+            "sensor.span_panel_consumed_energy_consumed_energy",
+            "sensor.garage_consumed_energy",
+            "sensor.span_panel_consumed_energy_consumed_energy",
+            "sensor.kitchen_consumed_energy_consumed_energy",
+        ),
+        id="default-consumed-energy",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SwitchInstall,
+            None,
+            "Breaker",
+            "switch.span_panel_breaker_breaker",
+            "switch.garage_breaker",
+            "switch.span_panel_breaker_breaker",
+            "switch.kitchen_breaker_breaker",
+        ),
+        id="default-breaker",
+    ),
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            None,
+            "Current Power",
+            "sensor.span_panel_current_power",
+            "sensor.garage_current_power",
+            "sensor.span_panel_current_power",
+            "sensor.kitchen_current_power",
+        ),
+        id="default-current-power-circuit",
+    ),
+    # Another sensor in Garage has the label first, so Core numbers this one's.
+    pytest.param(
+        _NamedForTheMeasurement(
+            _SensorInstall,
+            None,
+            "Power",
+            "sensor.span_panel_power_power",
+            "sensor.garage_power_2",
+            "sensor.span_panel_power_power",
+            "sensor.kitchen_power_power",
+            label_taken=True,
+        ),
+        id="default-power-numbered",
+    ),
+]
+
+WHERE_THE_AREA_GOES = [
+    pytest.param(False, id="cleared"),
+    pytest.param(True, id="onto-the-device"),
+]
+"""Whether the circuit's device is put in Kitchen as the entity's own area is cleared."""
+
+
+async def _accept_the_label_alone_in_garage(
+    hass: HomeAssistant, entry: MockConfigEntry, case: _NamedForTheMeasurement
+) -> tuple[_SensorInstall | _LegacyInstall | _SwitchInstall, str]:
+    """Create the case's entity, give it the area Garage, and accept its label-only offer.
+
+    Returns the install and the id the entity then has.
+    """
+    registry = er.async_get(hass)
+    if case.parts is not None:
+        registry.async_update_settings(entity_id_parts=list(case.parts))
+    if case.seed_api_key is not None:
+        seeded = registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            build_circuit_unique_id(SERIAL, CIRCUIT_ID, case.seed_api_key),
+            suggested_object_id=case.created.split(".", 1)[1],
+            config_entry=entry,
+        )
+        assert seeded.entity_id == case.created
+    install = case.make_install(hass, entry)
+    assert (await install.load(case.circuit_name)).entity_id == case.created
+    await _assert_recreate_offers_nothing(hass, install, case.circuit_name, case.created)
+
+    if case.label_taken:
+        domain, object_id = case.in_the_area.split(".", 1)
+        taken = registry.async_get_or_create(
+            domain, "other", "taken", suggested_object_id=object_id.rpartition("_")[0]
+        )
+        assert taken.entity_id == case.in_the_area.rpartition("_")[0]
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, case.created, garage.id)
+    accepted = await _accept_what_recreate_offers(hass, install, case.circuit_name, case.created)
+    assert accepted == case.in_the_area
+    await _assert_recreate_offers_nothing(hass, install, case.circuit_name, accepted)
+    return install, accepted
+
+
+def _put_the_device_in_kitchen(hass: HomeAssistant, entity_id: str) -> None:
+    """Set the area on the device an entity is on, as the README's remedy does."""
+    row = er.async_get(hass).async_get(entity_id)
+    assert row is not None
+    assert row.device_id is not None
+    kitchen = ar.async_get(hass).async_create("Kitchen")
+    dr.async_get(hass).async_update_child_device(row.device_id, area_id=kitchen.id)
+
+
+@pytest.mark.parametrize("onto_the_device", WHERE_THE_AREA_GOES)
+@pytest.mark.parametrize("case", NAMED_FOR_THE_MEASUREMENT)
+async def test_a_circuit_named_for_its_measurement_keeps_it_once_the_area_leaves_the_entity(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    case: _NamedForTheMeasurement,
+    onto_the_device: bool,
+) -> None:
+    """The label alone is read as the label, not as an id stopping at the device's name.
+
+    Once the area is cleared, or set on the circuit's device and cleared from
+    the entity as the README advises, the offer after a reload carries the
+    measurement in the wording the label-only id has, and once accepted it
+    reads back to the same base. Read as stopping at the name, the default
+    format offered `sensor.span_panel_power`, or `sensor.kitchen_power` after
+    the README's remedy.
+    """
+    install, accepted = await _accept_the_label_alone_in_garage(hass, entry, case)
+    if onto_the_device:
+        _put_the_device_in_kitchen(hass, accepted)
+    _give_the_entity_an_area(hass, accepted, None)
+
+    offered = await _accept_what_recreate_offers(hass, install, case.circuit_name, accepted)
+
+    assert offered == (case.on_the_device if onto_the_device else case.cleared)
+    await _assert_recreate_offers_nothing(hass, install, case.circuit_name, offered)
+
+
+@pytest.mark.parametrize("onto_the_device", WHERE_THE_AREA_GOES)
+@pytest.mark.parametrize("case", NAMED_FOR_THE_MEASUREMENT)
+async def test_a_circuit_named_for_its_measurement_keeps_it_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    case: _NamedForTheMeasurement,
+    onto_the_device: bool,
+) -> None:
+    """The listener's refresh reads the label alone as a reload does, the moment the area is cleared."""
+    _, accepted = await _accept_the_label_alone_in_garage(hass, entry, case)
+    if onto_the_device:
+        _put_the_device_in_kitchen(hass, accepted)
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, accepted, None)
+
+    row = registry.async_get(accepted)
+    stop()
+    assert row is not None
+    assert row.area_id is None
+    assert registry.async_regenerate_entity_id(row) == (
+        case.on_the_device if onto_the_device else case.cleared
+    )
+
+
+async def test_the_label_alone_is_kept_where_the_device_s_name_alone_composes_it(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An id Core composes today is offered nothing, even where it is the label alone too.
+
+    With the circuit's device put in Garage, the area its "Power" sensor had,
+    `sensor.garage_power` is what Core composes from that area and the device
+    with the suffix left out. So the README's remedy offers nothing here, and
+    the id does not take the measurement back.
+    """
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Power")).entity_id
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, created, garage.id)
+    accepted = await _accept_what_recreate_offers(hass, install, "Power", created)
+    assert accepted == "sensor.garage_power"
+    row = er.async_get(hass).async_get(accepted)
+    assert row is not None
+    assert row.device_id is not None
+
+    dr.async_get(hass).async_update_child_device(row.device_id, area_id=garage.id)
+    _give_the_entity_an_area(hass, accepted, None)
+
+    row = await _assert_recreate_offers_nothing(hass, install, "Power", accepted)
+    assert row.object_id_base == ""
+
+
+@pytest.mark.parametrize(
+    ("before", "created"),
+    [
+        pytest.param("Solar Power", "sensor.span_panel_solar_power", id="from-a-name-ending-on-it"),
+        pytest.param(
+            "Kitchen Outlets", "sensor.span_panel_kitchen_outlets_power", id="from-another-name"
+        ),
+    ],
+)
+async def test_a_circuit_renamed_to_its_measurement_is_offered_the_id_that_stops_at_its_name(
+    hass: HomeAssistant, entry: MockConfigEntry, before: str, created: str
+) -> None:
+    """The ruling for a circuit renamed "Power" in the SPAN app stands beside the label's reading.
+
+    Its id ends on the new name, as a label-only id does, but it is no label:
+    the label composed in each area the registry holds spells some other id.
+    So it is read as stopping at the name and offered `sensor.span_panel_power`,
+    which reads back to the same base once accepted.
+    """
+    ar.async_get(hass).async_create("Garage")
+    install = _SensorInstall(hass, entry)
+    assert (await install.load(before)).entity_id == created
+    await _assert_recreate_offers_nothing(hass, install, before, created)
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Power", created)
+
+    assert accepted == "sensor.span_panel_power"
+    row = await _assert_recreate_offers_nothing(hass, install, "Power", accepted)
+    assert row.object_id_base == ""

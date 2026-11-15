@@ -52,6 +52,15 @@ which is what Core composes today. An id from then is read exactly, number
 and all, where reading its words would give another wording, as it does for
 one whose panel's name runs into the suffix.
 
+An entity with no area of its own may have the id Core composed while it had
+one: its label alone, which R1's own-area exception offered and the user
+accepted. Nothing composes that id once the area is taken off the entity, so
+it is read by its tail, and on a circuit named for what the entity measures,
+"Power", the tail is the device's name as well. So the reader is handed what
+composes the label in each area the registry holds (`_the_label_alone`), and
+an id that is the label alone is read as the label, not as an id that stops
+at the device's name.
+
 ## Keeping the base current
 
 The base depends on the name of the circuit's device: it is empty where the
@@ -82,7 +91,7 @@ too late.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 import logging
 from typing import Final
@@ -251,17 +260,67 @@ def _is_the_id_core_registers(object_id: str, composed: str, *, numbered: bool) 
     return (without_core_number(object_id) if numbered else object_id) == slug
 
 
-def _base_reproducing(object_id: str, composed_by_base: dict[str, str]) -> str | None:
+def _base_reproducing(object_id: str, compositions: Sequence[tuple[str, str]]) -> str | None:
     """Return the base whose composition is the id an entity has, or None if none is.
 
-    An id that is a composition as it stands outranks one that is a
-    composition with a number after it.
+    `compositions` pairs each base with what it composes. An id that is a
+    composition as it stands outranks one that is a composition with a number
+    after it, and the first pair that spells it wins.
     """
     for numbered in (False, True):
-        for base, composed in composed_by_base.items():
+        for base, composed in compositions:
             if _is_the_id_core_registers(object_id, composed, numbered=numbered):
                 return base
     return None
+
+
+def _the_label_alone(
+    hass: HomeAssistant,
+    *,
+    panel_device_id: str,
+    circuit_device_identifier: tuple[str, str],
+    device_name: str,
+    config_entry_id: str,
+    wordings: Sequence[str],
+) -> Callable[[str], str | None]:
+    """Return what tells which wording an object id spells as the entity's label alone.
+
+    The label alone is the id Core composes for the entity in an area of its
+    own: that area and the base, with no device in front. It is what R1's
+    own-area exception offers, and it stays the entity's id once the area is
+    taken off it, until the user accepts another. The area it was composed in
+    is then no longer on the entity, so the label is composed in each area the
+    registry holds, as it stands and under Core's number. The answer is the
+    wording whose composition spells the id, or None where none does.
+
+    `naming.circuit_object_id_suffix` asks only about an id it would otherwise
+    read as stopping at the device's name, so the compositions, one for each
+    area and wording, are made for that id alone.
+    """
+
+    def wording_of_the_label(object_id: str) -> str | None:
+        return _base_reproducing(
+            object_id,
+            [
+                (wording, composed)
+                for area in ar.async_get(hass).async_list_areas()
+                for wording in wordings
+                if (
+                    composed := compose_circuit_object_id(
+                        hass,
+                        panel_device_id=panel_device_id,
+                        circuit_device_identifier=circuit_device_identifier,
+                        device_name=device_name,
+                        suffix_words=wording,
+                        config_entry_id=config_entry_id,
+                        entity_area_id=area.id,
+                    )
+                )
+                is not None
+            ],
+        )
+
+    return wording_of_the_label
 
 
 def circuit_object_id_base(
@@ -298,11 +357,18 @@ def circuit_object_id_base(
     from then exactly, number and all, where reading its words would not:
     one whose panel's name runs into the suffix, "Shop Current" in front of
     `power`, spells `current_power`.
+
+    An entity with no area of its own may have the label-only id it accepted
+    while it had one. The reader is handed what composes the label in each
+    area the registry holds (`_the_label_alone`), so that on a circuit named
+    "Power" such an id, `sensor.garage_power`, keeps its measurement rather
+    than being read as stopping at the device's name.
     """
     device_name = effective_circuit_device_name(
         dr.async_get(hass), serial, circuit, circuit_id, config_entry_id=config_entry_id
     )
     entity_area_id: str | None = None
+    label_alone: Callable[[str], str | None] | None = None
     if existing_entity_id is not None:
         row = er.async_get(hass).async_get(existing_entity_id)
         entity_area_id = row.area_id if row is not None else None
@@ -316,8 +382,8 @@ def circuit_object_id_base(
         for composed_area_id in composed_area_ids:
             reproducing = _base_reproducing(
                 object_id,
-                {
-                    base: composed
+                [
+                    (base, composed)
                     for base in bases
                     if (
                         composed := compose_circuit_object_id(
@@ -331,10 +397,19 @@ def circuit_object_id_base(
                         )
                     )
                     is not None
-                },
+                ],
             )
             if reproducing is not None:
                 return reproducing
+        if entity_area_id is None:
+            label_alone = _the_label_alone(
+                hass,
+                panel_device_id=panel_device_id,
+                circuit_device_identifier=circuit_device_identifier,
+                device_name=device_name,
+                config_entry_id=config_entry_id,
+                wordings=wordings,
+            )
     return circuit_object_id_suffix(
         recipe.id_identifier,
         device_name,
@@ -342,6 +417,7 @@ def circuit_object_id_base(
         existing_entity_id,
         device_then_entity=entity_id_parts(hass)[-2:] == _DEVICE_THEN_ENTITY,
         device_in_front=entity_area_id is None,
+        label_alone=label_alone,
     )
 
 
