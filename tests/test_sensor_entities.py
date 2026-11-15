@@ -1246,8 +1246,11 @@ def test_circuit_sensor_first_update_requests_reload_for_name_sync(hass: HomeAss
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_circuit_sensor_user_override_skips_reload_on_name_change(hass: HomeAssistant) -> None:
-    """Customized entity names should suppress automatic sync reloads."""
+def test_a_user_named_circuit_sensor_still_reloads_on_a_name_change(hass: HomeAssistant) -> None:
+    """A name the user gave the sensor does not hold its circuit's device on the old name.
+
+    The circuit's name lives on its device, which only the reload renames.
+    """
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(hass, snapshot)
@@ -1271,7 +1274,8 @@ def test_circuit_sensor_user_override_skips_reload_on_name_change(hass: HomeAssi
         mock_async_get.return_value = runtime_registry
         sensor._handle_coordinator_update()
 
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
     assert sensor._previous_circuit_name == "Renamed Kitchen"
 
 

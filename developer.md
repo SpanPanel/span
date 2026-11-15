@@ -444,9 +444,11 @@ else when generating an entity id, so occupying it made Recreate propose a frien
 have written — `"{circuit_name} {description name}"`, for the description's current label and every label it has carried, which is what
 `SpanPanelCircuitsSensorEntityDescription.legacy_names` exists to record. Anything else in that field is the user's and is left alone.
 
-The display name now travels as `original_name` via `_attr_name` for both modes, which means a rename pushed from the SPAN app is picked up by rebuilding the
-entity: `_sync_circuit_name` asks the coordinator for a reload rather than writing the registry in place. It skips both the reload and the name where the
-registry holds a `name`, since the user's field outranks the panel's and reloading could not change what is displayed.
+The display name now travels through the circuit's device for both modes: each entity carries only its label as `original_name` via `_attr_name`, and the
+circuit's name is its device's. A rename pushed from the SPAN app is therefore picked up by adding the entities again: `_sync_circuit_name` asks the coordinator
+for a reload rather than writing the registry in place, and the reload renames the device. It asks whether or not the user has named the entity. Their `name` is
+the entity's own and the reload leaves it alone, while skipping the reload would leave the device on the old name, for good where the user has named every
+entity on the circuit.
 
 ## The suffix mappings are closed
 

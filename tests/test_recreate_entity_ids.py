@@ -1461,17 +1461,20 @@ async def test_a_rename_in_the_span_app_reaches_the_display_name_after_the_reloa
 
 
 @pytest.mark.parametrize("make_install", CIRCUIT_INSTALLS, ids=PLATFORM_IDS)
-async def test_a_name_the_user_set_is_not_overridden_by_a_span_app_rename(
+async def test_a_span_app_rename_reaches_the_device_when_every_entity_is_named_by_the_user(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     parts_without_area: None,
     make_install: _CircuitInstall,
 ) -> None:
-    """A user who named an entity has said what it is called, and the panel has not.
+    """The user's name is the entity's; the circuit's name is its device's, and follows the panel.
 
-    The reload is skipped as well as the name: reloading could not change what
-    is displayed while the registry holds a `name`, so asking for one would be a
-    whole-entry teardown that no user could see the point of.
+    The install's one entity is every enabled entity its circuit has, and the
+    user has named it. The rename leaves that name alone (R4), but it still
+    asks for the reload: the circuit's name lives on its device, which only
+    the reload renames, so skipping it for a named entity left the device on
+    the old name for good -- and with it the panel half of what Home Assistant
+    displays and offers for every entity on the circuit.
     """
     install = make_install(hass, entry)
     await install.load(ORIGINAL_NAME)
@@ -1480,14 +1483,21 @@ async def test_a_name_the_user_set_is_not_overridden_by_a_span_app_rename(
     registry = er.async_get(hass)
     registry.async_update_entity(entity.entity_id, name="Beverage Cooling")
 
-    await install.rename_on_the_panel(RENAMED)
+    await install.rename_on_the_panel(ORIGINAL_NAME)
     install.coordinator.request_reload.assert_not_called()
+
+    await install.rename_on_the_panel(RENAMED)
+    install.coordinator.request_reload.assert_called_once()
 
     await install.load(RENAMED)
 
     after = registry.async_get(entity.entity_id)
     assert after is not None
-    assert after.name == "Beverage Cooling"
+    assert after.name == "Beverage Cooling"  # R4: the user's name is untouched
+    assert after.device_id is not None
+    device = dr.async_get(hass).async_get(after.device_id)
+    assert device is not None
+    assert device.name == RENAMED
 
 
 @pytest.mark.parametrize(

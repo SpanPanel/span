@@ -173,10 +173,10 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
-        The circuit's name is watched here: the entity carries it as
-        `original_name`, which can only be refreshed by being rebuilt, so a
-        rename earns a reload. Whether the panel still lets this circuit be
-        operated -- the answer that decided this entity exists -- is watched by
+        The circuit's name is watched here: it lives on the circuit's device,
+        which only adding the entity again renames, so a rename earns a reload.
+        Whether the panel still lets this circuit be operated -- the answer that
+        decided this entity exists -- is watched by
         `SpanPanelCoordinator._check_settability_change` instead, because the
         opposite edge happens on circuits that have no entity here to see it.
         """
@@ -185,21 +185,13 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         if circuit:
             current_circuit_name = circuit.name
 
-            # One path for both modes: the name is carried by `original_name`,
-            # which is written when the entity is added, so a reload is what
-            # refreshes it. A name in the registry is one the user set.
-            user_has_override = False
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry and entity_entry.name:
-                    user_has_override = True
-
-            if user_has_override:
-                self._previous_circuit_name = current_circuit_name
-            elif self._previous_circuit_name is _NAME_UNSET:
+            # One path for both modes, whether or not the user has named this
+            # entity: their name is the entity's own and the reload leaves it
+            # alone, while the circuit's name is the device's, which a skipped
+            # reload would leave on the old one.
+            if self._previous_circuit_name is _NAME_UNSET:
                 _LOGGER.info(
-                    "First update: syncing entity name to panel name '%s' for switch, requesting reload",
+                    "First update: syncing circuit device name to panel name '%s' for switch, requesting reload",
                     current_circuit_name,
                 )
                 self._previous_circuit_name = current_circuit_name

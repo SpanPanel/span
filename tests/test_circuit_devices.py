@@ -450,6 +450,32 @@ async def test_a_device_renamed_by_the_user_keeps_its_name(hass: HomeAssistant) 
         )
 
 
+async def test_a_rename_reaches_the_device_when_the_user_named_every_entity(
+    hass: HomeAssistant,
+) -> None:
+    """Names the user gave the circuit's entities do not hold its device on the old name.
+
+    Each entity's own name is the user's and stays as they wrote it (R4). The
+    circuit's name is the device's, which only the reload renames, so every
+    entity still asks for it when the panel renames the circuit.
+    """
+    async with _panel(hass, _kitchen_tree()) as panel:
+        registry = er.async_get(hass)
+        entities = er.async_entries_for_device(registry, panel.circuit_device(KITCHEN).id)
+        assert entities, "the circuit has no enabled entity to name"
+        named = {entity.entity_id: f"Galley {entity.original_name}" for entity in entities}
+        for entity_id, name in named.items():
+            registry.async_update_entity(entity_id, name=name)
+
+        await panel.rename_on_the_panel(KITCHEN, "Kitchen")
+
+        assert panel.circuit_device(KITCHEN).name == "Kitchen"
+        after = {entity_id: registry.async_get(entity_id) for entity_id in named}
+        assert {
+            entity_id: entity.name for entity_id, entity in after.items() if entity is not None
+        } == named
+
+
 # ---------------------------------------------------------------------------
 # A charger's feed circuit that has controls
 # ---------------------------------------------------------------------------

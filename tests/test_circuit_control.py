@@ -491,8 +491,11 @@ def test_switch_first_update_requests_reload_without_user_override(
     coordinator.request_reload.assert_called_once()
 
 
-def test_switch_user_override_skips_reload_on_update(hass: HomeAssistant) -> None:
-    """User-customized switch names should suppress auto-sync reloads."""
+def test_switch_a_user_named_switch_still_reloads_on_a_rename(hass: HomeAssistant) -> None:
+    """A name the user gave the switch does not hold its circuit's device on the old name.
+
+    The circuit's name lives on its device, which only the reload renames.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", is_user_controllable=True
     )
@@ -524,7 +527,8 @@ def test_switch_user_override_skips_reload_on_update(hass: HomeAssistant) -> Non
         )
         switch._handle_coordinator_update()
 
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
     assert switch._previous_circuit_name == "Renamed Kitchen"
 
 
@@ -813,7 +817,10 @@ def test_switch_coordinator_update_circuit_numbers_requests_reload(
 def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
     hass: HomeAssistant,
 ) -> None:
-    """In circuit-numbers mode, user-customized registry names must not be overwritten."""
+    """In circuit-numbers mode a user-set name is never written, and the rename still reloads.
+
+    The reload renames the circuit's device; the user's name is theirs (R4).
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -856,7 +863,7 @@ def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
         switch._handle_coordinator_update()
 
     runtime_registry.async_update_entity.assert_not_called()
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
 
 
 def test_switch_coordinator_update_friendly_mode_still_reloads(

@@ -302,8 +302,11 @@ def test_handle_coordinator_update_requests_reload_on_first_sync(hass: HomeAssis
     coordinator.request_reload.assert_called_once()
 
 
-def test_handle_coordinator_update_user_override_skips_reload(hass: HomeAssistant) -> None:
-    """Customized select names should suppress automatic name sync reloads."""
+def test_handle_coordinator_update_a_user_named_select_still_reloads(hass: HomeAssistant) -> None:
+    """A name the user gave the select does not hold its circuit's device on the old name.
+
+    The circuit's name lives on its device, which only the reload renames.
+    """
     coordinator = _make_coordinator_with_circuit(hass, circuit_name="Kitchen")
     with patch(
         "custom_components.span_panel.select.er.async_get"
@@ -332,7 +335,8 @@ def test_handle_coordinator_update_user_override_skips_reload(hass: HomeAssistan
         mock_async_get.return_value = runtime_registry
         select._handle_coordinator_update()
 
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
     assert select._previous_circuit_name == "Renamed Kitchen"
 
 

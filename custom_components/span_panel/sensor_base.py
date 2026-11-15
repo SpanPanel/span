@@ -286,13 +286,17 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         )
 
     def _sync_circuit_name(self) -> None:
-        """Follow a circuit renamed on the panel, by reloading so the name is rebuilt.
+        """Follow a circuit renamed on the panel, by reloading so its device is renamed.
 
-        One path for both modes. The name is carried by `original_name`, which is
-        written when the entity is added, so a reload is what refreshes it --
-        circuit-numbers mode used to write the registry's `name` in place instead,
-        which was quicker but handed that field the last word over entity id
-        generation. See `_release_synced_registry_name`.
+        One path for both modes. The circuit's name lives on the circuit's
+        device, which this entity's device info names and only an add
+        re-registers, so a reload is what renames it -- circuit-numbers mode
+        used to write the registry's `name` in place instead, which was quicker
+        but handed that field the last word over entity id generation. See
+        `_release_synced_registry_name`.
+
+        A charger feed circuit's sensors ask too: in circuit-names mode the
+        charger's device carries the name of the circuit that feeds it.
         """
         if not (hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits")):
             return
@@ -303,20 +307,15 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         current_circuit_name = circuit.name
 
-        # A name in the registry is one the user set: theirs outranks the panel's,
-        # and reloading would not change what is displayed anyway.
-        user_has_override = False
-        if self.entity_id:
-            entity_registry = er.async_get(self.hass)
-            entity_entry = entity_registry.async_get(self.entity_id)
-            if entity_entry and entity_entry.name:
-                user_has_override = True
-
-        if user_has_override:
-            self._previous_circuit_name = current_circuit_name
-        elif self._previous_circuit_name is _NAME_UNSET:
+        # Whether or not the user has named this entity. Their name is the
+        # entity's own and the reload leaves it alone; the circuit's name is
+        # the device's, and an entity that skipped the reload for its own name
+        # would leave the device on the old one -- for good, where the user has
+        # named every entity on the circuit. A name the user gave the device
+        # itself still wins what is displayed; that is Home Assistant's.
+        if self._previous_circuit_name is _NAME_UNSET:
             _LOGGER.info(
-                "First update: syncing sensor name to panel name '%s', requesting reload",
+                "First update: syncing circuit device name to panel name '%s', requesting reload",
                 current_circuit_name,
             )
             self._previous_circuit_name = current_circuit_name
