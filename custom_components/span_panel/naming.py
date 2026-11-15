@@ -16,6 +16,10 @@ yields a different device part, that is the user's configuration at work and
 the offer is legitimate. A new entity gets the noun-last wording, which is what
 the panel-level ids (`main_meter_consumed_energy`) and the display labels use.
 
+On a device named by the circuit, Core composes the circuit's name from the
+device, so the base is the suffix alone -- `power`, `energy consumed` -- read
+back the same way (`circuit_object_id_suffix`).
+
 The base is *not* the display name. The two are decoupled on purpose, so a
 label can be reworded without touching a single id.
 
@@ -92,44 +96,57 @@ def _form_after_the_identifier(object_id: str, identifier_slug: str, suffix: str
     return None
 
 
-def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str | None) -> str:
-    """Return the base for one circuit entity.
+def circuit_object_id_suffix(
+    id_identifier: str, device_name: str, suffix: str, existing_entity_id: str | None
+) -> str:
+    """Return the base for one circuit entity on its circuit's device: the suffix alone.
 
-    `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`);
-    `suffix` is this entity's canonical suffix, which the sensors derive from
-    their description key via `id_builder.get_user_friendly_suffix` while the
-    switch and the select -- which have no such key -- name theirs outright
-    ("breaker", "circuit_priority").
+    Home Assistant composes the circuit's name from the device, so the base
+    carries only the suffix words (`power`, `energy consumed`). It carries
+    nothing at all where the existing id omitted them, or where they would
+    repeat what the device name already says; Core then composes the id from
+    the devices alone.
 
-    Where the existing id still names this circuit, what follows the name
-    settles both halves at once -- which form the id carries, and whether the
-    preset builder omitted it. They are one question: an id reading
+    `id_identifier` is what the existing id was built from: the tabs in
+    circuit-numbers mode (`Circuit 15`), the circuit's name in names mode
+    (`Kitchen Outlets`). `device_name` is the circuit device's name, which Core
+    composes ahead of the base. `suffix` is this entity's canonical suffix,
+    which the sensors derive from their description key via
+    `id_builder.get_user_friendly_suffix` while the switch and the select --
+    which have no such key -- name theirs outright ("breaker",
+    "circuit_priority").
+
+    Where the existing id still names the identifier, what follows it settles
+    two things at once -- which form the id carries, and whether the preset
+    builder omitted it. They are one question: an id reading
     `..._solar_power_power` carries `power` and omitted nothing, while
-    `..._solar_power` omitted it. Answering each half on its own -- the form by
-    a plain `endswith`, the omission from the identifier alone -- disagreed with
-    the id in both directions. A circuit named "Current" had `..._current_power`
-    read as the `current_power` form and was offered
-    `..._current_current_power`; a circuit named "Solar Power" whose id kept
-    both halves was offered `..._solar_power`. Both are renames the user did not
-    cause, which R1 forbids.
+    `..._solar_power` omitted it. Answering each on its own -- the form by a
+    plain `endswith`, the omission from the name alone -- disagreed with the id
+    in both directions. A circuit named "Current" had `..._current_power` read
+    as the `current_power` form and was offered `..._current_current_power`; a
+    circuit named "Solar Power" whose id kept both halves was offered
+    `..._solar_power`. Both are renames the user did not cause, which R1
+    forbids.
 
-    Only where the id no longer names this circuit -- it was renamed on the
-    panel, issue #252 -- is the form read back by itself, from the end of the
-    id, and the omission decided from the *new* name. That is the whole point of
-    the rename: the name half follows the panel and the suffix half does not.
+    Only where the id no longer names the identifier -- the circuit was renamed
+    on the panel, issue #252 -- is the form read back by itself, from the end
+    of the id. There, and for a new entity, which gets the noun-last wording,
+    the omission is decided from `device_name`, the name Core composes the id
+    from now. That is the whole point of the rename: the name half follows the
+    panel and the suffix half does not.
 
     The omission test carries a leading underscore because the builder's did: a
     circuit named exactly "Power" is not a repetition of anything and kept both
     halves, `..._power_power`.
     """
-    identifier_slug = slugify(identifier)
+    identifier_slug = slugify(id_identifier)
     if existing_entity_id is not None:
         object_id = existing_entity_id.split(".", 1)[-1]
         form = _form_after_the_identifier(object_id, identifier_slug, suffix)
         if form is not None:
-            return f"{identifier} {form.replace('_', ' ')}"
+            return form.replace("_", " ")
         if _ends_on_segment(object_id, identifier_slug):
-            return identifier
+            return ""
 
     form = _existing_suffix_form(existing_entity_id, suffix)
     words = (
@@ -137,9 +154,21 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
         if form
         else NEW_ENTITY_ID_SUFFIX_WORDS.get(suffix, suffix.replace("_", " "))
     )
-    if identifier_slug.endswith(f"_{slugify(words)}"):
-        return identifier
-    return f"{identifier} {words}"
+    if slugify(device_name).endswith(f"_{slugify(words)}"):
+        return ""
+    return words
+
+
+def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str | None) -> str:
+    """Return the base for one circuit entity on the panel's device: its identifier, then its suffix.
+
+    `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`).
+    With the panel as the entity's device, the identifier is the name the id
+    is composed from, so it also decides the omission. The suffix half is
+    `circuit_object_id_suffix`'s answer; its docstring explains the read-back.
+    """
+    words = circuit_object_id_suffix(identifier, identifier, suffix, existing_entity_id)
+    return f"{identifier} {words}" if words else identifier
 
 
 def release_registry_name_written_by_older_release(

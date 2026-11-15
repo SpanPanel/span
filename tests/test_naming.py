@@ -8,6 +8,7 @@ from custom_components.span_panel.naming import (
     ENTITY_ID_SUFFIX_FORMS,
     NEW_ENTITY_ID_SUFFIX_WORDS,
     circuit_object_id_base,
+    circuit_object_id_suffix,
 )
 
 
@@ -171,6 +172,205 @@ def test_the_id_shapes_the_upgrade_scenarios_pinned(
     left to Home Assistant.
     """
     assert circuit_object_id_base(identifier, suffix, None) == expected
+
+
+# --- The suffix alone, for a circuit entity on its circuit's device ----------
+#
+# The cases above, each without its identifier. Every port passes the
+# identifier as the device name too -- an install whose circuit device is named
+# what its ids were built from -- so each answers exactly what the base did,
+# minus the name half. The cases after them pin the suffix's own contract,
+# including where the device name and the identifier differ.
+
+
+@pytest.mark.parametrize(
+    ("identifier", "suffix", "expected"),
+    [
+        ("Circuit 15", "power", "power"),
+        ("Circuit 30 32", "energy_consumed", "consumed energy"),
+        ("Kitchen Outlets", "energy_produced", "produced energy"),
+        ("Kitchen Outlets", "energy_net", "net energy"),
+        ("Kitchen Outlets", "current", "current"),
+        ("Kitchen Outlets", "breaker_rating", "breaker rating"),
+        ("Kitchen Outlets", "breaker", "breaker"),
+        ("Kitchen Outlets", "circuit_priority", "circuit priority"),
+    ],
+)
+def test_a_new_entity_gets_the_noun_last_suffix(
+    identifier: str, suffix: str, expected: str
+) -> None:
+    assert circuit_object_id_suffix(identifier, identifier, suffix, None) == expected
+
+
+@pytest.mark.parametrize(
+    ("existing", "suffix", "expected"),
+    [
+        # Preset-era spelling is kept, so Recreate proposes the entity its own id.
+        ("sensor.span_panel_circuit_15_energy_consumed", "energy_consumed", "energy consumed"),
+        ("sensor.span_panel_circuit_15_energy_produced", "energy_produced", "energy produced"),
+        ("sensor.span_panel_circuit_15_energy_net", "energy_net", "energy net"),
+        # Pre-preset spelling is kept too.
+        ("sensor.span_panel_circuit_15_consumed_energy", "energy_consumed", "consumed energy"),
+        # The oldest power spelling.
+        ("sensor.span_panel_circuit_15_current_power", "power", "current power"),
+        # A suffix with one form only.
+        ("switch.span_panel_circuit_15_breaker", "breaker", "breaker"),
+    ],
+)
+def test_an_existing_entity_keeps_the_suffix_form_it_has(
+    existing: str, suffix: str, expected: str
+) -> None:
+    assert circuit_object_id_suffix("Circuit 15", "Circuit 15", suffix, existing) == expected
+
+
+def test_an_existing_id_matching_no_known_form_gets_the_default_suffix() -> None:
+    assert (
+        circuit_object_id_suffix(
+            "Circuit 15", "Circuit 15", "energy_consumed", "sensor.something_else"
+        )
+        == "consumed energy"
+    )
+
+
+def test_the_suffix_is_omitted_when_the_name_already_ends_with_it() -> None:
+    """Preserves the preset builder's rule: a circuit named "Solar Power" got `..._solar_power`."""
+    assert circuit_object_id_suffix("Solar Power", "Solar Power", "power", None) == ""
+    assert (
+        circuit_object_id_suffix(
+            "Solar Power", "Solar Power", "power", "sensor.span_panel_solar_power"
+        )
+        == ""
+    )
+
+
+def test_a_name_that_is_only_the_suffix_word_keeps_the_suffix() -> None:
+    """The builder's test was `endswith(f"_{suffix}")`, underscore included.
+
+    A circuit named exactly "Power" therefore got `..._power_power`, because
+    "power" does not end with "_power" and there was nothing to omit. Omitting
+    it here would offer every such circuit a rename to `..._power` -- a move the
+    user did not cause, which R1 forbids.
+    """
+    assert circuit_object_id_suffix("Power", "Power", "power", None) == "power"
+    assert (
+        circuit_object_id_suffix("Power", "Power", "power", "sensor.span_panel_power_power")
+        == "power"
+    )
+
+
+def test_a_renamed_circuit_reads_the_suffix_from_the_end_of_its_id() -> None:
+    """Issue #252 at the layer that decides it: only the name half follows the panel.
+
+    The id still names the circuit's old name, so it no longer names the
+    identifier; it is consulted for nothing but which spelling of the suffix it
+    shipped with, read from its end.
+    """
+    assert (
+        circuit_object_id_suffix(
+            "Kitchen", "Kitchen", "power", "sensor.span_panel_kitchen_outlets_power"
+        )
+        == "power"
+    )
+
+
+@pytest.mark.parametrize(
+    ("identifier", "suffix", "existing", "expected"),
+    [
+        # A circuit named "Current". The id's trailing `_current_power` is the
+        # identifier followed by `power`, not the `current_power` spelling of the
+        # suffix -- reading it as the latter proposed `..._current_current_power`.
+        ("Current", "power", "sensor.span_panel_current_power", "power"),
+        # A circuit named "Solar Power" whose id kept both halves. The omission
+        # rule looks only at the name, so it proposed `..._solar_power` and
+        # offered every such circuit a rename.
+        ("Solar Power", "power", "sensor.span_panel_solar_power_power", "power"),
+        # The same circuit on an install whose id did omit them.
+        ("Solar Power", "power", "sensor.span_panel_solar_power", ""),
+        # Both, on an install with no device prefix: the identifier opens the
+        # object id rather than following an underscore.
+        ("Solar Power", "power", "sensor.solar_power_power", "power"),
+        ("Solar Power", "power", "sensor.solar_power", ""),
+        # A circuit named exactly "Power", which never omitted anything.
+        ("Power", "power", "sensor.span_panel_power_power", "power"),
+    ],
+)
+def test_what_follows_the_identifier_settles_the_suffix(
+    identifier: str, suffix: str, existing: str, expected: str
+) -> None:
+    """Where the id names this circuit, what follows the name settles both halves.
+
+    Which form the id carries, and whether the preset builder omitted it: an id
+    that spells the identifier and then a known form carries that form, and an
+    id that stops at the identifier omitted it.
+    """
+    assert circuit_object_id_suffix(identifier, identifier, suffix, existing) == expected
+
+
+@pytest.mark.parametrize(
+    "identifier", ["Kitchen Outlets", "Circuit 15", "Circuit 15 17", "Circuit 30 32"]
+)
+def test_the_upgrade_scenario_shapes_keep_the_suffix(identifier: str) -> None:
+    """The four shapes the deleted preset builder's own tests pinned.
+
+    A friendly name, a single-pole breaker and both two-pole spellings. None of
+    them ends on a suffix word, so each keeps `power` whole.
+    """
+    assert circuit_object_id_suffix(identifier, identifier, "power", None) == "power"
+
+
+def test_suffix_is_empty_when_the_id_ends_on_the_circuit_name() -> None:
+    """Core then composes the id from the devices alone, and it is the id the entity has."""
+    assert (
+        circuit_object_id_suffix(
+            "Solar Power", "Solar Power", "power", "sensor.span_panel_solar_power"
+        )
+        == ""
+    )
+
+
+def test_numbers_mode_reads_the_form_after_the_tabs() -> None:
+    """The id was built from the tabs, so the tabs -- not the device name -- locate the form."""
+    assert (
+        circuit_object_id_suffix(
+            "Circuit 15",
+            "Kitchen Outlets",
+            "energy_consumed",
+            "sensor.span_panel_circuit_15_energy_consumed",
+        )
+        == "energy consumed"
+    )
+
+
+def test_new_entity_gets_noun_last_words() -> None:
+    assert (
+        circuit_object_id_suffix("Kitchen Outlets", "Kitchen Outlets", "energy_consumed", None)
+        == "consumed energy"
+    )
+
+
+def test_omission_follows_the_device_name() -> None:
+    """With no id to read back, the device Core composes from decides the omission.
+
+    A numbers-mode circuit named "Solar Power" sits on a device of that name, so
+    the suffix would repeat what the device part already says.
+    """
+    assert circuit_object_id_suffix("Circuit 15", "Solar Power", "power", None) == ""
+
+
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "existing", "expected"),
+    [
+        # The device's name ends on the suffix word, but the id kept the suffix.
+        ("Circuit 15", "Solar Power", "sensor.span_panel_circuit_15_power", "power"),
+        # The device's name does not, but the id stops at the identifier.
+        ("Solar Power", "Roof Array", "sensor.span_panel_solar_power", ""),
+    ],
+)
+def test_an_id_that_names_the_identifier_decides_the_omission_over_the_device_name(
+    identifier: str, device_name: str, existing: str, expected: str
+) -> None:
+    """The device name decides only where the id gives no answer of its own."""
+    assert circuit_object_id_suffix(identifier, device_name, "power", existing) == expected
 
 
 # --- Releasing the registry name an older release wrote ----------------------
