@@ -394,6 +394,43 @@ def test_a_renamed_circuit_omits_the_suffix_its_new_device_name_ends_on(
     )
 
 
+@pytest.mark.parametrize(
+    ("id_identifier", "device_name", "suffix", "existing"),
+    [
+        # Circuit-numbers presets whose circuit device is named the suffix word.
+        ("Circuit 15", "Power", "power", "sensor.span_panel_circuit_15_power"),
+        ("Circuit 15", "Current", "current", "sensor.span_panel_circuit_15_current"),
+        ("Circuit 15", "Breaker", "breaker", "switch.span_panel_circuit_15_breaker"),
+        # Names mode, with the circuit's device renamed "Power" by the user.
+        ("Kitchen Outlets", "Power", "power", "sensor.span_panel_kitchen_outlets_power"),
+    ],
+)
+def test_a_device_named_the_suffix_word_does_not_swallow_the_suffix(
+    id_identifier: str, device_name: str, suffix: str, existing: str
+) -> None:
+    """The longer reading of the id wins, so the suffix stays whole, as the underscore rule keeps it.
+
+    The trailing `power` of `..._circuit_15_power` also reads as an id that
+    stops at a device named "Power". The tabs account for `circuit_15_power`,
+    the device for `power` alone, so the id is read as the tabs then `power`:
+    the suffix a new entity on that device gets too.
+    """
+    assert circuit_object_id_suffix(id_identifier, device_name, suffix, existing) == suffix
+    assert circuit_object_id_suffix(id_identifier, device_name, suffix, None) == suffix
+
+
+def test_the_device_wins_when_both_readings_account_for_the_same_tail() -> None:
+    """`..._solar_power` reads as device "Solar Power" stopping, or as circuit "Solar" then `power`.
+
+    The two are the same characters, and the device's reading reproduces the
+    id from the name Core composes it from now, so Recreate offers nothing.
+    """
+    assert (
+        circuit_object_id_suffix("Solar", "Solar Power", "power", "sensor.span_panel_solar_power")
+        == ""
+    )
+
+
 def _id_core_composes(domain: str, device_name: str, base: str) -> str:
     """Return the id Core composes by default: the panel, the circuit's device, the base."""
     parts = ("Span Panel", device_name, base)
@@ -407,6 +444,10 @@ def _id_core_composes(domain: str, device_name: str, base: str) -> str:
         ("Current", "sensor", "power", "power"),
         ("Main Breaker", "switch", "breaker", "breaker"),
         ("Kitchen Outlets", "sensor", "energy_consumed", "energy consumed"),
+        # Devices named the suffix word itself.
+        ("Power", "sensor", "power", "power"),
+        ("Current", "sensor", "current", "current"),
+        ("Breaker", "switch", "breaker", "breaker"),
     ],
 )
 @pytest.mark.parametrize(

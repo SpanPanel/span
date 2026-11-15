@@ -30,6 +30,7 @@ tables here govern entity ids only.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
@@ -96,17 +97,25 @@ def _form_after_the_identifier(object_id: str, identifier_slug: str, suffix: str
     return None
 
 
-def _words_after_the_name(object_id: str, name: str, suffix: str) -> str | None:
-    """Return the suffix words this id spells after `name`, "" if it stops there, else None.
+@dataclass(frozen=True, slots=True)
+class _NameReading:
+    """One reading of an id's tail as a name: `<name>_<form>`, or `<name>` alone."""
 
-    None means the id does not name `name` at all, so it answers nothing.
-    """
+    tail_length: int
+    """How many characters at the end of the id the reading accounts for."""
+
+    words: str
+    """The suffix words spelled after the name, or "" where the id stops at it."""
+
+
+def _read_after_the_name(object_id: str, name: str, suffix: str) -> _NameReading | None:
+    """Read this id's tail as `name` then a form, or as `name` alone; None if it is neither."""
     name_slug = slugify(name)
     form = _form_after_the_identifier(object_id, name_slug, suffix)
     if form is not None:
-        return form.replace("_", " ")
+        return _NameReading(len(f"{name_slug}_{form}"), form.replace("_", " "))
     if _ends_on_segment(object_id, name_slug):
-        return ""
+        return _NameReading(len(name_slug), "")
     return None
 
 
@@ -117,10 +126,10 @@ def circuit_object_id_suffix(
 
     Home Assistant composes the circuit's name from the device, so the base
     carries only the suffix words (`power`, `energy consumed`). It is empty --
-    Core then composes the id from the devices alone -- in two cases: the
-    existing id stops at the name it is read against (below), or, where the id
-    names neither name or there is none, the device name already ends with the
-    words.
+    Core then composes the id from the other parts of the user's entity-id
+    format, the devices under the default one -- in two cases: the existing id
+    is read (below) as stopping at a name, or, where the id names neither name
+    or there is none, the device name already ends with the words.
 
     `id_identifier` is the identifier the naming flag resolves today: the tabs
     in circuit-numbers mode (`Circuit 15`), the circuit's current name in names
@@ -131,26 +140,39 @@ def circuit_object_id_suffix(
     switch and the select -- which have no such key -- name theirs outright
     ("breaker", "circuit_priority").
 
-    An existing id is read against two names, the device's first and then the
-    identifier. Where it names either, what follows that name settles two
-    things at once -- which form the id carries, and whether it left the form
-    out. They are one question: an id reading `..._solar_power_power` carries
-    `power` and omitted nothing, while `..._solar_power` omitted it. Answering
-    each on its own -- the form by a plain `endswith`, the omission from the
-    name alone -- disagreed with the id in both directions. A circuit named
-    "Current" had `..._current_power` read as the `current_power` form and was
-    offered `..._current_current_power`; a circuit named "Solar Power" whose id
-    kept both halves was offered `..._solar_power`. Both are renames the user
-    did not cause, which R1 forbids.
+    An existing id is read against two names, the device's and the identifier.
+    Where it names either, what follows that name settles two things at once --
+    which form the id carries, and whether it left the form out. They are one
+    question: an id reading `..._solar_power_power` carries `power` and omitted
+    nothing, while `..._solar_power` omitted it. Answering each on its own --
+    the form by a plain `endswith`, the omission from the name alone --
+    disagreed with the id in both directions. A circuit named "Current" had
+    `..._current_power` read as the `current_power` form and was offered
+    `..._current_current_power`; a circuit named "Solar Power" whose id kept
+    both halves was offered `..._solar_power`. Both are renames the user did
+    not cause, which R1 forbids.
 
-    The device's name comes first because every id Core composes now carries
-    it: an offer the user accepts reads back to the base it was composed from,
-    so the restart after it offers nothing more. The identifier covers ids
+    The device's name is read because an id Core composes from the circuit
+    device carries it wherever the user's entity-id format includes the
+    device, as the default does: an offer the user accepts then reads back to
+    the base it was composed from, so the restart after it offers nothing more.
+    Read against the identifier alone, a numbers-mode circuit named "Current"
+    accepted `..._current_power`, which then named neither, and the next
+    restart offered `..._current_current_power`. The identifier covers ids
     built from it rather than from the device -- the circuit-numbers preset
-    `..._circuit_15_power`, and a names-mode id whose device the user has since
-    renamed. Read against the identifier alone, a numbers-mode circuit named
-    "Current" accepted `..._current_power`, which then named neither, and the
-    next restart offered `..._current_current_power`.
+    `..._circuit_15_power`, and a names-mode id whose device the user has
+    since renamed.
+
+    Where both names read the id, the reading that accounts for more of its
+    tail wins, because the suffix word can itself be a device's name. The
+    trailing `power` of `..._circuit_15_power` also reads as an id that stops
+    at a device named "Power"; the tabs account for `circuit_15_power`, the
+    device for `power` alone, so the suffix is kept, as the leading-underscore
+    rule below keeps it for a new entity on that device. Where the two account
+    for the same tail they are the same characters read two ways --
+    `..._solar_power` as device "Solar Power" stopping, or as circuit "Solar"
+    then `power` -- and the device wins, because its reading reproduces the id
+    from the name Core composes it from now.
 
     Only where the id names neither -- the circuit was renamed on the panel,
     issue #252 -- is the form read back by itself, from the end of the id.
@@ -164,10 +186,14 @@ def circuit_object_id_suffix(
     """
     if existing_entity_id is not None:
         object_id = existing_entity_id.split(".", 1)[-1]
-        for name in (device_name, id_identifier):
-            words_after_the_name = _words_after_the_name(object_id, name, suffix)
-            if words_after_the_name is not None:
-                return words_after_the_name
+        readings = [
+            reading
+            for name in (device_name, id_identifier)
+            if (reading := _read_after_the_name(object_id, name, suffix)) is not None
+        ]
+        if readings:
+            # `max` returns the first of equals, so the device wins a tie.
+            return max(readings, key=lambda reading: reading.tail_length).words
 
     form = _existing_suffix_form(existing_entity_id, suffix)
     words = (
