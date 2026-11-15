@@ -15,7 +15,7 @@ first registration only, so existing installs keep them.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final, NamedTuple
 
@@ -44,6 +44,7 @@ from span_panel_api import (
     SpanPVSnapshot,
 )
 
+from .const import ENABLE_CIRCUIT_NET_ENERGY_SENSORS
 from .energy_orientation import (
     EnergyRole,
     NetEnergy,
@@ -1308,6 +1309,37 @@ CIRCUIT_SENSORS: tuple[
         entity_registry_visible_default=True,
     ),
 )
+
+
+def circuit_sensor_descriptions(
+    circuit: SpanCircuitSnapshot, options: Mapping[str, object]
+) -> tuple[SpanPanelCircuitsSensorEntityDescription, ...]:
+    """Return the sensors a setup under `options` builds for a circuit, in the order it adds them.
+
+    The one answer to which of a circuit's sensors exist. The sensor platform
+    reads it to build them, and the conversion to circuit devices reads it to
+    tell which registry rows a platform is about to add again
+    (`circuit_device_conversion`). Two copies would drift, and a row converted
+    for an entity no platform then adds keeps an ID base that no longer fits
+    the device it was moved to.
+
+    - Power and the two energy counters, always.
+    - Net Energy, unless the entry's options switch circuit net energy off.
+    - Current and Breaker Rating, only where the circuit publishes the value.
+
+    `CIRCUIT_SENSORS` keeps its order, which Net Energy depends on.
+    """
+    net_energy = options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
+    descriptions = [
+        description
+        for description in CIRCUIT_SENSORS
+        if net_energy or description.energy_role is not EnergyRole.NET
+    ]
+    if circuit.current_a is not None:
+        descriptions.append(CIRCUIT_CURRENT_SENSOR)
+    if circuit.breaker_rating_a is not None:
+        descriptions.append(CIRCUIT_BREAKER_RATING_SENSOR)
+    return tuple(descriptions)
 
 
 # ---------------------------------------------------------------------------

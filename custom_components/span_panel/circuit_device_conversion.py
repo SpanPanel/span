@@ -12,16 +12,25 @@ config-entry migration, because a migration has only the registry: no unique-id
 shape tells a circuit's sensors from panel sensors such as
 `span_{serial}_current_power`, and a circuit's id is recognised only against the
 ids the panel publishes. Here a row is a circuit's entity when its unique id is
-one the platforms build for a circuit in the snapshot (`_circuit_entities`).
+one this setup's platforms build for a circuit in the snapshot
+(`_circuit_entities`).
 
-For each circuit with an entity still on the panel's device, in this order:
+Only those rows, because the platform add that follows is half of the move. It
+gives the row the ID base that goes with a circuit's device, the suffix alone,
+where an older release stored the circuit with it, "Kitchen Outlets power". A
+row moved for an entity no platform then adds would keep that base under a
+device named "Kitchen Outlets", and "Recreate entity IDs" would offer it the
+circuit's name twice.
+
+For each circuit with such an entity still on the panel's device, in this order:
 
 1. each entity's displayed name is recorded, before anything changes;
 2. the circuit's device is created, as the platforms would create it;
 3. names an older release wrote into the registry are handed back, before
    anything reads them as the user's;
 4. the circuit's area moves to its device, where that cannot put a breaker in
-   a room (`_area_for_the_device`);
+   a room, and a device that already has an area keeps it
+   (`_area_for_the_device`);
 5. a user's name that starts with the circuit's name is trimmed, since the
    device now says it;
 6. each entity is moved, renamed to its label and given its area and name in
@@ -36,6 +45,13 @@ Left where they are:
 
 - an entity of a circuit the panel does not publish, which stays on the
   panel's device with its name and area untouched;
+- an entity no platform builds this setup: a Net Energy sensor while the
+  option for them is off, a Current or Breaker Rating sensor whose circuit
+  does not publish the value, a breaker switch or priority select while
+  controls are switched off or the panel offers none on the circuit. Its row
+  stays as the older release left it, name, area and ID base, and is
+  converted by the setup that builds its entity again, after its circuit's
+  other entities;
 - a circuit-scoped extension entity, which is never re-homed (`extension`);
 - a charger's feed circuit's sensors, which belong on the charger's device;
 - any other row whose unique id names a circuit without being one the
@@ -47,6 +63,7 @@ changed, after the platforms are set up.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
 from typing import Final
@@ -56,19 +73,17 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from span_panel_api import SpanPanelSnapshot
 
 from .const import DOMAIN
+from .control_gate import ControlMode, ControlPolicy
 from .entity_resolver import entity_id_in_entry
 from .extension import is_extension_unique_id
+from .helpers import circuit_has_a_breaker_switch, circuit_has_a_priority_select
 from .id_builder import build_circuit_unique_id, build_select_unique_id, build_switch_unique_id
 from .naming import release_registry_name_written_by_older_release, trim_leading_circuit_name
 from .runtime import SpanPanelConfigEntry
 from .select import CIRCUIT_PRIORITY_DESCRIPTION
 from .sensor_base import description_label
 from .sensor_circuit import circuit_sensor_api_key
-from .sensor_definitions import (
-    CIRCUIT_BREAKER_RATING_SENSOR,
-    CIRCUIT_CURRENT_SENSOR,
-    CIRCUIT_SENSORS,
-)
+from .sensor_definitions import circuit_sensor_descriptions
 from .switch import BREAKER_LABEL
 from .util import circuit_device_info, effective_circuit_device_name
 
@@ -124,7 +139,7 @@ class ConversionReport:
 
 @dataclass(frozen=True, slots=True)
 class _CircuitEntity:
-    """One of the entities the integration builds for a circuit, on the circuit's device."""
+    """One of the entities this setup builds for a circuit, on the circuit's device."""
 
     circuit_id: str
 
@@ -135,8 +150,10 @@ class _CircuitEntity:
     """Labels it carried in older releases, which the registry may still hold."""
 
 
-def _circuit_entities(snapshot: SpanPanelSnapshot) -> dict[tuple[str, str], _CircuitEntity]:
-    """Return every entity that belongs on a circuit's device, by domain and unique id.
+def _circuit_entities(
+    snapshot: SpanPanelSnapshot, options: Mapping[str, object]
+) -> dict[tuple[str, str], _CircuitEntity]:
+    """Return every entity this setup builds on a circuit's device, by domain and unique id.
 
     Built from the snapshot's circuits with the builders the platforms use, so
     a registry row is recognised exactly where a platform would find it again:
@@ -144,60 +161,70 @@ def _circuit_entities(snapshot: SpanPanelSnapshot) -> dict[tuple[str, str], _Cir
     circuit a row names, as `id_builder.match_circuit_id` does, and which of
     the circuit's entities it is, which says what its label becomes.
 
+    Only what a setup under `options` builds, decided by what its platforms
+    decide with, so none of these is left without the platform add that
+    completes its move:
+
+    - a circuit's sensors are `circuit_sensor_descriptions`, the sensor
+      platform's own list;
+    - its breaker switch and priority select are there unless controls are
+      switched off, and then only where the panel offers the control, by the
+      predicates the two platforms create with.
+
     A charger's feed circuit's sensors are not among them. They go on the
     charger's device, where the sensor platform puts them, and only the feed
     circuit's switch and select are its own device's.
     """
     serial = snapshot.serial_number
     charger_feeds = {evse.feed_circuit_id for evse in snapshot.evse.values()}
+    controls_built = ControlPolicy.from_options(options).mode is not ControlMode.DISABLED
     entities: dict[tuple[str, str], _CircuitEntity] = {}
-    for circuit_id in snapshot.circuits:
+    for circuit_id, circuit in snapshot.circuits.items():
         if circuit_id not in charger_feeds:
-            for description in (
-                *CIRCUIT_SENSORS,
-                CIRCUIT_CURRENT_SENSOR,
-                CIRCUIT_BREAKER_RATING_SENSOR,
-            ):
+            for description in circuit_sensor_descriptions(circuit, options):
                 unique_id = build_circuit_unique_id(
                     serial, circuit_id, circuit_sensor_api_key(description.key)
                 )
                 entities["sensor", unique_id] = _CircuitEntity(
                     circuit_id, description_label(description), description.legacy_names
                 )
-        entities["switch", build_switch_unique_id(serial, circuit_id)] = _CircuitEntity(
-            circuit_id, BREAKER_LABEL
-        )
-        entities["select", build_select_unique_id(serial, circuit_id)] = _CircuitEntity(
-            circuit_id, CIRCUIT_PRIORITY_DESCRIPTION.name
-        )
+        if controls_built and circuit_has_a_breaker_switch(circuit):
+            entities["switch", build_switch_unique_id(serial, circuit_id)] = _CircuitEntity(
+                circuit_id, BREAKER_LABEL
+            )
+        if controls_built and circuit_has_a_priority_select(circuit):
+            entities["select", build_select_unique_id(serial, circuit_id)] = _CircuitEntity(
+                circuit_id, CIRCUIT_PRIORITY_DESCRIPTION.name
+            )
     return entities
 
 
 def _rows_to_convert(
     registry: er.EntityRegistry,
-    entry_id: str,
+    entry: SpanPanelConfigEntry,
     snapshot: SpanPanelSnapshot,
     panel_device_id: str,
 ) -> dict[str, dict[str, _CircuitEntity]]:
     """Return the circuit entities still on the panel's device: circuit id to entity id to entity.
 
     A row is one of them when it belongs to this entry, sits on the panel's
-    device and is one of the entities the integration builds for a circuit the
-    snapshot holds. Disabled entities are included: the registry keeps their
-    rows, and a platform that never adds them would never move them. An
-    extension entity is ruled out by name, though no id the integration builds
-    for a circuit is an extension's: it is never re-homed, whatever it names.
+    device and is one of the entities this setup builds for a circuit the
+    snapshot holds. Disabled entities are included: the platforms build them
+    too, and Home Assistant registers a disabled entity again, which refreshes
+    its row, before it declines to add it. An extension entity is ruled out by
+    name, though no id the integration builds for a circuit is an extension's:
+    it is never re-homed, whatever it names.
 
     In the registry's own order, the order it stores its rows in, which the
     area rule reads. The registry's per-entry index is not in that order: an
     update moves a row to its end, so read through it the first area among a
     circuit's entities would be the one on whichever was edited longest ago.
     """
-    circuit_entities = _circuit_entities(snapshot)
+    circuit_entities = _circuit_entities(snapshot, entry.options)
     selected: dict[str, dict[str, _CircuitEntity]] = {}
     for row in registry.entities.values():
         if (
-            row.config_entry_id != entry_id
+            row.config_entry_id != entry.entry_id
             or row.device_id != panel_device_id
             or is_extension_unique_id(row.unique_id)
         ):
@@ -226,28 +253,61 @@ def _circuit_switch(
 
 
 def _area_for_the_device(
+    settled_area: str | None,
     switch: er.RegistryEntry | er.DeletedRegistryEntry | None,
     rows: list[er.RegistryEntry],
     power_unique_id: str,
 ) -> str | None:
-    """Return the area a circuit's device takes from its entities, or None if none moves.
+    """Return the area a circuit's device has for its entities to share, or None if none moves.
 
-    The breaker switch decides wherever there is one. Entities with no area of
-    their own inherit their device's, and an area-wide turn-off reaches every
-    switch in the area, so moving another entity's area to the device would put
-    the breaker in that room.
+    `settled_area` is the area the device already has, which it keeps. The
+    circuit's area is decided once, by the rule below, when its first entities
+    are converted, and is the user's to change from then on. Entities converted
+    at a later setup, whose platform builds them again only then, join it:
+    read as the circuit's first area, one of theirs would move the device and
+    every entity on it.
+
+    For a device with no area yet, the breaker switch decides wherever there is
+    one. Entities with no area of their own inherit their device's, and an
+    area-wide turn-off reaches every switch in the area, so moving another
+    entity's area to the device would put the breaker in that room.
 
     1. A switch with an area of its own: the device takes that area.
     2. No switch: the device takes the power sensor's area, or failing that the
        first area among the circuit's other entities, in the registry's order.
     3. A switch with no area of its own: nothing moves.
     """
+    if settled_area is not None:
+        return settled_area
     if switch is not None:
         return switch.area_id
     power = next((row for row in rows if row.unique_id == power_unique_id), None)
     if power is not None and power.area_id is not None:
         return power.area_id
     return next((row.area_id for row in rows if row.area_id is not None), None)
+
+
+def _own_area_on_the_device(
+    row: er.RegistryEntry,
+    switch: er.RegistryEntry | er.DeletedRegistryEntry | None,
+    device_area: str | None,
+) -> str | None:
+    """Return the area of its own an entity keeps once it is on its circuit's device.
+
+    Where no area moved to the device, the one it has. Otherwise none: an
+    entity with an area of its own displays without its device, as just
+    "Power", so every entity gives its own up for the device's.
+
+    Except the breaker switch, which never leaves the area it is in. It can
+    differ from the device's only where the device's was settled before the
+    switch was converted and one of the two has been moved since, and there the
+    switch keeps its own.
+    """
+    if device_area is None:
+        return row.area_id
+    if switch is not None and row.entity_id == switch.entity_id and row.area_id != device_area:
+        return row.area_id
+    return None
 
 
 @callback
@@ -273,7 +333,7 @@ def async_convert_circuit_entities(
     area_changes: list[AreaChange] = []
     circuits_left_in_areas: list[str] = []
 
-    selected = _rows_to_convert(entity_registry, entry.entry_id, snapshot, panel_device_id)
+    selected = _rows_to_convert(entity_registry, entry, snapshot, panel_device_id)
     for circuit_id, entities in selected.items():
         circuit = snapshot.circuits[circuit_id]
 
@@ -305,22 +365,21 @@ def async_convert_circuit_entities(
         ]
         switch = _circuit_switch(entity_registry, entry.entry_id, serial, circuit_id)
         device_area = _area_for_the_device(
-            switch, rows, build_circuit_unique_id(serial, circuit_id, _POWER_WIRE_KEY)
+            device.area_id,
+            switch,
+            rows,
+            build_circuit_unique_id(serial, circuit_id, _POWER_WIRE_KEY),
         )
-        if device_area is not None:
-            # The rule decides even where the device already has an area, which
-            # only a conversion cut short can have left it: the area is the one
-            # the breaker switch is in already, or the circuit has no switch.
+        if device_area is None:
+            if switch is not None and any(row.area_id is not None for row in rows):
+                circuits_left_in_areas.append(device_name)
+        elif device.area_id is None:
             device_registry.async_update_child_device(device.id, area_id=device_area)
-        elif switch is not None and any(row.area_id is not None for row in rows):
-            circuits_left_in_areas.append(device_name)
 
         for row in rows:
-            # Once the device has the circuit's area, no entity keeps one of its
-            # own: it would display without its device, as just "Power".
             own_area = row.area_id
-            area_id = None if device_area is not None else own_area
-            if device_area is not None and own_area is not None and own_area != device_area:
+            area_id = _own_area_on_the_device(row, switch, device_area)
+            if own_area is not None and area_id is None and own_area != device_area:
                 area_changes.append(AreaChange(row.entity_id, own_area, device_area))
 
             # An entity that keeps an area of its own displays without its

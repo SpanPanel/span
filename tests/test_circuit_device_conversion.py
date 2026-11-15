@@ -9,9 +9,14 @@ circuit name the user's own name began with, and afterwards raises one notice
 listing what changed.
 
 Each case seeds the registry the way 2.3.0b4 left it, with every circuit entity
-on the panel's device, then runs the integration's real `async_setup_entry`
-over a replayed capture (`captures_replay.ReplayClient`): the real coordinator,
-platforms and registries.
+on the panel's device and holding the ID base that release stored, then runs
+the integration's real `async_setup_entry` over a replayed capture
+(`captures_replay.ReplayClient`): the real coordinator, platforms and
+registries.
+
+Only the entities a setup builds are converted by it. A row whose entity no
+platform adds that time stays on the panel's device as it was, and converts at
+the setup that builds its entity again.
 
 The suite runs on Home Assistant 2026.10.4, where an entity the user renamed
 still displays that name whole. Cases about renamed entities therefore assert
@@ -36,7 +41,6 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
-from homeassistant.util import slugify
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
@@ -55,9 +59,11 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     DOMAIN,
+    ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
+from custom_components.span_panel.control_gate import ControlMode
 from custom_components.span_panel.conversion_repairs import (
     async_clear_conversion_notice,
     async_raise_conversion_notice,
@@ -78,6 +84,7 @@ from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
     CURRENT_CONFIG_VERSION,
 )
+from custom_components.span_panel.options import CONTROL_MODE
 
 from .captures_replay import CAPTURES, ReplayClient, RetainedTree, capture, replay
 from .helpers import PANEL_NAME, add_panel_entry, register_panel_device
@@ -107,6 +114,12 @@ SECOND_PANEL_NAME: Final = "SPAN Panel 2"
 NAMES_MODE: Final[Mapping[str, object]] = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 NUMBERS_MODE: Final[Mapping[str, object]] = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 
+NET_ENERGY_OFF: Final[Mapping[str, object]] = {ENABLE_CIRCUIT_NET_ENERGY_SENSORS: False}
+"""The option under which no circuit's Net Energy sensor is built."""
+
+CONTROLS_OFF: Final[Mapping[str, object]] = {CONTROL_MODE: ControlMode.DISABLED.value}
+"""The option under which no breaker switch and no priority select is built."""
+
 NONE_LISTED: Final = "—"
 """What the notice shows in place of a list with nothing in it."""
 
@@ -132,6 +145,11 @@ class _Kind:
 
     id_suffix: str
     """What its entity ID ends with."""
+
+    @property
+    def id_words(self) -> str:
+        """Return the words the release put after the circuit in the entity's ID base."""
+        return self.id_suffix.replace("_", " ")
 
     unique_id: Callable[[str, str], str]
     """Its unique ID, from the panel's serial and the circuit's ID."""
@@ -336,6 +354,19 @@ def _tree() -> RetainedTree:
     return _named(capture(CAPTURE).tree(), {KITCHEN: KITCHEN_OUTLETS, UNSWITCHED: WORKSHOP})
 
 
+def _unpublished(tree: RetainedTree, circuit_id: str, published_property: str) -> RetainedTree:
+    """Take a property out of the tree, as a panel that stopped publishing it for a circuit."""
+    del tree[circuit_id][published_property]
+    return tree
+
+
+async def _change_options(install: _Install, options: Mapping[str, object]) -> None:
+    """Save new options for a panel that is set up, which reloads it."""
+    install.hass.config_entries.async_update_entry(install.entry, options=dict(options))
+    await install.hass.async_block_till_done()
+    assert install.entry.state is ConfigEntryState.LOADED
+
+
 def _install(
     hass: HomeAssistant,
     tree: RetainedTree,
@@ -350,6 +381,11 @@ def _install(
     release gave it, "Kitchen Outlets Power", and the ID its naming mode built:
     from the circuit's name, or from its breaker positions. A charger's feed
     circuit's sensors are left out: they were on the charger's device.
+
+    Each row holds the ID base the release stored, "Kitchen Outlets power", and
+    no suggested ID, so Home Assistant composed its ID then and composes it
+    again for "Recreate entity IDs". A row seeded with a suggested ID instead
+    would be offered that ID whatever became of its base.
     """
     adapter = replay(tree)
     snapshot = adapter.build_snapshot()
@@ -395,7 +431,7 @@ def _install(
                 device_id=panel.id,
                 has_entity_name=True,
                 original_name=f"{circuit.name} {kind.label}",
-                suggested_object_id=slugify(f"{panel_name} {identifier} {kind.id_suffix}"),
+                object_id_base=f"{identifier} {kind.id_words}",
                 disabled_by=(
                     er.RegistryEntryDisabler.INTEGRATION if kind.disabled_by_default else None
                 ),
@@ -560,7 +596,12 @@ async def test_an_older_release_name_is_released_not_trimmed(hass: HomeAssistant
 
 
 async def test_disabled_entities_are_converted(hass: HomeAssistant) -> None:
-    """A disabled entity is moved and renamed like any other, and stays disabled."""
+    """A disabled entity is moved and renamed like any other, and stays disabled.
+
+    Its platform builds it, and Home Assistant registers it again before
+    declining to add it, so its row gets the ID base that goes with its
+    circuit's device and is still offered the ID it has.
+    """
     install = _install(hass, _tree())
     registry = er.async_get(hass)
     registry.async_update_entity(
@@ -579,6 +620,8 @@ async def test_disabled_entities_are_converted(hass: HomeAssistant) -> None:
         assert rating.disabled_by is er.RegistryEntryDisabler.INTEGRATION
         assert at_forward[power.entity_id] == _stored(power)
         assert at_forward[rating.entity_id] == _stored(rating)
+        assert power.object_id_base == "power"
+        assert registry.async_regenerate_entity_id(power) == power.entity_id
 
 
 async def test_numbers_mode_install_converts_with_ids_unchanged(hass: HomeAssistant) -> None:
@@ -747,6 +790,154 @@ async def test_a_charger_feed_circuits_sensors_are_left_for_the_charger_device(
 
 
 # ---------------------------------------------------------------------------
+# What no platform builds this setup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", [NAMES_MODE, NUMBERS_MODE], ids=["names", "numbers"])
+@pytest.mark.parametrize(
+    ("options", "unpublished", "left"),
+    [
+        pytest.param(NET_ENERGY_OFF, None, (NET,), id="net-energy-switched-off"),
+        pytest.param({}, "meter/current", (CURRENT,), id="current-no-longer-published"),
+        pytest.param({}, "breaker/rating", (BREAKER_RATING,), id="rating-no-longer-published"),
+        pytest.param(CONTROLS_OFF, None, (BREAKER, PRIORITY), id="controls-switched-off"),
+    ],
+)
+async def test_an_entity_no_platform_builds_stays_as_it_was(
+    hass: HomeAssistant,
+    mode: Mapping[str, object],
+    options: Mapping[str, object],
+    unpublished: str | None,
+    left: tuple[_Kind, ...],
+) -> None:
+    """A row whose entity this setup does not build is left on the panel's device, untouched.
+
+    Only a platform adding the entity gives its row the ID base that goes with
+    its circuit's device. Moved without that, the row would keep the base
+    2.3.0b4 stored, "Kitchen Outlets net energy", under a device now named
+    "Kitchen Outlets", and "Recreate entity IDs" would offer it
+    `..._kitchen_outlets_kitchen_outlets_net_energy`. Left where it is, it is
+    offered the ID it has, as before the upgrade. The circuit's other entities
+    convert as usual.
+    """
+    install = _install(hass, _tree(), options={**mode, **options})
+    if unpublished is not None:
+        install = replace(install, adapter=replay(_unpublished(_tree(), KITCHEN, unpublished)))
+    registry = er.async_get(hass)
+    before = {kind: install.row(KITCHEN, kind) for kind in left}
+    for row in before.values():
+        assert row.object_id_base is not None
+        assert registry.async_regenerate_entity_id(row) == row.entity_id
+    built = [kind for kind in install.kinds(KITCHEN) if kind not in left]
+    assert built
+
+    async with _set_up(install) as at_forward:
+        for kind, row_before in before.items():
+            row = install.row(KITCHEN, kind)
+            assert row == row_before, row.entity_id
+            assert row.device_id == install.panel_device_id
+            assert at_forward[row.entity_id] == _stored(row_before)
+            assert registry.async_regenerate_entity_id(row) == row.entity_id
+        device = install.circuit_device(KITCHEN)
+        for kind in built:
+            assert install.row(KITCHEN, kind).device_id == device.id, kind.label
+
+
+async def test_an_entity_left_on_the_panel_converts_once_a_platform_builds_it(
+    hass: HomeAssistant,
+) -> None:
+    """The setup that builds the entity again converts its row, and the add gives it its base.
+
+    The conversion runs at every setup on what is still on the panel's device,
+    so the row waits there for as long as its entity is not built, and is
+    still offered its own ID once it has moved.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **NET_ENERGY_OFF})
+    registry = er.async_get(hass)
+
+    async with _set_up(install) as at_forward:
+        assert install.row(KITCHEN, NET).device_id == install.panel_device_id
+
+        await _change_options(install, NAMES_MODE)
+
+        row = install.row(KITCHEN, NET)
+        assert (row.device_id, row.original_name) == (
+            install.circuit_device(KITCHEN).id,
+            "Net Energy",
+        )
+        assert at_forward[row.entity_id] == _stored(row)
+        assert row.object_id_base == "net energy"
+        assert registry.async_regenerate_entity_id(row) == row.entity_id
+        assert install.convert().empty
+
+
+async def test_a_control_the_panel_stopped_offering_is_left_for_its_platform_to_withdraw(
+    hass: HomeAssistant,
+) -> None:
+    """A breaker switch and a priority select the panel offers no longer are not converted.
+
+    Their platforms build neither and remove both rows. The switch is still the
+    circuit's switch while it is there, so its area decides the circuit's.
+    """
+    install = _install(hass, _tree())
+    kitchen, garage = _area(hass, "Kitchen"), _area(hass, "Garage")
+    registry = er.async_get(hass)
+    controls = {
+        kind: registry.async_get_or_create(
+            kind.domain,
+            DOMAIN,
+            kind.unique_id(install.serial, UNSWITCHED),
+            config_entry=install.entry,
+            device_id=install.panel_device_id,
+            has_entity_name=True,
+            original_name=f"{WORKSHOP} {kind.label}",
+            object_id_base=f"{WORKSHOP} {kind.id_words}",
+        )
+        for kind in (BREAKER, PRIORITY)
+    }
+    controls[BREAKER] = registry.async_update_entity(controls[BREAKER].entity_id, area_id=kitchen)
+    install.update(UNSWITCHED, POWER, area_id=garage)
+
+    async with _set_up(install) as at_forward:
+        for row in controls.values():
+            assert at_forward[row.entity_id] == _stored(row)
+            assert registry.async_get(row.entity_id) is None
+        assert install.circuit_device(UNSWITCHED).area_id == kitchen
+        assert install.row(UNSWITCHED, POWER).area_id is None
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        pytest.param({}, id="everything-built"),
+        pytest.param(NET_ENERGY_OFF, id="net-energy-switched-off"),
+        pytest.param(CONTROLS_OFF, id="controls-switched-off"),
+        pytest.param({**NET_ENERGY_OFF, **CONTROLS_OFF}, id="both-switched-off"),
+    ],
+)
+async def test_recreate_offers_every_circuit_entity_the_id_it_has(
+    hass: HomeAssistant, options: Mapping[str, object]
+) -> None:
+    """On a circuit-names install no circuit entity is offered another ID, converted or not.
+
+    The guard against the conversion and the platforms disagreeing about what a
+    setup builds: a row moved to a circuit's device that no platform then adds
+    keeps the base that names the circuit, and is offered the circuit's name
+    twice.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **options})
+    registry = er.async_get(hass)
+    before = {row.unique_id: row.entity_id for row in install.all_rows()}
+
+    async with _set_up(install):
+        rows = install.all_rows()
+        assert {row.unique_id: row.entity_id for row in rows} == before
+        for row in rows:
+            assert registry.async_regenerate_entity_id(row) == row.entity_id
+
+
+# ---------------------------------------------------------------------------
 # Areas
 # ---------------------------------------------------------------------------
 
@@ -901,6 +1092,102 @@ async def test_the_trim_skips_an_entity_that_keeps_its_area(hass: HomeAssistant)
         power = install.row(KITCHEN, POWER)
         assert (power.name, power.area_id) == ("Kitchen Outlets Power usage", garage)
         assert install.row(KITCHEN, CURRENT).name == "Amps"
+
+
+async def test_a_late_entity_joins_the_area_its_circuit_device_has(hass: HomeAssistant) -> None:
+    """An entity converted after its circuit's others gives up its area for the device's.
+
+    The device's area was settled when the circuit's first entities were
+    converted. Read as the circuit's first area instead, the late entity's own
+    would move the device, and every entity on it, to another room.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **NET_ENERGY_OFF})
+    garage, basement = _area(hass, "Garage"), _area(hass, "Basement")
+    install.update(UNSWITCHED, POWER, area_id=garage)
+    install.update(UNSWITCHED, NET, area_id=basement)
+
+    async with _set_up(install):
+        assert install.circuit_device(UNSWITCHED).area_id == garage
+        assert install.row(UNSWITCHED, NET).area_id == basement
+        assert install.notice_lists()["area_changes"] == NONE_LISTED
+
+        await _change_options(install, NAMES_MODE)
+
+        device = install.circuit_device(UNSWITCHED)
+        net = install.row(UNSWITCHED, NET)
+        assert device.area_id == garage
+        assert (net.device_id, net.area_id) == (device.id, None)
+        assert install.notice_lists() == {
+            "panel": PANEL_NAME,
+            "renamed": NONE_LISTED,
+            "area_changes": "- Workshop Net Energy: Basement → Garage",
+            "circuits_left_in_areas": NONE_LISTED,
+        }
+
+
+async def test_an_area_the_user_gave_a_circuit_device_outlasts_a_late_entity(
+    hass: HomeAssistant,
+) -> None:
+    """A device the user has put in an area stays there, and a late entity joins it.
+
+    The circuit's breaker switch had no area, so the conversion moved none and
+    the user chose the device's since.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **NET_ENERGY_OFF})
+    kitchen, basement = _area(hass, "Kitchen"), _area(hass, "Basement")
+    install.update(KITCHEN, NET, area_id=basement)
+
+    async with _set_up(install):
+        device = install.circuit_device(KITCHEN)
+        assert device.area_id is None
+        dr.async_get(hass).async_update_child_device(device.id, area_id=kitchen)
+
+        await _change_options(install, NAMES_MODE)
+
+        net = install.row(KITCHEN, NET)
+        assert install.circuit_device(KITCHEN).area_id == kitchen
+        assert (net.device_id, net.area_id) == (device.id, None)
+        lists = install.notice_lists()
+        assert lists["area_changes"] == "- Kitchen Outlets Net Energy: Basement → Kitchen"
+        assert lists["circuits_left_in_areas"] == NONE_LISTED
+
+
+@pytest.mark.parametrize(
+    "device_moved", [pytest.param(False, id="device-where-the-switch-is"), True]
+)
+async def test_a_late_breaker_switch_stays_in_the_area_it_is_in(
+    hass: HomeAssistant, device_moved: bool
+) -> None:
+    """A breaker switch converted after its circuit's others never changes area.
+
+    Still on the panel's device, it decided the circuit's area. If the user has
+    since put the circuit's device in another, the device stays there and the
+    switch keeps its own: taking the device's would put the breaker in a room
+    it was never in, and moving the device would undo the user's choice.
+    """
+    install = _install(hass, _tree(), options={**NAMES_MODE, **CONTROLS_OFF})
+    kitchen, garage = _area(hass, "Kitchen"), _area(hass, "Garage")
+    install.update(KITCHEN, BREAKER, area_id=kitchen)
+
+    async with _set_up(install):
+        device = install.circuit_device(KITCHEN)
+        assert device.area_id == kitchen
+        assert install.row(KITCHEN, BREAKER).device_id == install.panel_device_id
+        if device_moved:
+            dr.async_get(hass).async_update_child_device(device.id, area_id=garage)
+
+        await _change_options(install, NAMES_MODE)
+
+        switch, select = install.row(KITCHEN, BREAKER), install.row(KITCHEN, PRIORITY)
+        assert (switch.device_id, select.device_id) == (device.id, device.id)
+        if device_moved:
+            assert install.circuit_device(KITCHEN).area_id == garage
+            assert switch.area_id == kitchen
+        else:
+            assert install.circuit_device(KITCHEN).area_id == kitchen
+            assert switch.area_id is None
+        assert select.area_id is None
+        assert install.notice_lists()["area_changes"] == NONE_LISTED
 
 
 # ---------------------------------------------------------------------------
