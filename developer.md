@@ -393,8 +393,9 @@ on what the panel publishes (`firmware_schema.py`), whether or not its adapter i
 ## Circuit entity ids: a base, not a preset
 
 Since Home Assistant 2026.8 the user owns entity id composition — `entity_id_parts` says whether the area, the device and the entity name are in an id, and Core
-assembles it. This integration no longer presets `entity_id` for circuit entities. It supplies one _base_ per entity and Core does the rest, which is how every
-non-circuit entity here has always worked.
+assembles it. This integration supplies one _base_ per circuit entity and Core does the rest, which is how every non-circuit entity here has always worked. The
+one `entity_id` it presets is a circuit entity's in circuit-numbers mode, once, when the entity is created, and that id is composed under the same settings
+(`circuit_number_ids`). `developer_entity_id_and_name_handling.md` holds the rules, R1 to R5, and is the document to check a naming change against.
 
 `naming.py` is the only place the wording of a circuit id is written down. Each circuit's entities live on the circuit's own device, a child of the panel's, so
 Core composes the panel's name and the circuit's from the two devices and the base is the suffix alone:
@@ -416,14 +417,15 @@ sensors through `_object_id_base`, and the switch and the select directly.
 
 R1 — "Recreate entity IDs" must never propose a change the user did not cause — bounds the _base_ and nothing else. Read exactly: the base must reproduce an
 existing entity's id **where Home Assistant composes it under the entity-id options that match how that install was built**. That is why the suffix wording is
-read back and why the name half is anchored on the circuit's own name: two spellings of ours, or a relabel, must never produce an offer.
+read back and why the name half comes from the circuit's device, which the panel names: two spellings of ours, or a relabel, must never produce an offer. In
+circuit-numbers mode the id an entity is created with carries its circuit number, and Recreate afterwards offers the circuit's name (R3).
 
 It is **not** a license to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
 device is the charger and not the panel; a second panel the config flow named "Span Panel 2", whose circuit ids all say `span_panel_` because the old builder
 was never told the panel's name; an install with `USE_DEVICE_PREFIX` off, whose ids carry no device at all where `has_entity_name` prefixes one — that is the
 user's own configuration at work, and the offer is legitimate. Recreate offers it; nothing moves until the user presses the button (R5). The "legacy preset"
-exceptions written for those three shapes were withdrawn by the maintainer on 2026-08-26, and there is no `self.entity_id = …` left in any of the four
-platforms.
+exceptions written for those three shapes were withdrawn by the maintainer on 2026-08-26. The only `self.entity_id = …` left in the platforms is the
+circuit-numbers creation preset, which is composed under the user's `entity_id_parts` and made once.
 
 One consequence worth naming: a circuit sensor on a sub-device card supplies **no base at all**. Its label there is the bare description name (`Power`), so it
 composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity is on its

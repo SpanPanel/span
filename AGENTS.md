@@ -85,15 +85,17 @@ It creates `../span-<name>` beside the primary checkout from a freshly fetched `
 All services registered by this integration MUST conform to the following requirements. These align with Home Assistant core's service architecture and ensure
 consistent behavior, proper UI rendering, and correct error handling.
 
-### 1. Voluptuous Schema Validation
+### 1. Schema Validation with probatio
 
-Every service MUST have a `vol.Schema` passed to `hass.services.async_register`. Use `vol.Required` for mandatory fields and `vol.Optional` for optional ones.
-Apply range/type validators (`vol.All`, `vol.Range`, `vol.Coerce`, `vol.In`) to constrain inputs at the schema level — do not defer validation to the handler.
+Every service MUST have a `vol.Schema` passed to `hass.services.async_register`, where `vol` is `probatio`, Home Assistant's schema library
+(`import probatio as vol`). Use `vol.Required` for mandatory fields and `vol.Optional` for optional ones. Apply range/type validators (`vol.All`, `vol.Range`,
+`vol.Coerce`, `vol.In`) to constrain inputs at the schema level — do not defer validation to the handler.
 
 ### 2. services.yaml Field Definitions
 
-Every service MUST have a corresponding entry in `services.yaml`. Each field MUST include a `selector` that matches its voluptuous type so the HA UI can render
-the correct input widget. Required fields MUST be marked with `required: true`. Parameterless services still need an entry (the service name with no body).
+Every service MUST have a corresponding entry in `services.yaml`. Each field MUST include a `selector` that matches its type in the schema so the HA UI can
+render the correct input widget. Required fields MUST be marked with `required: true`. Parameterless services still need an entry (the service name with no
+body).
 
 ### 3. strings.json Translations
 

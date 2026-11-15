@@ -46,7 +46,7 @@ real-time state updates without polling.
 
 ## Prerequisites
 
-- [Home Assistant](https://www.home-assistant.io/) installed
+- [Home Assistant](https://www.home-assistant.io/) 2026.11 or later
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel not on spanos2 firmware (see below)
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door; a panel that registers by passphrase only needs the passphrase
@@ -290,13 +290,13 @@ Created automatically when a SPAN Drive or other EVSE is commissioned on the pan
 The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
 feature. A display suffix differentiates multiple chargers on the same panel:
 
-- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
+- **Circuit names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
 - **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
 - **No suffix available**: the display suffix is omitted entirely (no empty parentheses)
 
 | Naming Mode     | Example Device Name                   | Example Entity ID                                         |
 | --------------- | ------------------------------------- | --------------------------------------------------------- |
-| Friendly names  | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
+| Circuit names   | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
 | Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
 | No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
 
@@ -382,6 +382,10 @@ Applies to Main Meter and Feed Through energy sensors.
 | `voltage` | string | Nominal panel voltage ("240") |
 
 ### Circuit-Level Sensors (per circuit)
+
+Each circuit is a device of its own under the panel's device. It holds the sensors below and, on a user-controllable circuit, the
+[circuit controls](#circuit-controls-per-user-controllable-circuit). The circuit that feeds a charger is the exception: its sensors are on the
+[charger's device](#evse-device-naming). See [Entity Naming Pattern](#entity-naming-pattern) for how circuit devices and their entities are named.
 
 | Sensor          | Device Class | Unit | Notes                                                                                         |
 | --------------- | ------------ | ---- | --------------------------------------------------------------------------------------------- |
@@ -601,31 +605,56 @@ Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `
 
 ### Entity Naming Pattern
 
-The integration provides flexible entity naming patterns, configured during initial setup:
+Each circuit is a device of its own in Home Assistant, under the panel's device and named by the circuit's name in the SPAN app. A circuit with no name there is
+named by its breaker position, such as "Circuit 15". A circuit's entities are named by what they measure or control, such as Power or Breaker, and Home
+Assistant puts the panel's name and the circuit's in front when it displays them, as in "Span Panel Kitchen Outlets Power". This requires Home Assistant 2026.11
+or later.
 
-1. **Friendly Names** (Recommended for new installations)
+- Renaming a circuit in the SPAN app renames its device, and with it the displayed name of every entity of the circuit. The integration reloads itself to pick
+  the new name up.
+- A name you give a circuit's device in Home Assistant takes precedence over the SPAN app's. A name you give an entity is yours, and a rename in the SPAN app
+  does not change it.
+- An area you set on a circuit's device applies to every entity of the circuit that has no area of its own, the Breaker switch included, so an action aimed at
+  that area, such as turning off everything in a room, turns that breaker off. When the panel adds a Breaker switch to a circuit whose device already has an
+  area, a repair names the switch and the area.
 
-   - Entity IDs use descriptive circuit names from your SPAN panel
+The naming pattern, chosen during initial setup, decides only the entity ID a new circuit entity is created with. Displayed names follow the SPAN app either
+way.
+
+1. **Circuit names** (Recommended for new installations)
+
    - Example: `sensor.span_panel_kitchen_outlets_power`
-   - Renaming a circuit in the SPAN app updates the displayed name automatically — the integration reloads itself to pick the new name up, since it travels as
-     the entity's original name and only a rebuild refreshes it; the entity ID changes only if you accept the offer from **Recreate entity IDs**
+   - Home Assistant builds each new entity's ID from the panel's name, the circuit's name and what the entity measures
    - More intuitive for automations and scripts
 
-2. **Circuit Numbers** (Stable entity IDs)
+2. **Circuit numbers**
 
-   - Entity IDs use generic circuit numbers
-   - Example: `sensor.span_panel_circuit_15_power`
-   - Entity IDs stay stable when circuits are renamed
-   - Friendly names still sync from SPAN panel for display
+   - Example: `sensor.span_panel_circuit_15_power`, or `sensor.span_panel_circuit_30_32_power` for a two-pole breaker
+   - The integration builds each new entity's ID from its breaker's position in place of the circuit's name, so the ID does not depend on what the circuit is
+     called when the entity is created
 
-The integration supplies only the circuit half of the ID shown above — `Kitchen Outlets Power` or `Circuit 15 Power`. Home Assistant composes the rest from your
-own entity ID settings (`entity_id_parts`, Home Assistant 2026.8 and newer), which decide whether the device name and the area are prefixed.
+An entity ID never changes on its own, in either mode. It changes only if you press **Recreate entity IDs** and accept the ID offered, which is the one Home
+Assistant builds now from the panel's name, the name of the circuit's device and what the entity measures:
 
-For an entity that already exists, the suffix wording in that half is read back from the ID the entity has rather than reworded. Circuit energy IDs have shipped
+- After a circuit is renamed in the SPAN app, Recreate offers an ID with the new name.
+- With circuit numbers, Recreate offers the ID the circuit would have under circuit names, such as `sensor.span_panel_kitchen_outlets_power` for
+  `sensor.span_panel_circuit_15_power`, which matches the displayed name. The circuit-number ID stays unless you accept, and entities created later still get
+  circuit-number IDs.
+
+The integration supplies only the last part of the ID shown above, such as `power`. Home Assistant composes the rest from your own entity ID settings
+(`entity_id_parts`), which decide whether the area and the panel's name go in front of the circuit's name. If you have saved a custom entity ID format in Home
+Assistant's settings that leaves out the parent device, circuit entities' IDs are built without the panel's name, so Recreate offers
+`sensor.kitchen_outlets_power`.
+
+For an entity that already exists, the wording of that last part is read back from the ID the entity has rather than reworded. Circuit energy IDs have shipped
 in two spellings — `consumed_energy` and `energy_consumed` — so an installation is offered whichever one it is already using, and never the other; only new
 sensors get the `consumed_energy` word order that the panel-level sensors use. Because your entity ID settings decide the rest of the ID, an installation whose
 circuits were named before those settings existed — a SPAN Drive feed circuit, a second panel, or an installation predating the device prefix — may be offered
 an ID with a different device half. Entities you already have keep the IDs they have until you press **Recreate entity IDs** and accept the offer.
+
+Upgrading from a release before 2.3.0 moves each circuit's entities from the panel's device to the circuit's own. No entity ID changes, and names you never
+changed display as before. A repair lists every displayed name and area the move changed. Templates that read an entity's device, such as `device_name` or
+`device_entities`, see the circuit's device from then on.
 
 ### Energy Dip Compensation
 
@@ -804,7 +833,7 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **Door sensor unavailable**                                                  | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **No switch on a circuit**                                                   | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The panel does not let you control the circuit, so no switch is created. That is the case for circuits set in the SPAN App as "Always on Circuits"; for solar and EV charger circuits; for a remote CT, which has no breaker; and, from panel firmware r202639, for the Commissioned PV System and Commissioned Backup System circuits, whose switch and priority select from earlier firmware are removed. A circuit set to never back up keeps its switch but has no priority select.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before.                                                                                                                                                                                                                                       | Home Assistant remembers a removed entity for**30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned.                                                                                                                                                                                                                                                                             |
-| **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | The release that stopped storing the panel passphrase migrated the config entry to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | 2.3.0 raised the config entry to version 8 when it gave each circuit its own device, as the release that stopped storing the panel passphrase had raised it to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade, so going back from 2.3.0 to any earlier release is refused. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again. On a release before 2.3.0 it also puts each circuit's entities back on the panel's device, and the names the upgrade shortened and the areas it moved are not restored.                                                                                                                                                                                                                                 |
 | **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel.**If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                                                                                                                                                                                                                                                                                                          |
 | **A circuit re-commissioned in the SPAN App has the wrong controls**         | A circuit whose configuration changed in the SPAN App — made controllable, locked, or set to never back up — seems to have the wrong controls.                                                                                                                                                                                                                                                                                      | Nothing needs doing. When the panel changes which controls a circuit allows, the integration reloads on its own and creates or removes that circuit's Breaker switch and priority select to match. A removed control returns with its entity ID, name and area when the panel offers it again. If a control still looks wrong, reload the integration (**Settings → Devices & Services → Span Panel → ⋮ → Reload**).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **"SPAN Panel hardware not validated with this release" repair**             | Setup has stopped with a repair naming the panel's hardware version and model, and no entities are created for that panel.                                                                                                                                                                                                                                                                                                          | This release has not been validated with that panel hardware, so it does not set the panel up; a MAIN 32 always proceeds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |

@@ -10,9 +10,25 @@ All notable changes to this project will be documented in this file.
   that space against both breakers together; the Breaker Rating sensor keeps showing the panel's rating.
 - **On MAIN 32, a package across two spaces can be recorded the same way**, and since the panel reports only the average of its two legs, the dashboard
   recommends turning monitoring off for that circuit instead of applying it.
+- **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
+  circuit's area, where an area-wide turn-off would reach it.
 
 ### Changed
 
+- **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
+  correctly only from 2026.11.
+- **Each circuit is now a device under the panel, named by the circuit's name in the SPAN app**, and its entities are named by what they measure, such as Power;
+  entity IDs do not change, and names you never changed display as before.
+- **A circuit's area moves to its device**, taken from its breaker switch, or on a circuit with no switch from its power sensor or else the first of its other
+  entities that has an area, and the circuit's other entities then share it instead of keeping areas of their own.
+- **A circuit whose breaker switch has no area keeps its entities' areas as they were**, so a room-wide turn-off still cannot reach its breaker.
+- **An entity you renamed now shows its circuit's name in front of yours**, as in "Kitchen Outlets Fridge Power", and a name that already began with the
+  circuit's name drops it so it does not show twice.
+- **Templates that read an entity's device**, such as `device_name`, `device_id` or `device_entities`, now see the circuit's device rather than the panel.
+- **In circuit-numbers mode, Recreate entity IDs now offers an ID built from the circuit's name**, matching its displayed name, while new entities still get
+  circuit-number IDs.
+- **The naming option now reads "Circuit names" or "Circuit numbers"**; the stored setting and every entity ID are unchanged.
+- **The alert settings label notification targets as Home Assistant does**, so a notify entity you renamed shows its device's name in front.
 - **Panels on spanos2 firmware, which publishes the older flat eBus schema, are no longer supported**; such a panel is refused with a Repair asking for a
   firmware update, and reconnects on its own once updated.
 
@@ -34,6 +50,8 @@ All notable changes to this project will be documented in this file.
 - **A circuit whose relay is locked on no longer reports a shed priority or PCS participation**, which the panel publishes for it but never acts on, so a
   circuit that stays on in an outage no longer claims it turns off.
 - **The solar and charger link sensors now go unavailable, and are named in the schema Repair, if the panel stops publishing their link status.**
+- **The battery tile shows its power, charge and energy for users who are not administrators**, whose dashboard finds entities without the panel's layout and
+  could not match the battery's readings.
 
 ## [2.2.0] - 11/2026
 

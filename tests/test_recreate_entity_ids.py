@@ -1510,10 +1510,10 @@ async def test_a_circuit_sensor_on_a_chargers_device_is_not_given_a_circuit_numb
 
 # --- Phase 2: a rename in the SPAN app still reaches the display name ---------
 #
-# The README promises it in both modes (:594, :602): friendly names
-# "automatically updates when you rename circuits in the SPAN panel", and
-# circuit-numbers mode keeps ids stable while "friendly names still sync from
-# SPAN panel for display". One mechanism serves both. A coordinator push
+# The README promises it in both modes, under "Entity Naming Pattern": a rename
+# in the SPAN app renames the circuit's device, and with it every entity of the
+# circuit, and displayed names follow the SPAN app whichever naming pattern was
+# chosen. One mechanism serves both. A coordinator push
 # carrying a changed circuit name asks the entry to reload, and the reload is
 # what renames the circuit's device, which Home Assistant composes the displayed
 # name from ahead of the entity's own label. The shortcut the old scheme took,
