@@ -185,6 +185,7 @@ def circuit_object_id_suffix(
     existing_entity_id: str | None,
     *,
     device_then_entity: bool = True,
+    device_in_front: bool = True,
 ) -> str:
     """Return the base for one circuit entity on its circuit's device: the suffix alone.
 
@@ -282,6 +283,16 @@ def circuit_object_id_suffix(
     `circuit_object_ids.circuit_object_id_base` asks first which wording
     reproduces the id under the format as it stands, and comes here for the
     ids none does.
+
+    Every omission above rests on Core composing the device's name in front of
+    the base, which it does while `device_in_front`: for an entity with no
+    area of its own. One that has an area is composed from the area and the
+    base alone, so its base is never empty. Left out, a "Solar Power" sensor
+    in the area Backyard was offered `sensor.backyard`, and under a format
+    with no area part the platform and the unique id, Core's fallback for an
+    id with nothing in it. The words are the form its id spells after the
+    name, or failing that at its end, so an id that stops at "Solar Power" is
+    read for the `power` it ends on and is offered `sensor.backyard_power`.
     """
     form: str | None = None
     object_id: str | None = None
@@ -297,8 +308,11 @@ def circuit_object_id_suffix(
         if by_device is not None and (
             by_identifier is None or by_device.tail_length >= by_identifier.tail_length
         ):
-            return by_device.form.replace("_", " ") if by_device.form else ""
-        if by_identifier is not None:
+            if by_device.form:
+                return by_device.form.replace("_", " ")
+            if device_in_front:
+                return ""
+        elif by_identifier is not None:
             form = by_identifier.form
 
     if form is None:
@@ -310,7 +324,7 @@ def circuit_object_id_suffix(
         if form
         else NEW_ENTITY_ID_SUFFIX_WORDS.get(suffix, suffix.replace("_", " "))
     )
-    if slugify(device_name).endswith(f"_{slugify(words)}"):
+    if device_in_front and slugify(device_name).endswith(f"_{slugify(words)}"):
         return ""
     return words
 

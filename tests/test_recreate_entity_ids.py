@@ -2117,3 +2117,224 @@ async def test_a_device_rename_moves_no_entity_and_stores_only_a_changed_base(
     assert after is not None
     assert after.object_id_base == "power"
     assert attr.evolve(after, object_id_base="", modified_at=before.modified_at) == before
+
+
+# --- An entity with an area of its own ----------------------------------------
+#
+# Core composes an entity that has an area of its own from that area and the
+# entity's base, with neither device in front. So the base cannot be left out
+# for it: a circuit named "Solar Power" leaves the suffix out of an id its
+# device's name already ends, and with no device in front that leaves the id
+# with nothing to say for the entity. R1's own-area exception offers such an
+# entity its label alone, `sensor.backyard_power`.
+
+DEVICE_ENTITY_FORMAT = [EntityNamePart.DEVICE, EntityNamePart.ENTITY]
+
+OWN_AREA_CASES = [
+    pytest.param(
+        _SensorInstall,
+        None,
+        "Solar Power",
+        "sensor.span_panel_solar_power",
+        "sensor.backyard_power",
+        id="sensor",
+    ),
+    pytest.param(
+        _SwitchInstall,
+        None,
+        "Main Breaker",
+        "switch.span_panel_main_breaker",
+        "switch.backyard_breaker",
+        id="switch",
+    ),
+    pytest.param(
+        _SelectInstall,
+        None,
+        "Pool Circuit Priority",
+        "select.span_panel_pool_circuit_priority",
+        "select.backyard_circuit_priority",
+        id="select",
+    ),
+    # No area part to say, and no device in front: the label is all there is.
+    pytest.param(
+        _SensorInstall,
+        DEVICE_ENTITY_FORMAT,
+        "Solar Power",
+        "sensor.solar_power",
+        "sensor.power",
+        id="a-format-with-no-area-part",
+    ),
+]
+"""An install, a saved format or none, a circuit whose name ends on the suffix, its id, the offer."""
+
+
+def _give_the_entity_an_area(hass: HomeAssistant, entity_id: str, area_id: str | None) -> None:
+    """Set or clear an entity's own area, as its user would in Home Assistant."""
+    er.async_get(hass).async_update_entity(entity_id, area_id=area_id)
+
+
+@pytest.mark.parametrize(
+    ("make_install", "parts", "circuit_name", "entity_id", "offered"), OWN_AREA_CASES
+)
+async def test_an_entity_with_an_area_of_its_own_is_offered_its_label_alone(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    make_install: _CircuitInstall,
+    parts: list[EntityNamePart] | None,
+    circuit_name: str,
+    entity_id: str,
+    offered: str,
+) -> None:
+    """The suffix is not left out of an id Core composes with no device in front.
+
+    Left out, the offer was the area alone, `sensor.backyard`, or under a
+    format with no area part Core's fallback, the platform and the unique id.
+    Once accepted, the label-only id is the entity's own.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=parts)
+    install = make_install(hass, entry)
+    assert (await install.load(circuit_name)).entity_id == entity_id
+    await _assert_recreate_offers_nothing(hass, install, circuit_name, entity_id)
+
+    backyard = ar.async_get(hass).async_create("Backyard")
+    _give_the_entity_an_area(hass, entity_id, backyard.id)
+    accepted = await _accept_what_recreate_offers(hass, install, circuit_name, entity_id)
+
+    assert accepted == offered
+    await _assert_recreate_offers_nothing(hass, install, circuit_name, offered)
+
+
+async def test_an_entity_with_an_area_of_its_own_keeps_the_wording_its_id_has(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The label-only offer spells the suffix as the entity's id does (R1)."""
+    seeded = _seed_preset_era_energy_sensor(hass, entry)
+    install = _LegacyInstall(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    backyard = ar.async_get(hass).async_create("Backyard")
+    _give_the_entity_an_area(hass, seeded, backyard.id)
+
+    accepted = await _accept_what_recreate_offers(hass, install, ORIGINAL_NAME, seeded)
+
+    assert accepted == "sensor.backyard_energy_consumed"
+    await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, accepted)
+
+
+async def test_an_id_that_is_the_area_alone_is_offered_the_label_too(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The empty base is not kept for an entity with an area, even where it spells the id.
+
+    `sensor.backyard` is what the empty base composes for a sensor in
+    Backyard. It names nothing of the entity, so the base is its label's
+    words all the same.
+    """
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Solar Power")).entity_id
+    backyard = ar.async_get(hass).async_create("Backyard")
+    registry = er.async_get(hass)
+    registry.async_update_entity(created, area_id=backyard.id, new_entity_id="sensor.backyard")
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Solar Power", "sensor.backyard")
+
+    assert accepted == "sensor.backyard_power"
+    await _assert_recreate_offers_nothing(hass, install, "Solar Power", accepted)
+
+
+@pytest.mark.parametrize(
+    ("make_install", "parts", "circuit_name", "entity_id", "offered"), OWN_AREA_CASES
+)
+async def test_an_area_given_to_an_entity_reaches_recreate_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    make_install: _CircuitInstall,
+    parts: list[EntityNamePart] | None,
+    circuit_name: str,
+    entity_id: str,
+    offered: str,
+) -> None:
+    """The offer is right the moment the area is stored, and again once it is cleared.
+
+    Setting an entity's area reloads nothing, and Core composes Recreate's
+    offer from the row as stored. A base left empty for the device's name
+    offered the area alone, and one kept for the area offered the suffix twice
+    over, `..._solar_power_power`, once the area was taken away.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=parts)
+    install = make_install(hass, entry)
+    assert (await install.load(circuit_name)).entity_id == entity_id
+    await install.load(circuit_name)
+    registry = er.async_get(hass)
+    backyard = ar.async_get(hass).async_create("Backyard")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, entity_id, backyard.id)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert row.area_id == backyard.id
+    assert registry.async_regenerate_entity_id(row) == offered
+
+    _give_the_entity_an_area(hass, entity_id, None)
+
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert row.area_id is None
+    assert registry.async_regenerate_entity_id(row) == entity_id
+    stop()
+
+
+async def test_an_area_change_moves_no_entity_and_stores_only_a_changed_base(
+    hass: HomeAssistant, entry: MockConfigEntry, parts_without_area: None
+) -> None:
+    """The refresh writes the row's base beside the area the user set, and nothing else.
+
+    A circuit whose name does not end on the suffix keeps the base it has, so
+    its row is written once, by the user.
+    """
+    install = _SensorInstall(hass, entry)
+    await install.load("Solar Power")
+    await install.load("Solar Power")
+    registry = er.async_get(hass)
+    entity_id = "sensor.span_panel_solar_power"
+    before = registry.async_get(entity_id)
+    assert before is not None
+    assert before.object_id_base == ""
+    backyard = ar.async_get(hass).async_create("Backyard")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, entity_id, backyard.id)
+    after = registry.async_get(entity_id)
+    stop()
+
+    assert after is not None
+    assert after.object_id_base == "power"
+    assert (
+        attr.evolve(after, object_id_base="", area_id=None, modified_at=before.modified_at)
+        == before
+    )
+
+
+async def test_an_area_given_to_another_entry_s_entity_is_left_alone(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Only this entry's circuit entities are refreshed; any other row is not touched."""
+    install = _SensorInstall(hass, entry)
+    await install.load("Solar Power")
+    other = MockConfigEntry(domain="other_domain", entry_id="entry-other")
+    other.add_to_hass(hass)
+    registry = er.async_get(hass)
+    stranger = registry.async_get_or_create(
+        "sensor", "other_domain", "stranger-power", config_entry=other, object_id_base=""
+    )
+    backyard = ar.async_get(hass).async_create("Backyard")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, stranger.entity_id, backyard.id)
+    stop()
+
+    row = registry.async_get(stranger.entity_id)
+    assert row is not None
+    assert row.object_id_base == ""

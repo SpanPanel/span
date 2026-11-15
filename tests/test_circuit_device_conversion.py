@@ -1017,6 +1017,52 @@ async def test_a_setup_keeps_id_bases_current_with_a_device_rename(hass: HomeAss
     assert install.row(circuit_id, POWER) is power
 
 
+async def test_a_setup_keeps_id_bases_current_with_an_entity_s_area(hass: HomeAssistant) -> None:
+    """Giving a circuit entity an area of its own refreshes that entity's ID base at once.
+
+    Through the real setup. Home Assistant composes such an entity with no
+    device in front, so a base left empty for a device whose name ends on the
+    suffix would leave it the area alone. The base comes back the moment the
+    area is stored, and goes again when the area is taken away. Nothing
+    listens once the entry is unloaded.
+    """
+    install = _install(hass, _tree())
+    registry = er.async_get(hass)
+    backyard = _area(hass, "Backyard")
+
+    def listening() -> int:
+        return hass.bus.async_listeners().get(er.EVENT_ENTITY_REGISTRY_UPDATED, 0)
+
+    listening_before = listening()
+
+    async with _set_up(install):
+        assert listening() > listening_before
+        device_id = install.circuit_device(KITCHEN).id
+        dr.async_get(hass).async_update_child_device(device_id, name_by_user="Shed Power")
+        power, current = install.row(KITCHEN, POWER), install.row(KITCHEN, CURRENT)
+        assert (power.object_id_base, current.object_id_base) == ("", "current")
+        entity_id = power.entity_id
+
+        registry.async_update_entity(entity_id, area_id=backyard)
+
+        power = install.row(KITCHEN, POWER)
+        assert power.object_id_base == "power"
+        assert power.entity_id == entity_id
+        assert registry.async_regenerate_entity_id(power) == "sensor.backyard_power"
+        # Only the entity whose area changed is worked out again.
+        assert install.row(KITCHEN, CURRENT) is current
+
+        registry.async_update_entity(entity_id, area_id=None)
+
+        power = install.row(KITCHEN, POWER)
+        assert power.object_id_base == ""
+        assert registry.async_regenerate_entity_id(power) == "sensor.span_panel_shed_power"
+
+    assert listening() == listening_before
+    registry.async_update_entity(entity_id, area_id=backyard)
+    assert install.row(KITCHEN, POWER).object_id_base == ""
+
+
 # ---------------------------------------------------------------------------
 # Areas
 # ---------------------------------------------------------------------------

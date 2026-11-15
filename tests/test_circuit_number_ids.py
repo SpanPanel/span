@@ -143,7 +143,9 @@ class _Arranged:
     entry: MockConfigEntry
     panel_device_id: str
 
-    def compose(self, hass: HomeAssistant, suffix_words: str = "power") -> str | None:
+    def compose(
+        self, hass: HomeAssistant, suffix_words: str = "power", entity_area_id: str | None = None
+    ) -> str | None:
         """Ask the composer for this panel's circuit, numbered `CIRCUIT_NUMBER`."""
         return compose_circuit_object_id(
             hass,
@@ -152,6 +154,7 @@ class _Arranged:
             device_name=CIRCUIT_NUMBER,
             suffix_words=suffix_words,
             config_entry_id=self.entry.entry_id,
+            entity_area_id=entity_area_id,
         )
 
     def register_circuit_device(self, hass: HomeAssistant, name: str) -> dr.ChildDeviceEntry:
@@ -232,6 +235,46 @@ def test_composer_knows_every_part_core_composes_an_id_from() -> None:
     the new part taught to it.
     """
     assert set(EntityNamePart) == COMPOSED_PARTS
+
+
+@pytest.mark.parametrize("parts", FORMATS.values(), ids=FORMATS.keys())
+@pytest.mark.parametrize("area_on", AREAS)
+async def test_composer_matches_core_for_an_entity_with_an_area_of_its_own(
+    hass: HomeAssistant, parts: list[EntityNamePart] | None, area_on: str
+) -> None:
+    """Core names neither device for such an entity, whatever areas the devices have.
+
+    The area is the entity's own and the floor is that area's. Where the
+    format has no area or floor part, the entity's base is all that is left.
+    """
+    arranged = _arrange(hass, parts, None)
+    circuit_device = arranged.register_circuit_device(hass, CIRCUIT_NUMBER)
+    basement = _basement(hass)
+    if area_on == "panel-area":
+        dr.async_get(hass).async_update_device(arranged.panel_device_id, area_id=basement)
+    elif area_on == "circuit-area":
+        dr.async_get(hass).async_update_child_device(circuit_device.id, area_id=basement)
+    floor = fr.async_get(hass).async_create("Upstairs")
+    attic = ar.async_get(hass).async_create("Attic", floor_id=floor.floor_id).id
+
+    registry = er.async_get(hass)
+    row = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        POWER_UNIQUE_ID,
+        config_entry=arranged.entry,
+        device_id=circuit_device.id,
+        has_entity_name=True,
+        object_id_base="power",
+        original_name="Power",
+    )
+    row = registry.async_update_entity(row.entity_id, area_id=attic)
+
+    composed = arranged.compose(hass, entity_area_id=attic)
+    assert composed is not None
+    assert "Circuit 15" not in composed
+    assert "SPAN Panel" not in composed
+    assert f"sensor.{slugify(composed)}" == registry.async_regenerate_entity_id(row)
 
 
 class _LaterPart(StrEnum):

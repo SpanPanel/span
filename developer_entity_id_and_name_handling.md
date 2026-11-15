@@ -201,6 +201,13 @@ every ID a release preset is shaped. `device_then_entity` says whether the user'
 - an ID that spells a name and then a form is still read by rules 1 and 2;
 - otherwise the form is the one the ID spells as whole words anywhere outside the name it carries, and the omission is decided from `device_name`.
 
+**An entity with an area of its own never has an empty base.** Every omission above rests on Core composing the device's name in front of the base, and Core
+names neither device for an entity that has an area of its own (§3.1): it composes the area and the base. So for such an entity the compositions tried are that
+area and each wording, the empty base is not among them, and `circuit_object_id_suffix` is told so with `device_in_front=False` and leaves nothing out. The
+words are the form the ID spells after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard is
+offered `sensor.backyard_power`, its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no area
+part Core's fallback of the platform and the unique ID.
+
 An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
 (`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
 
@@ -326,7 +333,7 @@ There is one name path, in both modes:
 A name the user gave the circuit's _device_ in Home Assistant (`name_by_user`) outranks the panel's in every displayed name and composed ID. That is Core's
 rule, not a check made here: the reload still stores the panel's new name underneath it.
 
-### 5.3 A circuit's device renamed in Home Assistant
+### 5.3 A circuit's device renamed, or an entity given an area, in Home Assistant
 
 The base depends on the device's name: it is empty where the name already ends on the suffix words, and an ID is read against the name (§4.3). A rename in the
 SPAN app reloads the entry, which builds every entity again. A rename of the device in Home Assistant reloads nothing, and Recreate composes from the stored row
@@ -339,6 +346,12 @@ So each circuit entity records what its base is worked out from as it is built, 
 stores those that differ. It runs inside the device registry's update event, before the rename returns, because Home Assistant asks whether to rename the
 device's entity IDs straight after it; a reload would answer too late. The base is stored by registering the entity again with it, which is how the platform's
 own add refreshes a row (§3.3). No entity ID moves (R5): "Solar Power" renamed "Roof Array" is then offered `sensor.span_panel_roof_array_power`.
+
+The base depends as well on whether the entity has an area of its own, which decides whether Core puts the device's name in front of it at all (§4.3). Setting
+or clearing an entity's area reloads nothing either. The same listener therefore works that one entity's base out again inside the entity registry's update
+event, when the row's `area_id` changes. The "Solar Power" sensor given the area Backyard is offered `sensor.backyard_power` at once, where the empty base would
+offer `sensor.backyard`, and with the area taken away again it is offered its own ID, where a base kept for the area would offer
+`sensor.span_panel_solar_power_power`.
 
 The rename therefore reaches:
 
@@ -455,7 +468,8 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
       entity-ID format, and nothing else — never from the display label, and never carrying the circuit's name.
 - [ ] Nothing reads an ID as though the format ended with the device and then the entity without being told it does (`device_then_entity`), and an ID Core
       composes today is offered nothing under any format (§4.3).
-- [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant (§5.3).
+- [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant or its own area is set or
+      cleared (§5.3). An entity with an area of its own never has an empty base (§4.3).
 - [ ] The composer answers nothing for an entity-ID format holding a part outside `COMPOSED_PARTS`, and nothing indexes a table of parts by a part it may not
       hold (§4.7).
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence

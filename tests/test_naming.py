@@ -602,6 +602,51 @@ def test_an_id_ending_on_the_device_name_left_the_suffix_out_only_under_device_t
     assert circuit_object_id_suffix(*stops, device_then_entity=False) == "power"
 
 
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "suffix", "existing", "expected"),
+    [
+        # The id stops at a device's name that ends on the suffix word.
+        ("Solar Power", "Solar Power", "power", "sensor.span_panel_solar_power", "power"),
+        ("Main Breaker", "Main Breaker", "breaker", "switch.span_panel_main_breaker", "breaker"),
+        # The label-only id the entity is offered reads back to the same words.
+        ("Solar Power", "Solar Power", "power", "sensor.backyard_power", "power"),
+        # The wording the id spells is kept, after the name or at the id's end.
+        (
+            "Kitchen Outlets",
+            "Kitchen Outlets",
+            "energy_consumed",
+            "sensor.span_panel_kitchen_outlets_energy_consumed",
+            "energy consumed",
+        ),
+        (
+            "Pool Energy",
+            "Pool Energy",
+            "energy_consumed",
+            "sensor.backyard_energy_consumed",
+            "energy consumed",
+        ),
+        # The circuit-number preset, on a circuit whose name ends on the word.
+        ("Circuit 15", "Solar Power", "power", "sensor.span_panel_circuit_15_power", "power"),
+        # An id that spells no form the suffix shipped with gets the new wording.
+        ("Solar Power", "Solar Power", "power", "sensor.something_else", "power"),
+    ],
+)
+def test_an_entity_with_an_area_of_its_own_never_leaves_the_suffix_out(
+    identifier: str, device_name: str, suffix: str, existing: str, expected: str
+) -> None:
+    """Core puts no device in front of such an entity, so nothing already says the word.
+
+    With the device in front, each of the ids above that stops at the name
+    reads as leaving the suffix out, which is what the second assertion holds.
+    """
+    assert (
+        circuit_object_id_suffix(identifier, device_name, suffix, existing, device_in_front=False)
+        == expected
+    )
+    if existing.endswith(f"_{slugify(device_name)}"):
+        assert circuit_object_id_suffix(identifier, device_name, suffix, existing) == ""
+
+
 @pytest.mark.parametrize("suffix", sorted(ENTITY_ID_SUFFIX_FORMS))
 def test_every_wording_of_a_suffix_is_tried_longest_first_in_one_order(suffix: str) -> None:
     """Two wordings of one length must not swap places from one run to the next."""

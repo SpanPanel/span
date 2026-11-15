@@ -690,6 +690,8 @@ def test_switch_circuit_numbers_entity_id_120v_single_tab(
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
         registry.async_get_entity_id.return_value = "switch.span_panel_circuit_10_breaker"
+        # The row has no area of its own, so Core composes its device in front.
+        registry.async_get.return_value.area_id = None
         mp.setattr(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
