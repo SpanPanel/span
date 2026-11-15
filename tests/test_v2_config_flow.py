@@ -769,7 +769,7 @@ async def test_v6_migration_drops_the_stored_passphrase(hass: HomeAssistant) -> 
 
     assert await async_migrate_entry(hass, entry) is True
 
-    assert entry.version == 7
+    assert entry.version == CURRENT_CONFIG_VERSION
     assert CONF_HOP_PASSPHRASE not in entry.data
     assert entry.data[CONF_ACCESS_TOKEN] == "v2-token-abc"
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
@@ -943,7 +943,7 @@ async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
     )
     entry.add_to_hass(hass)
     other_entry = MockConfigEntry(
-        version=7,
+        version=CURRENT_CONFIG_VERSION,
         minor_version=CURRENT_CONFIG_MINOR_VERSION,
         domain=DOMAIN,
         title="Span Panel 2",
@@ -1099,6 +1099,83 @@ async def test_home_assistant_actually_runs_the_v7_4_migration(hass: HomeAssista
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
+
+
+def _v7_4_entry() -> MockConfigEntry:
+    """Build a v2 entry as the last 7.x release left it, with every choice already stored."""
+    return MockConfigEntry(
+        version=7,
+        minor_version=4,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_SERIAL: "sp3-242424-001",
+            PANEL_CA_PENDING: True,
+        },
+        source=config_entries.SOURCE_USER,
+        options={
+            ALLOW_CONTEXTLESS_CONTROL: False,
+            CONTROL_MODE: ControlMode.ADMIN_ONLY.value,
+        },
+        unique_id="sp3-242424-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v7_4_migrates_to_8_0_unchanged(hass: HomeAssistant) -> None:
+    """The 8.0 step moves the version and nothing else.
+
+    Run through `async_setup`, so it is core that decides to migrate: a flow
+    left at 7.4 would never reach the step.
+    """
+    entry = _v7_4_entry()
+    entry.add_to_hass(hass)
+    data_before = dict(entry.data)
+    options_before = dict(entry.options)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert (entry.version, entry.minor_version) == (8, 0)
+    assert dict(entry.data) == data_before
+    assert dict(entry.options) == options_before
+
+
+@pytest.mark.asyncio
+async def test_an_8_0_entry_is_refused_by_a_7_x_release(hass: HomeAssistant) -> None:
+    """A 7.x release is never handed an entry this release has migrated.
+
+    The refusal is core's: it compares the entry's version with the flow's
+    `VERSION` and stops at a higher one before it calls the integration. So the
+    7.x release is modelled by putting both the flow and the constants it is
+    built from back to 7.4, with the migration itself left real. That migration
+    answers True for any entry at or past its own version, so nothing but core's
+    check stands between a downgrade and a setup on converted data.
+    """
+    entry = _v7_4_entry()
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry) is True
+    assert (entry.version, entry.minor_version) == (8, 0)
+
+    setup_entry = AsyncMock(return_value=True)
+    with (
+        patch("custom_components.span_panel.migrations.CURRENT_CONFIG_VERSION", 7),
+        patch("custom_components.span_panel.migrations.CURRENT_CONFIG_MINOR_VERSION", 4),
+        patch.object(SpanPanelConfigFlow, "VERSION", 7),
+        patch.object(SpanPanelConfigFlow, "MINOR_VERSION", 4),
+        patch("custom_components.span_panel.async_setup_entry", setup_entry),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR
+    setup_entry.assert_not_awaited()
+    assert (entry.version, entry.minor_version) == (8, 0)
 
 
 # ---------- zeroconf v2 discovery ----------

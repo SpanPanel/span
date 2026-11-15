@@ -94,6 +94,7 @@ from .control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL, DEFAULT_CONTROL_MOD
 from .firmware_schema import SchemaRead, async_read_schema
 from .flat_firmware_repairs import FLAT_FIRMWARE_TRANSLATION_KEY
 from .hardware_guard import registers_by_passphrase_only
+from .migrations import CURRENT_CONFIG_MINOR_VERSION, CURRENT_CONFIG_VERSION
 from .options import (
     ALLOW_CONTEXTLESS_CONTROL,
     CONTROL_MODE,
@@ -205,8 +206,8 @@ class TriggerFlowType(enum.Enum):
 class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
-    VERSION = 7
-    MINOR_VERSION = 4
+    VERSION = CURRENT_CONFIG_VERSION
+    MINOR_VERSION = CURRENT_CONFIG_MINOR_VERSION
     domain = DOMAIN
 
     def is_matching(self, other_flow: SpanPanelConfigFlow) -> bool:

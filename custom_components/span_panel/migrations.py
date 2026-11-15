@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # Must match the storage version produced by the latest supported entry format.
-CURRENT_CONFIG_VERSION = 7
-CURRENT_CONFIG_MINOR_VERSION = 4
+CURRENT_CONFIG_VERSION = 8
+CURRENT_CONFIG_MINOR_VERSION = 0
 
 _UNMAPPED_TAB_SENSORS_OPTION = "enable_unmapped_circuit_sensors"
 """The retired option's key, spelled out because nothing else reads it any more."""
@@ -32,7 +32,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
     """Migrate config entry through successive versions.
 
     Supports upgrades from v1.3.1+ (config version 2) through to the
-    current version 7.4. Each step mutates only the fields relevant to
+    current version 8.0. Each step mutates only the fields relevant to
     that version boundary.
 
     Core also calls this for an entry a newer release has already moved past
@@ -225,6 +225,20 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
             minor_version=4,
         )
         _LOGGER.debug("Migrated config entry %s to version 7.4", config_entry.entry_id)
+
+    # --- v7.4 → v8.0: close the way back to a 7.x release ---
+    if config_entry.version == 7:
+        # Nothing stored in the entry changes. From this release each circuit's
+        # entities sit on a device of their own, which no 7.x release knows, and
+        # the major version is the one thing Core checks before it hands an
+        # entry to an older release: it refuses a higher one outright, where a
+        # higher minor version is set up as it stands.
+        hass.config_entries.async_update_entry(
+            config_entry,
+            version=8,
+            minor_version=0,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 8.0", config_entry.entry_id)
 
     return True
 
