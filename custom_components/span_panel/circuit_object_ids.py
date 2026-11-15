@@ -45,7 +45,12 @@ An entity with an area of its own is composed as Core composes it: from that
 area and the base, with neither device in front. Its base is therefore never
 empty. The empty base is for an id that stops at the device's name, and with
 no device in front it would leave Core the area alone to compose from, or
-nothing at all.
+nothing at all. Its id may be one Core composed before it had the area, with
+the device in front, which Core would not compose today but a composition
+still spells, so each wording is composed that way too, after the area's,
+which is what Core composes today. An id from then keeps its wording where
+its tail spells none, as one Core numbered does, or spells another, as one
+does whose panel's name runs into the suffix.
 
 ## Keeping the base current
 
@@ -289,7 +294,13 @@ def circuit_object_id_base(
     An entity with an area of its own is composed with no device in front, so
     the empty base is not among those tried for it and is never its answer:
     it is offered its label alone, as R1's own-area exception says, in the
-    wording its id has.
+    wording its id has. Each wording is composed for it twice. First from
+    that area, as Core composes it now, so an id Core composes today, such as
+    a label-only id it has accepted, is offered nothing. Then with the device
+    in front, as Core composed it before it had the area, which spells an id
+    from then exactly where its tail cannot be read: one Core numbered,
+    `..._energy_consumed_2`, and one whose panel's name runs into the suffix,
+    "Shop Current" in front of `power`.
     """
     device_name = effective_circuit_device_name(
         dr.async_get(hass), serial, circuit, circuit_id, config_entry_id=config_entry_id
@@ -299,28 +310,34 @@ def circuit_object_id_base(
         row = er.async_get(hass).async_get(existing_entity_id)
         entity_area_id = row.area_id if row is not None else None
         wordings = suffix_wordings(recipe.suffix)
+        bases = wordings if entity_area_id is not None else (*wordings, "")
         circuit_device_identifier = (DOMAIN, build_circuit_device_identifier(serial, circuit_id))
-        reproducing = _base_reproducing(
-            existing_entity_id.split(".", 1)[-1],
-            {
-                base: composed
-                for base in (wordings if entity_area_id is not None else (*wordings, ""))
-                if (
-                    composed := compose_circuit_object_id(
-                        hass,
-                        panel_device_id=panel_device_id,
-                        circuit_device_identifier=circuit_device_identifier,
-                        device_name=device_name,
-                        suffix_words=base,
-                        config_entry_id=config_entry_id,
-                        entity_area_id=entity_area_id,
-                    )
-                )
-                is not None
-            },
+        object_id = existing_entity_id.split(".", 1)[-1]
+        composed_area_ids: tuple[str | None, ...] = (
+            (None,) if entity_area_id is None else (entity_area_id, None)
         )
-        if reproducing is not None:
-            return reproducing
+        for composed_area_id in composed_area_ids:
+            reproducing = _base_reproducing(
+                object_id,
+                {
+                    base: composed
+                    for base in bases
+                    if (
+                        composed := compose_circuit_object_id(
+                            hass,
+                            panel_device_id=panel_device_id,
+                            circuit_device_identifier=circuit_device_identifier,
+                            device_name=device_name,
+                            suffix_words=base,
+                            config_entry_id=config_entry_id,
+                            entity_area_id=composed_area_id,
+                        )
+                    )
+                    is not None
+                },
+            )
+            if reproducing is not None:
+                return reproducing
     return circuit_object_id_suffix(
         recipe.id_identifier,
         device_name,

@@ -205,11 +205,19 @@ every ID a release preset is shaped. `device_then_entity` says whether the user'
 - otherwise the form is the one the ID spells as whole words anywhere outside the name it carries, and the omission is decided from `device_name`.
 
 **An entity with an area of its own never has an empty base.** Every omission above rests on Core composing the device's name in front of the base, and Core
-names neither device for an entity that has an area of its own (§3.1): it composes the area and the base. So for such an entity the compositions tried are that
-area and each wording, the empty base is not among them, and `circuit_object_id_suffix` is told so with `device_in_front=False` and leaves nothing out. The
-words are the form the ID spells after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard is
-offered `sensor.backyard_power`, its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no area
-part Core's fallback of the platform and the unique ID.
+names neither device for an entity that has an area of its own (§3.1): it composes the area and the base. So for such an entity the empty base is not tried, and
+each wording is composed twice. It is composed first from that area, as Core composes the entity now, so that an ID Core composes today, such as a label-only ID
+the entity has accepted, is offered nothing. Under `(DEVICE, ENTITY)` a circuit named "Current" in an area of its own therefore keeps `sensor.current_power`,
+its label alone in the `current_power` wording, though its device once composed that ID from `power`. It is composed then with the device in front, as Core
+composed it before it had the area, which reads an ID from then exactly where its tail cannot be read: `sensor.span_panel_refrigerator_energy_consumed_2`,
+numbered by Core, spells no wording at its end, and under `(PARENT_DEVICE, ENTITY, DEVICE)` a panel named "Shop Current" makes
+`sensor.shop_current_power_kitchen_outlets` spell `current_power`, though it was composed from `power`. In the area Garage the two are offered
+`sensor.garage_energy_consumed` and `sensor.power`.
+
+Where neither composes the ID, `circuit_object_id_suffix` is told so with `device_in_front=False` and leaves nothing out. The words are the form the ID spells
+after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard is offered `sensor.backyard_power`,
+its label alone, which is R1's own-area exception. Left out, the offer was `sensor.backyard`, and under a format with no area part Core's fallback of the
+platform and the unique ID.
 
 An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
 (`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
@@ -264,7 +272,7 @@ construction, through `SpanPanelEntity._circuit_object_id_base`, which also reco
 
 Stored, preserved by the options flow, and read by `get_current_naming_pattern`, but it **cannot keep the device names out of a composed ID** — Core composes
 them under the user's own `entity_id_parts`. An install predating the option, whose circuit IDs carry no device half, is offered one on Recreate. That is Core
-composing under the user's settings, and it is documented in the README and CHANGELOG rather than special-cased.
+composing under the user's settings, and it is documented in the README rather than special-cased.
 
 ### 4.7 The creation preset in circuit-numbers mode
 
@@ -428,9 +436,9 @@ the circuit's name, such as "Fridge Power", is left alone and displays with the 
 Recreate offers a different ID only where the user's own configuration composes one. The README's Entity Naming Pattern section gives users the general rule:
 Recreate offers the ID Home Assistant builds now from the panel's name, the name of the circuit's device, what the entity measures and the user's own entity ID
 settings. It names seven of these rows outright: a circuit renamed in the SPAN app, circuit-numbers mode, an entity with an area of its own, a saved format with
-no parent-device part, a SPAN Drive feed circuit, a second panel, and an install predating the device prefix. The CHANGELOG has two lines on it: under 2.1.0,
-that Recreate proposes the IDs the panel would produce now, and under 2.3.0 the circuit-numbers offer. The other rows, the two uncaused ones among them, are
-spelled out here alone:
+no parent-device part, a SPAN Drive feed circuit, a second panel, and an install predating the device prefix. The CHANGELOG has three lines on it: under 2.1.0,
+that Recreate proposes the IDs the panel would produce now and that a panel device the user renamed is offered IDs carrying that name, and under 2.3.0 the
+circuit-numbers offer. The other rows, the two uncaused ones among them, are spelled out here alone:
 
 | Situation                                                                                                         | Offer                                                                               | Cause                                                                                                                                     |
 | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |

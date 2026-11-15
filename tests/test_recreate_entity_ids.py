@@ -20,6 +20,7 @@ cannot appear.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import ClassVar
 from unittest.mock import MagicMock
 
@@ -2338,6 +2339,185 @@ async def test_an_area_given_to_another_entry_s_entity_is_left_alone(
     row = registry.async_get(stranger.entity_id)
     assert row is not None
     assert row.object_id_base == ""
+
+
+# An id composed before its entity had an area of its own was composed with the
+# device in front, and that composition still spells it, in the wording it has.
+# Read by its tail instead, an id Core numbered spells no wording at its end,
+# and one whose panel name runs into the suffix spells the wrong one, so the
+# label-only offer took a wording the id never had.
+
+
+@dataclass(frozen=True, slots=True)
+class _IdFromBeforeTheArea:
+    """An entity's id from before it had an area of its own, and its offer once it has one."""
+
+    make_install: type[_LegacyInstall] | type[_SensorInstall]
+    api_key: str
+    """The key the sensor's unique id is built from."""
+
+    entity_id: str
+    """The id Core composed for the entity with the device in front."""
+
+    offered: str
+    """The offer once the entity is in Garage: its label alone, in the wording `entity_id` has."""
+
+    numbered: bool = False
+    """Whether another entity had the composed id first, so Core numbered this one's."""
+
+    circuit_name: str = ORIGINAL_NAME
+    parts: tuple[EntityNamePart, ...] | None = None
+    """The entity-id format the user saved, or None for Core's default."""
+
+    panel_name: str | None = None
+    """The name the user gave the panel's device, or None."""
+
+
+IDS_FROM_BEFORE_THE_AREA = [
+    # Two circuits named alike: the second's ids carry Core's number.
+    pytest.param(
+        _IdFromBeforeTheArea(
+            _LegacyInstall,
+            "consumedEnergyWh",
+            f"{PRESET_ERA_ENTITY_ID}_2",
+            "sensor.garage_energy_consumed",
+            numbered=True,
+        ),
+        id="numbered-energy-consumed",
+    ),
+    pytest.param(
+        _IdFromBeforeTheArea(
+            _SensorInstall,
+            "instantPowerW",
+            "sensor.span_panel_refrigerator_current_power_2",
+            "sensor.garage_current_power",
+            numbered=True,
+        ),
+        id="numbered-current-power",
+    ),
+    # A panel named "Shop Current" in front of the entity's part: the id spells
+    # `current_power`, a wording the suffix once shipped with, but was composed
+    # from `power`. The format has no area part, so the label is all there is.
+    pytest.param(
+        _IdFromBeforeTheArea(
+            _SensorInstall,
+            "instantPowerW",
+            "sensor.shop_current_power_kitchen_outlets",
+            "sensor.power",
+            circuit_name="Kitchen Outlets",
+            parts=(EntityNamePart.PARENT_DEVICE, EntityNamePart.ENTITY, EntityNamePart.DEVICE),
+            panel_name="Shop Current",
+        ),
+        id="a-panel-name-running-into-the-suffix",
+    ),
+]
+
+
+async def _load_an_id_from_before_the_area(
+    hass: HomeAssistant, entry: MockConfigEntry, case: _IdFromBeforeTheArea
+) -> tuple[_LegacyInstall | _SensorInstall, str]:
+    """Register the case's entity on its id, load it, and hold it to no offer while it has no area.
+
+    Returns the install and the entity's id.
+    """
+    registry = er.async_get(hass)
+    if case.parts is not None:
+        registry.async_update_settings(entity_id_parts=list(case.parts))
+    object_id = case.entity_id.split(".", 1)[1]
+    if case.numbered:
+        object_id = object_id.rpartition("_")[0]
+        taken = registry.async_get_or_create(
+            "sensor", "other", "taken", suggested_object_id=object_id
+        )
+        assert taken.entity_id == f"sensor.{object_id}"
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, case.api_key),
+        suggested_object_id=object_id,
+        config_entry=entry,
+    ).entity_id
+    assert seeded == case.entity_id
+
+    install = case.make_install(hass, entry)
+    await install.load(case.circuit_name)
+    if case.panel_name is not None:
+        dr.async_get(hass).async_update_device(
+            entry.runtime_data.panel_device_id, name_by_user=case.panel_name
+        )
+    await _assert_recreate_offers_nothing(hass, install, case.circuit_name, seeded)
+    return install, seeded
+
+
+@pytest.mark.parametrize("case", IDS_FROM_BEFORE_THE_AREA)
+async def test_an_id_from_before_the_entity_s_area_keeps_its_wording_in_the_label_only_offer(
+    hass: HomeAssistant, entry: MockConfigEntry, case: _IdFromBeforeTheArea
+) -> None:
+    """The label-only offer spells the suffix as the id the device in front composed does (R1).
+
+    Read by its tail, `..._energy_consumed_2` was offered
+    `sensor.garage_consumed_energy`, `..._current_power_2`
+    `sensor.garage_power`, and the "Shop Current" id `sensor.current_power`.
+    Once accepted, the offer is the entity's own id.
+    """
+    install, seeded = await _load_an_id_from_before_the_area(hass, entry, case)
+    garage = ar.async_get(hass).async_create("Garage")
+    _give_the_entity_an_area(hass, seeded, garage.id)
+
+    accepted = await _accept_what_recreate_offers(hass, install, case.circuit_name, seeded)
+
+    assert accepted == case.offered
+    await _assert_recreate_offers_nothing(hass, install, case.circuit_name, accepted)
+
+
+@pytest.mark.parametrize("case", IDS_FROM_BEFORE_THE_AREA)
+async def test_an_area_given_to_an_id_from_before_it_keeps_its_wording_without_a_reload(
+    hass: HomeAssistant, entry: MockConfigEntry, case: _IdFromBeforeTheArea
+) -> None:
+    """The listener's refresh reads the wording as a reload does, and gives the id back on clearing."""
+    await _load_an_id_from_before_the_area(hass, entry, case)
+    registry = er.async_get(hass)
+    garage = ar.async_get(hass).async_create("Garage")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _give_the_entity_an_area(hass, case.entity_id, garage.id)
+
+    row = registry.async_get(case.entity_id)
+    assert row is not None
+    assert row.area_id == garage.id
+    assert registry.async_regenerate_entity_id(row) == case.offered
+
+    _give_the_entity_an_area(hass, case.entity_id, None)
+
+    row = registry.async_get(case.entity_id)
+    assert row is not None
+    assert row.area_id is None
+    assert registry.async_regenerate_entity_id(row) == case.entity_id
+    stop()
+
+
+async def test_an_id_core_composes_in_the_entity_s_area_is_read_before_one_from_before_it(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An id Core composes for the entity in its own area is offered nothing.
+
+    Under `(DEVICE, ENTITY)` a circuit named "Current" composes
+    `sensor.current_power` from `power` with its device in front. In an area
+    of its own the entity composes the same id from `current power`, its
+    label alone in a wording the suffix shipped with. Read first for the
+    wording from before the area, it was offered `sensor.power`.
+    """
+    er.async_get(hass).async_update_settings(entity_id_parts=DEVICE_ENTITY_FORMAT)
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Current")).entity_id
+    assert created == "sensor.current_power"
+    await _assert_recreate_offers_nothing(hass, install, "Current", created)
+    backyard = ar.async_get(hass).async_create("Backyard")
+    _give_the_entity_an_area(hass, created, backyard.id)
+
+    row = await _assert_recreate_offers_nothing(hass, install, "Current", created)
+
+    assert row.object_id_base == "current power"
 
 
 # --- Issue #252 for an id in a spelling a new entity no longer gets -------------
