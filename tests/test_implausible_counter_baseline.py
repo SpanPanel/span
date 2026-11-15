@@ -168,11 +168,12 @@ def test_no_main32_counter_is_implausible(captured: Capture) -> None:
     assert implausible_counters(snapshot(captured.tree())) == []
 
 
-def test_the_sensor_is_told_by_its_circuit() -> None:
+def test_the_sensor_is_told_by_its_circuit(hass: HomeAssistant) -> None:
     """A circuit energy sensor applies its own circuit's bound."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c-1", tabs=[1], breaker_rating_a=15.0)
     panel = SpanPanelSnapshotFactory.create(circuits={"c-1": circuit})
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = panel
     coordinator.config_entry.options = {}
     coordinator.config_entry.data = {}

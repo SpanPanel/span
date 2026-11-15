@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 import logging
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_OFF
@@ -36,10 +36,7 @@ from .helpers import (
     construct_voltage_attribute,
     remove_withdrawn_controls,
 )
-from .naming import (
-    circuit_object_id_base,
-    release_registry_name_written_by_older_release,
-)
+from .naming import release_registry_name_written_by_older_release
 from .runtime import SpanPanelConfigEntry
 from .util import snapshot_to_device_info
 
@@ -53,9 +50,16 @@ _NAME_UNSET: object = object()
 # Device types that use "Solar" as the fallback identifier when unnamed.
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
 
+BREAKER_LABEL: Final = "Breaker"
+"""A breaker switch's name: its label alone, since its circuit's device says which breaker."""
+
 
 def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return a descriptive identifier for an unnamed circuit switch."""
+    """Return the identifier an unnamed circuit's switch id was built from.
+
+    Kept only for the base to read an existing id back against; the circuit's
+    device is named by `helpers.circuit_device_name`.
+    """
     if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
         return "Solar"
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
@@ -66,8 +70,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
     # Read in entity code rather than through a description: this platform
     # has no entity description at all. `relay_state` is the switch's own
-    # state (~258); `name` and `tabs` build its display name and its id base
-    # (~106-122).
+    # state (`_update_is_on`); `name` and `tabs` name its circuit's device and
+    # build its id base (`__init__`).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.relay_state",
         "circuit.name",
@@ -82,9 +86,9 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     ) -> None:
         """Initialize the values.
 
-        The circuit's name is not passed in: both the display name and the id
-        base are read from the circuit in the current snapshot, so a circuit
-        renamed on the panel reaches both on the next reload.
+        The circuit's name is not passed in: its device's name and the id base
+        are read from the circuit in the current snapshot, so a circuit renamed
+        on the panel reaches both on the next reload.
         """
         snapshot: SpanPanelSnapshot = coordinator.data
 
@@ -96,7 +100,12 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         self._device_name = device_name
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, snapshot, circuit_id)
 
-        self._attr_device_info = self._build_device_info(coordinator, snapshot)
+        # On the circuit's own device, which carries the circuit's name. A
+        # charger's feed circuit's switch is no exception: its sensors are on
+        # the charger's device, but the switch was never there.
+        self._attr_device_info = self._build_circuit_device_info(
+            coordinator, snapshot, circuit, circuit_id
+        )
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -104,27 +113,30 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             "switch", DOMAIN, self._attr_unique_id
         )
 
-        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        circuit_name = circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
-
-        # One name path, in both naming modes: the panel's name, carried as
-        # `original_name`. That field ranks below the object-id base below, so
-        # what is displayed can no longer decide what "Recreate entity IDs"
-        # proposes.
-        self._attr_name = f"{circuit_name} Breaker"
+        # One name path, in both naming modes: the label, carried as
+        # `original_name`. The device says which circuit, and that field ranks
+        # below the object-id base below, so what is displayed can no longer
+        # decide what "Recreate entity IDs" proposes.
+        self._attr_name = BREAKER_LABEL
 
         # The id itself is Home Assistant's to compose. This entity supplies only
-        # its base -- the naming-flag half plus "breaker" -- and leaves
-        # `entity_id` unset so Core assembles the rest from the user's
+        # its base -- the suffix "breaker", read back from the id it has -- and
+        # leaves `entity_id` unset so Core assembles the rest from the user's
         # `entity_id_parts`. The suffix is named outright rather than mapped:
         # `get_user_friendly_suffix` has no entry for a switch at all.
-        identifier = (
-            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
-            if use_circuit_numbers
-            else circuit_name
-        )
-        self._span_object_id_base = circuit_object_id_base(
-            identifier, "breaker", existing_entity_id
+        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        self._span_object_id_base = self._circuit_object_id_base(
+            coordinator,
+            snapshot,
+            circuit,
+            circuit_id,
+            id_identifier=(
+                construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+                if use_circuit_numbers
+                else circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
+            ),
+            suffix="breaker",
+            existing_entity_id=existing_entity_id,
         )
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
@@ -136,7 +148,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         # any other name is the user's.
         if existing_entity_id:
             release_registry_name_written_by_older_release(
-                entity_registry, existing_entity_id, circuit.name, ("Breaker",)
+                entity_registry, existing_entity_id, circuit.name, (BREAKER_LABEL,)
             )
 
         super().__init__(coordinator)

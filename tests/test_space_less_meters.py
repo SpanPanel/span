@@ -23,16 +23,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS
-from custom_components.span_panel.helpers import outside_meter_label
+from custom_components.span_panel.helpers import circuit_device_name, outside_meter_label
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
 )
-from custom_components.span_panel.sensor_circuit import (
-    _resolve_circuit_identifier,
-    _resolve_circuit_identifier_for_sync,
-)
+from custom_components.span_panel.sensor_circuit import _resolve_circuit_identifier
 
 from .captures_replay import (
     RetainedTree,
@@ -42,7 +39,7 @@ from .captures_replay import (
     snapshot,
     without_topics,
 )
-from .test_expected_entities import R202639_CAPTURE, _install, _topology
+from .test_expected_entities import PANEL_NAME, R202639_CAPTURE, _install, _topology
 
 METER: Final = "meter-a"
 CIRCUIT_TYPE: Final = "energy.ebus.device.circuit"
@@ -199,12 +196,15 @@ async def test_a_space_less_meter_is_named_by_its_id_in_both_modes(hass: HomeAss
 
     assert _resolve_circuit_identifier(meter, METER, {USE_CIRCUIT_NUMBERS: False}) == label
     assert _resolve_circuit_identifier(meter, METER, {USE_CIRCUIT_NUMBERS: True}) == label
-    assert _resolve_circuit_identifier_for_sync(meter, METER) == label
+    assert circuit_device_name(meter, METER) == label
     named = replace(meter, name="Anything")
     assert _resolve_circuit_identifier(named, METER, {USE_CIRCUIT_NUMBERS: False}) == label
+    assert circuit_device_name(named, METER) == label
 
     entry = await _install(hass, _with_meter(), "space-less-meter")
-    assert _meter_sensor(hass, entry, "instantPowerW").original_name == f"{label} Power"
+    power = _meter_sensor(hass, entry, "instantPowerW")
+    assert power.original_name == "Power"
+    assert er.async_get_full_entity_name(hass, power) == f"{PANEL_NAME} {label} Power"
 
 
 async def test_topology_marks_a_space_less_meter_outside_the_panel(

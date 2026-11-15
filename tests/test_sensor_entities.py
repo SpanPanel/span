@@ -39,7 +39,6 @@ from custom_components.span_panel.sensor_base import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
-    _resolve_circuit_identifier_for_sync,
     _unnamed_circuit_fallback,
 )
 from custom_components.span_panel.sensor_definitions import (
@@ -100,7 +99,7 @@ def _make_coordinator(hass: HomeAssistant, snapshot, *, options: dict | None = N
     """Create a coordinator-like mock for direct sensor tests."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     entry = MockConfigEntry(
@@ -466,6 +465,7 @@ def test_circuit_power_sensor_extra_attributes_include_circuit_metadata(
 def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab(hass: HomeAssistant) -> None:
     """An unnamed circuit in friendly-name mode falls back to its breaker position.
 
+    Its device is named by it, and the entity carries its label alone.
     Answering `None` here let Home Assistant name every unnamed circuit on the
     panel alike, and the id followed: they collided and were disambiguated with
     `_2`, `_3`, ... in whatever order they happened to be added.
@@ -476,7 +476,10 @@ def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab(hass: HomeA
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snapshot, "c1")
 
-    assert sensor.name == "Circuit 7 Breaker Rating"
+    assert sensor.name == "Breaker Rating"
+    assert sensor.device_info is not None
+    assert sensor.device_info.get("name") == "Circuit 7"
+    assert sensor.suggested_object_id == "breaker rating"
 
 
 def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
@@ -486,13 +489,6 @@ def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
 
     assert _unnamed_circuit_fallback(solar_circuit, "pv1") == "Solar"
     assert _unnamed_circuit_fallback(evse_circuit, "ev1") == "EV Charger"
-
-
-def test_resolve_circuit_identifier_for_sync_falls_back_when_name_missing() -> None:
-    """Panel-name sync should use unnamed fallback labels when needed."""
-    evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
-
-    assert _resolve_circuit_identifier_for_sync(evse_circuit, "ev1") == "EV Charger"
 
 
 def test_circuit_power_sensor_subdevice_uses_short_name(hass: HomeAssistant) -> None:
@@ -512,32 +508,47 @@ def test_circuit_power_sensor_subdevice_uses_short_name(hass: HomeAssistant) -> 
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Current"
 
 
-def test_circuit_power_sensor_missing_circuit_uses_fallback_name(hass: HomeAssistant) -> None:
-    """A missing circuit is named by its id, as the energy sensor names it."""
+@pytest.mark.parametrize(
+    ("sensor_class", "description"),
+    [
+        (SpanCircuitPowerSensor, CIRCUIT_CURRENT_SENSOR),
+        (
+            SpanCircuitEnergySensor,
+            next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"),
+        ),
+    ],
+    ids=["power", "energy"],
+)
+def test_a_circuit_sensor_needs_its_circuit_in_the_snapshot_it_is_built_from(
+    hass: HomeAssistant,
+    sensor_class: type[SpanCircuitPowerSensor] | type[SpanCircuitEnergySensor],
+    description: SpanPanelCircuitsSensorEntityDescription,
+) -> None:
+    """The circuit names the device the sensor goes on, so there is no sensor without it.
+
+    Setup builds circuit sensors from the circuits of the snapshot it is handed,
+    as the switch and the select are built, so this is a programming error and
+    not a state a panel can put the integration in.
+    """
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
     coordinator = _make_coordinator(hass, snapshot)
 
-    sensor = SpanCircuitPowerSensor(
-        coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "missing_circuit"
-    )
-
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit missing_circuit Current"
-    )
+    with pytest.raises(KeyError, match="Circuit missing_circuit not found"):
+        sensor_class(coordinator, description, snapshot, "missing_circuit")
 
 
 def test_circuit_power_sensor_get_data_source_raises_for_missing_circuit(
     hass: HomeAssistant,
 ) -> None:
     """Missing circuit data should raise a clear KeyError."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     with pytest.raises(KeyError, match="Circuit c1 not found"):
-        sensor.get_data_source(snapshot)
+        sensor.get_data_source(SpanPanelSnapshotFactory.create(circuits={}))
 
 
 def test_circuit_energy_sensor_registers_consumed_sensor_on_add(hass: HomeAssistant) -> None:
@@ -861,20 +872,6 @@ def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference(
     assert sensor.native_value == pytest.approx(4.0)
 
 
-def test_circuit_energy_sensor_missing_circuit_uses_fallback_names(hass: HomeAssistant) -> None:
-    """Circuit energy sensors should format fallback names when the circuit is gone."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
-    coordinator = _make_coordinator(hass, snapshot)
-    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
-
-    sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c9")
-
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Consumed Energy"
-    )
-
-
 def test_circuit_energy_sensor_subdevice_uses_description_only(hass: HomeAssistant) -> None:
     """EVSE sub-device energy sensors should use the description name directly."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
@@ -897,11 +894,13 @@ def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_m
     hass: HomeAssistant,
 ) -> None:
     """Missing circuit data should still return grace-period attributes without tabs."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
 
     sensor._last_valid_state = 12.0
     sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
@@ -1215,7 +1214,7 @@ def test_existing_circuit_entity_uses_panel_name_on_init(hass: HomeAssistant) ->
 
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    assert sensor._attr_name == "Kitchen Current"
+    assert sensor._attr_name == "Current"
     assert sensor._previous_circuit_name == "Kitchen"
 
 
@@ -1657,7 +1656,7 @@ def test_energy_sensor_name_change_requests_reload(hass: HomeAssistant) -> None:
 
 
 def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode(hass: HomeAssistant) -> None:
-    """The name follows the panel; the entity_id does not follow the name."""
+    """The device's name follows the panel; the entity_id does not follow the name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(hass, snapshot, options={USE_CIRCUIT_NUMBERS: True})
@@ -1672,8 +1671,10 @@ def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode(hass: HomeA
 
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    assert sensor._attr_name == "Kitchen Current"
-    assert sensor.suggested_object_id == "Circuit 5 current"
+    assert sensor._attr_name == "Current"
+    assert sensor.device_info is not None
+    assert sensor.device_info.get("name") == "Kitchen"
+    assert sensor.suggested_object_id == "current"
     assert sensor.entity_id is None  # Core assigns it when the platform adds the entity
     assert sensor._previous_circuit_name == "Kitchen"
 

@@ -25,6 +25,7 @@ def expected_lingering_timers():
 
 
 def _make_coordinator(
+    hass: HomeAssistant,
     circuits: dict[str, Any],
     *,
     panel_offline: bool = False,
@@ -33,6 +34,7 @@ def _make_coordinator(
     """Create a coordinator mock with a real snapshot from factories."""
     snapshot = SpanPanelSnapshotFactory.create(circuits=circuits)
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = snapshot
     coordinator.panel_offline = panel_offline
     coordinator.config_entry = MagicMock()
@@ -58,7 +60,7 @@ async def test_switch_creation_for_controllable_circuit(hass: HomeAssistant) -> 
         name="Main Feed",
         is_user_controllable=False,
     )
-    coordinator = _make_coordinator({"1": controllable, "2": non_controllable})
+    coordinator = _make_coordinator(hass, {"1": controllable, "2": non_controllable})
 
     entities: list[Any] = []
     mock_entry = MagicMock()
@@ -75,14 +77,14 @@ async def test_switch_creation_for_controllable_circuit(hass: HomeAssistant) -> 
 
 
 @pytest.mark.asyncio
-async def test_switch_turn_on_operation() -> None:
+async def test_switch_turn_on_operation(hass: HomeAssistant) -> None:
     """Turning on a switch sends CLOSED to the client."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
         relay_state="OPEN",
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
@@ -93,14 +95,14 @@ async def test_switch_turn_on_operation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_switch_turn_off_operation() -> None:
+async def test_switch_turn_off_operation(hass: HomeAssistant) -> None:
     """Turning off a switch sends OPEN to the client."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
@@ -111,7 +113,9 @@ async def test_switch_turn_off_operation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone() -> None:
+async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone(
+    hass: HomeAssistant,
+) -> None:
     """The panel declares this circuit's relay non-commandable.
 
     Nothing is published, so no coordinator update is coming to correct an
@@ -124,7 +128,7 @@ async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone() -
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
     coordinator.client.set_circuit_relay = AsyncMock(
         side_effect=SpanPanelServerError("Circuit '1' declares its relay non-commandable")
     )
@@ -146,7 +150,9 @@ async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone() -
 
 
 @pytest.mark.asyncio
-async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions() -> None:
+async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions(
+    hass: HomeAssistant,
+) -> None:
     """The identifier the entity was named from, not the wire id."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="abc123",
@@ -154,7 +160,7 @@ async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions() -> No
         relay_state="OPEN",
         tabs=[30, 32],
     )
-    coordinator = _make_coordinator({"abc123": circuit})
+    coordinator = _make_coordinator(hass, {"abc123": circuit})
     coordinator.client.set_circuit_relay = AsyncMock(
         side_effect=SpanPanelServerError("Circuit 'abc123' declares its relay non-commandable")
     )
@@ -170,12 +176,12 @@ async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions() -> No
     assert placeholders["circuit"] == "Circuit 30 32"
 
 
-def test_switch_state_reflects_relay_state() -> None:
+def test_switch_state_reflects_relay_state(hass: HomeAssistant) -> None:
     """Switch is_on mirrors the circuit relay state."""
     closed = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", relay_state="CLOSED"
     )
-    coordinator_closed = _make_coordinator({"1": closed})
+    coordinator_closed = _make_coordinator(hass, {"1": closed})
     assert (
         SpanPanelCircuitsSwitch(coordinator_closed, "1", "SPAN Panel").is_on
         is True
@@ -184,16 +190,16 @@ def test_switch_state_reflects_relay_state() -> None:
     opened = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", relay_state="OPEN"
     )
-    coordinator_open = _make_coordinator({"1": opened})
+    coordinator_open = _make_coordinator(hass, {"1": opened})
     assert (
         SpanPanelCircuitsSwitch(coordinator_open, "1", "SPAN Panel").is_on
         is False
     )
 
 
-def test_switch_handles_missing_circuit() -> None:
+def test_switch_handles_missing_circuit(hass: HomeAssistant) -> None:
     """Constructing a switch for a missing circuit raises ValueError."""
-    coordinator = _make_coordinator({})
+    coordinator = _make_coordinator(hass, {})
 
     with pytest.raises(ValueError, match="Circuit 1 not found"):
         SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
@@ -206,7 +212,7 @@ def test_switch_coordinator_update_handling(hass: HomeAssistant) -> None:
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     switch.hass = hass
@@ -231,7 +237,7 @@ def test_circuit_name_change_triggers_reload_request(hass: HomeAssistant) -> Non
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     switch.hass = hass
@@ -247,31 +253,31 @@ def test_circuit_name_change_triggers_reload_request(hass: HomeAssistant) -> Non
     coordinator.request_reload.assert_called_once()
 
 
-def test_switch_unavailable_when_panel_offline() -> None:
+def test_switch_unavailable_when_panel_offline(hass: HomeAssistant) -> None:
     """Switches become unavailable when the panel is offline."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="1")
-    coordinator = _make_coordinator({"1": circuit}, panel_offline=True)
+    coordinator = _make_coordinator(hass, {"1": circuit}, panel_offline=True)
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     assert switch.available is False
 
 
-def test_switch_extra_state_attributes_include_tabs_and_voltage() -> None:
+def test_switch_extra_state_attributes_include_tabs_and_voltage(hass: HomeAssistant) -> None:
     """Switches expose circuit tab and voltage metadata."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", tabs=[1])
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     assert switch.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
 
 
-def test_switch_relay_state_target_shows_pending_state() -> None:
+def test_switch_relay_state_target_shows_pending_state(hass: HomeAssistant) -> None:
     """Switch should show the target state while a relay command is pending."""
     # Panel reports OPEN but has a pending target of CLOSED
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", relay_state="OPEN", relay_state_target="CLOSED"
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     # Target differs from actual — switch should show target (CLOSED = on)
@@ -286,12 +292,12 @@ def test_switch_relay_state_target_shows_pending_state() -> None:
     assert switch.is_on is True
 
 
-def test_switch_relay_state_target_none_uses_actual_state() -> None:
+def test_switch_relay_state_target_none_uses_actual_state(hass: HomeAssistant) -> None:
     """Switch should use actual relay state when no target is published."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", relay_state="OPEN", relay_state_target=None
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     assert switch.is_on is False
@@ -332,6 +338,7 @@ async def test_switch_async_setup_entry_filters_supported_circuits(
     )
 
     coordinator = _make_coordinator(
+        hass,
         {
             "1": controllable,
             "2": locked,
@@ -355,7 +362,11 @@ async def test_switch_async_setup_entry_filters_supported_circuits(
 
 
 def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) -> None:
-    """Existing solar switch entities should sync to the solar fallback label."""
+    """An unnamed solar circuit's device is named "Solar", and its switch carries the label.
+
+    The id the switch already has was built from the same fallback, so the base
+    reads it back as "Solar" then `breaker`.
+    """
     solar = replace(
         SpanCircuitSnapshotFactory.create(
             circuit_id="15",
@@ -365,8 +376,7 @@ def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
         ),
         device_type="pv",
     )
-    coordinator = _make_coordinator({"15": solar})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"15": solar})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -377,18 +387,19 @@ def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "15", "SPAN Panel")
 
-    assert switch.name == "Solar Breaker"
+    assert switch.name == "Breaker"
+    assert switch.device_info is not None
+    assert switch.device_info.get("name") == "Solar"
+    assert switch.suggested_object_id == "breaker"
 
 
-def test_switch_initial_install_uses_circuit_numbers_when_enabled(
+def test_switch_initial_install_in_circuit_numbers_mode_is_on_the_circuits_device(
     hass: HomeAssistant,
 ) -> None:
-    """The option decides the id base, and the displayed name is the panel's regardless.
+    """The circuit's device is named by the circuit in both modes, and the base is the suffix.
 
-    It used to decide the name too, on a first install only, because the name was
-    the only thing an id could be composed from. The base is composed from the
-    option directly now, so the name is free to be the one the panel reports --
-    the same string an existing entity has always shown.
+    The option decides only which identifier an existing id is read back
+    against; a new switch has none to read.
     """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
@@ -396,10 +407,7 @@ def test_switch_initial_install_uses_circuit_numbers_when_enabled(
         tabs=[2, 3],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -410,14 +418,16 @@ def test_switch_initial_install_uses_circuit_numbers_when_enabled(
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
 
-    assert switch.name == "Kitchen Breaker"
-    assert switch.suggested_object_id == "Circuit 2 3 breaker"
+    assert switch.name == "Breaker"
+    assert switch.device_info is not None
+    assert switch.device_info.get("name") == "Kitchen"
+    assert switch.suggested_object_id == "breaker"
 
 
 def test_switch_initial_install_without_name_falls_back_to_the_tabs(
     hass: HomeAssistant,
 ) -> None:
-    """An unnamed circuit is named for its breaker position, not left to HA.
+    """An unnamed circuit's device is named for its breaker position, not left to HA.
 
     Letting HA default it gave every unnamed circuit on the panel the same name
     and the same id stem, which the registry then disambiguated with `_2`, `_3`,
@@ -429,8 +439,7 @@ def test_switch_initial_install_without_name_falls_back_to_the_tabs(
         tabs=[3],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator({"3": circuit})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"3": circuit})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -441,8 +450,10 @@ def test_switch_initial_install_without_name_falls_back_to_the_tabs(
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "3", "SPAN Panel")
 
-    assert switch.name == "Circuit 3 Breaker"
-    assert switch.suggested_object_id == "Circuit 3 breaker"
+    assert switch.name == "Breaker"
+    assert switch.device_info is not None
+    assert switch.device_info.get("name") == "Circuit 3"
+    assert switch.suggested_object_id == "breaker"
     assert switch._previous_circuit_name is not None
 
 
@@ -453,8 +464,7 @@ def test_switch_first_update_requests_reload_without_user_override(
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", is_user_controllable=True
     )
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     with pytest.MonkeyPatch.context() as mp:
         init_registry = MagicMock()
@@ -486,8 +496,7 @@ def test_switch_user_override_skips_reload_on_update(hass: HomeAssistant) -> Non
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", is_user_controllable=True
     )
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     with pytest.MonkeyPatch.context() as mp:
         init_registry = MagicMock()
@@ -526,8 +535,7 @@ def test_switch_update_is_on_clears_state_when_circuit_disappears(
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", is_user_controllable=True
     )
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -549,8 +557,7 @@ def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", is_user_controllable=True
     )
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -575,7 +582,7 @@ def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
     switch.hass.create_task.assert_any_call(off_task)
 
 
-def test_switch_relay_state_target_exposed_in_attributes() -> None:
+def test_switch_relay_state_target_exposed_in_attributes(hass: HomeAssistant) -> None:
     """relay_state_target should appear in extra attributes when set."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
@@ -583,7 +590,7 @@ def test_switch_relay_state_target_exposed_in_attributes() -> None:
         relay_state_target="CLOSED",
         tabs=[1],
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     attrs = switch.extra_state_attributes
@@ -591,7 +598,7 @@ def test_switch_relay_state_target_exposed_in_attributes() -> None:
     assert attrs["relay_state_target"] == "CLOSED"
 
 
-def test_switch_relay_state_target_absent_when_none() -> None:
+def test_switch_relay_state_target_absent_when_none(hass: HomeAssistant) -> None:
     """relay_state_target should not appear in attributes when None."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
@@ -599,7 +606,7 @@ def test_switch_relay_state_target_absent_when_none() -> None:
         relay_state_target=None,
         tabs=[1],
     )
-    coordinator = _make_coordinator({"1": circuit})
+    coordinator = _make_coordinator(hass, {"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     attrs = switch.extra_state_attributes
@@ -610,11 +617,11 @@ def test_switch_relay_state_target_absent_when_none() -> None:
 def test_switch_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
-    """The base stays circuit-based while the displayed name follows the panel.
+    """The base stays the suffix while the circuit's device carries the panel's name.
 
-    One name path in both modes -- the panel's -- and one id path: the base
-    handed to Core, which is composed from the naming flag and never from the
-    name. The two are decoupled, so the display name cannot move an id.
+    One name path in both modes -- the label, on a device named by the panel --
+    and one id path: the base handed to Core, read back from the id the switch
+    has. The two are decoupled, so the display name cannot move an id.
     """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
@@ -622,10 +629,7 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
         tabs=[15, 17],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     # --- Initial install: entity NOT in registry ---
     with pytest.MonkeyPatch.context() as mp:
@@ -637,8 +641,8 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
 
-    assert switch.name == "Air Conditioner Breaker"
-    assert switch.suggested_object_id == "Circuit 15 17 breaker"
+    assert switch.name == "Breaker"
+    assert switch.suggested_object_id == "breaker"
 
     # --- After reload: entity EXISTS in registry ---
     with pytest.MonkeyPatch.context() as mp:
@@ -652,38 +656,42 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
         )
         switch2 = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
 
-    # The panel's name, carried by original_name rather than the registry's
-    # `name`, which would outrank the base.
-    assert switch2.name == "Air Conditioner Breaker"
-    assert switch2.suggested_object_id == "Circuit 15 17 breaker"
+    # The label, carried by original_name rather than the registry's `name`,
+    # which would outrank the base; the tabs read the existing id back.
+    assert switch2.name == "Breaker"
+    assert switch2.device_info is not None
+    assert switch2.device_info.get("name") == "Air Conditioner"
+    assert switch2.suggested_object_id == "breaker"
 
 
 def test_switch_circuit_numbers_entity_id_120v_single_tab(
     hass: HomeAssistant,
 ) -> None:
-    """120V single-tab circuit should produce a base with one tab number."""
+    """A single-tab circuit's existing id is read back against its one tab number.
+
+    Named so that its device's name ends on the suffix word: read against the
+    name rather than the tabs, the id would look like one that left `breaker`
+    out, and the base would leave it out too.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="5",
-        name="Kitchen Outlets",
+        name="Main Breaker",
         tabs=[10],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"5": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"5": circuit}, options={"use_circuit_numbers": True})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
-        registry.async_get_entity_id.return_value = None
+        registry.async_get_entity_id.return_value = "switch.span_panel_circuit_10_breaker"
         mp.setattr(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "5", "SPAN Panel")
 
-    assert switch.name == "Kitchen Outlets Breaker"
-    assert switch.suggested_object_id == "Circuit 10 breaker"
+    assert switch.name == "Breaker"
+    assert switch.suggested_object_id == "breaker"
 
 
 def test_switch_circuit_numbers_releases_the_synced_registry_name(
@@ -696,10 +704,7 @@ def test_switch_circuit_numbers_releases_the_synced_registry_name(
         tabs=[15, 17],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -733,10 +738,7 @@ def test_switch_circuit_numbers_preserves_user_custom_name(
         tabs=[15, 17],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
@@ -768,10 +770,7 @@ def test_switch_coordinator_update_circuit_numbers_requests_reload(
         tabs=[15, 17],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     # Create switch with entity already in registry (existing entity)
     with pytest.MonkeyPatch.context() as mp:
@@ -821,10 +820,7 @@ def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
         tabs=[15, 17],
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"2": circuit}, options={"use_circuit_numbers": True}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"2": circuit}, options={"use_circuit_numbers": True})
 
     # Create switch with entity already in registry
     with pytest.MonkeyPatch.context() as mp:
@@ -872,10 +868,7 @@ def test_switch_coordinator_update_friendly_mode_still_reloads(
         name="Kitchen Outlets",
         is_user_controllable=True,
     )
-    coordinator = _make_coordinator(
-        {"1": circuit}, options={"use_circuit_numbers": False}
-    )
-    coordinator.hass = hass
+    coordinator = _make_coordinator(hass, {"1": circuit}, options={"use_circuit_numbers": False})
 
     # Create switch with entity already in registry (previous name known)
     with pytest.MonkeyPatch.context() as mp:

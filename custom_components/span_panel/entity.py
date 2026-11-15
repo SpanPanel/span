@@ -8,9 +8,10 @@ from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from span_panel_api import PublishOutcome, SpanPanelSnapshot
+from span_panel_api import PublishOutcome, SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
 from .const import CONF_DEVICE_NAME, DOMAIN
@@ -22,7 +23,8 @@ from .control_gate import (
 )
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
-from .util import snapshot_to_device_info
+from .naming import circuit_object_id_suffix
+from .util import circuit_device_info, effective_circuit_device_name, snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,10 +52,12 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     _span_object_id_base: str | None = None
     """The base Home Assistant composes this entity's id from, when set.
 
-    Circuit entities set it from `naming.circuit_object_id_base`; every other
-    entity leaves it None and Core composes from the display name as it
-    always has. Core reads `suggested_object_id` only for an entity that has
-    not preset `entity_id`, which after this release is every entity here.
+    Circuit entities on their circuit's device set it from
+    `_circuit_object_id_base`, and it is their suffix alone, since Core
+    composes the circuit's name from the device. Every other entity leaves it
+    None and Core composes from the display name as it always has. Core reads
+    `suggested_object_id` only for an entity that has not preset `entity_id`,
+    which after this release is every entity here.
     """
 
     @property
@@ -290,3 +294,48 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         )
         host = coordinator.config_entry.data.get(CONF_HOST)
         return snapshot_to_device_info(snapshot, device_name, host=host)
+
+    @staticmethod
+    def _build_circuit_device_info(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit: SpanCircuitSnapshot,
+        circuit_id: str,
+    ) -> ChildDeviceInfo:
+        """Construct the device info of a circuit's own device, a child of the panel's."""
+        return circuit_device_info(
+            snapshot.serial_number,
+            circuit,
+            circuit_id,
+            panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+        )
+
+    @staticmethod
+    def _circuit_object_id_base(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit: SpanCircuitSnapshot,
+        circuit_id: str,
+        *,
+        id_identifier: str,
+        suffix: str,
+        existing_entity_id: str | None,
+    ) -> str:
+        """Return the base of a circuit entity's id on its circuit's device: the suffix alone.
+
+        `naming.circuit_object_id_suffix` reads it back from the id the entity
+        already has, against two names. `id_identifier` is what the naming flag
+        resolves today, the name ids were built from before the circuit had a
+        device: its tabs in circuit-numbers mode, its name or an unnamed
+        circuit's fallback otherwise. The other is the name Core composes the
+        id from, the circuit device's, as `effective_circuit_device_name`
+        gives it.
+        """
+        device_name = effective_circuit_device_name(
+            dr.async_get(coordinator.hass),
+            snapshot.serial_number,
+            circuit,
+            circuit_id,
+            config_entry_id=coordinator.config_entry.entry_id,
+        )
+        return circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)

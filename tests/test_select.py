@@ -21,6 +21,7 @@ from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 
 def _make_coordinator_with_circuit(
+    hass: HomeAssistant,
     circuit_id: str = "id",
     circuit_name: str = "name",
     priority: str = "SOC_THRESHOLD",
@@ -43,6 +44,7 @@ def _make_coordinator_with_circuit(
     )
 
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = snapshot
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.title = "SPAN Panel"
@@ -66,7 +68,7 @@ def test_select_init_missing_circuit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_select_option_refusal_is_raised_at_the_caller() -> None:
+async def test_async_select_option_refusal_is_raised_at_the_caller(hass: HomeAssistant) -> None:
     """A refused priority reaches the person who chose it, carrying the reason.
 
     The panel refuses this for two different situations -- the circuit is
@@ -75,7 +77,7 @@ async def test_async_select_option_refusal_is_raised_at_the_caller() -> None:
     passed through rather than diagnosed here, and the entity contributes the
     name the user knows the circuit by.
     """
-    coordinator = _make_coordinator_with_circuit()
+    coordinator = _make_coordinator_with_circuit(hass)
     circuit = coordinator.data.circuits["id"]
 
     select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Test Device")
@@ -100,9 +102,9 @@ async def test_async_select_option_refusal_is_raised_at_the_caller() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_select_option_undelivered_is_raised_at_the_caller() -> None:
+async def test_async_select_option_undelivered_is_raised_at_the_caller(hass: HomeAssistant) -> None:
     """A `FAILED` outcome is the promise this change will not arrive later."""
-    coordinator = _make_coordinator_with_circuit()
+    coordinator = _make_coordinator_with_circuit(hass)
     circuit = coordinator.data.circuits["id"]
 
     select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Test Device")
@@ -128,10 +130,9 @@ async def test_async_select_option_undelivered_is_raised_at_the_caller() -> None
 
 
 @pytest.mark.asyncio
-async def test_async_select_option_success_refreshes_coordinator() -> None:
+async def test_async_select_option_success_refreshes_coordinator(hass: HomeAssistant) -> None:
     """Successful priority changes should refresh coordinator data."""
-    coordinator = _make_coordinator_with_circuit()
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass)
     coordinator.async_request_refresh = AsyncMock()
 
     with patch(
@@ -156,16 +157,16 @@ async def test_async_select_option_success_refreshes_coordinator() -> None:
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-def test_select_uses_circuit_numbers_for_the_base_when_the_option_is_enabled() -> None:
-    """The option decides the id base; the displayed name is the panel's regardless.
+def test_select_initial_install_in_circuit_numbers_mode_is_on_the_circuits_device(
+    hass: HomeAssistant,
+) -> None:
+    """The circuit's device is named by the circuit in both modes, and the base is the suffix.
 
-    It used to decide the name too, on a first install only, because the name was
-    the only thing an id could be composed from. The base is composed from the
-    option directly now.
+    The option decides only which identifier an existing id is read back
+    against; a new select has none to read.
     """
-    coordinator = _make_coordinator_with_circuit()
+    coordinator = _make_coordinator_with_circuit(hass)
     coordinator.config_entry.options = {"use_circuit_numbers": True}
-    coordinator.hass = MagicMock()
 
     with patch(
         "custom_components.span_panel.select.er.async_get"
@@ -178,19 +179,20 @@ def test_select_uses_circuit_numbers_for_the_base_when_the_option_is_enabled() -
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
         )
 
-    assert select.name == "name Circuit Priority"
-    assert select.suggested_object_id == "Circuit 1 circuit priority"
+    assert select.name == "Circuit Priority"
+    assert select.device_info is not None
+    assert select.device_info.get("name") == "name"
+    assert select.suggested_object_id == "circuit priority"
 
 
-def test_select_unnamed_friendly_mode_falls_back_to_the_tabs() -> None:
-    """An unnamed circuit is named for its breaker position, not left to HA.
+def test_select_unnamed_friendly_mode_falls_back_to_the_tabs(hass: HomeAssistant) -> None:
+    """An unnamed circuit's device is named for its breaker position, not left to HA.
 
     Deferring gave every unnamed circuit on the panel the same name and the same
     id stem, which the registry then disambiguated with `_2`, `_3`, ... in
     whatever order the platform happened to add them.
     """
-    coordinator = _make_coordinator_with_circuit(circuit_name="")
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass, circuit_name="")
 
     with patch(
         "custom_components.span_panel.select.er.async_get"
@@ -203,12 +205,18 @@ def test_select_unnamed_friendly_mode_falls_back_to_the_tabs() -> None:
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
         )
 
-    assert select.name == "Circuit 1 Circuit Priority"
-    assert select.suggested_object_id == "Circuit 1 circuit priority"
+    assert select.name == "Circuit Priority"
+    assert select.device_info is not None
+    assert select.device_info.get("name") == "Circuit 1"
+    assert select.suggested_object_id == "circuit priority"
 
 
-def test_select_existing_entity_uses_solar_fallback_name() -> None:
-    """Existing unnamed PV entities should use the solar fallback name."""
+def test_select_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) -> None:
+    """An unnamed solar circuit's device is named "Solar", and its select carries the label.
+
+    The id the select already has was built from the same fallback, so the base
+    reads it back as "Solar" then `circuit_priority`.
+    """
     circuit = replace(
         SpanCircuitSnapshotFactory.create(
             circuit_id="pv-1",
@@ -221,7 +229,7 @@ def test_select_existing_entity_uses_solar_fallback_name() -> None:
     snapshot = SpanPanelSnapshotFactory.create(circuits={"pv-1": circuit})
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.title = "SPAN Panel"
     coordinator.config_entry.data = {}
@@ -238,12 +246,15 @@ def test_select_existing_entity_uses_solar_fallback_name() -> None:
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "pv-1", "SPAN Panel"
         )
 
-    assert select.name == "Solar Circuit Priority"
+    assert select.name == "Circuit Priority"
+    assert select.device_info is not None
+    assert select.device_info.get("name") == "Solar"
+    assert select.suggested_object_id == "circuit priority"
 
 
-def test_select_available_false_when_panel_offline() -> None:
+def test_select_available_false_when_panel_offline(hass: HomeAssistant) -> None:
     """Select entities become unavailable when the panel is offline."""
-    coordinator = _make_coordinator_with_circuit()
+    coordinator = _make_coordinator_with_circuit(hass)
     coordinator.panel_offline = True
 
     select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel")
@@ -251,10 +262,9 @@ def test_select_available_false_when_panel_offline() -> None:
     assert select.available is False
 
 
-def test_select_extra_state_attributes_include_tabs_and_voltage() -> None:
+def test_select_extra_state_attributes_include_tabs_and_voltage(hass: HomeAssistant) -> None:
     """Select attributes should expose breaker tabs and circuit voltage."""
-    coordinator = _make_coordinator_with_circuit()
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass)
     with patch(
         "custom_components.span_panel.select.er.async_get"
     ) as mock_async_get:
@@ -269,10 +279,9 @@ def test_select_extra_state_attributes_include_tabs_and_voltage() -> None:
     assert select.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
 
 
-def test_handle_coordinator_update_requests_reload_on_first_sync() -> None:
+def test_handle_coordinator_update_requests_reload_on_first_sync(hass: HomeAssistant) -> None:
     """First update for an entity not yet in the registry should request reload."""
-    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass, circuit_name="Kitchen")
     with patch(
         "custom_components.span_panel.select.er.async_get"
     ) as mock_async_get:
@@ -293,10 +302,9 @@ def test_handle_coordinator_update_requests_reload_on_first_sync() -> None:
     coordinator.request_reload.assert_called_once()
 
 
-def test_handle_coordinator_update_user_override_skips_reload() -> None:
+def test_handle_coordinator_update_user_override_skips_reload(hass: HomeAssistant) -> None:
     """Customized select names should suppress automatic name sync reloads."""
-    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass, circuit_name="Kitchen")
     with patch(
         "custom_components.span_panel.select.er.async_get"
     ) as mock_async_get:
@@ -328,10 +336,9 @@ def test_handle_coordinator_update_user_override_skips_reload() -> None:
     assert select._previous_circuit_name == "Renamed Kitchen"
 
 
-def test_handle_coordinator_update_requests_reload_on_name_change() -> None:
+def test_handle_coordinator_update_requests_reload_on_name_change(hass: HomeAssistant) -> None:
     """Later circuit renames should request a select reload."""
-    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass, circuit_name="Kitchen")
     with patch(
         "custom_components.span_panel.select.er.async_get"
     ) as mock_async_get:
@@ -361,10 +368,11 @@ def test_handle_coordinator_update_requests_reload_on_name_change() -> None:
     assert select._previous_circuit_name == "Renamed Kitchen"
 
 
-def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot() -> None:
+def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot(
+    hass: HomeAssistant,
+) -> None:
     """Select entity should not crash when its circuit is temporarily absent from a snapshot."""
-    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
-    coordinator.hass = MagicMock()
+    coordinator = _make_coordinator_with_circuit(hass, circuit_name="Kitchen")
     with patch(
         "custom_components.span_panel.select.er.async_get"
     ) as mock_async_get:
@@ -390,7 +398,7 @@ def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot() ->
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_filters_supported_circuits() -> None:
+async def test_async_setup_entry_filters_supported_circuits(hass: HomeAssistant) -> None:
     """Platform setup should only create selects for supported controllable circuits."""
     controllable = SpanCircuitSnapshotFactory.create(
         circuit_id="main-1",
@@ -426,6 +434,7 @@ async def test_async_setup_entry_filters_supported_circuits() -> None:
     )
 
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = SpanPanelSnapshotFactory.create(
         circuits={
             "main-1": controllable,
@@ -442,14 +451,16 @@ async def test_async_setup_entry_filters_supported_circuits() -> None:
     )
     async_add_entities = MagicMock()
 
-    await async_setup_entry(MagicMock(), config_entry, async_add_entities)
+    await async_setup_entry(hass, config_entry, async_add_entities)
 
     entities = async_add_entities.call_args.args[0]
     assert len(entities) == 2
     assert {entity.id for entity in entities} == {"main-1", "pv-1"}
 
 
-async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable() -> None:
+async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable(
+    hass: HomeAssistant,
+) -> None:
     """A never-backup circuit gets no priority select, even with a controllable relay.
 
     Relay controllability and priority settability are two independent
@@ -480,6 +491,7 @@ async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable()
     )
 
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = SpanPanelSnapshotFactory.create(
         circuits={"main-1": settable_priority, "main-2": locked_priority}
     )
@@ -491,7 +503,7 @@ async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable()
     )
     async_add_entities = MagicMock()
 
-    await async_setup_entry(MagicMock(), config_entry, async_add_entities)
+    await async_setup_entry(hass, config_entry, async_add_entities)
 
     entities = async_add_entities.call_args.args[0]
     assert {entity.id for entity in entities} == {"main-1"}
@@ -500,7 +512,7 @@ async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable()
 def test_select_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
-    """The base must stay circuit-based after name sync sets the friendly display name."""
+    """The base stays the suffix while the circuit's device carries the panel's name."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -531,8 +543,8 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
             "SPAN Panel",
         )
 
-    assert select.name == "Air Conditioner Circuit Priority"
-    assert select.suggested_object_id == "Circuit 15 17 circuit priority"
+    assert select.name == "Circuit Priority"
+    assert select.suggested_object_id == "circuit priority"
 
     # --- After reload: entity EXISTS in registry ---
     with pytest.MonkeyPatch.context() as mp:
@@ -551,19 +563,26 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
             "SPAN Panel",
         )
 
-    # The panel's name, carried by original_name rather than the registry's
-    # `name`, which would outrank the base.
-    assert select2.name == "Air Conditioner Circuit Priority"
-    assert select2.suggested_object_id == "Circuit 15 17 circuit priority"
+    # The label, carried by original_name rather than the registry's `name`,
+    # which would outrank the base; the tabs read the existing id back.
+    assert select2.name == "Circuit Priority"
+    assert select2.device_info is not None
+    assert select2.device_info.get("name") == "Air Conditioner"
+    assert select2.suggested_object_id == "circuit priority"
 
 
 def test_select_circuit_numbers_entity_id_120v_single_tab(
     hass: HomeAssistant,
 ) -> None:
-    """120V single-tab circuit should produce a base with one tab number."""
+    """A single-tab circuit's existing id is read back against its one tab number.
+
+    Named so that its device's name ends on the suffix words: read against the
+    name rather than the tabs, the id would look like one that left
+    `circuit_priority` out, and the base would leave it out too.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="5",
-        name="Kitchen Outlets",
+        name="Main Circuit Priority",
         tabs=[10],
         is_user_controllable=True,
     )
@@ -578,7 +597,9 @@ def test_select_circuit_numbers_entity_id_120v_single_tab(
 
     with pytest.MonkeyPatch.context() as mp:
         registry = MagicMock()
-        registry.async_get_entity_id.return_value = None
+        registry.async_get_entity_id.return_value = (
+            "select.span_panel_circuit_10_circuit_priority"
+        )
         mp.setattr(
             "custom_components.span_panel.select.er.async_get",
             lambda _hass: registry,
@@ -590,8 +611,8 @@ def test_select_circuit_numbers_entity_id_120v_single_tab(
             "SPAN Panel",
         )
 
-    assert select.name == "Kitchen Outlets Circuit Priority"
-    assert select.suggested_object_id == "Circuit 10 circuit priority"
+    assert select.name == "Circuit Priority"
+    assert select.suggested_object_id == "circuit priority"
 
 
 def test_select_coordinator_update_circuit_numbers_requests_reload(

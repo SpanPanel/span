@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import Final
 
-from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
+from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo, DeviceRegistry
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
@@ -425,3 +425,32 @@ def circuit_device_info(
         name=circuit_device_name(circuit, circuit_id),
         parent_device_id=panel_device_id,
     )
+
+
+def effective_circuit_device_name(
+    device_registry: DeviceRegistry,
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    circuit_id: str,
+    *,
+    config_entry_id: str,
+) -> str:
+    """Return the name Home Assistant composes a circuit's entity ids and names from.
+
+    Core reads a device's `name_by_user` ahead of its `name`, so a name the user
+    gave the circuit's device in Home Assistant is the answer wherever there is
+    one, whatever the panel calls the circuit.
+
+    Otherwise it is the name `circuit_device_info` gives the device now, not the
+    name the registry holds for it. A circuit entity is built before it is
+    added, and adding it writes that name over the registry's, so the
+    registry's is the circuit's name from before the rename on the panel that
+    this reload follows. An id read against the old name is answered for a
+    device that no longer carries it.
+    """
+    device = device_registry.async_get_child_device_by_identifier(
+        (DOMAIN, build_circuit_device_identifier(serial, circuit_id)), config_entry_id
+    )
+    if device is not None and device.name_by_user:
+        return device.name_by_user
+    return circuit_device_name(circuit, circuit_id)

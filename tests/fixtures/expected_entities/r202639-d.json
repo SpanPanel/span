@@ -18,6 +18,30 @@
       "sw_version": null,
       "via_device": "xg-1334-066e8"
     },
+    "xg-1334-066e8_circuit_circuit-1": {
+      "name": "Bedroom, Kitchen / Lights",
+      "parent_device": "xg-1334-066e8"
+    },
+    "xg-1334-066e8_circuit_circuit-2": {
+      "name": "Office / Outlets",
+      "parent_device": "xg-1334-066e8"
+    },
+    "xg-1334-066e8_circuit_circuit-3": {
+      "name": "Utility room / Lights & Outlets",
+      "parent_device": "xg-1334-066e8"
+    },
+    "xg-1334-066e8_circuit_circuit-4": {
+      "name": "Electric oven",
+      "parent_device": "xg-1334-066e8"
+    },
+    "xg-1334-066e8_circuit_circuit-8": {
+      "name": "Lucid charger",
+      "parent_device": "xg-1334-066e8"
+    },
+    "xg-1334-066e8_circuit_circuit-9": {
+      "name": "Neutral forming transformer (NFT)",
+      "parent_device": "xg-1334-066e8"
+    },
     "xg-1334-066e8_evse_dt-5599-00321": {
       "hw_version": null,
       "manufacturer": "SPAN",
@@ -207,13 +231,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-1_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_breaker_rating",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -221,13 +245,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-1_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_current",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -235,13 +259,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-1_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_consumed_energy",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "8106.5",
       "state_class": "total_increasing",
@@ -249,13 +273,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-1_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_net_energy",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "7704.5",
       "state_class": "total",
@@ -263,13 +287,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-1_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_produced_energy",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "402.0",
       "state_class": "total_increasing",
@@ -277,13 +301,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-1_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_kitchen_lights_power",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -291,13 +315,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-1334-066e8_circuit-2_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_office_outlets_breaker_rating",
       "hidden_by": null,
-      "original_name": "Office / Outlets Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -305,13 +329,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-2_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_office_outlets_current",
       "hidden_by": null,
-      "original_name": "Office / Outlets Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -319,13 +343,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-2_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_office_outlets_consumed_energy",
       "hidden_by": null,
-      "original_name": "Office / Outlets Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "96785.1",
       "state_class": "total_increasing",
@@ -333,13 +357,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-2_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_office_outlets_net_energy",
       "hidden_by": null,
-      "original_name": "Office / Outlets Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "96369.2",
       "state_class": "total",
@@ -347,13 +371,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-2_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_office_outlets_produced_energy",
       "hidden_by": null,
-      "original_name": "Office / Outlets Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "415.9",
       "state_class": "total_increasing",
@@ -361,13 +385,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-2_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_office_outlets_power",
       "hidden_by": null,
-      "original_name": "Office / Outlets Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -375,13 +399,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-1334-066e8_circuit-3_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_breaker_rating",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -389,13 +413,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-3_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_current",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -403,13 +427,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-3_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_consumed_energy",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "8337.7",
       "state_class": "total_increasing",
@@ -417,13 +441,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-3_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_net_energy",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "7910.4",
       "state_class": "total",
@@ -431,13 +455,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-3_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_produced_energy",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "427.3",
       "state_class": "total_increasing",
@@ -445,13 +469,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-3_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_utility_room_lights_outlets_power",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -459,13 +483,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-1334-066e8_circuit-4_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_electric_oven_breaker_rating",
       "hidden_by": null,
-      "original_name": "Electric oven Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -473,13 +497,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-4_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_electric_oven_current",
       "hidden_by": null,
-      "original_name": "Electric oven Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -487,13 +511,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-4_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_electric_oven_consumed_energy",
       "hidden_by": null,
-      "original_name": "Electric oven Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "12213.2",
       "state_class": "total_increasing",
@@ -501,13 +525,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-4_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_electric_oven_net_energy",
       "hidden_by": null,
-      "original_name": "Electric oven Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "11397.0",
       "state_class": "total",
@@ -515,13 +539,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-4_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_electric_oven_produced_energy",
       "hidden_by": null,
-      "original_name": "Electric oven Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "816.2",
       "state_class": "total_increasing",
@@ -529,13 +553,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-4_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_electric_oven_power",
       "hidden_by": null,
-      "original_name": "Electric oven Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -627,13 +651,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-1334-066e8_circuit-8_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_lucid_charger_breaker_rating",
       "hidden_by": null,
-      "original_name": "Lucid charger Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -641,13 +665,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-8_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_lucid_charger_current",
       "hidden_by": null,
-      "original_name": "Lucid charger Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -655,13 +679,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-8_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_lucid_charger_consumed_energy",
       "hidden_by": null,
-      "original_name": "Lucid charger Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "965.9",
       "state_class": "total_increasing",
@@ -669,13 +693,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-8_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_lucid_charger_net_energy",
       "hidden_by": null,
-      "original_name": "Lucid charger Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "581.1",
       "state_class": "total",
@@ -683,13 +707,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-8_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_lucid_charger_produced_energy",
       "hidden_by": null,
-      "original_name": "Lucid charger Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "384.8",
       "state_class": "total_increasing",
@@ -697,13 +721,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-8_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-8",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_lucid_charger_power",
       "hidden_by": null,
-      "original_name": "Lucid charger Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -711,13 +735,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-1334-066e8_circuit-9_breaker_rating": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_breaker_rating",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -725,13 +749,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-9_current": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_current",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -739,13 +763,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_circuit-9_energy_consumed": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_consumed_energy",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "78533900304.6",
       "state_class": "total_increasing",
@@ -753,13 +777,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-9_energy_net": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_net_energy",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "78533899848.1",
       "state_class": "total",
@@ -767,13 +791,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-9_energy_produced": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_produced_energy",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "456.5",
       "state_class": "total_increasing",
@@ -781,13 +805,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-1334-066e8_circuit-9_power": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_neutral_forming_transformer_nft_power",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -1299,13 +1323,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-1334-066e8_relay_circuit-1": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_bedroom_kitchen_lights_breaker",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1313,13 +1337,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_relay_circuit-2": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_office_outlets_breaker",
       "hidden_by": null,
-      "original_name": "Office / Outlets Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1327,13 +1351,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_relay_circuit-3": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_utility_room_lights_outlets_breaker",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1341,13 +1365,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_relay_circuit-4": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_electric_oven_breaker",
       "hidden_by": null,
-      "original_name": "Electric oven Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1355,13 +1379,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_relay_circuit-9": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_neutral_forming_transformer_nft_breaker",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1369,13 +1393,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_select_circuit-1": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-1",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_bedroom_kitchen_lights_circuit_priority",
       "hidden_by": null,
-      "original_name": "Bedroom, Kitchen / Lights Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1383,13 +1407,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_select_circuit-2": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-2",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_office_outlets_circuit_priority",
       "hidden_by": null,
-      "original_name": "Office / Outlets Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1397,13 +1421,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_select_circuit-3": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_utility_room_lights_outlets_circuit_priority",
       "hidden_by": null,
-      "original_name": "Utility room / Lights & Outlets Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1411,13 +1435,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_select_circuit-4": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-4",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_electric_oven_circuit_priority",
       "hidden_by": null,
-      "original_name": "Electric oven Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1425,13 +1449,13 @@
       "unit_of_measurement": null
     },
     "span_xg-1334-066e8_select_circuit-9": {
-      "device": "xg-1334-066e8",
+      "device": "xg-1334-066e8_circuit_circuit-9",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_neutral_forming_transformer_nft_circuit_priority",
       "hidden_by": null,
-      "original_name": "Neutral forming transformer (NFT) Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,

@@ -107,8 +107,9 @@ def test_attributes_name_the_peers_only_where_the_circuit_says_whom_it_shares_wi
     assert construct_shared_with_attributes(SNAPSHOT, declared_alone) == {"meter_shared_with": []}
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = snapshot
     coordinator.config_entry.options = {}
     coordinator.config_entry.data = {}
@@ -116,8 +117,8 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     return coordinator
 
 
-def test_each_members_power_sensor_and_switch_carry_its_peers() -> None:
-    coordinator = _coordinator(SNAPSHOT)
+def test_each_members_power_sensor_and_switch_carry_its_peers(hass: HomeAssistant) -> None:
+    coordinator = _coordinator(hass, SNAPSHOT)
     sensor = SpanCircuitPowerSensor(coordinator, POWER, SNAPSHOT, "circuit-57")
     switch = SpanPanelCircuitsSwitch(coordinator, "circuit-57", "SPAN Panel")
 

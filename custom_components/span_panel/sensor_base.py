@@ -42,10 +42,7 @@ from .grace_period import (  # noqa: F401
     handle_offline_grace_period,
     initialize_from_last_state,
 )
-from .naming import (
-    circuit_object_id_base,
-    release_registry_name_written_by_older_release,
-)
+from .naming import release_registry_name_written_by_older_release
 from .options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
@@ -104,11 +101,12 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     _attr_has_entity_name = True
 
     _is_sub_device: bool = False
-    """True when this entity is shown on a sub-device's card rather than the panel's.
+    """True when this circuit sensor is shown on a sub-device's card rather than its circuit's.
 
-    Set by the circuit classes when they are handed a `device_info_override`.
-    Such a sensor supplies no base at all: it composes from its label on the
-    sub-device's card, which is the shape the sub-device's own sensors have.
+    Set by the circuit classes when they are handed a `device_info_override`,
+    which only a charger's feed circuit is. Such a sensor supplies no base at
+    all: it composes from its label on the sub-device's card, which is the
+    shape the sub-device's own sensors have.
     """
 
     def __init__(
@@ -147,23 +145,18 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     "sensor", DOMAIN, self._attr_unique_id
                 )
 
-                # One name path, in both naming modes: the panel's name, carried
-                # as `original_name`. That field ranks below the object-id base
+                # One name path, in both naming modes, carried as
+                # `original_name`. That field ranks below the object-id base
                 # below, so what is displayed can no longer decide what
                 # "Recreate entity IDs" proposes.
                 self._attr_name = self._generate_panel_name(snapshot, description)
 
                 # The id itself is Home Assistant's to compose. This entity
-                # supplies only its base; `entity_id` is left unset so Core
-                # assembles the rest from the user's `entity_id_parts`. A
-                # sub-device sensor supplies no base either, composing from its
-                # label on the sub-device's card like that device's own sensors.
-                parts = self._object_id_parts(snapshot, description)
-                if parts is not None and not self._is_sub_device:
-                    identifier, suffix = parts
-                    self._span_object_id_base = circuit_object_id_base(
-                        identifier, suffix, existing_entity_id
-                    )
+                # supplies at most its base; `entity_id` is left unset so Core
+                # assembles the rest from the user's `entity_id_parts`.
+                self._span_object_id_base = self._object_id_base(
+                    snapshot, description, existing_entity_id
+                )
 
                 if existing_entity_id:
                     self._release_synced_registry_name(
@@ -215,32 +208,30 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    def _object_id_parts(
-        self, snapshot: SpanPanelSnapshot, description: T
-    ) -> tuple[str, str] | None:
-        """Return the identifier and canonical suffix this entity's id is built from.
+    def _object_id_base(
+        self, snapshot: SpanPanelSnapshot, description: T, existing_entity_id: str | None
+    ) -> str | None:
+        """Return the base this entity's id is composed from, or None to leave it to Core.
 
         `None` -- the default, and the answer for every entity that is not a
-        circuit -- leaves `_span_object_id_base` unset, so Home Assistant
-        composes the id from the display name exactly as it always has.
+        circuit sensor on its circuit's device -- leaves `_span_object_id_base`
+        unset, so Home Assistant composes the id from the display name exactly
+        as it always has.
 
-        A circuit entity answers with the naming-flag half (`Circuit 15`,
-        `Kitchen Outlets`) and the suffix `naming.circuit_object_id_base` keys
-        on. The two travel together because
-        neither is any use alone, and because a circuit entity's
-        `description.key` has been overwritten with the circuit id by then, so
-        there is no suffix a default could compute.
+        `existing_entity_id` is the id the entity's registry row has, or None
+        for an entity being created, which a circuit sensor reads its suffix's
+        spelling back from.
         """
         return None
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate the displayed name for the sensor, in either naming mode.
 
-        Circuit entities override this to prefix the panel's own circuit name,
-        which is what makes a circuit renamed in the SPAN app show through. Every
-        other sensor's name is its description's label -- and a description that
-        declares a `translation_key` instead is normally not asked at all, since
-        its name comes from `translations/en.json`.
+        The description's label, which for a circuit sensor is all of it: the
+        circuit's name is its device's, which is what makes a circuit renamed
+        in the SPAN app show through. A description that declares a
+        `translation_key` instead is normally not asked at all, since its name
+        comes from `translations/en.json`.
 
         Args:
             snapshot: The panel snapshot data

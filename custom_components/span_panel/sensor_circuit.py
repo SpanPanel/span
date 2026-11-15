@@ -49,6 +49,11 @@ def _unnamed_circuit_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> 
 
     PV circuits use "Solar" (matching v1 naming), EVSE circuits use "EV Charger",
     all others use tab-based naming.
+
+    Kept only as the name an unnamed circuit's ids were built from, which the
+    base reads an existing id back against. The circuit's device is named by
+    `helpers.circuit_device_name`, which has no "EV Charger" branch: a charger's
+    feed circuit keeps its sensors on the charger's device.
     """
     if circuit.device_type in _SOLAR_DEVICE_TYPES:
         return "Solar"
@@ -62,15 +67,16 @@ def _resolve_circuit_identifier(
     circuit_id: str,
     options: Mapping[str, Any],
 ) -> str:
-    """Resolve the circuit identifier respecting user naming preference.
+    """Resolve the identifier the naming flag gives a circuit: its name, or its tabs.
 
-    Always answers, because this is the half of the entity id the naming flags
-    decide and there is nothing sensible for Home Assistant to fall back to. An
-    unnamed circuit in friendly-name mode used to answer `None` and let Core
-    compose from the description label alone, which gives every unnamed circuit
-    on the panel the same `sensor.<panel>_power` and leaves the registry to tell
-    them apart with `_2`, `_3`, ... in whatever order they were added. The tab
-    fallback names them after the breaker position they occupy instead.
+    The name a circuit entity's id was built from before the circuit had a
+    device of its own, which the base reads an existing id back against
+    (`naming.circuit_object_id_suffix`). It always answers: an unnamed circuit
+    in friendly-name mode used to answer `None` and let Core compose from the
+    description label alone, which gave every unnamed circuit on the panel the
+    same `sensor.<panel>_power`, told apart with `_2`, `_3`, ... in whatever
+    order they were added. The tab fallback named them after the breaker
+    position they occupy instead.
 
     A meter without a breaker space has neither a name nor a position, so it is
     named by `outside_meter_label` in both modes.
@@ -87,16 +93,6 @@ def _resolve_circuit_identifier(
     if name:
         return name
 
-    return _unnamed_circuit_fallback(circuit, circuit_id)
-
-
-def _resolve_circuit_identifier_for_sync(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Resolve the circuit identifier for name-sync (always panel name, with fallback)."""
-    if circuit.measures_outside_panel:
-        return outside_meter_label(circuit_id)
-    name: str = circuit.name
-    if name:
-        return name
     return _unnamed_circuit_fallback(circuit, circuit_id)
 
 
@@ -133,9 +129,10 @@ class SpanCircuitSensorBase(
 
     Both are handed a catalog description and a circuit id, rebuild the
     description around that id so the base class looks the reading up by it, and
-    key their unique id and entity-id suffix on `_API_KEY_MAP`. What genuinely
-    differs stays on the two subclasses: the residual field paths, the displayed
-    name, and the state attributes.
+    key their unique id and entity-id suffix on `_API_KEY_MAP`. Both live on the
+    circuit's own device, or on a charger's for its feed circuit, and are named
+    by their label alone. What genuinely differs stays on the two subclasses:
+    the residual field paths and the state attributes.
 
     Cooperative `super()` throughout, because the energy sensor mixes this with
     `SpanEnergySensorBase`: the `__init__` below reaches the grace-period base on
@@ -150,12 +147,18 @@ class SpanCircuitSensorBase(
         circuit_id: str,
         device_info_override: DeviceInfo | None = None,
     ) -> None:
-        """Initialize a circuit sensor bound to one circuit."""
+        """Initialize a circuit sensor bound to one circuit.
+
+        The circuit must be in `snapshot`, which its device is named from.
+        `device_info_override` is the charger's device, for a charger's feed
+        circuit; every other circuit sensor goes on its circuit's own device.
+        """
         # Set before `super().__init__`, which calls the three methods below
         # while it composes the entity's identity.
         self.circuit_id = circuit_id
         self.original_key = description.key
         self._is_sub_device = device_info_override is not None
+        circuit = _get_circuit_data_source(circuit_id, snapshot)
 
         # The key becomes the circuit id because the base class looks its data
         # up by it; `original_key` keeps what the catalog called this sensor.
@@ -166,8 +169,11 @@ class SpanCircuitSensorBase(
         # later would have been dropped by both.
         super().__init__(data_coordinator, replace(description, key=circuit_id), snapshot)
 
-        if device_info_override is not None:
-            self._attr_device_info = device_info_override
+        self._attr_device_info = (
+            device_info_override
+            if device_info_override is not None
+            else self._build_circuit_device_info(data_coordinator, snapshot, circuit, circuit_id)
+        )
 
     @property
     def _api_key(self) -> str:
@@ -184,19 +190,31 @@ class SpanCircuitSensorBase(
             self.coordinator, snapshot, self.circuit_id, self._api_key, self._device_name
         )
 
-    def _object_id_parts(
+    def _object_id_base(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> tuple[str, str] | None:
-        """Return the circuit identifier and the suffix this sensor's id ends with."""
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if not circuit:
+        existing_entity_id: str | None,
+    ) -> str | None:
+        """Return the suffix this sensor's id is composed from on its circuit's device.
+
+        None on a charger's device, where the sensor composes from its label
+        like the charger's own sensors.
+        """
+        if self._is_sub_device:
             return None
-        identifier = _resolve_circuit_identifier(
-            circuit, self.circuit_id, self.coordinator.config_entry.options
+        circuit = _get_circuit_data_source(self.circuit_id, snapshot)
+        return self._circuit_object_id_base(
+            self.coordinator,
+            snapshot,
+            circuit,
+            self.circuit_id,
+            id_identifier=_resolve_circuit_identifier(
+                circuit, self.circuit_id, self.coordinator.config_entry.options
+            ),
+            suffix=get_user_friendly_suffix(self._api_key),
+            existing_entity_id=existing_entity_id,
         )
-        return identifier, get_user_friendly_suffix(self._api_key)
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the circuit this sensor reads."""
@@ -207,8 +225,9 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
     """Circuit power/current/breaker-rating sensor with extra state attributes."""
 
     # Beyond the value the description declares: `name` and `tabs` build the
-    # entity's identity (~56-83), and `tabs`, `relay_state`, `relay_requester`
-    # and `priority` are republished as state attributes (~231-243).
+    # entity's identity -- its device's name and its id base -- and `tabs`,
+    # `relay_state`, `relay_requester` and `priority` are republished as state
+    # attributes (`extra_state_attributes`).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.name",
         "circuit.tabs",
@@ -216,23 +235,6 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
         "circuit.relay_requester",
         "circuit.priority",
     )
-
-    def _generate_panel_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate panel name for circuit sensors (always uses panel circuit name)."""
-        if self._is_sub_device:
-            return str(description.name or "Sensor")
-
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if not circuit:
-            circuit_identifier = construct_circuit_identifier_from_tabs([], self.circuit_id)
-            return f"{circuit_identifier} {description.name or 'Sensor'}"
-
-        circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
-        return f"{circuit_identifier} {description.name or 'Sensor'}"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -362,23 +364,6 @@ class SpanCircuitEnergySensor(
             circuit_id,
             device_info_override=device_info_override,
         )
-
-    def _generate_panel_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate panel name for circuit energy sensors (always uses panel circuit name)."""
-        if self._is_sub_device:
-            return str(description.name)
-
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if not circuit:
-            circuit_identifier = construct_circuit_identifier_from_tabs([], self.circuit_id)
-            return f"{circuit_identifier} {description.name}"
-
-        circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
-        return f"{circuit_identifier} {description.name}"
 
     def _reading_is_implausible(self, reading: float) -> bool:
         """Whether the reading is beyond anything this circuit's breaker could ever have passed."""

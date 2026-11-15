@@ -71,8 +71,11 @@ async def _manager(
     return manager
 
 
-def _coordinator(snap: SpanPanelSnapshot, manager: PackageRatingManager) -> MagicMock:
+def _coordinator(
+    hass: HomeAssistant, snap: SpanPanelSnapshot, manager: PackageRatingManager
+) -> MagicMock:
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = snap
     coordinator.panel_offline = False
     coordinator.transport_dead = False
@@ -97,7 +100,7 @@ async def test_the_sensor_reports_the_panel_rating_whatever_package_is_copied(
     hass: HomeAssistant,
 ) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
+    coordinator = _coordinator(hass, snap, await _manager(hass, snap, rated=True))
 
     sensor = _breaker_rating_sensor(coordinator, snap)
 
@@ -107,7 +110,7 @@ async def test_the_sensor_reports_the_panel_rating_whatever_package_is_copied(
 
 async def test_the_sensor_reports_the_panel_rating_without_one(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, rated=False))
+    coordinator = _coordinator(hass, snap, await _manager(hass, snap, rated=False))
 
     sensor = _breaker_rating_sensor(coordinator, snap)
 
@@ -118,10 +121,10 @@ async def test_the_sensor_reports_the_panel_rating_without_one(hass: HomeAssista
 async def test_the_sensor_carries_no_rating_attributes(hass: HomeAssistant) -> None:
     snap = _panel()
     rated = _breaker_rating_sensor(
-        _coordinator(snap, await _manager(hass, snap, rated=True)), snap
+        _coordinator(hass, snap, await _manager(hass, snap, rated=True)), snap
     ).extra_state_attributes
     plain = _breaker_rating_sensor(
-        _coordinator(snap, await _manager(hass, snap, rated=False)), snap
+        _coordinator(hass, snap, await _manager(hass, snap, rated=False)), snap
     ).extra_state_attributes
 
     assert rated is not None and plain is not None
@@ -142,7 +145,7 @@ async def test_the_sensor_is_unknown_where_the_circuit_publishes_no_rating(
     unrated = replace(
         snap, circuits={"circuit-2": replace(snap.circuits["circuit-2"], breaker_rating_a=None)}
     )
-    coordinator = _coordinator(unrated, manager)
+    coordinator = _coordinator(hass, unrated, manager)
 
     sensor = _breaker_rating_sensor(coordinator, unrated)
 
@@ -152,7 +155,7 @@ async def test_the_sensor_is_unknown_where_the_circuit_publishes_no_rating(
 
 async def test_the_rating_sensor_is_the_plain_circuit_sensor(hass: HomeAssistant) -> None:
     snap = _panel()
-    coordinator = _coordinator(snap, await _manager(hass, snap, rated=True))
+    coordinator = _coordinator(hass, snap, await _manager(hass, snap, rated=True))
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
 
     entities = create_circuit_sensors(coordinator, snap, entry)

@@ -53,7 +53,7 @@ def _coordinator(
 ) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.client.field_metadata = metadata
     entry = MockConfigEntry(
         domain=DOMAIN, data={}, title="SPAN Panel", options={}, unique_id=snapshot.serial_number

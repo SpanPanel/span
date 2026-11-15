@@ -8,7 +8,7 @@ every expectation is read from the same capture's published values.
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
@@ -162,7 +162,9 @@ async def test_a_space_less_meter_never_looks_like_a_breaker(
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
             if meter in entity.unique_id:
                 assert entity.domain == "sensor", entity.entity_id
-                assert entity.original_name and entity.original_name.startswith(label), entity
+                assert entity.device_id is not None, entity.entity_id
+                device = dr.async_get(hass).async_get(entity.device_id)
+                assert device is not None and device.name == label, entity.entity_id
 
         row = topology["circuits"][meter]
         assert (row["always_on"], row["is_never_backup"]) == (None, None)

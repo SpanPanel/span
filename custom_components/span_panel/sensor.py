@@ -245,7 +245,9 @@ def _build_evse_device_info_map(
     """Build a mapping of EVSE feed circuit IDs to their EVSE DeviceInfo.
 
     Circuit sensors for EVSE feed circuits are assigned to the EVSE sub-device
-    instead of the panel device, keeping all charger-related entities together.
+    instead of their circuit's own device, keeping all charger-related entities
+    together. Only the sensors: the feed circuit's breaker switch and priority
+    select go on its circuit's device like every other circuit's.
     """
     if not snapshot.evse:
         return {}

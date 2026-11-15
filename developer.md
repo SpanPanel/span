@@ -396,19 +396,21 @@ Since Home Assistant 2026.8 the user owns entity id composition — `entity_id_p
 assembles it. This integration no longer presets `entity_id` for circuit entities. It supplies one _base_ per entity and Core does the rest, which is how every
 non-circuit entity here has always worked.
 
-`naming.py` is the only place the wording of a circuit id is written down. `circuit_object_id_base(identifier, suffix, existing_entity_id)` joins the
-naming-flag half — `Circuit 15`, `Kitchen Outlets` — to the suffix wording, and it is the base, not the display name: the two are decoupled on purpose so a
-label can be reworded without a migration. The suffix wording is read back from the id an entity already has, because two spellings have shipped
-(`consumed_energy` before ids were preset, `energy_consumed` after); a new entity gets the noun-last form, matching the panel-level ids.
-`ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another is _discovered_, never to introduce one.
+`naming.py` is the only place the wording of a circuit id is written down. Each circuit's entities live on the circuit's own device, a child of the panel's, so
+Core composes the panel's name and the circuit's from the two devices and the base is the suffix alone:
+`circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)` answers `power` or `energy consumed`, or nothing where the existing id stops
+at the circuit's name. It is the base, not the display name: the two are decoupled on purpose so a label can be reworded without a migration. The suffix wording
+is read back from the id an entity already has, because two spellings have shipped (`consumed_energy` before ids were preset, `energy_consumed` after); a new
+entity gets the noun-last form, matching the panel-level ids. `ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another
+is _discovered_, never to introduce one.
 
 `SpanPanelEntity.suggested_object_id` hands Core that base. It reads `_span_object_id_base`, which circuit entities set and every other entity leaves `None`, in
 which case the property falls through to Core's own answer — composition from the display name, exactly as before. Core consults `suggested_object_id` only for
 an entity that has not preset `entity_id`. **The property and a preset `entity_id` are not two routes to the same place**: `_async_derive_object_ids`
 (`entity_platform.py`) files what the property returns as the registry's `object_id_base`, which Core then prefixes with the device and the area per the user's
 parts, and files a preset `entity_id` as `suggested_object_id`, which outranks the base and is taken verbatim with no prefix at all. Setting `entity_id` to the
-base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and
-the switch and the select directly.
+base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route, `SpanPanelEntity._circuit_object_id_base`: the
+sensors through `_object_id_base`, and the switch and the select directly.
 
 ### What R1 bounds, and what it does not
 
@@ -424,10 +426,10 @@ exceptions written for those three shapes were withdrawn by the maintainer on 20
 platforms.
 
 One consequence worth naming: a circuit sensor on a sub-device card supplies **no base at all**. Its label there is the bare description name (`Power`), so it
-composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity sets its base
-whenever `_object_id_parts` answers.
+composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity is on its
+circuit's device and sets its base.
 
-**The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_base`, and a sub-device
+**The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_suffix`, and a sub-device
 sensor never calls it — with no base, Core composes the entity half from the description label, which is the current one. So an existing feed energy sensor
 spelled `…_energy_consumed` is offered `sensor.<charger>_consumed_energy`: the device half changes (panel → charger) and so does the suffix wording
 (`energy_consumed` → `consumed_energy`, the label being `Consumed Energy`). **That is by design, not a bug.** These sensors belong to the charger's card, and
@@ -452,9 +454,9 @@ registry holds a `name`, since the user's field outranks the panel's and reloadi
 the suffixes their entities have carried since before 2.0.8. **Do not add entries.** A new description key needs none: it resolves to itself, which is what the
 sub-device builders (`build_bess_unique_id`, `build_mid_unique_id`, `build_evse_unique_id`) have always done, since their keys were written snake_case.
 
-The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (it is the `suffix` half of
-`naming.circuit_object_id_base`, and `get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id`
-costs the long-term statistics, and the `entity_id` breaks whatever templates and automations a user wrote against it.
+The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (it is the suffix `naming.circuit_object_id_suffix`
+reads back, and `get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id` costs the long-term
+statistics, and the `entity_id` breaks whatever templates and automations a user wrote against it.
 
 `tests/test_suffix_mappings_are_closed.py` holds all three dictionaries to their exact contents and fails on an added key, a removed key or a changed value —
 verified by mutation, not by inspection.

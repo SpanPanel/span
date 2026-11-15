@@ -1,24 +1,26 @@
 """Identity of circuit entities: the base Home Assistant composes an id from.
 
 Since Home Assistant 2026.8 the user decides how an entity id is composed
-(`entity_id_parts`: area, device, entity). This integration no longer presets
-an `entity_id`; it supplies one *base* per circuit entity -- `Circuit 15 power`
-or `Kitchen Outlets power` -- and Core assembles the rest from the user's
-settings. `SpanPanelEntity.suggested_object_id` hands the base to Core.
+(`entity_id_parts`: area, parent device, device, entity). This integration no
+longer presets an `entity_id`; it supplies one *base* per circuit entity and
+Core assembles the rest from the user's settings.
+`SpanPanelEntity.suggested_object_id` hands the base to Core.
+
+Each circuit's entities live on a device of the circuit's own, named by the
+circuit and a child of the panel's, so Core composes the panel's name and the
+circuit's from the two devices. The base is the suffix alone -- `power`,
+`energy consumed` -- or empty where the existing id stops at the circuit's
+name (`circuit_object_id_suffix`).
 
 The base must reproduce an existing entity's id *where Home Assistant composes
 it under the entity-id options that match how that install was built*: it
-carries the circuit's own name and the install's own suffix wording, read back
-from the id the entity already has, because this integration has shipped two
-spellings (`consumed_energy` before it preset ids, `energy_consumed` after). It
-never bypasses `entity_id_parts` with a hard-coded id -- where composition
-yields a different device part, that is the user's configuration at work and
-the offer is legitimate. A new entity gets the noun-last wording, which is what
-the panel-level ids (`main_meter_consumed_energy`) and the display labels use.
-
-On a device named by the circuit, Core composes the circuit's name from the
-device, so the base is the suffix alone -- `power`, `energy consumed` -- read
-back the same way (`circuit_object_id_suffix`).
+carries the install's own suffix wording, read back from the id the entity
+already has, because this integration has shipped two spellings
+(`consumed_energy` before it preset ids, `energy_consumed` after). It never
+bypasses `entity_id_parts` with a hard-coded id -- where composition yields a
+different device part, that is the user's configuration at work and the offer
+is legitimate. A new entity gets the noun-last wording, which is what the
+panel-level ids (`main_meter_consumed_energy`) and the display labels use.
 
 The base is *not* the display name. The two are decoupled on purpose, so a
 label can be reworded without touching a single id.
@@ -204,18 +206,6 @@ def circuit_object_id_suffix(
     if slugify(device_name).endswith(f"_{slugify(words)}"):
         return ""
     return words
-
-
-def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str | None) -> str:
-    """Return the base for one circuit entity on the panel's device: its identifier, then its suffix.
-
-    `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`).
-    With the panel as the entity's device, the identifier is the name the id
-    is composed from, so it also decides the omission. The suffix half is
-    `circuit_object_id_suffix`'s answer; its docstring explains the read-back.
-    """
-    words = circuit_object_id_suffix(identifier, identifier, suffix, existing_entity_id)
-    return f"{identifier} {words}" if words else identifier
 
 
 def release_registry_name_written_by_older_release(
