@@ -82,14 +82,15 @@ So each circuit entity records what its base is worked out from
 (`CircuitIdBase`) when it is built, enabled or not, and
 `async_keep_circuit_id_bases_current` works the bases out again and stores
 those that differ: a circuit's when its device's `name_by_user` or `area_id`
-changes, every circuit's when the panel device's do, and an entity's when its
-own area does. It does so inside the registry's update event, before the
-change has returned, because Home Assistant asks whether to rename the
-device's entity ids straight after a rename. A reload would answer too late.
+changes, every circuit's when the panel device's do or when an area or a
+floor is renamed or an area moved to another floor where the format reads
+it, and an entity's when its own area does. It does so inside the registry's
+update event, before the change has returned, because Home Assistant asks
+whether to rename the device's entity ids straight after a rename. A reload
+would answer too late.
 
-Two changes are not followed until the next restart. Core announces no event
-for a saved entity-id format. A renamed area or floor is announced, for any
-edit to it, and is not watched.
+One change applies only after the next restart: a saved entity-id format,
+for which Core announces no event.
 """
 
 from __future__ import annotations
@@ -415,7 +416,7 @@ def async_keep_circuit_id_bases_current(
 ) -> CALLBACK_TYPE:
     """Refresh circuit entities' id bases when what they were decided from changes without a reload.
 
-    Three changes do that, and each is refreshed inside the registry's own
+    Four changes do that, and each is refreshed inside the registry's own
     update event:
 
     - a circuit's device renamed in Home Assistant, or its area set, changed
@@ -426,7 +427,10 @@ def async_keep_circuit_id_bases_current(
       circuit, since a circuit device with no area of its own takes the
       panel's and every id names the panel under a parent-device part;
     - an area set on a circuit entity or taken off it, which refreshes that
-      entity.
+      entity;
+    - an area renamed or moved to another floor, or a floor renamed, where
+      the user's entity-id format reads what changed, which refreshes every
+      circuit (`_async_follow_area_and_floor_names`).
 
     Returns the call that stops it, for the entry's unload. The circuits are
     those of the snapshot the entry was set up from, which its entities were
@@ -470,6 +474,14 @@ def async_keep_circuit_id_bases_current(
             _refresh_circuit(runtime_data, circuit_id, only=only)
 
     @callback
+    def _refresh_every_circuit() -> None:
+        """Refresh the bases of every circuit's entities."""
+        if (runtime_data := loaded_runtime_data(entry)) is None:
+            return
+        for circuit_id in list(runtime_data.circuit_id_bases):
+            _refresh_circuit(runtime_data, circuit_id)
+
+    @callback
     def _device_updated(event: Event[dr.EventDeviceRegistryUpdatedData]) -> None:
         if event.data["action"] != "update" or not any(
             change in event.data["changes"] for change in _COMPOSED_DEVICE_CHANGES
@@ -477,8 +489,7 @@ def async_keep_circuit_id_bases_current(
             return
         runtime_data = loaded_runtime_data(entry)
         if runtime_data is not None and event.data["device_id"] == runtime_data.panel_device_id:
-            for circuit_id in list(runtime_data.circuit_id_bases):
-                _refresh_circuit(runtime_data, circuit_id)
+            _refresh_every_circuit()
             return
         _refresh(event.data["device_id"])
 
@@ -499,6 +510,81 @@ def async_keep_circuit_id_bases_current(
     stop_listening = (
         hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, _device_updated),
         hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _entity_updated),
+        _async_follow_area_and_floor_names(hass, _refresh_every_circuit),
+    )
+
+    @callback
+    def _stop() -> None:
+        for stop in stop_listening:
+            stop()
+
+    return _stop
+
+
+@callback
+def _async_follow_area_and_floor_names(
+    hass: HomeAssistant, on_change: CALLBACK_TYPE
+) -> CALLBACK_TYPE:
+    """Call `on_change` when a name the user's entity-id format composes from moves.
+
+    An area's name, under an area part; the floor an area is on, and a
+    floor's name, under a floor part. Core announces every edit to an area or
+    a floor, an icon or an alias as well, without saying what changed, so
+    what a composition reads of each is kept here to compare with.
+
+    `async_keep_circuit_id_bases_current` refreshes every circuit on it,
+    rather than only those composed in the area, because which areas an id is
+    composed in is the composer's to say: the entity's own, and with the
+    device in front its device's or the panel's. A second statement of that
+    could drift from it, an area or floor is renamed seldom, and a refresh
+    stores only the bases that changed.
+
+    Returns the call that stops it.
+    """
+    areas = ar.async_get(hass)
+    floors = fr.async_get(hass)
+    read_of_each_area: dict[str, tuple[str, str | None]] = {
+        area.id: (area.name, area.floor_id) for area in areas.async_list_areas()
+    }
+    name_of_each_floor: dict[str, str] = {
+        floor.floor_id: floor.name for floor in floors.async_list_floors()
+    }
+
+    @callback
+    def _area_updated(event: Event[ar.EventAreaRegistryUpdatedData]) -> None:
+        if (area_id := event.data["area_id"]) is None:
+            return
+        before = read_of_each_area.pop(area_id, None)
+        if (area := areas.async_get_area(area_id)) is None:
+            return
+        after = read_of_each_area[area_id] = (area.name, area.floor_id)
+        if event.data["action"] != "update" or before is None:
+            return
+        parts = entity_id_parts(hass)
+        if (EntityNamePart.AREA in parts and before[0] != after[0]) or (
+            EntityNamePart.FLOOR in parts and before[1] != after[1]
+        ):
+            on_change()
+
+    @callback
+    def _floor_updated(event: Event[fr.EventFloorRegistryUpdatedData]) -> None:
+        data = event.data
+        if data["action"] == "reorder":
+            return
+        before = name_of_each_floor.pop(data["floor_id"], None)
+        if (floor := floors.async_get_floor(data["floor_id"])) is None:
+            return
+        name_of_each_floor[floor.floor_id] = floor.name
+        if (
+            data["action"] == "update"
+            and before not in {None, floor.name}
+            and EntityNamePart.FLOOR in entity_id_parts(hass)
+        ):
+            on_change()
+
+    stop_listening = (
+        hass.bus.async_listen(ar.EVENT_AREA_REGISTRY_UPDATED, _area_updated),
+        hass.bus.async_listen(fr.EVENT_FLOOR_REGISTRY_UPDATED, _floor_updated),
     )
 
     @callback

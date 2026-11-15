@@ -338,8 +338,9 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         What the base was worked out from is recorded with the entry, under
         the entity's `domain` and `unique_id`, so it can be worked out again
         when the circuit's device or the panel's is renamed in Home Assistant,
-        or an area is set on either or on the entity, none of which builds an
-        entity again (`circuit_object_ids.async_keep_circuit_id_bases_current`).
+        an area is set on either or on the entity, or an area or a floor is
+        renamed, none of which builds an entity again
+        (`circuit_object_ids.async_keep_circuit_id_bases_current`).
         """
         entry = coordinator.config_entry
         recipe = CircuitIdBase(domain, unique_id, id_identifier, suffix)

@@ -22,12 +22,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import ClassVar
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import attr
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+    floor_registry as fr,
+)
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_registry import EntityNamePart
 import pytest
@@ -37,7 +42,11 @@ from pytest_homeassistant_custom_component.common import (
 )
 from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
+from custom_components.span_panel import (
+    SpanPanelRuntimeData,
+    circuit_object_ids,
+    ensure_device_registered,
+)
 from custom_components.span_panel.circuit_object_ids import async_keep_circuit_id_bases_current
 from custom_components.span_panel.const import (
     DOMAIN,
@@ -3604,3 +3613,229 @@ async def test_a_circuit_renamed_to_its_measurement_follows_its_device_s_area_wi
     assert registry.async_regenerate_entity_id(row) == moved
     await install.load("Power")
     assert registry.async_regenerate_entity_id(_offer_as_stored(hass, renamed)) == moved
+
+
+# B1 in an install: an id from before the device prefix, on a circuit "Garage",
+# renamed "Breaker". It ends on the new name and on the form `breaker` alike, so
+# it is read for the form, as every rename is.
+
+
+async def _load_a_no_prefix_breaker_on_garage(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> tuple[_SwitchInstall, str]:
+    """Register the switch on `switch.garage_breaker`, load it on "Garage", and hold its first offer."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+    seeded = er.async_get(hass).async_get_or_create(
+        "switch",
+        DOMAIN,
+        build_switch_unique_id(SERIAL, CIRCUIT_ID),
+        suggested_object_id="garage_breaker",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == "switch.garage_breaker"
+    install = _SwitchInstall(hass, entry)
+    await install.load("Garage")
+    await install.load("Garage")
+    registry = er.async_get(hass)
+    # The device half Core composes, which §7 lists for an install with no prefix.
+    assert (
+        registry.async_regenerate_entity_id(_offer_as_stored(hass, seeded.entity_id))
+        == "switch.span_panel_garage_breaker"
+    )
+    return install, seeded.entity_id
+
+
+async def test_a_no_prefix_breaker_renamed_breaker_in_the_span_app_keeps_the_measurement(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Renamed "Breaker" on the panel, the switch is offered the id a new switch on that device gets."""
+    install, entity_id = await _load_a_no_prefix_breaker_on_garage(hass, entry)
+
+    accepted = await _accept_what_recreate_offers(hass, install, "Breaker", entity_id)
+
+    assert accepted == "switch.span_panel_breaker_breaker"
+    row = await _assert_recreate_offers_nothing(hass, install, "Breaker", accepted)
+    assert row.object_id_base == "breaker"
+
+
+async def test_a_no_prefix_breaker_whose_device_is_renamed_breaker_keeps_it_without_a_reload(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Renamed "Breaker" in Home Assistant, the offer is the same through the listener and after a restart."""
+    install, entity_id = await _load_a_no_prefix_breaker_on_garage(hass, entry)
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    _rename_the_circuit_device(hass, entity_id, "Breaker")
+
+    row = _offer_as_stored(hass, entity_id)
+    stop()
+    assert registry.async_regenerate_entity_id(row) == "switch.span_panel_breaker_breaker"
+    await install.load("Garage")
+    assert (
+        registry.async_regenerate_entity_id(_offer_as_stored(hass, entity_id))
+        == "switch.span_panel_breaker_breaker"
+    )
+
+
+# --- An area or a floor renamed ---------------------------------------------------
+#
+# Under a format with an area part, Core composes an id from the area's name,
+# and under one with a floor part from that area's floor's name. Where the id a
+# circuit entity has is a composition today, its base is the one that composes
+# it, so a rename can change the base without reloading anything.
+
+FLOOR_AREA_DEVICE_ENTITY = (
+    EntityNamePart.FLOOR,
+    EntityNamePart.AREA,
+    EntityNamePart.DEVICE,
+    EntityNamePart.ENTITY,
+)
+AREA_DEVICE_ENTITY = (EntityNamePart.AREA, EntityNamePart.DEVICE, EntityNamePart.ENTITY)
+
+
+def _rename(hass: HomeAssistant, what: str, area_id: str, floor_id: str) -> None:
+    """Rename the area, rename its floor, or move it to another floor, as its user would."""
+    areas = ar.async_get(hass)
+    if what == "area":
+        areas.async_update(area_id, name="Workshop")
+    elif what == "floor":
+        fr.async_get(hass).async_update(floor_id, name="Main")
+    else:
+        upper = fr.async_get(hass).async_create("Upper")
+        areas.async_update(area_id, floor_id=upper.floor_id)
+
+
+@pytest.mark.parametrize(
+    ("parts", "what", "accepted", "offered"),
+    [
+        pytest.param(
+            None, "area", "sensor.garage_power", "sensor.workshop_power_power", id="default"
+        ),
+        pytest.param(
+            AREA_DEVICE_ENTITY,
+            "area",
+            "sensor.garage_power",
+            "sensor.workshop_power_power",
+            id="area-device-entity",
+        ),
+        pytest.param(
+            FLOOR_AREA_DEVICE_ENTITY,
+            "area",
+            "sensor.ground_garage_power",
+            "sensor.ground_workshop_power_power",
+            id="floor-format-area-renamed",
+        ),
+        pytest.param(
+            FLOOR_AREA_DEVICE_ENTITY,
+            "floor",
+            "sensor.ground_garage_power",
+            "sensor.main_garage_power_power",
+            id="floor-renamed",
+        ),
+        pytest.param(
+            FLOOR_AREA_DEVICE_ENTITY,
+            "area-floor",
+            "sensor.ground_garage_power",
+            "sensor.upper_garage_power_power",
+            id="area-moved-to-another-floor",
+        ),
+    ],
+)
+async def test_an_area_renamed_reaches_an_id_composed_from_it_without_a_reload(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    what: str,
+    accepted: str,
+    offered: str,
+) -> None:
+    """A circuit named "Power" composed with the suffix left out keeps `power` once the area's name moves.
+
+    Its label-only id in Garage, accepted, is offered nothing once its device
+    is put in Garage too, since Core composes that id from the area and the
+    device with the suffix left out, and the base is empty. Renamed, the area
+    composes another id, so the base is the form the id ends on, and the offer
+    the id a new entity on that device gets. Left as it was, the empty base
+    offered `sensor.workshop_power` until the next restart.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    ground = fr.async_get(hass).async_create("Ground")
+    garage = ar.async_get(hass).async_create("Garage", floor_id=ground.floor_id)
+    install = _SensorInstall(hass, entry)
+    created = (await install.load("Power")).entity_id
+    _give_the_entity_an_area(hass, created, garage.id)
+    assert await _accept_what_recreate_offers(hass, install, "Power", created) == accepted
+    await install.load("Power")
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+    _take_the_area_off(hass, accepted, "device-then-entity", "Garage")
+    row = _offer_as_stored(hass, accepted)
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", accepted)
+
+    _rename(hass, what, garage.id, ground.floor_id)
+
+    row = _offer_as_stored(hass, accepted)
+    stop()
+    assert registry.async_regenerate_entity_id(row) == offered
+    await install.load("Power")
+    assert registry.async_regenerate_entity_id(_offer_as_stored(hass, accepted)) == offered
+
+
+@pytest.mark.parametrize(
+    ("parts", "edit", "refreshes"),
+    [
+        pytest.param(None, "area-name", True, id="default-area-name"),
+        pytest.param(None, "area-icon", False, id="default-area-icon"),
+        pytest.param(None, "area-floor", False, id="default-area-floor"),
+        pytest.param(None, "floor-name", False, id="default-floor-name"),
+        pytest.param(PARENT_DEVICE_ENTITY, "area-name", False, id="no-area-part-area-name"),
+        pytest.param(FLOOR_AREA_DEVICE_ENTITY, "area-floor", True, id="floor-format-area-floor"),
+        pytest.param(FLOOR_AREA_DEVICE_ENTITY, "floor-name", True, id="floor-format-floor-name"),
+        pytest.param(FLOOR_AREA_DEVICE_ENTITY, "floor-icon", False, id="floor-format-floor-icon"),
+    ],
+)
+async def test_an_area_edit_refreshes_the_bases_only_where_it_changes_what_a_composition_reads(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    edit: str,
+    refreshes: bool,
+) -> None:
+    """Core announces every edit to an area, so the listener works the bases out only for a name it reads.
+
+    A composition reads an area's name under an area part, and its floor's
+    name under a floor part. An icon, or a name the user's format leaves out,
+    changes no id.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    floors = fr.async_get(hass)
+    ground = floors.async_create("Ground")
+    areas = ar.async_get(hass)
+    garage = areas.async_create("Garage", floor_id=ground.floor_id)
+    install = _SensorInstall(hass, entry)
+    await install.load("Power")
+    await install.load("Power")
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+    upper = floors.async_create("Upper")
+
+    with patch.object(
+        circuit_object_ids,
+        "async_refresh_circuit_id_bases",
+        wraps=circuit_object_ids.async_refresh_circuit_id_bases,
+    ) as refresh:
+        if edit == "area-name":
+            areas.async_update(garage.id, name="Workshop")
+        elif edit == "area-icon":
+            areas.async_update(garage.id, icon="mdi:garage")
+        elif edit == "area-floor":
+            areas.async_update(garage.id, floor_id=upper.floor_id)
+        elif edit == "floor-name":
+            floors.async_update(ground.floor_id, name="Main")
+        else:
+            floors.async_update(ground.floor_id, icon="mdi:home-floor-0")
+    stop()
+
+    assert refresh.called is refreshes
