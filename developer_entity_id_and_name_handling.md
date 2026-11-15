@@ -204,15 +204,22 @@ every ID a release preset is shaped. `device_then_entity` says whether the user'
 - an ID that spells a name and then a form is still read by rules 1 and 2;
 - otherwise the form is the one the ID spells as whole words anywhere outside the name it carries, and the omission is decided from `device_name`.
 
+**An ID Core numbered is read past the number.** Where the ID Core composed is taken, as it is for every circuit after the first of one name, Core appends `_2`,
+`_3` and on, so the ID ends on the number and none of the readings above finds a name or a form there. Where the ID as it stands gives no reading, it is read
+again without the number (`naming.without_core_number`). On a circuit renamed "Beer Fridge" in the SPAN app, `sensor.span_panel_refrigerator_energy_consumed_2`
+keeps `energy consumed` and is offered `sensor.span_panel_beer_fridge_energy_consumed`. Read only as it stands, it spelled no wording and was offered
+`sensor.span_panel_beer_fridge_consumed_energy`. The ID as it stands is read first because a name can end on a number of its own: `sensor.span_panel_pump_2`
+stops at a device named "Pump 2".
+
 **An entity with an area of its own never has an empty base.** Every omission above rests on Core composing the device's name in front of the base, and Core
 names neither device for an entity that has an area of its own (§3.1): it composes the area and the base. So for such an entity the empty base is not tried, and
 each wording is composed twice. It is composed first from that area, as Core composes the entity now, so that an ID Core composes today, such as a label-only ID
 the entity has accepted, is offered nothing. Under `(DEVICE, ENTITY)` a circuit named "Current" in an area of its own therefore keeps `sensor.current_power`,
 its label alone in the `current_power` wording, though its device once composed that ID from `power`. It is composed then with the device in front, as Core
-composed it before it had the area, which reads an ID from then exactly where its tail cannot be read: `sensor.span_panel_refrigerator_energy_consumed_2`,
-numbered by Core, spells no wording at its end, and under `(PARENT_DEVICE, ENTITY, DEVICE)` a panel named "Shop Current" makes
-`sensor.shop_current_power_kitchen_outlets` spell `current_power`, though it was composed from `power`. In the area Garage the two are offered
-`sensor.garage_energy_consumed` and `sensor.power`.
+composed it before it had the area, which reads an ID from then exactly, number and all, where reading its words would not: under
+`(PARENT_DEVICE, ENTITY, DEVICE)` a panel named "Shop Current" makes `sensor.shop_current_power_kitchen_outlets` spell `current_power`, though it was composed
+from `power`. In the area Garage it is offered `sensor.power`, and `sensor.span_panel_refrigerator_energy_consumed_2` is offered
+`sensor.garage_energy_consumed`.
 
 Where neither composes the ID, `circuit_object_id_suffix` is told so with `device_in_front=False` and leaves nothing out. The words are the form the ID spells
 after the name, or failing that at its end. A "Solar Power" sensor on `sensor.span_panel_solar_power` in the area Backyard is offered `sensor.backyard_power`,

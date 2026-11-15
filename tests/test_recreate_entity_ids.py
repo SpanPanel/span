@@ -2342,10 +2342,10 @@ async def test_an_area_given_to_another_entry_s_entity_is_left_alone(
 
 
 # An id composed before its entity had an area of its own was composed with the
-# device in front, and that composition still spells it, in the wording it has.
-# Read by its tail instead, an id Core numbered spells no wording at its end,
-# and one whose panel name runs into the suffix spells the wrong one, so the
-# label-only offer took a wording the id never had.
+# device in front, and that composition still spells it, number and all, in the
+# wording it has. Read for its words instead, an id whose panel name runs into
+# the suffix spells the wrong one, so the label-only offer took a wording the
+# id never had.
 
 
 @dataclass(frozen=True, slots=True)
@@ -2455,10 +2455,8 @@ async def test_an_id_from_before_the_entity_s_area_keeps_its_wording_in_the_labe
 ) -> None:
     """The label-only offer spells the suffix as the id the device in front composed does (R1).
 
-    Read by its tail, `..._energy_consumed_2` was offered
-    `sensor.garage_consumed_energy`, `..._current_power_2`
-    `sensor.garage_power`, and the "Shop Current" id `sensor.current_power`.
-    Once accepted, the offer is the entity's own id.
+    Read for its words, the "Shop Current" id was offered
+    `sensor.current_power`. Once accepted, the offer is the entity's own id.
     """
     install, seeded = await _load_an_id_from_before_the_area(hass, entry, case)
     garage = ar.async_get(hass).async_create("Garage")
@@ -2608,3 +2606,79 @@ async def test_a_renamed_circuit_keeps_a_spelling_new_entities_no_longer_get(
     row = await _assert_recreate_offers_nothing(hass, install, RENAMED, offered)
     assert row.object_id_base == words
     assert words in {"energy consumed", "current power"}
+
+
+# The same for an id Core numbered. Circuits of one name share every composed
+# id, so Core gives the second's `_2` and a third's `_3`. Renamed in the SPAN
+# app, such an id names neither the device nor the identifier, and is read by
+# its tail, which ends on the number. Read only as it stands, it spelled no
+# wording at all, and the offer took the one a new entity gets.
+
+NUMBERED_SPELLINGS = [
+    pytest.param(
+        _LegacyInstall,
+        "consumedEnergyWh",
+        "span_panel_refrigerator_energy_consumed",
+        "sensor.span_panel_beer_fridge_energy_consumed",
+        id="energy-consumed",
+    ),
+    # The spelling a new entity gets, which the offer took for every id.
+    pytest.param(
+        _LegacyInstall,
+        "consumedEnergyWh",
+        "span_panel_refrigerator_consumed_energy",
+        "sensor.span_panel_beer_fridge_consumed_energy",
+        id="consumed-energy",
+    ),
+    pytest.param(
+        _SensorInstall,
+        "instantPowerW",
+        "span_panel_refrigerator_current_power",
+        "sensor.span_panel_beer_fridge_current_power",
+        id="current-power",
+    ),
+]
+"""An install, its sensor's API key, the object id Core composed for it, the offer after the rename."""
+
+
+@pytest.mark.parametrize("number", [2, 3])
+@pytest.mark.parametrize(("make_install", "api_key", "composed", "offered"), NUMBERED_SPELLINGS)
+async def test_a_renamed_circuit_keeps_its_spelling_past_the_number_core_added(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    make_install: type[_LegacyInstall] | type[_SensorInstall],
+    api_key: str,
+    composed: str,
+    offered: str,
+    number: int,
+) -> None:
+    """The number Core added to the id is not read as its end, and the offer carries none.
+
+    Entities of circuits named alike hold the composed id and the numbers
+    before this one's. Renamed "Beer Fridge", the circuit is offered its new
+    name in the spelling its id has, and once accepted that id reads back to
+    the same base, so the next restart offers nothing more.
+    """
+    registry = er.async_get(hass)
+    for earlier in range(1, number):
+        registry.async_get_or_create(
+            "sensor", "other", f"earlier-{earlier}", suggested_object_id=composed
+        )
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, api_key),
+        suggested_object_id=composed,
+        config_entry=entry,
+    ).entity_id
+    assert seeded == f"sensor.{composed}_{number}"
+    install = make_install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, seeded)
+    words = row.object_id_base
+
+    accepted = await _accept_what_recreate_offers(hass, install, RENAMED, seeded)
+
+    assert accepted == offered
+    row = await _assert_recreate_offers_nothing(hass, install, RENAMED, offered)
+    assert row.object_id_base == words

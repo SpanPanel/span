@@ -87,6 +87,19 @@ def suffix_wordings(suffix: str) -> tuple[str, ...]:
     return tuple(form.replace("_", " ") for form in forms)
 
 
+def without_core_number(object_id: str) -> str | None:
+    """Return an object id without the number Core appended to it, or None where it ends on none.
+
+    Core composes an id and, where another entity has it, appends `_2`, `_3`
+    and on until one is free: two circuits named "Lights" are
+    `..._lights_power` and `..._lights_power_2`.
+    """
+    head, _, number = object_id.rpartition("_")
+    if head and number.isdecimal() and int(number) > 1:
+        return head
+    return None
+
+
 def _ends_on_segment(object_id: str, segment: str) -> bool:
     """Report whether `object_id` ends on `segment` at a word boundary.
 
@@ -96,11 +109,8 @@ def _ends_on_segment(object_id: str, segment: str) -> bool:
     return object_id == segment or object_id.endswith(f"_{segment}")
 
 
-def _existing_suffix_form(existing_entity_id: str | None, suffix: str) -> str | None:
-    """Return the suffix form an existing id carries, or None if it carries none we know."""
-    if existing_entity_id is None:
-        return None
-    object_id = existing_entity_id.split(".", 1)[-1]
+def _existing_suffix_form(object_id: str, suffix: str) -> str | None:
+    """Return the suffix form an existing id ends on, or None if it ends on none we know."""
     for form in _known_forms(suffix):
         if object_id.endswith(f"_{form}"):
             return form
@@ -176,6 +186,64 @@ def _form_spelled_apart_from_the_name(
         if any(_without_the_first_run(piece, run) is not None for piece in pieces):
             return form
     return None
+
+
+def _new_entity_words(suffix: str) -> str:
+    """Return the wording a new entity's base gets for `suffix`."""
+    return NEW_ENTITY_ID_SUFFIX_WORDS.get(suffix, suffix.replace("_", " "))
+
+
+def _base_of_the_words(words: str, device_name: str, *, device_in_front: bool) -> str:
+    """Return `words` as a base, or nothing where the device's name in front of them ends on them."""
+    if device_in_front and slugify(device_name).endswith(f"_{slugify(words)}"):
+        return ""
+    return words
+
+
+def _base_an_id_spells(
+    object_id: str,
+    id_identifier: str,
+    device_name: str,
+    suffix: str,
+    *,
+    device_then_entity: bool,
+    device_in_front: bool,
+) -> str | None:
+    """Return the base one object id reads as, or None where nothing here reads it.
+
+    The readings `circuit_object_id_suffix` describes, of `object_id` as it is
+    handed in. Nothing reads an id that names neither the device nor the
+    identifier and spells no form of the suffix.
+    """
+    by_device = _read_after_the_name(
+        object_id, device_name, suffix, may_stop_at_the_name=device_then_entity
+    )
+    by_identifier = _read_after_the_name(
+        object_id, id_identifier, suffix, may_stop_at_the_name=device_then_entity
+    )
+    form: str | None = None
+    # `>=`, so the device wins a tie.
+    if by_device is not None and (
+        by_identifier is None or by_device.tail_length >= by_identifier.tail_length
+    ):
+        if by_device.form:
+            return by_device.form.replace("_", " ")
+        if device_in_front:
+            return ""
+    elif by_identifier is not None:
+        form = by_identifier.form
+
+    if form is None:
+        form = _existing_suffix_form(object_id, suffix)
+    if form is None and not device_then_entity:
+        form = _form_spelled_apart_from_the_name(object_id, (device_name, id_identifier), suffix)
+    if form is None and by_device is None and by_identifier is None:
+        return None
+    return _base_of_the_words(
+        form.replace("_", " ") if form else _new_entity_words(suffix),
+        device_name,
+        device_in_front=device_in_front,
+    )
 
 
 def circuit_object_id_suffix(
@@ -280,6 +348,16 @@ def circuit_object_id_suffix(
       outside the name it carries (`_form_spelled_apart_from_the_name`), and
       the omission is decided from `device_name`, as for a new entity.
 
+    An id Core numbered ends on the number: where the id it composed is
+    taken, as it is for every circuit after the first of one name, Core
+    appends `_2`, `_3` and on (`without_core_number`). None of the readings
+    above finds a name or a form at such an end, so where the id as it stands
+    spells nothing they read, the id without the number is read instead.
+    Read only as it stands, `..._refrigerator_energy_consumed_2` on a circuit
+    renamed in the SPAN app was offered `consumed energy`, a wording it never
+    had. The id as it stands comes first because a name can end on a number
+    of its own: `sensor.span_panel_pump_2` stops at a device named "Pump 2".
+
     `circuit_object_ids.circuit_object_id_base` asks first which wording
     reproduces the id under the format as it stands, and comes here for the
     ids none does.
@@ -294,39 +372,23 @@ def circuit_object_id_suffix(
     name, or failing that at its end, so an id that stops at "Solar Power" is
     read for the `power` it ends on and is offered `sensor.backyard_power`.
     """
-    form: str | None = None
-    object_id: str | None = None
     if existing_entity_id is not None:
         object_id = existing_entity_id.split(".", 1)[-1]
-        by_device = _read_after_the_name(
-            object_id, device_name, suffix, may_stop_at_the_name=device_then_entity
-        )
-        by_identifier = _read_after_the_name(
-            object_id, id_identifier, suffix, may_stop_at_the_name=device_then_entity
-        )
-        # `>=`, so the device wins a tie.
-        if by_device is not None and (
-            by_identifier is None or by_device.tail_length >= by_identifier.tail_length
-        ):
-            if by_device.form:
-                return by_device.form.replace("_", " ")
-            if device_in_front:
-                return ""
-        elif by_identifier is not None:
-            form = by_identifier.form
-
-    if form is None:
-        form = _existing_suffix_form(existing_entity_id, suffix)
-    if form is None and object_id is not None and not device_then_entity:
-        form = _form_spelled_apart_from_the_name(object_id, (device_name, id_identifier), suffix)
-    words = (
-        form.replace("_", " ")
-        if form
-        else NEW_ENTITY_ID_SUFFIX_WORDS.get(suffix, suffix.replace("_", " "))
+        unnumbered = without_core_number(object_id)
+        for read in (object_id,) if unnumbered is None else (object_id, unnumbered):
+            base = _base_an_id_spells(
+                read,
+                id_identifier,
+                device_name,
+                suffix,
+                device_then_entity=device_then_entity,
+                device_in_front=device_in_front,
+            )
+            if base is not None:
+                return base
+    return _base_of_the_words(
+        _new_entity_words(suffix), device_name, device_in_front=device_in_front
     )
-    if device_in_front and slugify(device_name).endswith(f"_{slugify(words)}"):
-        return ""
-    return words
 
 
 def release_registry_name_written_by_older_release(

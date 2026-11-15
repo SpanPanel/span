@@ -48,9 +48,9 @@ no device in front it would leave Core the area alone to compose from, or
 nothing at all. Its id may be one Core composed before it had the area, with
 the device in front, which Core would not compose today but a composition
 still spells, so each wording is composed that way too, after the area's,
-which is what Core composes today. An id from then keeps its wording where
-its tail spells none, as one Core numbered does, or spells another, as one
-does whose panel's name runs into the suffix.
+which is what Core composes today. An id from then is read exactly, number
+and all, where reading its words would give another wording, as it does for
+one whose panel's name runs into the suffix.
 
 ## Keeping the base current
 
@@ -100,7 +100,7 @@ from span_panel_api import SpanCircuitSnapshot
 
 from .const import DOMAIN
 from .id_builder import build_circuit_device_identifier
-from .naming import circuit_object_id_suffix, suffix_wordings
+from .naming import circuit_object_id_suffix, suffix_wordings, without_core_number
 from .runtime import SpanPanelConfigEntry, loaded_runtime_data
 from .util import circuit_id_of_device, effective_circuit_device_name
 
@@ -242,16 +242,13 @@ def _is_the_id_core_registers(object_id: str, composed: str, *, numbered: bool) 
     """Report whether Core registers `composed` as `object_id`.
 
     As it stands, or with `numbered`, under the number Core appends where an
-    id is taken: two circuits named "Lights" are `..._lights_power` and
-    `..._lights_power_2`.
+    id is taken (`naming.without_core_number`): two circuits named "Lights"
+    are `..._lights_power` and `..._lights_power_2`.
     """
     slug = slugify(composed)
     if not composed or not slug:
         return False
-    if not numbered:
-        return object_id == slug
-    head, _, number = object_id.rpartition("_")
-    return head == slug and number.isdecimal() and int(number) > 1
+    return (without_core_number(object_id) if numbered else object_id) == slug
 
 
 def _base_reproducing(object_id: str, composed_by_base: dict[str, str]) -> str | None:
@@ -298,9 +295,9 @@ def circuit_object_id_base(
     that area, as Core composes it now, so an id Core composes today, such as
     a label-only id it has accepted, is offered nothing. Then with the device
     in front, as Core composed it before it had the area, which spells an id
-    from then exactly where its tail cannot be read: one Core numbered,
-    `..._energy_consumed_2`, and one whose panel's name runs into the suffix,
-    "Shop Current" in front of `power`.
+    from then exactly, number and all, where reading its words would not:
+    one whose panel's name runs into the suffix, "Shop Current" in front of
+    `power`, spells `current_power`.
     """
     device_name = effective_circuit_device_name(
         dr.async_get(hass), serial, circuit, circuit_id, config_entry_id=config_entry_id

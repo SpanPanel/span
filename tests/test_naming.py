@@ -10,6 +10,7 @@ from custom_components.span_panel.naming import (
     NEW_ENTITY_ID_SUFFIX_WORDS,
     circuit_object_id_suffix,
     suffix_wordings,
+    without_core_number,
 )
 
 
@@ -645,6 +646,147 @@ def test_an_entity_with_an_area_of_its_own_never_leaves_the_suffix_out(
     )
     if existing.endswith(f"_{slugify(device_name)}"):
         assert circuit_object_id_suffix(identifier, device_name, suffix, existing) == ""
+
+
+# --- An id Core numbered ------------------------------------------------------
+#
+# Core appends `_2`, `_3` and on to an id another entity has, so two circuits
+# of one name have `..._lights_power` and `..._lights_power_2`. Every reading
+# above looks at an id's end, which for such an id is the number.
+
+
+@pytest.mark.parametrize(
+    ("object_id", "expected"),
+    [
+        ("span_panel_lights_power_2", "span_panel_lights_power"),
+        ("span_panel_lights_power_3", "span_panel_lights_power"),
+        ("span_panel_lights_power_12", "span_panel_lights_power"),
+        ("span_panel_lights_power", None),
+        # Core numbers from 2, so a 1 or a 0 is a name's.
+        ("span_panel_remote_ct_1", None),
+        ("span_panel_circuit_0", None),
+        # A number with nothing in front of it is the whole id.
+        ("2", None),
+    ],
+)
+def test_the_number_core_appends_is_two_or_more_after_the_id_it_composed(
+    object_id: str, expected: str | None
+) -> None:
+    assert without_core_number(object_id) == expected
+
+
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "suffix", "existing", "expected"),
+    [
+        # Renamed on the panel (#252): the form is read from the id's end, past
+        # the number, in each spelling the suffix shipped with.
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "energy_consumed",
+            "sensor.span_panel_refrigerator_energy_consumed_2",
+            "energy consumed",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "energy_consumed",
+            "sensor.span_panel_refrigerator_energy_consumed_3",
+            "energy consumed",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "energy_consumed",
+            "sensor.span_panel_refrigerator_consumed_energy_2",
+            "consumed energy",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "energy_produced",
+            "sensor.span_panel_refrigerator_energy_produced_2",
+            "energy produced",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "energy_net",
+            "sensor.span_panel_refrigerator_energy_net_12",
+            "energy net",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "power",
+            "sensor.span_panel_refrigerator_current_power_2",
+            "current power",
+        ),
+        (
+            "Beer Fridge",
+            "Beer Fridge",
+            "power",
+            "sensor.span_panel_refrigerator_current_power_3",
+            "current power",
+        ),
+        # The id names the device and kept both halves, which the omission
+        # from the device's name would otherwise drop.
+        ("Solar Power", "Solar Power", "power", "sensor.span_panel_solar_power_power_2", "power"),
+        # The id names the tabs and spells the form after them.
+        (
+            "Circuit 15",
+            "Kitchen Outlets",
+            "power",
+            "sensor.span_panel_circuit_15_current_power_2",
+            "current power",
+        ),
+        # The id stops at the device's name, so it left the suffix out.
+        ("Solar Power", "Solar Power", "power", "sensor.span_panel_solar_power_2", ""),
+    ],
+)
+def test_an_id_core_numbered_is_read_past_the_number(
+    identifier: str, device_name: str, suffix: str, existing: str, expected: str
+) -> None:
+    """The id is read as the one Core composed before it added the number.
+
+    Read only as it stands, such an id spelled no form, and an id in an older
+    release's spelling was offered the new one.
+    """
+    assert circuit_object_id_suffix(identifier, device_name, suffix, existing) == expected
+
+
+@pytest.mark.parametrize(
+    ("identifier", "device_name", "suffix", "existing", "expected", "device_then_entity"),
+    [
+        # The id stops at a device's name that ends on a number of its own.
+        ("Pump 2", "Pump 2", "power", "sensor.span_panel_pump_2", "", True),
+        # Under `(ENTITY, DEVICE)` every id ends on the device's name. Without
+        # its `2`, the name's `power` would be read as the suffix's.
+        (
+            "Solar Power 2",
+            "Solar Power 2",
+            "power",
+            "sensor.current_power_solar_power_2",
+            "current power",
+            False,
+        ),
+    ],
+)
+def test_an_id_that_ends_on_a_number_is_read_as_it_stands_first(
+    identifier: str,
+    device_name: str,
+    suffix: str,
+    existing: str,
+    expected: str,
+    device_then_entity: bool,
+) -> None:
+    """A name can end on a number too, so the number is set aside only where nothing else reads."""
+    assert (
+        circuit_object_id_suffix(
+            identifier, device_name, suffix, existing, device_then_entity=device_then_entity
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize("suffix", sorted(ENTITY_ID_SUFFIX_FORMS))
