@@ -1055,12 +1055,12 @@
       "description": "{panel} は spanos2 ファームウェアで動作しています。このファームウェアが公開する以前のフラットな eBus スキーマは、この統合ではサポートされなくなりました。パネルのファームウェアを更新してください。更新後、パネルは自動的に再接続されます。"
     },
     "circuit_devices_converted": {
-      "title": "SPAN Panel circuits now have their own devices",
-      "description": "Each circuit of {panel} is now a device of its own under the panel, named by the circuit's name in the SPAN app, and its entities are named by what they measure, such as Power. No entity ID has changed, so automations, scripts and dashboards that use entity IDs keep working.\n\n**Displayed names that changed:**\n\n{renamed}\n\n**Areas moved to the circuit's device**, so a circuit's entities now share one area:\n\n{area_changes}\n\n**Circuits whose areas were left as they were**, because their breaker switch has no area. Their entities show without the circuit's name. To restore it, set an area on the circuit's device and clear the entities' own areas, knowing that the breaker switch then joins that area too, where an area-wide turn-off reaches it.\n\n{circuits_left_in_areas}\n\nTemplates that read an entity's device, such as `device_name` or `device_entities`, now see the circuit's device instead of the panel. Dismiss this notice once you have read it."
+      "title": "SPAN Panel の回路がそれぞれ独自のデバイスになりました",
+      "description": "{panel} の各回路は、パネルの下にある独自のデバイスになりました。デバイスの名前は SPAN アプリでの回路名で、そのエンティティには Power のように測定対象の名前が付きます。エンティティIDは変更されていないため、エンティティIDを使用するオートメーション、スクリプト、ダッシュボードは引き続き動作します。\n\n**変更された表示名:**\n\n{renamed}\n\n**回路のデバイスに移動されたエリア**（回路のエンティティは 1 つのエリアを共有するようになりました）:\n\n{area_changes}\n\n**エリアをそのまま残した回路**（ブレーカースイッチにエリアがないため）。これらの回路のエンティティは回路名なしで表示されます。回路名を戻すには、回路のデバイスにエリアを設定し、エンティティ自体のエリアを解除してください。その場合、ブレーカースイッチもそのエリアに入り、エリア全体をオフにする操作の対象になることに注意してください。\n\n{circuits_left_in_areas}\n\n`device_name` や `device_entities` など、エンティティのデバイスを読み取るテンプレートは、パネルではなく回路のデバイスを参照するようになりました。内容を確認したら、この通知を無視してください。"
     },
     "breaker_switch_in_area": {
-      "title": "SPAN Panel breaker switch joined an area",
-      "description": "{switch} is a new breaker switch on a circuit whose device is in {area}, so the switch is in {area} too. An area-wide action, such as turning off everything in {area}, now turns this breaker off. To keep it out of such actions, give the switch a different area of its own or remove the area from its circuit's device. Dismiss this notice once you have read it."
+      "title": "SPAN Panel のブレーカースイッチがエリアに入りました",
+      "description": "{switch} は、デバイスが {area} にある回路の新しいブレーカースイッチであるため、このスイッチも {area} に入っています。{area} のすべてをオフにするなど、エリア全体に対する操作で、このブレーカーがオフになるようになりました。そうした操作の対象から外すには、スイッチに別の独自のエリアを設定するか、回路のデバイスからエリアを解除してください。内容を確認したら、この通知を無視してください。"
     }
   }
 }
