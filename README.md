@@ -100,12 +100,12 @@ The following terms appear throughout this document and in the integration's sen
 | Sensor                       | Device Class | Unit | Notes                                                                                                                          |
 | ---------------------------- | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                         |
-| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                |
+| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power. Off by default                                                                                |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                           |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                           |
 | Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced. Off by default                                                                                        |
-| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                    |
-| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                    |
+| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported. Off by default                                                                                    |
+| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported. Off by default                                                                                    |
 | Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy. Off by default                                                                                         |
 | DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals. Diagnostic, off by default |
 | Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown         |
@@ -136,9 +136,6 @@ On a panel with no main breaker, current monitoring judges the mains against the
 **The three Feedthrough sensors and the two Downstream current sensors are off by default.** The eBus specification's maintainer has documented that the panel's
 feedthrough (downstream lugs) figures cannot be relied on: the energy registers can decrease or go negative, the power reading is inverted relative to every
 other terminal, and the downstream currents report the **upstream** service conductors.
-
-Existing installations keep all five, with their history and entity ids — Home Assistant applies the setting only when an entity is first created. If you use
-them somewhere, removing them is worth considering, but that is your call.
 
 ### Shed Forecast Sensors
 
@@ -242,8 +239,8 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 
 | Attribute  | Type   | Notes                                                             |
 | ---------- | ------ | ----------------------------------------------------------------- |
-| `voltage`  | string | Nominal panel voltage ("240")                                     |
-| `amperage` | string | Calculated current (power / voltage); null while power is unknown |
+| `voltage`  | number | Nominal panel voltage (240)                                       |
+| `amperage` | number | Calculated current (power / voltage); null while power is unknown |
 
 **Current Power** carries one more, because whether it reads grid flow depends on the wiring:
 
@@ -363,9 +360,9 @@ device uses manufacturer, model, serial number, and software version from batter
 
 Applies to Main Meter and Feed Through energy sensors.
 
-| Attribute | Type   | Notes                         |
-| --------- | ------ | ----------------------------- |
-| `voltage` | string | Nominal panel voltage ("240") |
+| Attribute | Type   | Notes                       |
+| --------- | ------ | --------------------------- |
+| `voltage` | number | Nominal panel voltage (240) |
 
 ### Circuit-Level Sensors (per circuit)
 
@@ -661,12 +658,6 @@ listed: the sensor was compensated the whole time and needs no attention.
 | ---------------- | --------------------------------------------- |
 | `energy_offset`  | Cumulative Wh compensation applied (when > 0) |
 | `last_dip_delta` | Size of the most recent dip in Wh             |
-
-**Before upgrading to 2.1.2,** check the `energy_offset` of your Produced and Consumed Energy sensors as described under **Energy Dashboard spikes after
-firmware updates** in [Troubleshooting](#troubleshooting). At the first update after the upgrade, Main Meter Net Energy steps once by its counters' offsets,
-which it now applies, and a solar circuit's Net Energy steps by twice the difference of its counters' offsets, which it now applies in its own direction. A load
-circuit's Net Energy does not step. An offset far larger than its sensor's reading was never a real reset: turn Energy Dip Compensation off and then back on to
-clear it before you upgrade.
 
 Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
 
