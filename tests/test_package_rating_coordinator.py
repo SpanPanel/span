@@ -27,6 +27,7 @@ from custom_components.span_panel.package_rating_manager import PackageRatingMan
 from custom_components.span_panel.notices import is_standing
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .helpers import ensure_device_registered_stand_in
 
 SERVICE_A = 100
 _DECLARED = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
@@ -327,7 +328,7 @@ async def _set_up(
         patch("custom_components.span_panel.SpanPanelCoordinator", side_effect=_build),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch(
             "custom_components.span_panel._async_enforce_hardware_verdict", side_effect=before_begin

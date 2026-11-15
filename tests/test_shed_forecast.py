@@ -30,10 +30,12 @@ from custom_components.span_panel.sensor_definitions import SHED_FORECAST_SENSOR
 from custom_components.span_panel.sensor_panel import SpanShedForecastSensor
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import CONF_HOST, UnitOfTime
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -61,7 +63,7 @@ def _mock_entity_registry() -> Any:
         yield registry
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     """A coordinator-like mock carrying one snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -69,16 +71,18 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -121,21 +125,21 @@ def _without_node() -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
-def _sensors(snapshot: SpanPanelSnapshot) -> dict[str, SpanShedForecastSensor]:
+def _sensors(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, SpanShedForecastSensor]:
     """Whatever the platform creates for this snapshot, keyed by description key."""
-    created = create_shed_forecast_sensors(_coordinator(snapshot), snapshot)
+    created = create_shed_forecast_sensors(_coordinator(hass, snapshot), snapshot)
     return {sensor.entity_description.key: sensor for sensor in created}
 
 
-def _state(snapshot: SpanPanelSnapshot, key: str) -> float | int | str | None:
+def _state(hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str) -> float | int | str | None:
     """The state one forecast sensor reports for a snapshot."""
-    sensor = _sensors(snapshot)[key]
+    sensor = _sensors(hass, snapshot)[key]
     sensor._update_native_value()
     return sensor.native_value
 
 
-def _attributes(snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
-    return _sensors(snapshot)[key].extra_state_attributes or {}
+def _attributes(hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
+    return _sensors(hass, snapshot)[key].extra_state_attributes or {}
 
 
 # ---------------------------------------------------------------------------
@@ -171,17 +175,19 @@ def test_the_capture_publishes_the_whole_capability() -> None:
         (TOTAL_TIME_REMAINING_KEY, TOTAL_TIME_REMAINING),
     ],
 )
-def test_each_sensor_reports_the_value_the_panel_published(key: str, property_id: str) -> None:
-    assert _state(schema_one_snapshot(), key) == float(_published(property_id))
+def test_each_sensor_reports_the_value_the_panel_published(
+    hass: HomeAssistant, key: str, property_id: str
+) -> None:
+    assert _state(hass, schema_one_snapshot(), key) == float(_published(property_id))
 
 
-def test_the_two_sensors_do_not_report_the_same_reading() -> None:
+def test_the_two_sensors_do_not_report_the_same_reading(hass: HomeAssistant) -> None:
     """The capture publishes different values for the two estimates, so a wiring
     that crossed them would fail here rather than looking plausible."""
     snapshot = schema_one_snapshot()
 
-    assert _state(snapshot, TIME_TO_PRIORITY_SHED_KEY) != _state(
-        snapshot, TOTAL_TIME_REMAINING_KEY
+    assert _state(hass, snapshot, TIME_TO_PRIORITY_SHED_KEY) != _state(
+        hass, snapshot, TOTAL_TIME_REMAINING_KEY
     )
 
 
@@ -193,15 +199,15 @@ def test_the_two_sensors_do_not_report_the_same_reading() -> None:
     ],
 )
 def test_republishing_an_estimate_moves_its_sensor(
-    key: str, property_id: str, republished: str
+    hass: HomeAssistant, key: str, property_id: str, republished: str
 ) -> None:
     """The mutation proof. Each republished value differs from every value the
     capture carries, so a sensor pinned to a constant — or wired to the wrong
     property — cannot report it."""
     snapshot = _republishing(**{property_id.replace("-", "_"): republished})
 
-    assert _state(snapshot, key) == float(republished)
-    assert _state(snapshot, key) != float(_published(property_id))
+    assert _state(hass, snapshot, key) == float(republished)
+    assert _state(hass, snapshot, key) != float(_published(property_id))
 
 
 @pytest.mark.parametrize(
@@ -211,14 +217,16 @@ def test_republishing_an_estimate_moves_its_sensor(
         (TOTAL_TIME_REMAINING_KEY, TOTAL_TIME_REMAINING),
     ],
 )
-def test_zero_minutes_is_a_state_and_not_an_absence(key: str, property_id: str) -> None:
+def test_zero_minutes_is_a_state_and_not_an_absence(
+    hass: HomeAssistant, key: str, property_id: str
+) -> None:
     """Shedding starts now is a reading, and the most important one the capability
     reports. A gate that treated zero as absence would delete the entity exactly
     when a user needs it."""
     snapshot = _republishing(**{property_id.replace("-", "_"): "0"})
 
-    assert key in _sensors(snapshot)
-    assert _state(snapshot, key) == 0.0
+    assert key in _sensors(hass, snapshot)
+    assert _state(hass, snapshot, key) == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -242,24 +250,24 @@ def test_zero_minutes_is_a_state_and_not_an_absence(key: str, property_id: str) 
     ],
 )
 def test_each_sensor_carries_its_own_full_charge_twin(
-    key: str, attribute: str, property_id: str
+    hass: HomeAssistant, key: str, attribute: str, property_id: str
 ) -> None:
     """The pairing, not just the presence: each estimate carries the
     full-charge figure that refines *it*."""
-    attributes = _attributes(schema_one_snapshot(), key)
+    attributes = _attributes(hass, schema_one_snapshot(), key)
 
     assert attributes[attribute] == int(_published(property_id))
 
 
-def test_no_sensor_carries_the_other_sensors_twin() -> None:
+def test_no_sensor_carries_the_other_sensors_twin(hass: HomeAssistant) -> None:
     """The capture publishes 3038 and 4320, and the second happens to equal the
     live total — so only the pairing check above plus this one can tell a correct
     wiring from a crossed one."""
     assert "full_charge_total_time_remaining" not in _attributes(
-        schema_one_snapshot(), TIME_TO_PRIORITY_SHED_KEY
+        hass, schema_one_snapshot(), TIME_TO_PRIORITY_SHED_KEY
     )
     assert "full_charge_time_to_priority_shed" not in _attributes(
-        schema_one_snapshot(), TOTAL_TIME_REMAINING_KEY
+        hass, schema_one_snapshot(), TOTAL_TIME_REMAINING_KEY
     )
 
 
@@ -279,11 +287,11 @@ def test_no_sensor_carries_the_other_sensors_twin() -> None:
     ],
 )
 def test_republishing_a_full_charge_figure_moves_its_attribute(
-    key: str, attribute: str, property_id: str
+    hass: HomeAssistant, key: str, attribute: str, property_id: str
 ) -> None:
     snapshot = _republishing(**{property_id.replace("-", "_"): "999"})
 
-    assert _attributes(snapshot, key)[attribute] == 999
+    assert _attributes(hass, snapshot, key)[attribute] == 999
 
 
 @pytest.mark.parametrize(
@@ -302,47 +310,51 @@ def test_republishing_a_full_charge_figure_moves_its_attribute(
     ],
 )
 def test_a_full_charge_figure_the_panel_drops_takes_its_attribute_with_it(
-    key: str, attribute: str, property_id: str
+    hass: HomeAssistant, key: str, attribute: str, property_id: str
 ) -> None:
     """Absent, not `None`. An attribute that is present and empty reads as a
     reading the panel failed to produce; this is firmware that does not carry the
     property at all."""
     snapshot = _without(property_id)
 
-    assert attribute not in _attributes(snapshot, key)
+    assert attribute not in _attributes(hass, snapshot, key)
     # The sensor itself is unaffected: the estimate it reads is still published.
-    assert _state(snapshot, key) == float(
+    assert _state(hass, snapshot, key) == float(
         _published(TIME_TO_PRIORITY_SHED if key == TIME_TO_PRIORITY_SHED_KEY else TOTAL_TIME_REMAINING)
     )
 
 
 @pytest.mark.parametrize("key", [TIME_TO_PRIORITY_SHED_KEY, TOTAL_TIME_REMAINING_KEY])
-def test_confidence_rides_on_both_sensors(key: str) -> None:
+def test_confidence_rides_on_both_sensors(hass: HomeAssistant, key: str) -> None:
     """It qualifies both estimates, so it appears on both."""
-    assert _attributes(schema_one_snapshot(), key)["forecast_confidence"] == _published(
+    assert _attributes(hass, schema_one_snapshot(), key)["forecast_confidence"] == _published(
         CONFIDENCE
     )
 
 
 @pytest.mark.parametrize("key", [TIME_TO_PRIORITY_SHED_KEY, TOTAL_TIME_REMAINING_KEY])
-def test_republishing_confidence_moves_the_attribute(key: str) -> None:
+def test_republishing_confidence_moves_the_attribute(hass: HomeAssistant, key: str) -> None:
     snapshot = _republishing(confidence="LOW")
 
-    assert _attributes(snapshot, key)["forecast_confidence"] == "LOW"
-    assert _attributes(snapshot, key)["forecast_confidence"] != _published(CONFIDENCE)
+    assert _attributes(hass, snapshot, key)["forecast_confidence"] == "LOW"
+    assert _attributes(hass, snapshot, key)["forecast_confidence"] != _published(CONFIDENCE)
 
 
 @pytest.mark.parametrize("key", [TIME_TO_PRIORITY_SHED_KEY, TOTAL_TIME_REMAINING_KEY])
-def test_confidence_the_panel_drops_takes_its_attribute_with_it(key: str) -> None:
-    assert "forecast_confidence" not in _attributes(_without(CONFIDENCE), key)
+def test_confidence_the_panel_drops_takes_its_attribute_with_it(
+    hass: HomeAssistant, key: str
+) -> None:
+    assert "forecast_confidence" not in _attributes(hass, _without(CONFIDENCE), key)
 
 
-def test_a_sensor_with_neither_refinement_publishes_no_attributes_at_all() -> None:
+def test_a_sensor_with_neither_refinement_publishes_no_attributes_at_all(
+    hass: HomeAssistant,
+) -> None:
     """`None` rather than an empty dict, which is what the entity contract asks
     for and what stops an empty attribute block rendering."""
     snapshot = _without(FULL_CHARGE_TIME_TO_PRIORITY_SHED, CONFIDENCE)
 
-    assert _sensors(snapshot)[TIME_TO_PRIORITY_SHED_KEY].extra_state_attributes is None
+    assert _sensors(hass, snapshot)[TIME_TO_PRIORITY_SHED_KEY].extra_state_attributes is None
 
 
 # ---------------------------------------------------------------------------
@@ -350,21 +362,21 @@ def test_a_sensor_with_neither_refinement_publishes_no_attributes_at_all() -> No
 # ---------------------------------------------------------------------------
 
 
-def test_the_capture_creates_both_sensors() -> None:
-    assert set(_sensors(schema_one_snapshot())) == {
+def test_the_capture_creates_both_sensors(hass: HomeAssistant) -> None:
+    assert set(_sensors(hass, schema_one_snapshot())) == {
         TIME_TO_PRIORITY_SHED_KEY,
         TOTAL_TIME_REMAINING_KEY,
     }
 
 
-def test_a_panel_with_no_forecast_node_gets_no_sensors() -> None:
+def test_a_panel_with_no_forecast_node_gets_no_sensors(hass: HomeAssistant) -> None:
     """The absence test. A dead entity stuck at unknown is worse than no entity:
     it occupies the entity list, breaks a dashboard card, and cannot be told
     apart from a panel whose forecast has failed."""
     snapshot = _without_node()
 
     assert has_shed_forecast(snapshot) is False
-    assert create_shed_forecast_sensors(_coordinator(snapshot), snapshot) == []
+    assert create_shed_forecast_sensors(_coordinator(hass, snapshot), snapshot) == []
 
 
 @pytest.mark.parametrize(
@@ -375,7 +387,7 @@ def test_a_panel_with_no_forecast_node_gets_no_sensors() -> None:
     ],
 )
 def test_a_partial_node_creates_only_the_sensor_it_can_fill(
-    dropped: str, surviving: str
+    hass: HomeAssistant, dropped: str, surviving: str
 ) -> None:
     """The catalog marks all four times SHOULD, not MUST, so a partial node is
     legal firmware rather than a defect — and the half it omits must produce no
@@ -383,7 +395,7 @@ def test_a_partial_node_creates_only_the_sensor_it_can_fill(
     snapshot = _without(dropped)
 
     assert has_shed_forecast(snapshot) is True
-    assert set(_sensors(snapshot)) == {surviving}
+    assert set(_sensors(hass, snapshot)) == {surviving}
 
 
 def test_the_forecast_appearing_is_a_capability_change() -> None:
@@ -433,9 +445,9 @@ def test_the_declared_unit_matches_what_the_panel_declares() -> None:
         assert metadata[field_path].unit == description.native_unit_of_measurement
 
 
-def test_the_two_sensors_get_distinct_unique_ids() -> None:
+def test_the_two_sensors_get_distinct_unique_ids(hass: HomeAssistant) -> None:
     """They live on the same device and differ only by description key."""
-    sensors = _sensors(schema_one_snapshot())
+    sensors = _sensors(hass, schema_one_snapshot())
     unique_ids = {sensor.unique_id for sensor in sensors.values()}
 
     assert len(unique_ids) == len(sensors)

@@ -19,6 +19,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -92,7 +93,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -172,14 +173,14 @@ class TestExportCircuitManifest:
         entry_b.mock_state(hass, ConfigEntryState.LOADED)
         entry_a.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_a),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry_a, snapshot_a.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot_a),
             setup_snapshot=snapshot_a,
         )
         entry_b.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_b),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry_b, snapshot_b.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot_b),
             setup_snapshot=snapshot_b,
@@ -225,7 +226,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -290,7 +291,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -340,7 +341,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -378,7 +379,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -413,7 +414,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
@@ -449,7 +450,7 @@ class TestExportCircuitManifest:
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,

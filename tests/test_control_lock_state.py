@@ -43,6 +43,7 @@ from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .common import async_fire_time_changed
 from .factories import SpanPanelSnapshotFactory
+from .helpers import ensure_device_registered_stand_in
 
 LOCK_ENTITY = "switch.span_panel_control_lock"
 SERIAL = "sp3-lock-001"
@@ -101,7 +102,7 @@ async def _panel(hass: HomeAssistant, *, timeout: float) -> AsyncIterator[MockCo
         patch("custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch("custom_components.span_panel.PLATFORMS", [Platform.SWITCH]),
     ):

@@ -41,7 +41,7 @@ from custom_components.span_panel.services import (
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
-from .helpers import count_panel_describes_breakers
+from .helpers import count_panel_describes_breakers, register_panel_device
 
 SERVICE_A: Final = 100
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
@@ -458,7 +458,7 @@ class TestACopySurvivesTheMonitorsOwnReset:
         coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
-            panel_device_id="sp3-ratings-001-device",
+            panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,

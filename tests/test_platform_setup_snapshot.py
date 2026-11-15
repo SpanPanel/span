@@ -29,6 +29,7 @@ from custom_components.span_panel.switch import async_setup_entry as switch_setu
 
 from .adapter_fixtures import schema_one_snapshot
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -55,7 +56,7 @@ async def _built(
     coordinator.async_request_refresh = AsyncMock()
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, decided.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(decided),
         setup_snapshot=decided,

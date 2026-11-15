@@ -59,6 +59,7 @@ from custom_components.span_panel.util import (
 )
 
 from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -1151,7 +1152,7 @@ async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_stand
     entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,

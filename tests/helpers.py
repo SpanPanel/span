@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.dt import utcnow
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -154,6 +156,33 @@ def add_panel_entry(hass: HomeAssistant, entry_id: str, serial: str) -> MockConf
     )
     entry.add_to_hass(hass)
     return entry
+
+
+def register_panel_device(hass: HomeAssistant, entry: MockConfigEntry, serial: str) -> str:
+    """Register `entry`'s panel device under `serial` and return its device registry ID.
+
+    Runtime data's `panel_device_id` has to name a registered device. Every
+    sub-device names the panel device as its parent, and Core drops an entity
+    whose device names an unregistered parent, logging an error rather than
+    raising, so a made-up ID loses the entity without failing the test.
+
+    `entry` must already be added to `hass`, because the device registry
+    refuses a device for an unknown config entry.
+    """
+    device_info = DeviceInfo(identifiers={(DOMAIN, serial)}, name=PANEL_NAME)
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    return device.id
+
+
+async def ensure_device_registered_stand_in(
+    hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot, device_name: str
+) -> str:
+    """Stand in for `ensure_device_registered`, registering the panel device as it does.
+
+    A test that patches the real one out still gets runtime data naming a
+    registered device, because setup carries the ID this returns into it.
+    """
+    return register_panel_device(hass, entry, snapshot.serial_number)
 
 
 def get_circuit_entity_id_from_integration(

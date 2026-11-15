@@ -69,6 +69,7 @@ from .adapter_fixtures import (
 )
 from .captures_replay import HOMIE_PREFIX, replay
 from .factories import pv_binding_for
+from .helpers import register_panel_device
 
 EVSE = "evse"
 EVSE_2 = "evse-2"
@@ -219,7 +220,9 @@ def _wire(device_id: str, topic: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _coordinator(snapshot: SpanPanelSnapshot, client: object | None = None) -> MagicMock:
+def _coordinator(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, client: object | None = None
+) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
@@ -227,16 +230,18 @@ def _coordinator(snapshot: SpanPanelSnapshot, client: object | None = None) -> M
     coordinator.last_update_success = True
     coordinator.unresolved_paths = frozenset()
     coordinator.client = MagicMock() if client is None else client
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -254,7 +259,7 @@ async def _created(
     own call before it attempts the adopted ones, so that a device this
     integration models nothing for cannot cost the user a control it does model.
     """
-    coordinator = _coordinator(snapshot, client)
+    coordinator = _coordinator(hass, snapshot, client)
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, coordinator.config_entry, async_add_entities)
@@ -516,7 +521,7 @@ async def test_a_coordinator_with_no_snapshot_yet_takes_the_control_down(hass: H
 
 async def test_the_control_is_unavailable_while_the_panel_is_offline(hass: HomeAssistant) -> None:
     tree = schema_one_tree()
-    coordinator = _coordinator(schema_one_snapshot(tree))
+    coordinator = _coordinator(hass, schema_one_snapshot(tree))
     async_add_entities = MagicMock()
     await async_setup_entry(hass, coordinator.config_entry, async_add_entities)
     entity = _for(

@@ -21,6 +21,7 @@ from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.services import _async_register_monitoring_services
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 _DECLARED: Final = {"panel.main_breaker_rating_a": FieldMetadata(unit="A", datatype="integer")}
 
@@ -96,7 +97,7 @@ async def _monitoring_status(
     coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="sp3-offered-001-device",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,

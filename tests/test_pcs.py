@@ -59,11 +59,13 @@ from custom_components.span_panel.sensor_panel import SpanPcsSensor
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import CONF_HOST, UnitOfElectricCurrent
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -152,7 +154,7 @@ def _mock_entity_registry() -> Any:
         yield registry
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     """A coordinator-like mock carrying one snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -160,16 +162,18 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -226,43 +230,48 @@ def _without_node(device_id: str = SCHEMA_ONE_PANEL) -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
-def _sensors(snapshot: SpanPanelSnapshot) -> dict[str, SpanPcsSensor]:
+def _sensors(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, SpanPcsSensor]:
     """Whatever the platform creates for this snapshot, keyed by description key."""
-    created = create_pcs_sensors(_coordinator(snapshot), snapshot)
+    created = create_pcs_sensors(_coordinator(hass, snapshot), snapshot)
     return {sensor.entity_description.key: sensor for sensor in created}
 
 
-def _state(snapshot: SpanPanelSnapshot, key: str) -> StateType | date | datetime | Decimal:
+def _state(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str
+) -> StateType | date | datetime | Decimal:
     """The state one PCS sensor reports for a snapshot.
 
     Typed as `SensorEntity.native_value` is rather than narrowed to what these
     two sensors happen to report: narrowing here would be the test asserting its
     own expectation twice, once in the annotation and once in the body.
     """
-    sensor = _sensors(snapshot)[key]
+    sensor = _sensors(hass, snapshot)[key]
     sensor._update_native_value()
     return sensor.native_value
 
 
-def _attributes(snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
-    return _sensors(snapshot)[key].extra_state_attributes or {}
+def _attributes(hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
+    return _sensors(hass, snapshot)[key].extra_state_attributes or {}
 
 
 def _binary(
+    hass: HomeAssistant,
     snapshot: SpanPanelSnapshot,
 ) -> SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]:
     """The `pcs_active` binary sensor, updated from the snapshot."""
     sensor: SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] = SpanPanelBinarySensor(
-        _coordinator(snapshot), PCS_ACTIVE_SENSOR
+        _coordinator(hass, snapshot), PCS_ACTIVE_SENSOR
     )
     sensor.async_write_ha_state = MagicMock()
     sensor._handle_coordinator_update()
     return sensor
 
 
-def _circuit_power_sensor(snapshot: SpanPanelSnapshot, circuit_id: str) -> SpanCircuitPowerSensor:
+def _circuit_power_sensor(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, circuit_id: str
+) -> SpanCircuitPowerSensor:
     """The power sensor for one circuit, which is where PCS participation lands."""
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     created = create_circuit_sensors(coordinator, snapshot, coordinator.config_entry)
     for sensor in created:
         if isinstance(sensor, SpanCircuitPowerSensor) and sensor.circuit_id == circuit_id:
@@ -270,8 +279,10 @@ def _circuit_power_sensor(snapshot: SpanPanelSnapshot, circuit_id: str) -> SpanC
     raise AssertionError(f"no power sensor created for circuit {circuit_id}")
 
 
-def _circuit_attributes(snapshot: SpanPanelSnapshot, circuit_id: str) -> dict[str, Any]:
-    return _circuit_power_sensor(snapshot, circuit_id).extra_state_attributes or {}
+def _circuit_attributes(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, circuit_id: str
+) -> dict[str, Any]:
+    return _circuit_power_sensor(hass, snapshot, circuit_id).extra_state_attributes or {}
 
 
 # ---------------------------------------------------------------------------
@@ -337,12 +348,12 @@ def test_the_republished_values_are_all_different_from_each_other() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_import_limit_sensor_reports_the_effective_limit() -> None:
+def test_the_import_limit_sensor_reports_the_effective_limit(hass: HomeAssistant) -> None:
     """The headline reading, on a PCS that is switched on."""
-    assert _state(_configured(), IMPORT_LIMIT_KEY) == float(_CONFIGURED["import-limit"])
+    assert _state(hass, _configured(), IMPORT_LIMIT_KEY) == float(_CONFIGURED["import-limit"])
 
 
-def test_the_effective_limit_is_not_any_of_its_inputs() -> None:
+def test_the_effective_limit_is_not_any_of_its_inputs(hass: HomeAssistant) -> None:
     """The capability calls `import-limit` the arbitration *result*. A sensor
     wired to the FSR would be plausible and wrong, so the four inputs are
     republished to one shared value the result does not share."""
@@ -356,23 +367,23 @@ def test_the_effective_limit_is_not_any_of_its_inputs() -> None:
         }
     )
 
-    assert _state(snapshot, IMPORT_LIMIT_KEY) == 12.5
+    assert _state(hass, snapshot, IMPORT_LIMIT_KEY) == 12.5
 
 
-def test_republishing_the_effective_limit_moves_the_sensor() -> None:
+def test_republishing_the_effective_limit_moves_the_sensor(hass: HomeAssistant) -> None:
     """The mutation proof, twice over: two values, neither the captured zero."""
-    assert _state(_republishing(import_limit="15.0"), IMPORT_LIMIT_KEY) == 15.0
-    assert _state(_republishing(import_limit="16.5"), IMPORT_LIMIT_KEY) == 16.5
+    assert _state(hass, _republishing(import_limit="15.0"), IMPORT_LIMIT_KEY) == 15.0
+    assert _state(hass, _republishing(import_limit="16.5"), IMPORT_LIMIT_KEY) == 16.5
 
 
-def test_zero_amps_is_a_reading_and_not_an_absence() -> None:
+def test_zero_amps_is_a_reading_and_not_an_absence(hass: HomeAssistant) -> None:
     """The captured state, and a real one: the PCS is permitting no import at
     all. An entity that treated it as missing would go blank exactly when the
     panel is most restrictive."""
-    assert _state(schema_one_snapshot(), IMPORT_LIMIT_KEY) == 0.0
+    assert _state(hass, schema_one_snapshot(), IMPORT_LIMIT_KEY) == 0.0
 
 
-def test_the_arbitration_rides_as_attributes_on_the_limit() -> None:
+def test_the_arbitration_rides_as_attributes_on_the_limit(hass: HomeAssistant) -> None:
     """The whole attribute dictionary at once, against a PCS where every value
     is distinct.
 
@@ -381,28 +392,30 @@ def test_the_arbitration_rides_as_attributes_on_the_limit() -> None:
     failure worth catching is a value landing under the wrong name — which a
     per-key assertion on a matching value cannot see and this does.
     """
-    assert _attributes(_configured(), IMPORT_LIMIT_KEY) == _CONFIGURED_ATTRIBUTES
+    assert _attributes(hass, _configured(), IMPORT_LIMIT_KEY) == _CONFIGURED_ATTRIBUTES
 
 
-def test_the_attributes_are_the_inputs_and_not_the_result() -> None:
+def test_the_attributes_are_the_inputs_and_not_the_result(hass: HomeAssistant) -> None:
     """`import-limit` and `binding-constraint` are the two entities. Repeating
     either as an attribute of the other would be a second copy to keep in
     step."""
-    attributes = _attributes(_configured(), IMPORT_LIMIT_KEY)
+    attributes = _attributes(hass, _configured(), IMPORT_LIMIT_KEY)
 
     assert "import_limit" not in attributes
     assert "binding_constraint" not in attributes
 
 
 @pytest.mark.parametrize("family", PCS_CONSTRAINT_FAMILIES, ids=lambda f: f.attribute)
-def test_each_constraint_family_publishes_its_own_three_attributes(family: Any) -> None:
+def test_each_constraint_family_publishes_its_own_three_attributes(
+    hass: HomeAssistant, family: Any
+) -> None:
     """Every family contributes a limit, an enablement and an active flag, and
     the names extend the limit's. Asserted per family so a copied line that left
     one family reading another's fields fails naming the family."""
     snapshot = _configured()
     pcs = snapshot.pcs
     assert pcs is not None
-    attributes = _attributes(snapshot, IMPORT_LIMIT_KEY)
+    attributes = _attributes(hass, snapshot, IMPORT_LIMIT_KEY)
 
     assert attributes[family.attribute] == family.limit_fn(pcs)
     assert attributes[f"{family.attribute}_enablement"] == family.enablement_fn(pcs)
@@ -410,7 +423,9 @@ def test_each_constraint_family_publishes_its_own_three_attributes(family: Any) 
 
 
 @pytest.mark.parametrize("property_id", sorted(_CONFIGURED))
-def test_republishing_any_property_moves_only_what_reads_it(property_id: str) -> None:
+def test_republishing_any_property_moves_only_what_reads_it(
+    hass: HomeAssistant, property_id: str
+) -> None:
     """The strongest statement this module makes, and the one the uniform
     capture demands.
 
@@ -427,11 +442,11 @@ def test_republishing_any_property_moves_only_what_reads_it(property_id: str) ->
 
     def observe(snapshot: SpanPanelSnapshot) -> dict[str, object]:
         observed: dict[str, object] = {
-            f"state:{IMPORT_LIMIT_KEY}": _state(snapshot, IMPORT_LIMIT_KEY),
-            f"state:{BINDING_CONSTRAINT_KEY}": _state(snapshot, BINDING_CONSTRAINT_KEY),
-            "state:pcs_active": _binary(snapshot).is_on,
+            f"state:{IMPORT_LIMIT_KEY}": _state(hass, snapshot, IMPORT_LIMIT_KEY),
+            f"state:{BINDING_CONSTRAINT_KEY}": _state(hass, snapshot, BINDING_CONSTRAINT_KEY),
+            "state:pcs_active": _binary(hass, snapshot).is_on,
         }
-        observed.update(_attributes(snapshot, IMPORT_LIMIT_KEY))
+        observed.update(_attributes(hass, snapshot, IMPORT_LIMIT_KEY))
         return observed
 
     baseline = observe(schema_one_snapshot(tree))
@@ -453,16 +468,20 @@ def test_republishing_any_property_moves_only_what_reads_it(property_id: str) ->
 
 
 @pytest.mark.parametrize("property_id", sorted(_CONFIGURED))
-def test_an_unpublished_property_is_omitted_rather_than_shown_empty(property_id: str) -> None:
+def test_an_unpublished_property_is_omitted_rather_than_shown_empty(
+    hass: HomeAssistant, property_id: str
+) -> None:
     """Three of the four constraint classes are `MAY`, so an absent family is
     conformant firmware. An attribute present and holding `None` would read as a
     reading the panel failed to produce, which is a different claim."""
-    attributes = _attributes(_without(property_id), IMPORT_LIMIT_KEY)
+    attributes = _attributes(hass, _without(property_id), IMPORT_LIMIT_KEY)
 
     assert None not in attributes.values()
 
 
-def test_a_panel_publishing_no_constraint_families_still_shows_its_limit() -> None:
+def test_a_panel_publishing_no_constraint_families_still_shows_its_limit(
+    hass: HomeAssistant,
+) -> None:
     """The minimum conformant PCS: the two results, and none of the working."""
     snapshot = _without(
         *[
@@ -473,8 +492,8 @@ def test_a_panel_publishing_no_constraint_families_still_shows_its_limit() -> No
         "enabled",
     )
 
-    assert _state(snapshot, IMPORT_LIMIT_KEY) == 0.0
-    assert _attributes(snapshot, IMPORT_LIMIT_KEY) == {}
+    assert _state(hass, snapshot, IMPORT_LIMIT_KEY) == 0.0
+    assert _attributes(hass, snapshot, IMPORT_LIMIT_KEY) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -482,19 +501,22 @@ def test_a_panel_publishing_no_constraint_families_still_shows_its_limit() -> No
 # ---------------------------------------------------------------------------
 
 
-def test_the_binding_constraint_is_the_published_enum_lowercased() -> None:
+def test_the_binding_constraint_is_the_published_enum_lowercased(hass: HomeAssistant) -> None:
     """Lowercase because Home Assistant looks the state up as a translation key,
     which its own contract restricts to `[a-z0-9-_]+`."""
     assert (
-        _state(_configured(), BINDING_CONSTRAINT_KEY) == _CONFIGURED["binding-constraint"].lower()
+        _state(hass, _configured(), BINDING_CONSTRAINT_KEY)
+        == _CONFIGURED["binding-constraint"].lower()
     )
 
 
 @pytest.mark.parametrize("republished", ["FSR", "DOE", "VOLTAGE", "OFF_GRID", "OPERATOR"])
-def test_republishing_the_binding_constraint_moves_the_sensor(republished: str) -> None:
+def test_republishing_the_binding_constraint_moves_the_sensor(
+    hass: HomeAssistant, republished: str
+) -> None:
     """Members of the enum the panel's own `$description` declares, none of them
     the captured `NONE`, so a sensor pinned to the capture cannot report any."""
-    assert _state(_republishing(binding_constraint=republished), BINDING_CONSTRAINT_KEY) == (
+    assert _state(hass, _republishing(binding_constraint=republished), BINDING_CONSTRAINT_KEY) == (
         republished.lower()
     )
 
@@ -515,23 +537,23 @@ def test_the_declared_options_are_the_enum_the_panel_declares() -> None:
     assert set(PCS_BINDING_CONSTRAINT_OPTIONS) == {value.lower() for value in declared.split(",")}
 
 
-def test_the_binding_constraint_publishes_no_attributes_of_its_own() -> None:
+def test_the_binding_constraint_publishes_no_attributes_of_its_own(hass: HomeAssistant) -> None:
     """The other half of putting the pairing on the description: one PCS sensor
     carries thirteen attributes and the other carries none, and which is which is
     data rather than a comparison against `key` inside the entity."""
-    assert _sensors(_configured())[BINDING_CONSTRAINT_KEY].extra_state_attributes is None
+    assert _sensors(hass, _configured())[BINDING_CONSTRAINT_KEY].extra_state_attributes is None
 
 
-def test_none_is_a_binding_constraint_and_not_an_absence() -> None:
+def test_none_is_a_binding_constraint_and_not_an_absence(hass: HomeAssistant) -> None:
     """The captured value. `NONE` means nothing is constraining import, which is
     a state the catalog defines; reporting it as unknown would lose that."""
-    assert _state(schema_one_snapshot(), BINDING_CONSTRAINT_KEY) == "none"
+    assert _state(hass, schema_one_snapshot(), BINDING_CONSTRAINT_KEY) == "none"
 
 
-def test_a_binding_constraint_that_stops_arriving_goes_unknown() -> None:
+def test_a_binding_constraint_that_stops_arriving_goes_unknown(hass: HomeAssistant) -> None:
     """Absence after setup is a different event from absence at setup: an entity
     a user already has cannot be deleted, so it degrades instead."""
-    sensor = _sensors(schema_one_snapshot())[BINDING_CONSTRAINT_KEY]
+    sensor = _sensors(hass, schema_one_snapshot())[BINDING_CONSTRAINT_KEY]
 
     sensor.coordinator.data = _without("binding-constraint")
     sensor._update_native_value()
@@ -544,26 +566,26 @@ def test_a_binding_constraint_that_stops_arriving_goes_unknown() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_activity_sensor_follows_the_published_flag() -> None:
+def test_the_activity_sensor_follows_the_published_flag(hass: HomeAssistant) -> None:
     """Both directions, because the capture only shows one of them."""
-    assert _binary(_republishing(active="true")).is_on is True
-    assert _binary(_republishing(active="false")).is_on is False
+    assert _binary(hass, _republishing(active="true")).is_on is True
+    assert _binary(hass, _republishing(active="false")).is_on is False
 
 
-def test_activity_is_not_enablement() -> None:
+def test_activity_is_not_enablement(hass: HomeAssistant) -> None:
     """A configured PCS spends most of its life enabled and inactive, which is
     exactly the state a sensor reading the wrong flag would misreport. Both are
     `false` in the capture, so crossing them there is invisible."""
     snapshot = _republishing(enabled="true", active="false")
 
-    assert _binary(snapshot).is_on is False
-    assert _attributes(snapshot, IMPORT_LIMIT_KEY)["pcs_enabled"] is True
+    assert _binary(hass, snapshot).is_on is False
+    assert _attributes(hass, snapshot, IMPORT_LIMIT_KEY)["pcs_enabled"] is True
 
 
-def test_the_activity_sensor_goes_unknown_when_the_flag_stops_arriving() -> None:
+def test_the_activity_sensor_goes_unknown_when_the_flag_stops_arriving(hass: HomeAssistant) -> None:
     """`None` reaches Home Assistant as unknown, not as unavailable: the panel
     is reachable and the entity is fine, the fact simply is not being stated."""
-    assert _binary(_without("active")).is_on is None
+    assert _binary(hass, _without("active")).is_on is None
 
 
 def test_the_activity_sensor_is_a_running_diagnostic() -> None:
@@ -580,22 +602,22 @@ def test_the_activity_sensor_is_a_running_diagnostic() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_capture_creates_all_three_entities() -> None:
-    created = _sensors(schema_one_snapshot())
+def test_the_capture_creates_all_three_entities(hass: HomeAssistant) -> None:
+    created = _sensors(hass, schema_one_snapshot())
 
     assert set(created) == {IMPORT_LIMIT_KEY, BINDING_CONSTRAINT_KEY}
     assert has_pcs(schema_one_snapshot()) is True
 
 
-def test_a_panel_with_no_pcs_node_gets_no_entities() -> None:
+def test_a_panel_with_no_pcs_node_gets_no_entities(hass: HomeAssistant) -> None:
     """The presence gate, from the tree end."""
     snapshot = _without_node()
 
     assert has_pcs(snapshot) is False
-    assert _sensors(snapshot) == {}
+    assert _sensors(hass, snapshot) == {}
 
 
-def test_a_switched_off_pcs_still_gets_its_entities() -> None:
+def test_a_switched_off_pcs_still_gets_its_entities(hass: HomeAssistant) -> None:
     """The reason the gate is the node and not a value, stated as a test.
 
     The capture publishes `0.0` on every limit and `false` on every flag. A
@@ -607,11 +629,13 @@ def test_a_switched_off_pcs_still_gets_its_entities() -> None:
 
     assert snapshot.pcs is not None
     assert snapshot.pcs.import_limit_a == 0.0
-    assert set(_sensors(snapshot)) == {IMPORT_LIMIT_KEY, BINDING_CONSTRAINT_KEY}
-    assert _binary(snapshot).is_on is False
+    assert set(_sensors(hass, snapshot)) == {IMPORT_LIMIT_KEY, BINDING_CONSTRAINT_KEY}
+    assert _binary(hass, snapshot).is_on is False
 
 
-def test_a_declared_node_that_publishes_nothing_still_gets_its_entities() -> None:
+def test_a_declared_node_that_publishes_nothing_still_gets_its_entities(
+    hass: HomeAssistant,
+) -> None:
     """Mid-discovery, and the same rule: the panel has announced the capability
     and not yet retained its topics, so the entities exist and read unknown."""
     tree = schema_one_tree()
@@ -619,15 +643,15 @@ def test_a_declared_node_that_publishes_nothing_still_gets_its_entities() -> Non
         del tree[SCHEMA_ONE_PANEL][f"{NODE}/{property_id}"]
     snapshot = schema_one_snapshot(tree)
 
-    assert set(_sensors(snapshot)) == {IMPORT_LIMIT_KEY, BINDING_CONSTRAINT_KEY}
-    assert _state(snapshot, IMPORT_LIMIT_KEY) is None
-    assert _attributes(snapshot, IMPORT_LIMIT_KEY) == {}
+    assert set(_sensors(hass, snapshot)) == {IMPORT_LIMIT_KEY, BINDING_CONSTRAINT_KEY}
+    assert _state(hass, snapshot, IMPORT_LIMIT_KEY) is None
+    assert _attributes(hass, snapshot, IMPORT_LIMIT_KEY) == {}
 
 
-def test_a_reading_that_stops_arriving_goes_unknown_rather_than_stale() -> None:
+def test_a_reading_that_stops_arriving_goes_unknown_rather_than_stale(hass: HomeAssistant) -> None:
     """The last value persisting would be worse than unknown: a panel reporting
     a 40 A limit forever is indistinguishable from one still enforcing it."""
-    sensor = _sensors(_configured())[IMPORT_LIMIT_KEY]
+    sensor = _sensors(hass, _configured())[IMPORT_LIMIT_KEY]
 
     sensor.coordinator.data = _without("import-limit")
     sensor._update_native_value()
@@ -659,37 +683,37 @@ def test_the_capture_publishes_participation_on_two_disagreeing_circuits() -> No
     assert _published("priority", MANAGED_CIRCUIT) != _published("priority", SECOND_MANAGED_CIRCUIT)
 
 
-def test_a_circuit_sensor_carries_its_pcs_participation() -> None:
+def test_a_circuit_sensor_carries_its_pcs_participation(hass: HomeAssistant) -> None:
     """Read against the capture rather than against literals, on both circuits."""
     snapshot = schema_one_snapshot()
 
     for circuit_id in (MANAGED_CIRCUIT, SECOND_MANAGED_CIRCUIT):
-        attributes = _circuit_attributes(snapshot, circuit_id)
+        attributes = _circuit_attributes(hass, snapshot, circuit_id)
         assert attributes["pcs_managed"] is True
         assert attributes["pcs_priority"] == int(_published("priority", circuit_id))
 
 
-def test_republishing_participation_moves_the_circuit_attributes() -> None:
+def test_republishing_participation_moves_the_circuit_attributes(hass: HomeAssistant) -> None:
     """The attribute-mutation proof. The republished priority is outside the
     range any circuit uses in the capture, so an attribute wired to another
     circuit — or to the load-shed priority beside it — cannot report it."""
     snapshot = _republishing(device_id=MANAGED_CIRCUIT, managed="false", priority="42")
 
-    attributes = _circuit_attributes(snapshot, MANAGED_CIRCUIT)
+    attributes = _circuit_attributes(hass, snapshot, MANAGED_CIRCUIT)
 
     assert attributes["pcs_managed"] is False
     assert attributes["pcs_priority"] == 42
     # The other circuit is untouched, so a shared read would show here.
-    second = _circuit_attributes(snapshot, SECOND_MANAGED_CIRCUIT)
+    second = _circuit_attributes(hass, snapshot, SECOND_MANAGED_CIRCUIT)
     assert second["pcs_managed"] is True
     assert second["pcs_priority"] == int(_published("priority", SECOND_MANAGED_CIRCUIT))
 
 
-def test_pcs_priority_is_not_the_shed_priority_beside_it() -> None:
+def test_pcs_priority_is_not_the_shed_priority_beside_it(hass: HomeAssistant) -> None:
     """Two policies on one relay, and two attributes on one sensor. The catalog
     keeps them apart because they answer different questions, and they do not
     even share a value space."""
-    attributes = _circuit_attributes(schema_one_snapshot(), MANAGED_CIRCUIT)
+    attributes = _circuit_attributes(hass, schema_one_snapshot(), MANAGED_CIRCUIT)
 
     assert isinstance(attributes["pcs_priority"], int)
     assert isinstance(attributes["shed_priority"], str)
@@ -697,6 +721,7 @@ def test_pcs_priority_is_not_the_shed_priority_beside_it() -> None:
 
 @pytest.mark.parametrize("property_id", ["managed", "priority"])
 def test_a_circuit_that_does_not_publish_participation_omits_the_attribute(
+    hass: HomeAssistant,
     property_id: str,
 ) -> None:
     """Both properties are `MAY`. `False` and `0` would each be a claim the
@@ -704,12 +729,12 @@ def test_a_circuit_that_does_not_publish_participation_omits_the_attribute(
     reading."""
     snapshot = _without(property_id, device_id=MANAGED_CIRCUIT)
 
-    assert f"pcs_{property_id}" not in _circuit_attributes(snapshot, MANAGED_CIRCUIT)
+    assert f"pcs_{property_id}" not in _circuit_attributes(hass, snapshot, MANAGED_CIRCUIT)
 
 
-def test_a_circuit_outside_any_pcs_shows_neither_attribute() -> None:
+def test_a_circuit_outside_any_pcs_shows_neither_attribute(hass: HomeAssistant) -> None:
     snapshot = _without_node(MANAGED_CIRCUIT)
-    attributes = _circuit_attributes(snapshot, MANAGED_CIRCUIT)
+    attributes = _circuit_attributes(hass, snapshot, MANAGED_CIRCUIT)
 
     assert "pcs_managed" not in attributes
     assert "pcs_priority" not in attributes
@@ -781,22 +806,22 @@ def test_the_declared_unit_matches_what_the_panel_declares() -> None:
     )
 
 
-def test_the_entities_live_on_the_main_panel_device() -> None:
+def test_the_entities_live_on_the_main_panel_device(hass: HomeAssistant) -> None:
     """The PCS is the enclosure's own capability, not a sub-device."""
-    created = list(_sensors(schema_one_snapshot()).values())
-    panel_device = _binary(schema_one_snapshot()).device_info
+    created = list(_sensors(hass, schema_one_snapshot()).values())
+    panel_device = _binary(hass, schema_one_snapshot()).device_info
 
     assert panel_device is not None
     for sensor in created:
         assert sensor.device_info == panel_device
 
 
-def test_every_pcs_entity_gets_a_distinct_unique_id() -> None:
+def test_every_pcs_entity_gets_a_distinct_unique_id(hass: HomeAssistant) -> None:
     """They live on one device and differ only by description key, so a key
     reused from another panel sensor would silently collide."""
-    created = _sensors(schema_one_snapshot())
+    created = _sensors(hass, schema_one_snapshot())
     unique_ids = {sensor.unique_id for sensor in created.values()} | {
-        _binary(schema_one_snapshot()).unique_id
+        _binary(hass, schema_one_snapshot()).unique_id
     }
 
     assert len(unique_ids) == len(created) + 1

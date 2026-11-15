@@ -54,6 +54,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 
 _CIRCUIT_POWER_PATH = "circuit.instant_power_w"
 _ETHERNET_LINK_PATH = "panel.eth0_link"
@@ -81,7 +82,7 @@ def _make_coordinator(hass: HomeAssistant) -> SpanPanelCoordinator:
     coordinator.data = snapshot
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,

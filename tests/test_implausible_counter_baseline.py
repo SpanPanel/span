@@ -156,7 +156,7 @@ async def test_diagnostics_list_each_implausible_counter(hass: HomeAssistant) ->
     )
     panel = SpanPanelSnapshotFactory.create(circuits={"c-1": circuit})
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(panel))
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(hass, panel))
 
     assert result["implausible_counters"] == [
         {"circuit_id": "c-1", "counter": "consumed", "reading_wh": IMPLAUSIBLE, "bound_wh": BOUND}

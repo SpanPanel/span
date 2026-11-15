@@ -37,12 +37,12 @@ from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 from .test_current_monitor import _make_hass, _make_monitor, _make_options
 from .test_websocket import (
     _handle_panel_topology_inner,
     _make_coordinator,
     _make_mock_connection,
-    _register_panel_device,
 )
 
 SERIAL: Final = "sp3-shared-001"
@@ -275,18 +275,18 @@ async def test_topology_carries_both_group_keys(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=SERIAL)
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
+    device_id = register_panel_device(hass, entry, SERIAL)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=_make_coordinator(SNAPSHOT),
-        panel_device_id="panel-device-id",
+        panel_device_id=device_id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SNAPSHOT),
         setup_snapshot=SNAPSHOT,
     )
-    device = _register_panel_device(hass, "span_entry", serial=SERIAL)
     connection = _make_mock_connection()
 
     await _handle_panel_topology_inner(
-        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
     )
     rows = connection.send_result.call_args[0][1]["circuits"]
 
@@ -305,17 +305,17 @@ async def _topology_of(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=SERIAL)
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
+    device_id = register_panel_device(hass, entry, SERIAL)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=_make_coordinator(snapshot),
-        panel_device_id="panel-device-id",
+        panel_device_id=device_id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
     )
-    device = _register_panel_device(hass, "span_entry", serial=SERIAL)
     connection = _make_mock_connection()
     await _handle_panel_topology_inner(
-        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
     )
     result: dict[str, object] = connection.send_result.call_args[0][1]
     return result
@@ -375,9 +375,10 @@ async def test_diagnostics_list_one_row_per_group(hass: HomeAssistant) -> None:
     coordinator.schema_findings = None
     coordinator.client.masked_tree.return_value = None
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=SERIAL)
+    entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, SERIAL),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SNAPSHOT),
         setup_snapshot=SNAPSHOT,

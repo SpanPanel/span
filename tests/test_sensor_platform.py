@@ -37,6 +37,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -182,7 +183,9 @@ def test_create_panel_sensors_filters_net_energy_and_adds_diagnostics() -> None:
     } <= set(keys)
 
 
-def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> None:
+def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix(
+    hass: HomeAssistant,
+) -> None:
     """EVSE feed circuits should map to EVSE sub-device info."""
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={
@@ -197,15 +200,17 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
         },
     )
     coordinator = MagicMock()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={"device_name": "Main House"},
         title="SPAN Panel",
         options={USE_CIRCUIT_NUMBERS: False},
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -217,7 +222,7 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
     assert mapping["c1"]["name"] == "Main House SPAN Drive (Garage Charger)"
 
 
-def test_create_circuit_sensors_honors_optional_net_sensors() -> None:
+def test_create_circuit_sensors_honors_optional_net_sensors(hass: HomeAssistant) -> None:
     """Circuit sensors should honor the net-energy option."""
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={
@@ -244,10 +249,11 @@ def test_create_circuit_sensors_honors_optional_net_sensors() -> None:
         options={ENABLE_CIRCUIT_NET_ENERGY_SENSORS: False},
         unique_id=snapshot.serial_number,
     )
+    entry.add_to_hass(hass)
     coordinator.config_entry = entry
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -268,7 +274,9 @@ def test_create_circuit_sensors_honors_optional_net_sensors() -> None:
     )
 
 
-def test_create_battery_sensors_returns_expected_entities_when_bess_present() -> None:
+def test_create_battery_sensors_returns_expected_entities_when_bess_present(
+    hass: HomeAssistant,
+) -> None:
     """Battery helpers should create battery power, SoE, and metadata sensors."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(
@@ -278,14 +286,16 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.hass = MagicMock()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={"device_name": "Main House"},
         title="SPAN Panel",
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -301,7 +311,7 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
     assert "part_number" in keys
 
 
-def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
+def test_create_power_flow_sensors_gate_pv_and_site_flow(hass: HomeAssistant) -> None:
     """Power-flow helper should add PV and site/grid entities only when available."""
     snapshot = SpanPanelSnapshotFactory.create(
         power_flow_pv=-3500.0,
@@ -312,12 +322,12 @@ def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.hass = MagicMock()
-    coordinator.config_entry = MockConfigEntry(
-        domain=DOMAIN, data={}, title="SPAN Panel"
-    )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -332,7 +342,7 @@ def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
     assert "pv_vendor" in keys
 
 
-def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None:
+def test_create_evse_sensors_creates_all_descriptions_for_each_charger(hass: HomeAssistant) -> None:
     """EVSE helpers should create one entity per EVSE description."""
     snapshot = SpanPanelSnapshotFactory.create(
         evse={
@@ -343,12 +353,12 @@ def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.hass = MagicMock()
-    coordinator.config_entry = MockConfigEntry(
-        domain=DOMAIN, data={}, title="SPAN Panel"
-    )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,

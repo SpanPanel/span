@@ -75,11 +75,13 @@ from custom_components.span_panel.sensor_panel import (
 )
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import CONF_HOST, UnitOfPower
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -123,7 +125,7 @@ def _mock_entity_registry() -> Any:
         yield registry
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     """A coordinator-like mock carrying one snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -131,16 +133,18 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -195,20 +199,22 @@ BessSensor = SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor
 """What `create_battery_sensors` returns: everything on the BESS sub-device."""
 
 
-def _sensors(snapshot: SpanPanelSnapshot) -> dict[str, BessSensor]:
+def _sensors(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, BessSensor]:
     """Whatever the platform creates for this snapshot, keyed by description key."""
-    created = create_battery_sensors(_coordinator(snapshot), snapshot)
+    created = create_battery_sensors(_coordinator(hass, snapshot), snapshot)
     return {sensor.entity_description.key: sensor for sensor in created}
 
 
-def _state(snapshot: SpanPanelSnapshot, key: str) -> StateType | date | datetime | Decimal:
+def _state(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str
+) -> StateType | date | datetime | Decimal:
     """The state one BESS sensor reports for a snapshot.
 
     Typed as `SensorEntity.native_value` is, rather than narrowed to what these
     two sensors happen to report: narrowing here would be the test asserting its
     own expectation twice, once in the annotation and once in the body.
     """
-    sensor = _sensors(snapshot)[key]
+    sensor = _sensors(hass, snapshot)[key]
     sensor._update_native_value()
     return sensor.native_value
 
@@ -291,7 +297,7 @@ def test_the_capture_publishes_the_bess_meter_opposite_the_enclosure_flow() -> N
 # ---------------------------------------------------------------------------
 
 
-def test_charging_reads_negative() -> None:
+def test_charging_reads_negative(hass: HomeAssistant) -> None:
     """The convention, asserted on the state a user sees rather than on the field.
 
     From r202639 the wire is discharge-positive, so the capture publishes this
@@ -306,13 +312,13 @@ def test_charging_reads_negative() -> None:
     the convention a user reads whichever frame the wire was in.
     """
     published = float(_published(BESS, POWER_TOPIC))
-    state = _state(schema_one_snapshot(), POWER_KEY)
+    state = _state(hass, schema_one_snapshot(), POWER_KEY)
 
     assert state == published
     assert isinstance(state, float) and state < 0
 
 
-def test_charging_reads_negative_in_the_old_frame() -> None:
+def test_charging_reads_negative_in_the_old_frame(hass: HomeAssistant) -> None:
     """The same charging battery, published the way firmware through r202633 does.
 
     That wire is charge-positive, the enclosure metering the BESS the way it
@@ -330,14 +336,14 @@ def test_charging_reads_negative_in_the_old_frame() -> None:
     tree[SCHEMA_ONE_PANEL]["info/firmware-version"] = R202633_FIRMWARE
     tree[BESS][POWER_TOPIC] = str(old_frame)
 
-    state = _state(schema_one_snapshot(tree), POWER_KEY)
+    state = _state(hass, schema_one_snapshot(tree), POWER_KEY)
 
     assert old_frame > 0
     assert state == -old_frame
     assert isinstance(state, float) and state < 0
 
 
-def test_it_agrees_with_the_battery_power_sensor_beside_it() -> None:
+def test_it_agrees_with_the_battery_power_sensor_beside_it(hass: HomeAssistant) -> None:
     """The two battery-power sensors on this device must not contradict each other.
 
     `battery_power` reads the enclosure's arbitrated `power-flows/battery`; this
@@ -351,14 +357,14 @@ def test_it_agrees_with_the_battery_power_sensor_beside_it() -> None:
     """
     snapshot = schema_one_snapshot()
 
-    own_meter = _state(snapshot, POWER_KEY)
-    enclosure_flow = _state(snapshot, ENCLOSURE_FLOW_KEY)
+    own_meter = _state(hass, snapshot, POWER_KEY)
+    enclosure_flow = _state(hass, snapshot, ENCLOSURE_FLOW_KEY)
 
     assert isinstance(own_meter, float) and isinstance(enclosure_flow, float)
     assert (own_meter > 0) == (enclosure_flow > 0)
 
 
-def test_they_agree_when_the_battery_discharges_too() -> None:
+def test_they_agree_when_the_battery_discharges_too(hass: HomeAssistant) -> None:
     """Agreement at one operating point could be coincidence; this is the other.
 
     Both properties are republished with the battery discharging — the capture's
@@ -370,8 +376,8 @@ def test_they_agree_when_the_battery_discharges_too() -> None:
         enclosure_flow=-float(_published(SCHEMA_ONE_PANEL, ENCLOSURE_FLOW_TOPIC)),
     )
 
-    own_meter = _state(snapshot, POWER_KEY)
-    enclosure_flow = _state(snapshot, ENCLOSURE_FLOW_KEY)
+    own_meter = _state(hass, snapshot, POWER_KEY)
+    enclosure_flow = _state(hass, snapshot, ENCLOSURE_FLOW_KEY)
 
     assert isinstance(own_meter, float) and own_meter > 0
     assert isinstance(enclosure_flow, float) and enclosure_flow > 0
@@ -405,7 +411,7 @@ def _r202633(*, enclosure_flow: float) -> SpanPanelSnapshot:
 
 
 @pytest.mark.parametrize("direction", ["charging", "discharging"])
-def test_r202633_the_two_sensors_agree(direction: str) -> None:
+def test_r202633_the_two_sensors_agree(hass: HomeAssistant, direction: str) -> None:
     """In the old frame the wire properties share a sign, and the sensors still agree.
 
     The agreement the capture itself pinned until it was retaken in r202639's
@@ -417,8 +423,8 @@ def test_r202633_the_two_sensors_agree(direction: str) -> None:
     enclosure_flow = captured if direction == "charging" else -captured
     snapshot = _r202633(enclosure_flow=enclosure_flow)
 
-    own_meter = _state(snapshot, POWER_KEY)
-    flow_sensor = _state(snapshot, ENCLOSURE_FLOW_KEY)
+    own_meter = _state(hass, snapshot, POWER_KEY)
+    flow_sensor = _state(hass, snapshot, ENCLOSURE_FLOW_KEY)
 
     assert isinstance(own_meter, float) and isinstance(flow_sensor, float)
     assert own_meter == flow_sensor
@@ -447,7 +453,7 @@ def _r202639(*, enclosure_flow: float, power: float | None = None) -> SpanPanelS
 
 
 @pytest.mark.parametrize("direction", ["charging", "discharging"])
-def test_r202639_the_two_sensors_agree(direction: str) -> None:
+def test_r202639_the_two_sensors_agree(hass: HomeAssistant, direction: str) -> None:
     """On r202639 the wire properties are opposed, and the sensors still agree.
 
     The capture's enclosure flow is a charging battery; negating it gives the
@@ -459,15 +465,15 @@ def test_r202639_the_two_sensors_agree(direction: str) -> None:
     enclosure_flow = captured if direction == "charging" else -captured
     snapshot = _r202639(enclosure_flow=enclosure_flow)
 
-    own_meter = _state(snapshot, POWER_KEY)
-    flow_sensor = _state(snapshot, ENCLOSURE_FLOW_KEY)
+    own_meter = _state(hass, snapshot, POWER_KEY)
+    flow_sensor = _state(hass, snapshot, ENCLOSURE_FLOW_KEY)
 
     assert isinstance(own_meter, float) and isinstance(flow_sensor, float)
     assert own_meter == flow_sensor
     assert (own_meter > 0) == (direction == "discharging")
 
 
-def test_r202639_the_firmware_version_decides_when_the_flow_is_idle() -> None:
+def test_r202639_the_firmware_version_decides_when_the_flow_is_idle(hass: HomeAssistant) -> None:
     """With the flow idle, only the firmware version says the meter's sign.
 
     With `power-flows/battery` at zero the signs cannot be compared, so only the
@@ -476,7 +482,7 @@ def test_r202639_the_firmware_version_decides_when_the_flow_is_idle() -> None:
     """
     snapshot = _r202639(enclosure_flow=0.0, power=1200.0)
 
-    assert _state(snapshot, POWER_KEY) == 1200.0
+    assert _state(hass, snapshot, POWER_KEY) == 1200.0
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +499,7 @@ def test_r202639_the_firmware_version_decides_when_the_flow_is_idle() -> None:
     ids=["r202639", "r202633"],
 )
 def test_republishing_the_meter_moves_the_sensor(
-    firmware: str, on_the_wire: Callable[[float], float]
+    hass: HomeAssistant, firmware: str, on_the_wire: Callable[[float], float]
 ) -> None:
     """The mutation proof, in each frame. The battery is republished discharging
     at half the captured rate, so the state differs in magnitude and in sign from
@@ -517,44 +523,46 @@ def test_republishing_the_meter_moves_the_sensor(
     snapshot = schema_one_snapshot(tree)
 
     assert discharging > 0
-    assert _state(snapshot, POWER_KEY) == discharging
-    assert _state(snapshot, POWER_KEY) != published
+    assert _state(hass, snapshot, POWER_KEY) == discharging
+    assert _state(hass, snapshot, POWER_KEY) != published
 
 
-def test_a_battery_at_rest_reports_zero_and_not_negative_zero() -> None:
+def test_a_battery_at_rest_reports_zero_and_not_negative_zero(hass: HomeAssistant) -> None:
     """`-0.0` compares equal to `0.0` and renders as "-0.0" beside it, so a
     negation added without a guard produces a reading that looks broken exactly
     when nothing is happening."""
     snapshot = _republishing(meter__active_power="0.0")
 
-    assert _state(snapshot, POWER_KEY) == 0.0
-    assert str(_state(snapshot, POWER_KEY)) == "0.0"
+    assert _state(hass, snapshot, POWER_KEY) == 0.0
+    assert str(_state(hass, snapshot, POWER_KEY)) == "0.0"
 
 
-def test_zero_watts_is_a_state_and_not_an_absence() -> None:
+def test_zero_watts_is_a_state_and_not_an_absence(hass: HomeAssistant) -> None:
     """An idle battery is a reading. A gate that treated zero as absence would
     delete the entity whenever the battery stopped moving power."""
     snapshot = _republishing(meter__active_power="0.0")
 
-    assert POWER_KEY in _sensors(snapshot)
+    assert POWER_KEY in _sensors(hass, snapshot)
 
 
-def test_the_communication_state_is_the_published_enum_lowercased() -> None:
+def test_the_communication_state_is_the_published_enum_lowercased(hass: HomeAssistant) -> None:
     """Lowercase because HA looks the state up as a translation key, which its own
     contract restricts to `[a-z0-9-_]+`."""
     published = _published(BESS, COMMS_TOPIC)
 
-    assert _state(schema_one_snapshot(), COMMS_KEY) == published.lower()
+    assert _state(hass, schema_one_snapshot(), COMMS_KEY) == published.lower()
 
 
 @pytest.mark.parametrize("republished", ["DEGRADED", "LOST", "UNKNOWN"])
-def test_republishing_the_communication_state_moves_the_sensor(republished: str) -> None:
+def test_republishing_the_communication_state_moves_the_sensor(
+    hass: HomeAssistant, republished: str
+) -> None:
     """Every other member of the enum the BESS's own `$description` declares, so
     a sensor pinned to the captured OK cannot report any of them."""
     snapshot = _republishing(status__communication_state=republished)
 
-    assert _state(snapshot, COMMS_KEY) == republished.lower()
-    assert _state(snapshot, COMMS_KEY) != _published(BESS, COMMS_TOPIC).lower()
+    assert _state(hass, snapshot, COMMS_KEY) == republished.lower()
+    assert _state(hass, snapshot, COMMS_KEY) != _published(BESS, COMMS_TOPIC).lower()
 
 
 def test_the_declared_options_are_the_enum_the_bess_declares() -> None:
@@ -569,7 +577,7 @@ def test_the_declared_options_are_the_enum_the_bess_declares() -> None:
     assert set(options) == {value.lower() for value in declared.split(",")}
 
 
-def test_communication_state_is_not_the_connected_binary_sensor() -> None:
+def test_communication_state_is_not_the_connected_binary_sensor(hass: HomeAssistant) -> None:
     """The two link facts this task deliberately keeps apart.
 
     `bess_connected` is the enclosure's `connection/fed-by-device-status` view;
@@ -579,7 +587,7 @@ def test_communication_state_is_not_the_connected_binary_sensor() -> None:
     """
     snapshot = _republishing(status__communication_state="LOST")
 
-    assert _state(snapshot, COMMS_KEY) == "lost"
+    assert _state(hass, snapshot, COMMS_KEY) == "lost"
     assert snapshot.battery.connected is True
 
 
@@ -588,29 +596,29 @@ def test_communication_state_is_not_the_connected_binary_sensor() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_capture_creates_both_sensors() -> None:
-    created = _sensors(schema_one_snapshot())
+def test_the_capture_creates_both_sensors(hass: HomeAssistant) -> None:
+    created = _sensors(hass, schema_one_snapshot())
 
     assert POWER_KEY in created
     assert COMMS_KEY in created
 
 
-def test_a_bess_with_no_meter_node_gets_no_power_sensor() -> None:
+def test_a_bess_with_no_meter_node_gets_no_power_sensor(hass: HomeAssistant) -> None:
     """A dead entity stuck at unknown is worse than no entity: it occupies the
     entity list, breaks a dashboard card, and cannot be told apart from a battery
     whose meter has failed."""
     snapshot = _without_node("meter")
 
-    assert POWER_KEY not in _sensors(snapshot)
+    assert POWER_KEY not in _sensors(hass, snapshot)
     # The other half of the pair is unaffected — a partial BESS is legal firmware.
-    assert COMMS_KEY in _sensors(snapshot)
+    assert COMMS_KEY in _sensors(hass, snapshot)
 
 
-def test_a_bess_with_no_status_node_gets_no_communication_sensor() -> None:
+def test_a_bess_with_no_status_node_gets_no_communication_sensor(hass: HomeAssistant) -> None:
     snapshot = _without_node("status")
 
-    assert COMMS_KEY not in _sensors(snapshot)
-    assert POWER_KEY in _sensors(snapshot)
+    assert COMMS_KEY not in _sensors(hass, snapshot)
+    assert POWER_KEY in _sensors(hass, snapshot)
 
 
 @pytest.mark.parametrize(
@@ -618,7 +626,7 @@ def test_a_bess_with_no_status_node_gets_no_communication_sensor() -> None:
     [(POWER_KEY, POWER_TOPIC, None), (COMMS_KEY, COMMS_TOPIC, "unknown")],
 )
 def test_a_reading_that_stops_arriving_goes_unknown_rather_than_stale(
-    key: str, topic: str, unknown: str | None
+    hass: HomeAssistant, key: str, topic: str, unknown: str | None
 ) -> None:
     """Absence after setup is a different event from absence at setup.
 
@@ -631,7 +639,7 @@ def test_a_reading_that_stops_arriving_goes_unknown_rather_than_stale(
     Driven through the coordinator rather than by rebuilding the entity, because
     that is the path a live update takes.
     """
-    sensor = _sensors(schema_one_snapshot())[key]
+    sensor = _sensors(hass, schema_one_snapshot())[key]
 
     sensor.coordinator.data = _without(topic)
     sensor._update_native_value()
@@ -640,7 +648,9 @@ def test_a_reading_that_stops_arriving_goes_unknown_rather_than_stale(
 
 
 @pytest.mark.parametrize(("key", "topic"), [(POWER_KEY, POWER_TOPIC), (COMMS_KEY, COMMS_TOPIC)])
-def test_a_property_declared_and_never_published_creates_no_entity(key: str, topic: str) -> None:
+def test_a_property_declared_and_never_published_creates_no_entity(
+    hass: HomeAssistant, key: str, topic: str
+) -> None:
     """The gate is the value, not the declaration.
 
     A BESS may declare a property in its `$description` and publish nothing on it
@@ -652,12 +662,12 @@ def test_a_property_declared_and_never_published_creates_no_entity(key: str, top
     tree = schema_one_tree()
     del tree[BESS][topic]
 
-    created = _sensors(schema_one_snapshot(tree))
+    created = _sensors(hass, schema_one_snapshot(tree))
 
     assert key not in created
 
 
-def test_a_bess_publishing_neither_gets_neither_sensor() -> None:
+def test_a_bess_publishing_neither_gets_neither_sensor(hass: HomeAssistant) -> None:
     tree = schema_one_tree()
     description = json.loads(tree[BESS]["$description"])
     for node in ("meter", "status"):
@@ -668,17 +678,17 @@ def test_a_bess_publishing_neither_gets_neither_sensor() -> None:
     snapshot = schema_one_snapshot(tree)
 
     assert has_bess_telemetry(snapshot) is False
-    created = _sensors(snapshot)
+    created = _sensors(hass, snapshot)
     assert POWER_KEY not in created
     assert COMMS_KEY not in created
     # The BESS itself is still commissioned, so its metadata sensors survive.
     assert created
 
 
-def test_no_bess_device_creates_no_battery_sensors_at_all() -> None:
+def test_no_bess_device_creates_no_battery_sensors_at_all(hass: HomeAssistant) -> None:
     snapshot = _without_bess()
 
-    assert create_battery_sensors(_coordinator(snapshot), snapshot) == []
+    assert create_battery_sensors(_coordinator(hass, snapshot), snapshot) == []
 
 
 def test_the_telemetry_appearing_is_a_capability_change() -> None:
@@ -728,19 +738,19 @@ def test_the_declared_unit_matches_what_the_bess_declares() -> None:
     assert schema_one_metadata()["battery.power_w"].unit == (description.native_unit_of_measurement)
 
 
-def test_both_sensors_live_on_the_bess_sub_device() -> None:
+def test_both_sensors_live_on_the_bess_sub_device(hass: HomeAssistant) -> None:
     """Beside the metadata sensors and the battery level, not on the panel."""
-    created = _sensors(schema_one_snapshot())
+    created = _sensors(hass, schema_one_snapshot())
     bess_device = created["vendor"].device_info
 
     assert created[POWER_KEY].device_info == bess_device
     assert created[COMMS_KEY].device_info == bess_device
 
 
-def test_every_bess_sensor_gets_a_distinct_unique_id() -> None:
+def test_every_bess_sensor_gets_a_distinct_unique_id(hass: HomeAssistant) -> None:
     """They live on one device and differ only by description key, so a key reused
     from the metadata group would silently collide."""
-    created = _sensors(schema_one_snapshot())
+    created = _sensors(hass, schema_one_snapshot())
     unique_ids = {sensor.unique_id for sensor in created.values()}
 
     assert len(unique_ids) == len(created)

@@ -60,6 +60,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 
 
 async def test_config_entry_diagnostics_includes_redacted_runtime_data(
@@ -118,9 +119,10 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         title="SPAN Panel",
         unique_id="sp3-diag-001",
     )
+    entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -221,9 +223,10 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.client.masked_tree.return_value = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, "sp3-diag-002"),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -298,7 +301,7 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     # mypy cannot see the drift on a `SimpleNamespace`.
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -344,7 +347,7 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=await async_load_curation(hass, entry),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -381,7 +384,7 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
     identity = pv_binding_for(snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=identity,
         setup_snapshot=snapshot,
@@ -429,7 +432,7 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -457,7 +460,7 @@ async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnaps
     coordinator.client.masked_tree.return_value = None
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=binding,
         setup_snapshot=snapshot,
@@ -542,12 +545,13 @@ def _export(tree: dict[str, dict[str, str]]) -> MaskedTree:
 
 
 def _reference_entry(
+    hass: HomeAssistant,
     snapshot: SpanPanelSnapshot,
     tree: dict[str, dict[str, str]] | None = None,
     *,
     panel_offline: bool = False,
 ) -> MockConfigEntry:
-    """Return an entry whose coordinator holds `snapshot`, as diagnostics reads it.
+    """Return an entry in `hass` whose coordinator holds `snapshot`, as diagnostics reads it.
 
     Given `tree`, the client exports the library's real masked tree for it, so a
     test of what reaches the dump is a test of what the library masks.
@@ -560,9 +564,10 @@ def _reference_entry(
     coordinator.schema_findings = None
     coordinator.client.masked_tree.return_value = None if tree is None else _export(tree)
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
+    entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -579,7 +584,9 @@ async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> 
     snapshot = schema_one_snapshot()
     assert snapshot.wifi_ssid
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot, schema_one_tree()))
+    result = await async_get_config_entry_diagnostics(
+        hass, _reference_entry(hass, snapshot, schema_one_tree())
+    )
 
     assert result["panel"]["wifi_ssid"] == REDACTED
     assert snapshot.wifi_ssid not in json.dumps(result, default=str)
@@ -598,17 +605,11 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
     )
     assert postal_code.value
 
-    entry = _reference_entry(snapshot, schema_one_tree())
+    entry = _reference_entry(hass, snapshot, schema_one_tree())
     result = await async_get_config_entry_diagnostics(hass, entry)
 
     assert postal_code.value not in json.dumps(result, default=str)
 
-    entry.add_to_hass(hass)
-    dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, snapshot.serial_number)},
-        name="Span Panel",
-    )
     er.async_get(hass).async_get_or_create(
         "sensor",
         DOMAIN,
@@ -640,7 +641,9 @@ async def test_diagnostics_carry_the_masked_device_tree(hass: HomeAssistant) -> 
     snapshot = schema_one_snapshot()
     export = _export(schema_one_tree())
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(snapshot, schema_one_tree()))
+    result = await async_get_config_entry_diagnostics(
+        hass, _reference_entry(hass, snapshot, schema_one_tree())
+    )
 
     assert result["device_tree"] == export
     assert "device_tree_unavailable" not in result
@@ -648,7 +651,9 @@ async def test_diagnostics_carry_the_masked_device_tree(hass: HomeAssistant) -> 
 
 async def test_diagnostics_say_an_undescribed_panel_has_no_tree(hass: HomeAssistant) -> None:
     """A panel that has not described its root yet has nothing to export, and the report says why."""
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(schema_one_snapshot()))
+    result = await async_get_config_entry_diagnostics(
+        hass, _reference_entry(hass, schema_one_snapshot())
+    )
 
     assert result["device_tree"] is None
     assert result["device_tree_unavailable"] == "not_described"
@@ -657,7 +662,7 @@ async def test_diagnostics_say_an_undescribed_panel_has_no_tree(hass: HomeAssist
 async def test_an_offline_panel_still_reports_its_last_tree(hass: HomeAssistant) -> None:
     """A panel that dropped off is the case a report is written about, so its last tree stays."""
     export = _export(schema_one_tree())
-    entry = _reference_entry(schema_one_snapshot(), schema_one_tree(), panel_offline=True)
+    entry = _reference_entry(hass, schema_one_snapshot(), schema_one_tree(), panel_offline=True)
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -717,7 +722,7 @@ async def test_diagnostics_report_the_stored_package_ratings_and_the_removals_no
     coordinator.package_rating_manager = manager
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, now.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(now),
         setup_snapshot=now,

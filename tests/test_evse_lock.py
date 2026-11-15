@@ -54,7 +54,7 @@ def _snapshot(lock_state: str = "LOCKED") -> SpanPanelSnapshot:
 async def _created(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, client: object | None = None
 ) -> list[SpanEvseLock]:
-    coordinator = _coordinator(snapshot, client)
+    coordinator = _coordinator(hass, snapshot, client)
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, coordinator.config_entry, async_add_entities)
@@ -78,7 +78,7 @@ async def test_only_a_settable_lock_becomes_a_lock_entity(hass: HomeAssistant) -
 
 async def test_no_lock_entity_while_controls_are_disabled(hass: HomeAssistant) -> None:
     snapshot = _snapshot()
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     coordinator.config_entry.runtime_data = replace(
         coordinator.config_entry.runtime_data,
         control_policy=replace(ControlPolicy.default(), mode=ControlMode.DISABLED),

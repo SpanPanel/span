@@ -56,6 +56,7 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.leaf_repairs import leaf_name_mismatch_issue_id
 
 from .factories import SpanPanelSnapshotFactory
+from .helpers import ensure_device_registered_stand_in
 
 PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 OTHER_PEM = "-----BEGIN CERTIFICATE-----\nb3RoZXI=\n-----END CERTIFICATE-----\n"
@@ -110,7 +111,7 @@ def _full_setup(client: MagicMock, hass: HomeAssistant) -> Iterator[MagicMock]:
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),

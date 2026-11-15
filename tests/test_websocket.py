@@ -35,7 +35,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
-from .helpers import count_panel_describes_breakers, unwrap_websocket_command
+from .helpers import count_panel_describes_breakers, register_panel_device, unwrap_websocket_command
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -110,8 +110,8 @@ async def _topology_circuits(
 
 async def _panel_holding(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, copies: Mapping[str, list[int]]
-) -> dr.DeviceEntry:
-    """Load a panel whose real `PackageRatingManager` holds `copies`, and return its device."""
+) -> str:
+    """Load a panel whose real `PackageRatingManager` holds `copies`, and return its device's registry ID."""
     entry = MockConfigEntry(
         domain=DOMAIN, data={}, entry_id="span_entry", unique_id=snapshot.serial_number
     )
@@ -125,45 +125,28 @@ async def _panel_holding(
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.package_rating_manager = manager
+    panel_device_id = register_panel_device(hass, entry, snapshot.serial_number)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=panel_device_id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
     )
-    return _register_panel_device(hass, "span_entry", serial=snapshot.serial_number)
+    return panel_device_id
 
 
-async def _ask_topology(
-    hass: HomeAssistant, device: dr.DeviceEntry
-) -> dict[str, dict[str, object]]:
-    """Answer the topology for the panel `device` is, and return its circuits."""
+async def _ask_topology(hass: HomeAssistant, device_id: str) -> dict[str, dict[str, object]]:
+    """Answer the topology for the panel whose device registry ID is `device_id`, and return its circuits."""
     connection = _make_mock_connection()
 
     await _handle_panel_topology_inner(
-        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
     )
 
     connection.send_error.assert_not_called()
     circuits: dict[str, dict[str, object]] = connection.send_result.call_args.args[1]["circuits"]
     return circuits
-
-
-def _register_panel_device(
-    hass: HomeAssistant,
-    config_entry_id: str,
-    serial: str = "sp3-242424-001",
-) -> dr.DeviceEntry:
-    """Register a SPAN panel device in the device registry."""
-    device_registry = dr.async_get(hass)
-    return device_registry.async_get_or_create(
-        config_entry_id=config_entry_id,
-        identifiers={(DOMAIN, serial)},
-        manufacturer="Span",
-        model="SPAN Panel",
-        name="SPAN Panel",
-    )
 
 
 def _register_sub_device(
@@ -504,23 +487,21 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         snapshot = SpanPanelSnapshotFactory.create()
+        panel_device_id = register_panel_device(hass, entry, "sp3-subdev-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=panel_device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        panel_device = _register_panel_device(
-            hass, "span_entry", serial="sp3-subdev-001"
-        )
         bess_device = _register_sub_device(
             hass,
             "span_entry",
             "sp3-subdev-001_bess",
             "SPAN Panel Battery",
-            panel_device.id,
+            panel_device_id,
         )
 
         connection = _make_mock_connection()
@@ -550,10 +531,10 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         # State defaults to NOT_LOADED
 
-        device = _register_panel_device(hass, "span_entry")
+        device_id = register_panel_device(hass, entry, "sp3-242424-001")
 
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -595,21 +576,20 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, "sp3-test-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
-
         # Register a power sensor for the kitchen circuit.
         _register_entity(
             hass,
             "span_entry",
-            device.id,
+            device_id,
             "sensor",
             "span_panel_uuid_kitchen_power",
             "sensor.span_panel_kitchen_power",
@@ -617,7 +597,7 @@ class TestHandlePanelTopology:
         )
 
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -632,7 +612,7 @@ class TestHandlePanelTopology:
         assert result["device_name"] == "SPAN Panel"
         # The panel's current device and its entry, which a consumer reads from
         # here rather than looking the id it holds up in the device list.
-        assert result["panel_device_id"] == device.id
+        assert result["panel_device_id"] == device_id
         assert result["config_entry_id"] == "span_entry"
 
         # Kitchen circuit (240V).
@@ -664,29 +644,28 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        panel_device_id = register_panel_device(hass, entry, "sp3-sub-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=panel_device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
-
-        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-sub-001")
 
         bess_device = _register_sub_device(
             hass,
             "span_entry",
             "sp3-sub-001_bess",
             "SPAN Panel Battery",
-            panel_device.id,
+            panel_device_id,
         )
         evse_device = _register_sub_device(
             hass,
             "span_entry",
             "sp3-sub-001_evse_0",
             "SPAN Panel SPAN Drive",
-            panel_device.id,
+            panel_device_id,
         )
 
         # Register an entity on the BESS device.
@@ -704,7 +683,7 @@ class TestHandlePanelTopology:
         msg = {
             "id": 1,
             "type": "span_panel/panel_topology",
-            "device_id": panel_device.id,
+            "device_id": panel_device_id,
         }
 
         await _handle_panel_topology_inner(hass, connection, msg)
@@ -746,21 +725,21 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        panel_device_id = register_panel_device(hass, entry, "sp3-evse-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=panel_device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-evse-001")
         evse_device = _register_sub_device(
             hass,
             "span_entry",
             "sp3-evse-001_evse_0",
             "SPAN Drive",
-            panel_device.id,
+            panel_device_id,
         )
 
         # Power sensor lives on the EVSE device, not the panel device.
@@ -777,7 +756,7 @@ class TestHandlePanelTopology:
         msg = {
             "id": 1,
             "type": "span_panel/panel_topology",
-            "device_id": panel_device.id,
+            "device_id": panel_device_id,
         }
 
         await _handle_panel_topology_inner(hass, connection, msg)
@@ -823,18 +802,17 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, "sp3-prio-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        device = _register_panel_device(hass, "span_entry", serial="sp3-prio-001")
-
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -878,18 +856,17 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, "sp3-contract-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        device = _register_panel_device(hass, "span_entry", serial="sp3-contract-001")
-
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -948,16 +925,16 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, "sp3-test-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
-        device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -1023,10 +1000,10 @@ class TestHandlePanelTopology:
     ) -> None:
         """One answer serves every circuit's form and the panel's offer, however many circuits it has."""
         snapshot = _tandem_and_package_panel(publishes_shared_meters=None)
-        device = await _panel_holding(hass, snapshot, {})
+        device_id = await _panel_holding(hass, snapshot, {})
         asked = count_panel_describes_breakers(monkeypatch, websocket)
 
-        circuits = await _ask_topology(hass, device)
+        circuits = await _ask_topology(hass, device_id)
 
         assert len(circuits) == 3
         assert len(asked) == 1
@@ -1074,18 +1051,17 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, "sp3-backup-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        device = _register_panel_device(hass, "span_entry", serial="sp3-backup-001")
-
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -1113,27 +1089,26 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        panel_device_id = register_panel_device(hass, entry, "sp3-242424-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=panel_device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
-
         _register_entity(
             hass,
             "span_entry",
-            panel_device.id,
+            panel_device_id,
             "binary_sensor",
             "span_sp3-242424-001_panel_status",
             "binary_sensor.span_panel_test_panel_status",
         )
 
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -1156,20 +1131,19 @@ class TestHandlePanelTopology:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        panel_device_id = register_panel_device(hass, entry, "sp3-242424-001")
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=panel_device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,
         )
 
-        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
-
         # Intentionally do NOT register a binary_sensor.*_panel_status entity
 
         connection = _make_mock_connection()
-        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device.id}
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device_id}
 
         await _handle_panel_topology_inner(hass, connection, msg)
 
@@ -1233,24 +1207,24 @@ class TestOfferedControls:
         entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=serial)
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
+        device_id = register_panel_device(hass, entry, serial)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(live_snapshot),
-            panel_device_id="panel-device-id",
+            panel_device_id=device_id,
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(setup_snapshot),
             setup_snapshot=setup_snapshot,
             control_policy=replace(ControlPolicy.default(), mode=mode),
         )
-        device = _register_panel_device(hass, "span_entry", serial=serial)
         for domain, unique_id, entity_id in (
             ("sensor", f"span_{serial}_uuid_kitchen_power", "sensor.kitchen_power"),
             ("switch", f"span_{serial}_relay_uuid_kitchen", "switch.kitchen_breaker"),
             ("select", f"span_{serial}_select_uuid_kitchen", "select.kitchen_priority"),
         ):
-            _register_entity(hass, "span_entry", device.id, domain, unique_id, entity_id)
+            _register_entity(hass, "span_entry", device_id, domain, unique_id, entity_id)
         connection = _make_mock_connection()
         await _handle_panel_topology_inner(
-            hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+            hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device_id}
         )
         connection.send_error.assert_not_called()
         record = connection.send_result.call_args[0][1]["circuits"]["uuid_kitchen"]

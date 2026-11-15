@@ -60,6 +60,7 @@ from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 CIRCUIT_ID = "15"
 SERIAL = "sp3-recreate-001"
@@ -166,7 +167,7 @@ class _Install[E: SpanPanelEntity]:
         self._coordinator = coordinator
         self._entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
-            panel_device_id="panel-device-id",
+            panel_device_id=register_panel_device(self._hass, self._entry, snapshot.serial_number),
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
             setup_snapshot=snapshot,

@@ -30,27 +30,30 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
-def _make_coordinator(snapshot) -> MagicMock:
+def _make_coordinator(hass: HomeAssistant, snapshot) -> MagicMock:
     """Create a coordinator-like mock for binary sensor tests."""
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -59,10 +62,10 @@ def _make_coordinator(snapshot) -> MagicMock:
     return coordinator
 
 
-def test_panel_status_sensor_stays_available_when_panel_goes_offline() -> None:
+def test_panel_status_sensor_stays_available_when_panel_goes_offline(hass: HomeAssistant) -> None:
     """The panel status binary sensor stays available and flips off when offline."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in BINARY_SENSORS if desc.key == PANEL_STATUS)
     entity = SpanPanelBinarySensor(coordinator, description)
     entity.async_write_ha_state = MagicMock()
@@ -78,10 +81,10 @@ def test_panel_status_sensor_stays_available_when_panel_goes_offline() -> None:
     assert entity.is_on is False
 
 
-def test_hardware_status_sensor_shows_unknown_when_panel_offline() -> None:
+def test_hardware_status_sensor_shows_unknown_when_panel_offline(hass: HomeAssistant) -> None:
     """Door/ethernet/wifi sensors stay available but report unknown offline."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(desc for desc in BINARY_SENSORS if desc.key == SYSTEM_DOOR_STATE)
     entity = SpanPanelBinarySensor(coordinator, description)
@@ -93,12 +96,12 @@ def test_hardware_status_sensor_shows_unknown_when_panel_offline() -> None:
     assert entity.is_on is None
 
 
-def test_evse_binary_sensor_reports_unknown_when_panel_offline() -> None:
+def test_evse_binary_sensor_reports_unknown_when_panel_offline(hass: HomeAssistant) -> None:
     """EVSE binary sensors should clear state when the panel is offline."""
     snapshot = SpanPanelSnapshotFactory.create(
         evse={"evse-0": SpanEvseSnapshotFactory.create(status="CHARGING")}
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(
         desc for desc in EVSE_BINARY_SENSORS if desc.key == "evse_charging"
@@ -111,7 +114,7 @@ def test_evse_binary_sensor_reports_unknown_when_panel_offline() -> None:
     assert entity.is_on is None
 
 
-def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery() -> None:
+def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery(hass: HomeAssistant) -> None:
     """No MID is the answer, not the absence of one.
 
     Observed on a live upgrade: this entity read `Off` on flat and went
@@ -124,7 +127,7 @@ def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery() -> None:
     does not island, and `False` is a reading rather than a default.
     """
     snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None, mid=None)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
     entity.async_write_ha_state = MagicMock()
 
@@ -134,7 +137,9 @@ def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery() -> None:
     assert entity.available is True, "and the entity must exist to give it"
 
 
-def test_grid_islandable_reads_the_inverter_when_the_panel_publishes_one() -> None:
+def test_grid_islandable_reads_the_inverter_when_the_panel_publishes_one(
+    hass: HomeAssistant,
+) -> None:
     """A BESS inverter's `grid-forming/capable` is the answer, and MID presence is not consulted.
 
     The capture declares a MID, so the structural fallback would say `True`;
@@ -145,7 +150,7 @@ def test_grid_islandable_reads_the_inverter_when_the_panel_publishes_one() -> No
     add_grid_forming_inverter(tree, capable=False)
     snapshot = schema_one_snapshot(tree)
     assert snapshot.mid is not None, "the fallback would answer True on this capture"
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
     entity.async_write_ha_state = MagicMock()
 
@@ -154,10 +159,10 @@ def test_grid_islandable_reads_the_inverter_when_the_panel_publishes_one() -> No
     assert entity.is_on is False, "the published value wins over the structural fallback"
 
 
-def test_grid_islandable_sensor_uses_online_status_value() -> None:
+def test_grid_islandable_sensor_uses_online_status_value(hass: HomeAssistant) -> None:
     """Non-status binary sensors should mirror their live boolean value when online."""
     snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
     entity.async_write_ha_state = MagicMock()
 
@@ -167,12 +172,12 @@ def test_grid_islandable_sensor_uses_online_status_value() -> None:
     assert entity.available is True
 
 
-def test_bess_connected_sensor_becomes_unavailable_when_panel_offline() -> None:
+def test_bess_connected_sensor_becomes_unavailable_when_panel_offline(hass: HomeAssistant) -> None:
     """Non-status binary sensors should become unavailable when the panel is offline."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0, connected=True)
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
     entity.async_write_ha_state = MagicMock()
@@ -182,12 +187,12 @@ def test_bess_connected_sensor_becomes_unavailable_when_panel_offline() -> None:
     assert entity.available is False
 
 
-def test_binary_sensor_with_none_value_shows_unknown_not_unavailable() -> None:
+def test_binary_sensor_with_none_value_shows_unknown_not_unavailable(hass: HomeAssistant) -> None:
     """Binary sensors should show unknown (not unavailable) when value_fn returns None."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0, connected=None)
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
     entity.async_write_ha_state = MagicMock()
 
@@ -197,13 +202,13 @@ def test_binary_sensor_with_none_value_shows_unknown_not_unavailable() -> None:
     assert entity.available is True
 
 
-def test_door_state_unknown_shows_unknown_not_unavailable() -> None:
+def test_door_state_unknown_shows_unknown_not_unavailable(hass: HomeAssistant) -> None:
     """Door sensor with UNKNOWN state should show unknown, not unavailable.
 
     Firmware may report UNKNOWN when the door has not been operated recently.
     """
     snapshot = SpanPanelSnapshotFactory.create(door_state="UNKNOWN")
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in BINARY_SENSORS if desc.key == SYSTEM_DOOR_STATE)
     entity = SpanPanelBinarySensor(coordinator, description)
     entity.async_write_ha_state = MagicMock()
@@ -214,12 +219,14 @@ def test_door_state_unknown_shows_unknown_not_unavailable() -> None:
     assert entity.available is True
 
 
-def test_evse_binary_sensor_uses_empty_snapshot_when_missing_mid_session() -> None:
+def test_evse_binary_sensor_uses_empty_snapshot_when_missing_mid_session(
+    hass: HomeAssistant,
+) -> None:
     """EVSE binary sensors should tolerate the charger disappearing from coordinator data."""
     snapshot = SpanPanelSnapshotFactory.create(
         evse={"evse-0": SpanEvseSnapshotFactory.create(status="CHARGING")}
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(
         desc for desc in EVSE_BINARY_SENSORS if desc.key == "evse_ev_connected"
     )
@@ -241,7 +248,7 @@ async def test_binary_sensor_async_setup_entry_adds_panel_bess_and_evse_entities
         battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0, connected=True),
         evse={"evse-0": SpanEvseSnapshotFactory.create()},
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
     config_entry.runtime_data = MagicMock(
         control_policy=ControlPolicy.default(),
