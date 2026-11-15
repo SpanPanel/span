@@ -206,16 +206,13 @@ A panel that reports solar gets a **Solar** device holding PV Power, the panel's
 | PV Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
 
 - **When it appears:** the panel reports a PV power reading (0 W counts), a solar inverter, or, on panels other than MAIN 32, a circuit marked as a solar feed.
-- **Area:** the device starts with none. Assign one so area-based dashboards, automations and voice commands include its entities.
 - **More than one inverter:** each additional inverter gets a **Solar Inverter** device, named after the circuit that feeds it where one does, with its own PV
   Vendor, PV Product and PV Nameplate Capacity, and PV Panel Link where the panel reports one. The Solar device's sensors describe the first inverter the
   integration found, or all inverters together when the panel cannot tell them apart, such as behind a Tesla Gateway.
-- **Inverter power:** each inverter's power is the power of the circuit that feeds it, shown on its tile in the SPAN Panel card. An inverter upstream of the
-  panel counts toward PV Power only.
+- **Inverter power:** each inverter's power is the power of the circuit that feeds it. An inverter upstream of the panel counts toward PV Power only.
 - **Solar circuits:** a circuit marked as a solar feed reports its Power and Net Energy as generation.
 - **Solar without an inverter**, such as solar DC-coupled into a battery: PV Power still reports it, and PV Vendor, PV Product and PV Nameplate Capacity are
   unknown.
-- **Removed inverters:** a Solar Inverter device the panel stops reporting stays, unavailable, until you delete it.
 
 **Deprecated:**
 
@@ -234,11 +231,10 @@ linked to the panel. It appears automatically where the panel reports one; nothi
 
 **Grid State** is not **DSM Grid State**, which is whether **your home** is islanded: the grid can be down while your home runs happily off the battery.
 
-**A panel with no battery has no MID, and that is itself an answer.** The specification makes backup capability structural — having a MID is what says a panel
-can island — so **Grid Islandable** reads `Off` and **Grid Forming Entity** reads `Grid` rather than either going unavailable.
+**A panel with no battery has no MID.** The specification makes backup capability structural — having a MID is what says a panel can island — so **Grid
+Islandable** reads `Off` and **Grid Forming Entity** reads `Grid` rather than either going unavailable.
 
-`DSM Grid State` keeps its entity id and history but is no longer inferred from the battery or the dominant power source; it now reads the islanding state the
-MID actually senses, or your GFE override while the panel is acting on one.
+`DSM Grid State` reads the islanding state the MID senses, or your GFE override while the panel is acting on one.
 
 ### Power Sensor Attributes
 
@@ -275,13 +271,12 @@ whole-site figure — so the two legitimately disagree. When `at_service_entranc
 
 ### EVSE (EV Charger) Entities
 
-Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
-`via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
+Created when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via `via_device`. Vendor,
+product, serial number, and software version are surfaced as device info attributes — not separate entities.
 
 #### EVSE Device Naming
 
-The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
-feature. A display suffix differentiates multiple chargers on the same panel:
+The EVSE device name includes the panel device name prefix. A display suffix differentiates multiple chargers on the same panel:
 
 - **Circuit names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
 - **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
@@ -325,10 +320,10 @@ EVSE Panel Link is a diagnostic and appears only where the circuit feeding that 
 | EVSE Charge Current Limit | Number   | A    | The charge-current ceiling you can lower. Bounded by the installer-commissioned maximum |
 | EVSE Lock                 | Lock     | —    | Locks and unlocks the charger. Only where the panel lets the charger be locked          |
 
-The maximum is read from the panel: it is the current the charger was commissioned for, and a value above it is refused rather than clamped. Where the charger
-declares the range its limit accepts, the control offers only that range, so it offers nothing below the charger's minimum. The control is created only where
-the panel declares the limit settable, and reports unavailable while the panel has not published the commissioned maximum that bounds it. A change the panel has
-acknowledged but not yet applied appears as a `charge_current_limit_target` attribute while the state stays the limit the charger is still enforcing.
+The maximum is read from the panel: it is the current the charger was commissioned for. Where the charger declares the range its limit accepts, the control
+offers only that range, so it offers nothing below the charger's minimum. The control is created only where the panel declares the limit settable, and reports
+unavailable while the panel has not published the commissioned maximum that bounds it. A change the panel has acknowledged but not yet applied appears as a
+`charge_current_limit_target` attribute while the state stays the limit the charger is still enforcing.
 
 #### EVSE Device Info Attributes
 
@@ -459,7 +454,7 @@ Circuit Priority select and no current monitoring, its Power sensor carries no r
 
 ### Adopted Devices and Readings
 
-The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modeled. Rather than ignoring it, the integration gives
+The eBus schema is vendor-extensible, so your panel can publish a device type this integration has not modeled. Rather than ignoring it, the integration gives
 it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
 
 Everything adopted arrives **disabled** and **filed under Diagnostics until you promote it** from the dashboard [Adopted tab](#the-adopted-tab); the new-entity
@@ -481,9 +476,6 @@ Three things worth knowing before you build on one:
 
 So deletion means "hide it until next time" for a reading that is still adopted and "clear it out" for one that no longer is.
 
-**Two readings that say where the panel is installed are not created on a new install**: Status Postal Code and Status Time Zone. An install that already has
-them keeps them, and they keep updating.
-
 **These entities are permanent in id, not in identity.** If one of these readings is later modeled properly (delivered as an official part of the integration),
 that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. The adopted one stops updating and is left behind
 until you delete it. That is why a vendor reading you have come to depend on is worth raising in an issue: being modeled is what turns it into something with a
@@ -491,8 +483,8 @@ real name, a proper category and statistics out of the box.
 
 ### The Adopted Tab
 
-The integration will not guess what an adopted reading means. You are not guessing — it is your device — so the built-in dashboard has an **Adopted** tab where
-you can tell the integration about the reading.
+The integration will not guess what an adopted reading means. The built-in dashboard has an **Adopted** tab where you can tell the integration about the
+reading.
 
 A row that arrived as a control rather than a reading — a switch, a select or a number box — offers prominence alone, because a device class and a statistics
 class both describe a value being read.
