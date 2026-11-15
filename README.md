@@ -197,7 +197,7 @@ None of them reads 0 W for a value the panel has not reported, so an automation 
 
 ### PV Metadata Sensors (on the Solar sub-device)
 
-These live on a **Solar** device of their own, alongside PV Power and PV Panel Link.
+A panel that reports solar gets a **Solar** device holding PV Power, the panel's total solar output, PV Panel Link, and the sensors below.
 
 | Sensor                | Device Class | Unit | Notes                                                                                |
 | --------------------- | ------------ | ---- | ------------------------------------------------------------------------------------ |
@@ -205,23 +205,17 @@ These live on a **Solar** device of their own, alongside PV Power and PV Panel L
 | PV Product            | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
 | PV Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
 
-The Solar device, like the battery's and each charger's, starts without an area. Assign it one, or anything area-scoped (dashboards, automations, voice
-targeting a room) does not match its entities.
-
-Each additional solar inverter gets a **Solar Inverter** device of its own, named after the circuit that feeds it where one does, with its own PV Vendor, PV
-Product and PV Nameplate Capacity, and its PV Panel Link where the panel reports one. The PV entities on the **Solar** device describe the inverter the
-integration saw first, by the circuit that feeds it, and keep describing it, beside PV Power, the panel's total. Where the panel cannot say which inverter that
-is — an inverter no circuit feeds, for example behind a Tesla Gateway, or several already present when the integration first saw one — they describe all of your
-inverters together. An inverter device the panel no longer reports stays, unavailable, until you delete it. Each inverter's power is the power of the circuit
-that feeds it, which the SPAN Panel card shows on that inverter's tile. An inverter no circuit feeds, such as one upstream of the panel, has no individual
-reading; its output is included in PV Power, the panel's total. The card's Solar tile shows its inverter's circuit and the site total together; on a
-single-inverter site the two are usually close.
-
-On panels other than MAIN 32, a circuit can declare that it feeds solar. Such a circuit reads its Power and Net Energy as generation and displays as generation,
-and solar fed through one gets the **Solar** device even where the panel publishes no inverter. Wherever the panel publishes a PV power figure, 0 W included, it
-gets the Solar device and PV Power, which covers solar the panel reports only there, such as solar DC-coupled into a battery; PV Vendor, PV Product and PV
-Nameplate Capacity stay unknown when there is no inverter for them to describe. A panel that publishes no PV figure, no solar circuit and no inverter gets no
-Solar device.
+- **When it appears:** the panel reports a PV power reading (0 W counts), a solar inverter, or, on panels other than MAIN 32, a circuit marked as a solar feed.
+- **Area:** the device starts with none. Assign one so area-based dashboards, automations and voice commands include its entities.
+- **More than one inverter:** each additional inverter gets a **Solar Inverter** device, named after the circuit that feeds it where one does, with its own PV
+  Vendor, PV Product and PV Nameplate Capacity, and PV Panel Link where the panel reports one. The Solar device's sensors describe the first inverter the
+  integration found, or all inverters together when the panel cannot tell them apart, such as behind a Tesla Gateway.
+- **Inverter power:** each inverter's power is the power of the circuit that feeds it, shown on its tile in the SPAN Panel card. An inverter upstream of the
+  panel counts toward PV Power only.
+- **Solar circuits:** a circuit marked as a solar feed reports its Power and Net Energy as generation.
+- **Solar without an inverter**, such as solar DC-coupled into a battery: PV Power still reports it, and PV Vendor, PV Product and PV Nameplate Capacity are
+  unknown.
+- **Removed inverters:** a Solar Inverter device the panel stops reporting stays, unavailable, until you delete it.
 
 **Deprecated:**
 
