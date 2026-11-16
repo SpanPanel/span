@@ -84,16 +84,14 @@ So each circuit entity records what its base is worked out from
 those that differ: a circuit's when its device's `name_by_user` or `area_id`
 changes, every circuit's when the panel device's do or when an area or a
 floor is renamed or an area moved to another floor where the format reads
-it, and an entity's when its own area does. It does so inside the registry's
-update event, before the change has returned, because Home Assistant asks
-whether to rename the device's entity ids straight after a rename. A reload
-would answer too late.
+it, and an entity's when its own area or its id does. It does so inside the
+registry's update event, before the change has returned, because Home
+Assistant asks whether to rename the device's entity ids straight after a
+rename. A reload would answer too late.
 
-Two changes reach the base only at the next restart: a saved entity-id
-format, for which Core announces no event, and an entity id the user edits
-by hand, which the listener does not watch. Until then a hand-edited entity
-is offered the id it had. Everything else the base is worked out from either
-reloads the entry when it changes or is watched.
+One change applies only after the next restart: a saved entity-id format,
+for which Core announces no event. Everything else the base is worked out
+from either reloads the entry when it changes or is watched.
 """
 
 from __future__ import annotations
@@ -154,6 +152,14 @@ _COMPOSED_DEVICE_CHANGES: Final = ("name_by_user", "area_id")
 The circuit's device and the panel's both: the user's name for it, which Core
 reads ahead of the device's own, and its area, which a circuit device with no
 area of its own takes from the panel.
+"""
+
+_COMPOSED_ENTITY_CHANGES: Final = ("area_id", "entity_id")
+"""What of a circuit entity's own registry row its base is worked out from.
+
+Its area, which decides whether a device is put in front of it, and its id,
+which the base reproduces. Core reports the old id among an update's
+changes, and the event names the entity by its new one.
 """
 
 
@@ -430,8 +436,8 @@ def async_keep_circuit_id_bases_current(
     - the panel's device renamed, or its area changed, which refreshes every
       circuit, since a circuit device with no area of its own takes the
       panel's and every id names the panel under a parent-device part;
-    - an area set on a circuit entity or taken off it, which refreshes that
-      entity;
+    - an area set on a circuit entity or taken off it, or its id edited, by
+      hand or by accepting Recreate's offer, which refreshes that entity;
     - an area renamed or moved to another floor, or a floor renamed, where
       the user's entity-id format reads what changed, which refreshes every
       circuit (`_async_follow_area_and_floor_names`).
@@ -499,7 +505,9 @@ def async_keep_circuit_id_bases_current(
 
     @callback
     def _entity_updated(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
-        if event.data["action"] != "update" or "area_id" not in event.data["changes"]:
+        if event.data["action"] != "update" or not any(
+            change in event.data["changes"] for change in _COMPOSED_ENTITY_CHANGES
+        ):
             return
         row = er.async_get(hass).async_get(event.data["entity_id"])
         if (

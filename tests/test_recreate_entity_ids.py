@@ -3839,3 +3839,134 @@ async def test_an_area_edit_refreshes_the_bases_only_where_it_changes_what_a_com
     stop()
 
     assert refresh.called is refreshes
+
+
+# --- An entity id edited by hand ---------------------------------------------------
+#
+# The base reproduces the id the entity has, so an id the user edits by hand is
+# read again as the edit is stored. Left with the base worked out from the old
+# id, Recreate offered the old id back until the next restart, reverting an edit
+# the user made, and nothing after it.
+
+
+@pytest.mark.parametrize(
+    ("parts", "created", "edited", "base", "offered"),
+    [
+        # A wording of the label: Core composes the edit from `current power`.
+        pytest.param(
+            None,
+            ORIGINAL_ENTITY_ID,
+            "sensor.span_panel_refrigerator_current_power",
+            "current power",
+            "sensor.span_panel_refrigerator_current_power",
+            id="default-a-wording-of-the-label",
+        ),
+        # An id that stops at the device's name: Core composes it from nothing.
+        pytest.param(
+            None,
+            ORIGINAL_ENTITY_ID,
+            "sensor.span_panel_refrigerator",
+            "",
+            "sensor.span_panel_refrigerator",
+            id="default-stopping-at-the-name",
+        ),
+        pytest.param(
+            DEVICE_ENTITY,
+            "sensor.refrigerator_power",
+            "sensor.refrigerator_current_power",
+            "current power",
+            "sensor.refrigerator_current_power",
+            id="device-entity-a-wording-of-the-label",
+        ),
+        pytest.param(
+            DEVICE_ENTITY,
+            "sensor.refrigerator_power",
+            "sensor.refrigerator",
+            "",
+            "sensor.refrigerator",
+            id="device-entity-stopping-at-the-name",
+        ),
+        # No composition spells the edit and no reading reads a form in it, so
+        # it gets the wording a new entity does and is offered the composed id,
+        # as it is after a restart.
+        pytest.param(
+            None,
+            ORIGINAL_ENTITY_ID,
+            "sensor.fridge_watts",
+            "power",
+            ORIGINAL_ENTITY_ID,
+            id="default-an-id-nothing-composes",
+        ),
+    ],
+)
+async def test_an_entity_id_edited_by_hand_is_offered_what_a_restart_offers(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    created: str,
+    edited: str,
+    base: str,
+    offered: str,
+) -> None:
+    """An id Core composes today is offered nothing, the moment the user stores it (§8)."""
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    install = _SensorInstall(hass, entry)
+    assert (await install.load(ORIGINAL_NAME)).entity_id == created
+    await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, created)
+    registry = er.async_get(hass)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    registry.async_update_entity(created, new_entity_id=edited)
+
+    row = _offer_as_stored(hass, edited)
+    stop()
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (base, offered)
+    await install.load(ORIGINAL_NAME)
+    row = _offer_as_stored(hass, edited)
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (base, offered)
+
+
+@pytest.mark.parametrize("taken", [False, True], ids=["as-composed", "numbered"])
+@pytest.mark.parametrize(
+    ("parts", "composed"),
+    [
+        pytest.param(None, "sensor.span_panel_beer_fridge_power", id="default"),
+        pytest.param(DEVICE_ENTITY, "sensor.beer_fridge_power", id="device-entity"),
+    ],
+)
+async def test_an_accepted_offer_read_as_it_is_stored_offers_nothing_more(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    composed: str,
+    taken: bool,
+) -> None:
+    """Accepting Recreate's offer is an id edit too, and reading it again gives the base it came from.
+
+    The device renamed "Beer Fridge" in Home Assistant is offered the id Core
+    composes for it, or that id under Core's number where another entity has
+    it, and once accepted the listener stores the same base, so nothing more
+    is offered, before a restart or after it.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    install = _SensorInstall(hass, entry)
+    created = (await install.load(ORIGINAL_NAME)).entity_id
+    await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, created)
+    registry = er.async_get(hass)
+    if taken:
+        domain, object_id = composed.split(".", 1)
+        registry.async_get_or_create(domain, "other", "taken", suggested_object_id=object_id)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+    _rename_the_circuit_device(hass, created, RENAMED)
+    offered = registry.async_regenerate_entity_id(_offer_as_stored(hass, created))
+    assert offered == (f"{composed}_2" if taken else composed)
+
+    registry.async_update_entity(created, new_entity_id=offered)
+
+    row = _offer_as_stored(hass, offered)
+    stop()
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("power", offered)
+    row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, offered)
+    assert row.object_id_base == "power"
