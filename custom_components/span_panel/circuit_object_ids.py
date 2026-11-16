@@ -89,12 +89,15 @@ registry's update event, before the change has returned, because Home
 Assistant asks whether to rename the device's entity ids straight after a
 rename. A reload would answer too late.
 
-An edit to an entity's id is the one of these Core acts on itself: it
-removes the live entity and adds it again, and the add writes the base the
-entity hands it. The entity works that out as Core asks, from the row as it
-stands (`circuit_object_id_base_now`), and so does the listener, so the row
-ends on the edited id's base whichever of the two writes last. The listener's
-part keeps a disabled entity current, which Core does not add again.
+An edit to an entity's id is the one of these Core may act on itself. On
+Home Assistant 2026.11 it removes these entities and adds them again, since
+they define add and remove hooks without `async_entity_id_changed`, a path
+Core marks for removal in 2027.11, and the add writes the base the entity
+hands it. The entity works that out as Core asks, from the row as it stands
+(`circuit_object_id_base_now`), and so does the listener, so the row ends on
+the edited id's base whichever of the two writes last. Where Core renames an
+entity in place, or adds no disabled one, it writes no base, and the
+listener keeps it current.
 
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out
@@ -410,12 +413,14 @@ def circuit_object_id_base_now(hass: HomeAssistant, source: CircuitIdBaseSource)
 
     The base for an entity with no row yet is the one a new entity gets.
     `SpanPanelEntity.suggested_object_id` answers with this, and Core reads
-    that only as it adds the entity: when the entry sets up, and again
-    whenever the entity's id is edited, since Core then removes the live
-    entity and adds it once more. `async_refresh_circuit_id_bases` answers
-    with it too, so the base Core's add writes and the base the listener
-    writes for the same edit are worked out from the same row. Whichever of
-    the two lands last, the row ends on it.
+    that only as it adds the entity: when the entry sets up, and on Home
+    Assistant 2026.11 again after the entity's id is edited, since these
+    classes define add and remove hooks without `async_entity_id_changed`
+    and Core re-adds such entities, a path it marks for removal in 2027.11.
+    `async_refresh_circuit_id_bases` answers with it too, so the base Core's
+    add writes and the base the listener writes for the same edit are worked
+    out from the same row. Whichever of the two lands last, the row ends on
+    it, and where Core renames in place the listener's is the one written.
     """
     existing_entity_id = er.async_get(hass).async_get_entity_id(
         source.recipe.domain, DOMAIN, source.recipe.unique_id

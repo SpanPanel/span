@@ -281,8 +281,10 @@ alone. Core's `type.__getattribute__` guard covers the `name` property only, so 
 source at construction, through `SpanPanelEntity._circuit_id_base_source`, which also records it with the entry for the listener (§5.3). Every other entity
 leaves it `None` and composes from its label as it always has.
 
-Core reads `suggested_object_id` only as it adds an entity: as the entry sets up, and again each time an entity's ID is edited, when Core removes the live
-entity and adds it once more. So the base Core writes is the one the row's ID calls for at that moment, not the one the entity was built with (§5.3).
+Core reads `suggested_object_id` only as it adds an entity. It adds one as the entry sets up, and on Home Assistant 2026.11 again after the entity's ID is
+edited: these classes define add and remove hooks without `async_entity_id_changed`, so Core removes the live entity and adds it once more
+(`_entity_class_requires_readd` in Core's `helpers/entity.py`, a path Core marks for removal in 2027.11). So the base Core writes at an add is the one the row's
+ID calls for at that moment, not the one the entity was built with. Under a rename in place Core writes no base, and the listener keeps it current (§5.3).
 
 `entity_id` is preset in one case only: a circuit entity being created in circuit-numbers mode (§4.7). Nothing else in this integration assigns
 `self.entity_id`, and nothing assigns `_attr_entity_id`.
@@ -413,14 +415,15 @@ an icon or an alias as well, without saying what changed, so the listener keeps 
 every circuit, rather than only those composed in that area, because which areas an ID is composed in is the composer's to say, and a second statement of it
 could drift.
 
-The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. Core removes
-the live entity and adds it again under its new ID, and that add writes the base the entity hands it, which is worked out then from the row (§4.4). The listener
-also works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, which keeps a disabled entity current, since Core adds
-no disabled entity again. Both work it out from the same row, so the row ends on the edited ID's base whichever of the two writes last. Edited to
-`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was
-built offered the old ID back, `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit, wherever Core's re-add wrote
-after the listener. Accepting a Recreate offer is such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is
-offered.
+The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
+works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`. That keeps every entity current, enabled or disabled,
+whatever Core does with the edit. On Home Assistant 2026.11 Core also removes these entities and adds them again under the new ID, because they define add and
+remove hooks without `async_entity_id_changed`, a path Core marks for removal in 2027.11. That add writes the base the entity hands it, worked out then from the
+row (§4.4). Both work it out from the same row, so the row ends on the edited ID's base whichever of the two writes last. Where Core renames an entity in place,
+or does not add it, as for a disabled one, it writes no base and the listener's is the one that stands. Edited to `sensor.span_panel_refrigerator`, which Core
+composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
+`sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit, wherever Core's re-add wrote after the listener. Accepting a
+Recreate offer is such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is offered.
 
 One change applies only after the next restart: a saved entity-ID format, for which Core announces no event. Everything else the base is worked out from either
 reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the integration's own entry do, or is watched above. The panel
@@ -555,10 +558,10 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
       entity-ID format, and nothing else — never from the display label, and never carrying the circuit's name.
 - [ ] Nothing reads an ID as though the format ended with the device and then the entity without being told it does (`device_then_entity`), and an ID Core
       composes today is offered nothing under any format (§4.3).
-- [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant, when its device's area,
-      the panel device's name or the panel device's area changes, when an area or a floor the format reads is renamed or an area moved to another floor, or when
-      its own area is set or cleared or its ID edited (§5.3). A saved entity-ID format is the one change that reaches the base only at the next restart. An
-      entity with an area of its own never has an empty base (§4.3).
+- [ ] What a circuit entity's base is worked out from is recorded when the entity is built. The base is worked out as Core adds the entity, and again when its
+      device is renamed in Home Assistant, when its device's area, the panel device's name or the panel device's area changes, when an area or a floor the
+      format reads is renamed or an area moved to another floor, or when its own area is set or cleared or its ID edited (§5.3). A saved entity-ID format is the
+      one change that reaches the base only at the next restart. An entity with an area of its own never has an empty base (§4.3).
 - [ ] The composer answers nothing for an entity-ID format holding a part outside `COMPOSED_PARTS`, and nothing indexes a table of parts by a part it may not
       hold (§4.7).
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
