@@ -16,10 +16,17 @@ Home Assistant 2026.11.
 - **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
   correctly only from 2026.11.
 
+### Changed
+
+- **The grace-period attributes on energy sensors, such as `last_valid_state` and `last_valid_changed`, now appear only while the panel is offline**, the only
+  time the grace period they describe applies.
+
 ### Fixed
 
 - **The SPAN Panel card loads on dashboards whose resources are defined in YAML**, and the dashboard resource earlier versions added for the card is removed
   because the integration now loads it on every dashboard itself.
+- **Energy sensors no longer write a new recorder database row on every snapshot when their reading has not changed**, which greatly reduces database growth
+  (#361).
 
 ## [2.3.0] - 11/2026
 

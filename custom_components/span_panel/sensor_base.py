@@ -68,6 +68,9 @@ _NAME_UNSET: object = object()
 # (SpanEnergySensorBase: panel-wide and circuit energy entities). High-churn grace/dip
 # diagnostics dominated DB growth (#197). tabs and voltage are merged in by circuit
 # subclasses; they stay on the live entity for Developer tools and automations.
+# Omitting a key here keeps its value out of `state_attributes` only: a change to it
+# still fires `state_changed`, and the recorder still writes a `states` row. Which is
+# why the grace keys appear only while the panel is offline (#361).
 _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
     {
         "energy_offset",
@@ -558,6 +561,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
     High-churn diagnostic attributes are listed in ``extra_state_attributes`` for
     the UI but omitted from recorder history via ``_unrecorded_attributes`` so the
     database is not flooded with unique attribute blobs on every energy update.
+    The grace-period ones are published only while the panel is offline, so an
+    unchanged reading writes no new state (see ``extra_state_attributes``).
     """
 
     _unrecorded_attributes = _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES
@@ -1008,11 +1013,27 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return additional state attributes including grace period info."""
-        attributes = {}
+        """Return the dip diagnostics, and the grace period's while the panel is offline.
 
-        # Always show grace period information if we have valid tracking data
-        if self._last_valid_changed is not None:
+        **The grace-period attributes appear only while the panel is offline**,
+        the only time the grace period they describe applies. Online,
+        `last_valid_state` is the state and `last_valid_changed` is the time of
+        this update, except while a reading is missing and the sensor is unknown.
+
+        That timestamp moving on every update is also why they must stay off an
+        online sensor. Home Assistant fires `state_changed` for any change to a
+        live attribute, and the recorder writes a `states` row for each one, so
+        it cost a row per snapshot per energy sensor whatever the reading did
+        (#361). `_unrecorded_attributes` cannot prevent that: it keeps the value
+        out of `state_attributes`, not the row out of `states`.
+
+        The tracking itself is unaffected. `_track_valid_state` still records
+        every valid reading, and `extra_restore_state_data` still saves it, so a
+        grace period that starts after a restart starts from the right time.
+        """
+        attributes: dict[str, Any] = {}
+
+        if self.coordinator.panel_offline and self._last_valid_changed is not None:
             if self._last_valid_state is not None:
                 attributes["last_valid_state"] = str(self._last_valid_state)
             attributes["last_valid_changed"] = self._last_valid_changed.isoformat()
@@ -1027,9 +1048,9 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 remaining_minutes = max(0, int(remaining_seconds / 60))
                 attributes["grace_period_remaining"] = str(remaining_minutes)
 
-                # Indicate if we're currently using grace period
-                panel_offline = self.coordinator.panel_offline
-                if panel_offline and remaining_seconds > 0:
+                # Offline is already given, so the last valid reading is in use
+                # for as long as the grace period has time left.
+                if remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
 
         # Energy dip compensation attributes

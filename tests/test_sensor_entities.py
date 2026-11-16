@@ -368,9 +368,10 @@ def test_panel_metadata_sensors_return_expected_data_sources(hass: HomeAssistant
 def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace(
     hass: HomeAssistant,
 ) -> None:
-    """Panel energy sensors should merge grace-period and voltage attributes."""
+    """Panel energy sensors should merge the offline grace-period attributes with voltage."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
     coordinator = _make_coordinator(hass, snapshot)
+    coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -894,10 +895,11 @@ def test_circuit_energy_sensor_subdevice_uses_description_only(hass: HomeAssista
 def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing(
     hass: HomeAssistant,
 ) -> None:
-    """Missing circuit data should still return grace-period attributes without tabs."""
+    """Missing circuit data should still return the offline grace-period attributes, without tabs."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(hass, snapshot)
+    coordinator.panel_offline = True
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
@@ -1098,6 +1100,7 @@ def test_energy_sensor_coerces_invalid_grace_period_value(hass: HomeAssistant) -
     coordinator = _make_coordinator(
         hass, snapshot, options={"energy_reporting_grace_period": "abc"}
     )
+    coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1564,6 +1567,7 @@ def test_energy_sensor_negative_grace_period_is_coerced_to_zero(hass: HomeAssist
     """Negative grace periods should be normalized to zero."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
     coordinator = _make_coordinator(hass, snapshot)
+    coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
