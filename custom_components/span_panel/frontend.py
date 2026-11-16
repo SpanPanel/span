@@ -1,19 +1,25 @@
 """Frontend registration helpers for the Span Panel integration.
 
-Handles sidebar panel registration, Lovelace card JS resource management,
-static path serving, and panel settings storage.
+Handles static path serving, loading the card on every dashboard, sidebar
+panel registration, and panel settings storage.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 import hashlib
 import logging
 import os
 from typing import Any, Literal
 
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import LOVELACE_DATA
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.collection import ItemNotFound
 from homeassistant.helpers.storage import Store
 
 from .const import PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
@@ -23,6 +29,9 @@ _LOGGER = logging.getLogger(__name__)
 PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 CARD_FILENAME = "span-panel-card.js"
+
+_LEGACY_CARD_RESOURCE_URL = f"{PANEL_URL}/{CARD_FILENAME}"
+"""The card's URL, without its query, as earlier versions wrote it into Lovelace's resources."""
 
 _PANEL_SETTINGS_STORAGE_VERSION = 1
 _PANEL_SETTINGS_STORAGE_KEY = "span_panel_settings"
@@ -181,43 +190,106 @@ async def async_set_favorite(
         return favorites
 
 
-async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
-    """Ensure the card JS is registered as a Lovelace resource.
+def _is_legacy_resource(item: Mapping[str, object]) -> bool:
+    """Whether a Lovelace resource is the entry earlier versions wrote for the card.
 
-    Reads the lovelace_resources storage directly and adds an entry for our
-    card URL if one isn't already present.  This avoids the MIME-type issues
-    that occur when serving from /local/ in dev mode.
+    The query is ignored because those versions wrote the card's cache tag into
+    it, and rewrote it whenever the bundle changed.
     """
-    store: Store[dict[str, list[dict[str, str]]]] = Store(hass, 1, "lovelace_resources")
-    data = await store.async_load()
-    if data is None:
-        data = {"items": []}
+    url = item.get("url")
+    return isinstance(url, str) and url.split("?", 1)[0] == _LEGACY_CARD_RESOURCE_URL
 
-    items: list[dict[str, str]] = data.get("items", [])
 
-    # Strip query strings when comparing so a cache-bust bump doesn't duplicate
-    base_url = url.split("?")[0]
-    for item in items:
-        if item.get("url", "").split("?")[0] == base_url:
-            # Update the URL in case the cache tag changed
-            if item["url"] != url:
-                item["url"] = url
-                await store.async_save(data)
-            return
+async def _async_remove_legacy_resource(hass: HomeAssistant) -> None:
+    """Delete the Lovelace resource earlier versions wrote for the card.
 
-    items.append(
-        {
-            "id": hashlib.md5(base_url.encode(), usedforsecurity=False).hexdigest(),
-            "url": url,
-            "type": "module",
-        }
+    Those versions made the card available by writing it into Lovelace's
+    resource storage; it is now loaded as an extra frontend module, so the old
+    entry would only load it a second time. It is deleted through Lovelace's
+    own resource collection, never by editing the storage file, so the
+    collection and its storage stay in step.
+
+    Runs at every startup and deletes nothing once the entry is gone. Only an
+    entry for the card this integration serves is deleted: the same card added
+    from elsewhere, such as HACS, is the user's. In YAML resource mode Lovelace
+    never reads its resource storage, so there is nothing to delete.
+
+    Best effort: resources that cannot be loaded, such as a storage file
+    written by a newer Home Assistant, are logged and left as they are. The
+    card is loaded either way, and failing here would fail the integration's
+    setup for the sake of a duplicate.
+    """
+    resources = hass.data[LOVELACE_DATA].resources
+    if not isinstance(resources, ResourceStorageCollection):
+        return
+
+    # Lovelace loads its resources on first use. Asking for its info loads them
+    # if nothing has yet, where loading them directly would load them twice.
+    # Storage raises HomeAssistantError itself for a file it cannot read, and a
+    # subclass of it for one a newer Home Assistant wrote, so nothing narrower
+    # covers both.
+    try:
+        await resources.async_get_info()
+    except HomeAssistantError as err:  # pylint: disable=broad-exception-caught
+        _LOGGER.warning(
+            "Could not load the Lovelace resources to delete the one for %s that "
+            "an earlier version added, so it is left in place: %s",
+            _LEGACY_CARD_RESOURCE_URL,
+            err,
+        )
+        return
+
+    legacy_ids = [item_id for item_id, item in resources.data.items() if _is_legacy_resource(item)]
+    for item_id in legacy_ids:
+        try:
+            await resources.async_delete_item(item_id)
+        except ItemNotFound:
+            # Deleted in the meantime, for instance through the resource editor.
+            continue
+        _LOGGER.info(
+            "Deleted the Lovelace resource for %s that an earlier version added; "
+            "the card is now loaded on every dashboard without one",
+            _LEGACY_CARD_RESOURCE_URL,
+        )
+
+
+async def async_register_frontend_assets(hass: HomeAssistant) -> None:
+    """Serve the bundled frontend and load the card on every dashboard.
+
+    Domain-level and independent of the panel settings, so it runs once, from
+    `async_setup`, before the sidebar panel is registered. The card is loaded
+    as an extra frontend module, which every dashboard gets in either Lovelace
+    resource mode; a resource in Lovelace's storage reaches no dashboard when
+    the resources are kept in YAML.
+
+    The module URL carries a hash of the bundle because the static path is
+    served with month-long cache headers, so a changed bundle needs a new URL
+    for browsers to fetch it.
+
+    The card is added before the resource earlier versions wrote is deleted,
+    so that deleting it, which is best effort, can never keep the card from
+    loading.
+    """
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
     )
-    data["items"] = items
-    await store.async_save(data)
+
+    card_cache_tag = await hass.async_add_executor_job(_frontend_file_hash, CARD_FILENAME)
+    add_extra_js_url(hass, f"{PANEL_URL}/{CARD_FILENAME}?v={card_cache_tag}")
+
+    await _async_remove_legacy_resource(hass)
 
 
 async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     """Register or remove the sidebar panel based on stored settings.
+
+    Runs from `async_setup`, after `async_register_frontend_assets` has
+    registered the static path the panel's module is served from, and again
+    from the options flow whenever the panel settings are saved. It touches
+    the sidebar panel only: re-applying the settings must neither register the
+    static path again nor add the card's module URL again, which the frontend
+    would record as another change and send to every subscriber of its
+    extra-module changes.
 
     Uses deferred imports from the parent package so that test patches
     applied to ``custom_components.span_panel.*`` take effect.
@@ -226,7 +298,6 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     # (custom_components.span_panel.X). Resolving through ``from .`` at
     # call time ensures patched values are picked up.
     from . import (  # pylint: disable=import-outside-toplevel
-        _async_ensure_lovelace_resource as _ensure_lovelace,
         async_load_panel_settings as _load_settings,
         async_register_panel as _register_panel,
         async_remove_panel as _remove_panel,
@@ -235,18 +306,6 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     settings = await _load_settings(hass)
     show = settings.get(PANEL_SHOW_SIDEBAR, True)
     admin_only = settings.get(PANEL_ADMIN_ONLY, False)
-
-    # Always register static paths so the card JS is reachable even when
-    # the sidebar panel is hidden.
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
-    )
-
-    # Auto-register the Lovelace card as a resource so users don't need a
-    # manual entry (also avoids MIME-type issues with /local/ in dev mode).
-    card_cache_tag = await hass.async_add_executor_job(_frontend_file_hash, CARD_FILENAME)
-    card_url = f"{PANEL_URL}/{CARD_FILENAME}?v={card_cache_tag}"
-    await _ensure_lovelace(hass, card_url)
 
     if show:
         # Remove first to allow re-registration with updated require_admin

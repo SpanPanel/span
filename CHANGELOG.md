@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.1] - 11/2026
+
+### Fixed
+
+- **The SPAN Panel card loads on dashboards whose resources are defined in YAML**, and the dashboard resource earlier versions added for the card is removed
+  because the integration now loads it on every dashboard itself.
+
 ## [2.3.0] - 11/2026
 
 **Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires

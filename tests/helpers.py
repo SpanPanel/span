@@ -1,6 +1,6 @@
 """Helper functions for testing the Span Panel integration."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 import datetime
 import inspect
 from types import ModuleType
@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.dt import utcnow
+import probatio as vol
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
@@ -33,6 +34,16 @@ def unwrap_websocket_command(command: Callable[..., object]) -> WebSocketHandler
     """
     handler: WebSocketHandler = inspect.unwrap(command, stop=inspect.iscoroutinefunction)
     return handler
+
+
+def shown_values(schema: vol.Schema) -> dict[str, object]:
+    """Return the values a form shows: what saving it unchanged submits."""
+    shown: dict[str, object] = {}
+    for key in schema.schema:
+        description = key.description
+        if isinstance(description, Mapping) and "suggested_value" in description:
+            shown[str(key)] = description["suggested_value"]
+    return shown
 
 
 def count_panel_describes_breakers(

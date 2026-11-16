@@ -9,6 +9,7 @@
     "diagnostics",
     "frontend",
     "http",
+    "lovelace",
     "panel_custom",
     "persistent_notification",
     "repairs"

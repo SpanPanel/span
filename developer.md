@@ -12,7 +12,7 @@ The SPAN Panel integration consists of three repositories:
 
 The card repo produces two JS bundles:
 
-- `span-panel-card.js` -- Lovelace card (standalone, HACS-distributable)
+- `span-panel-card.js` -- Lovelace card (loaded on every dashboard by the integration)
 - `span-panel.js` -- Full-page sidebar panel (served by the integration)
 
 Both bundles are committed as build artifacts in `custom_components/span_panel/frontend/dist/`.
@@ -199,7 +199,7 @@ git commit -m "feat: update frontend with card changes"
 
 `scripts/build-frontend.sh` does three things:
 
-1. Runs `npm run build` in the span-card repo (rollup produces two IIFE bundles)
+1. Runs `npm run build` in the span-card repo (rollup produces two ES module bundles)
 2. Copies `dist/span-panel.js` and `dist/span-panel-card.js` into `custom_components/span_panel/frontend/dist/`
 3. Prints the files and a reminder to stage them
 
@@ -216,7 +216,8 @@ The script reads `SPAN_CARD_DIR` from `.env` (or the environment). You can also 
 ### Local development with HA Core
 
 When running HA Core locally, the integration is symlinked into `config/custom_components/span_panel`. The frontend JS files are served from
-`custom_components/span_panel/frontend/dist/` via the `async_register_static_paths` call in `__init__.py`.
+`custom_components/span_panel/frontend/dist/` by `async_register_frontend_assets` in `frontend.py`, which also loads the card on every dashboard as an extra
+frontend module.
 
 After rebuilding the frontend, restart HA to pick up the new JS. Browsers cache aggressively -- a hard refresh (Cmd+Shift+R) of the panel page also works if you
 clear the `cache_headers` flag during development.

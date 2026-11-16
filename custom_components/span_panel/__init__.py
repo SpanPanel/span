@@ -111,9 +111,9 @@ from .flat_firmware_repairs import (
 from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
-    _async_ensure_lovelace_resource as _async_ensure_lovelace_resource,
     async_apply_panel_registration as async_apply_panel_registration,
     async_load_panel_settings as async_load_panel_settings,
+    async_register_frontend_assets as async_register_frontend_assets,
     async_save_panel_settings as async_save_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
@@ -212,6 +212,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_favorites_services(hass)
     _async_register_credential_services(hass)
 
+    # The static path first: the sidebar panel's module is served from it.
+    await async_register_frontend_assets(hass)
     await async_apply_panel_registration(hass)
 
     return True
