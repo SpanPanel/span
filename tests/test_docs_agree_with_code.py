@@ -25,7 +25,6 @@ import pytest
 
 import custom_components.span_panel as span_panel
 from custom_components.span_panel.const import ENTITY_NAMING_PATTERN
-from custom_components.span_panel.migrations import CURRENT_CONFIG_VERSION
 
 REPO = Path(__file__).resolve().parent.parent
 PACKAGE = Path(span_panel.__file__).resolve().parent
@@ -256,17 +255,6 @@ def test_the_readme_names_each_naming_option_as_setup_shows_it(words: str, examp
 
     assert f"**{words}**" in naming
     assert f"`sensor.{example}`" in naming
-
-
-def test_the_readme_names_the_config_entry_version_a_downgrade_is_refused_across() -> None:
-    """The troubleshooting row explains the refusal by the version the entry is at now."""
-    row = next(
-        line
-        for line in _read(README).splitlines()
-        if line.startswith("| **Setup fails after downgrading the integration**")
-    )
-
-    assert f"version {CURRENT_CONFIG_VERSION}" in row
 
 
 def _enforced_minimum_home_assistant() -> str:

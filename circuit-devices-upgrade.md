@@ -48,10 +48,4 @@ switch joined an area**, names the switch and the area.
 
 ## Going back to an earlier release
 
-2.3.0 raises the config entry to version 8. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and
-there is no automatic downgrade, so going back from 2.3.0 to any earlier release is refused. Reinstall 2.3.0, or restore a backup taken before the upgrade.
-
-You can also remove the panel from Home Assistant while 2.3.0 is still installed, then install the earlier release and add the panel again. Remove it before
-installing the earlier release: 2.3.0 clears its repairs as the panel is removed, and an earlier release cannot. This preserves entity IDs, but needs the panel
-passphrase or physical access to the door again. It puts each circuit's entities back on the panel's device, and the names the upgrade shortened and the areas
-it moved are not restored.
+2.3.0 raises the config entry to version 8, and an earlier release refuses to load it. To go back, restore a backup taken before the upgrade.
