@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.0] - unreleased
 
+**Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
+Home Assistant 2026.11; going back means restoring a backup taken before the upgrade.
+
 ### Added
 
 - **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app in the Monitoring tab or a circuit's side panel**, so current monitoring judges
