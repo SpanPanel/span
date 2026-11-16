@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.3.0] - unreleased
+## [2.3.0] - 11/2026
 
 **Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
-Home Assistant 2026.11. The upgrade is designed to be non-destructive: each entity keeps its entity ID, unique ID and history, and a name you set is kept, less
-a leading circuit name that would show twice. Going back means restoring a backup taken before the upgrade.
+Home Assistant 2026.11.
+
+- **The upgrade is designed to be non-destructive:** each entity keeps its entity ID, unique ID and history, and a name you set is kept, less a leading circuit
+  name that would show twice. Going back means restoring a backup (or a copy of config/.storage) taken before the upgrade.
+
+- **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
+  circuit's area, where an area-wide turn-off would reach it. Repairs are normal and not a sign of fault but take action if recommended.
+
+- **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
+  correctly only from 2026.11.
 
 ### Added
 
@@ -15,13 +23,9 @@ a leading circuit name that would show twice. Going back means restoring a backu
 - **On MAIN 32, the second breaker rating the SPAN app shows for a circuit across two spaces, such as the 30 in 20-30A, can be entered in the Monitoring tab or
   the circuit's side panel**; since the panel reports only the average of its two legs, the dashboard keeps that rating without applying it and recommends
   turning monitoring off for that circuit.
-- **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
-  circuit's area, where an area-wide turn-off would reach it.
 
 ### Changed
 
-- **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
-  correctly only from 2026.11.
 - **Each circuit is now a device under the panel, named by the circuit's name in the SPAN app**, and its entities are named by what they measure, such as Power;
   entity IDs do not change, and a name you never changed displays as before unless the move changed the entity's area or left it with an area of its own, as the
   repair lists.
