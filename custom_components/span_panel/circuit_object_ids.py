@@ -89,6 +89,13 @@ registry's update event, before the change has returned, because Home
 Assistant asks whether to rename the device's entity ids straight after a
 rename. A reload would answer too late.
 
+An edit to an entity's id is the one of these Core acts on itself: it
+removes the live entity and adds it again, and the add writes the base the
+entity hands it. The entity works that out as Core asks, from the row as it
+stands (`circuit_object_id_base_now`), and so does the listener, so the row
+ends on the edited id's base whichever of the two writes last. The listener's
+part keeps a disabled entity current, which Core does not add again.
+
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out
 from either reloads the entry when it changes or is watched.
@@ -175,6 +182,22 @@ class CircuitIdBase:
 
     suffix: str
     """The entity's canonical suffix, as `naming.ENTITY_ID_SUFFIX_FORMS` keys it."""
+
+
+@dataclass(frozen=True, slots=True)
+class CircuitIdBaseSource:
+    """Everything one circuit entity's id base is worked out from, whenever Core asks for it.
+
+    The panel and the circuit the entity was built for, and the recipe the
+    entry records for `async_keep_circuit_id_bases_current`.
+    """
+
+    panel_device_id: str
+    config_entry_id: str
+    serial: str
+    circuit: SpanCircuitSnapshot
+    circuit_id: str
+    recipe: CircuitIdBase
 
 
 def entity_id_parts(hass: HomeAssistant) -> tuple[EntityNamePart, ...]:
@@ -382,6 +405,33 @@ def circuit_object_id_base(
     )
 
 
+def circuit_object_id_base_now(hass: HomeAssistant, source: CircuitIdBaseSource) -> str:
+    """Return a circuit entity's base for the id its registry row has now, or a new entity's.
+
+    The base for an entity with no row yet is the one a new entity gets.
+    `SpanPanelEntity.suggested_object_id` answers with this, and Core reads
+    that only as it adds the entity: when the entry sets up, and again
+    whenever the entity's id is edited, since Core then removes the live
+    entity and adds it once more. `async_refresh_circuit_id_bases` answers
+    with it too, so the base Core's add writes and the base the listener
+    writes for the same edit are worked out from the same row. Whichever of
+    the two lands last, the row ends on it.
+    """
+    existing_entity_id = er.async_get(hass).async_get_entity_id(
+        source.recipe.domain, DOMAIN, source.recipe.unique_id
+    )
+    return circuit_object_id_base(
+        hass,
+        panel_device_id=source.panel_device_id,
+        config_entry_id=source.config_entry_id,
+        serial=source.serial,
+        circuit=source.circuit,
+        circuit_id=source.circuit_id,
+        recipe=source.recipe,
+        existing_entity_id=existing_entity_id,
+    )
+
+
 @callback
 def async_refresh_circuit_id_bases(
     hass: HomeAssistant,
@@ -404,15 +454,16 @@ def async_refresh_circuit_id_bases(
         entity_id = registry.async_get_entity_id(recipe.domain, DOMAIN, recipe.unique_id)
         if entity_id is None or (row := registry.async_get(entity_id)) is None:
             continue
-        base = circuit_object_id_base(
+        base = circuit_object_id_base_now(
             hass,
-            panel_device_id=panel_device_id,
-            config_entry_id=config_entry_id,
-            serial=serial,
-            circuit=circuit,
-            circuit_id=circuit_id,
-            recipe=recipe,
-            existing_entity_id=entity_id,
+            CircuitIdBaseSource(
+                panel_device_id=panel_device_id,
+                config_entry_id=config_entry_id,
+                serial=serial,
+                circuit=circuit,
+                circuit_id=circuit_id,
+                recipe=recipe,
+            ),
         )
         if row.object_id_base != base:
             registry.async_get_or_create(

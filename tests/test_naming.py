@@ -970,21 +970,49 @@ def test_a_suffix_with_no_shipped_form_has_its_own_words() -> None:
 
 from unittest.mock import MagicMock
 
+from custom_components.span_panel.circuit_object_ids import CircuitIdBase, CircuitIdBaseSource
 from custom_components.span_panel.entity import SpanPanelEntity
+
+from .factories import SpanCircuitSnapshotFactory
 
 
 class _Probe(SpanPanelEntity):
     _attr_name = "Display Name"
 
-    def __init__(self) -> None:
+    def __init__(self, hass: HomeAssistant | None = None) -> None:
         coordinator = MagicMock()
+        coordinator.hass = hass
         super().__init__(coordinator)
 
 
-def test_the_base_is_what_core_is_told_when_one_is_set() -> None:
-    probe = _Probe()
-    probe._span_object_id_base = "Circuit 15 power"
-    assert probe.suggested_object_id == "Circuit 15 power"
+async def test_the_base_core_is_told_is_worked_out_from_the_row_as_core_asks(
+    hass: HomeAssistant,
+) -> None:
+    """The base comes from the id the entity's row has when Core asks, not when the entity was built.
+
+    Core asks as it adds the entity, which it does again after the entity's id
+    is edited. A row registered after the entity was built is read then.
+    """
+    recipe = CircuitIdBase("sensor", "uid-asked", "Kitchen Outlets", "power")
+    probe = _Probe(hass)
+    probe._span_id_base_source = CircuitIdBaseSource(
+        panel_device_id="panel-device",
+        config_entry_id="entry-asked",
+        serial="sp3-naming-001",
+        circuit=SpanCircuitSnapshotFactory.create(circuit_id="15", name="Kitchen Outlets"),
+        circuit_id="15",
+        recipe=recipe,
+    )
+    assert probe.suggested_object_id == "power"
+
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "uid-asked",
+        suggested_object_id="span_panel_kitchen_outlets_current_power",
+    )
+
+    assert probe.suggested_object_id == "current power"
 
 
 def test_without_a_base_core_gets_the_stock_answer() -> None:

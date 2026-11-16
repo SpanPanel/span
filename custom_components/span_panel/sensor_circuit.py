@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Final
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
+from .circuit_object_ids import CircuitIdBaseSource
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
 from .counter_plausibility import exceeds_lifetime_bound
@@ -190,14 +191,13 @@ class SpanCircuitSensorBase(
             self.coordinator, snapshot, self.circuit_id, self._api_key, self._device_name
         )
 
-    def _object_id_base(
+    def _id_base_source(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
         unique_id: str,
-        existing_entity_id: str | None,
-    ) -> str | None:
-        """Return the suffix this sensor's id is composed from on its circuit's device.
+    ) -> CircuitIdBaseSource | None:
+        """Return what this sensor's id base on its circuit's device is worked out from.
 
         None on a charger's device, where the sensor composes from its label
         like the charger's own sensors.
@@ -205,7 +205,7 @@ class SpanCircuitSensorBase(
         if self._is_sub_device:
             return None
         circuit = _get_circuit_data_source(self.circuit_id, snapshot)
-        return self._circuit_object_id_base(
+        return self._circuit_id_base_source(
             self.coordinator,
             snapshot,
             circuit,
@@ -214,7 +214,6 @@ class SpanCircuitSensorBase(
             unique_id=unique_id,
             id_identifier=self._id_identifier(circuit),
             suffix=get_user_friendly_suffix(self._api_key),
-            existing_entity_id=existing_entity_id,
         )
 
     def _entity_id_at_creation(

@@ -14,7 +14,12 @@ from span_panel_api import PublishOutcome, SpanCircuitSnapshot, SpanPanelSnapsho
 from span_panel_api.exceptions import SpanPanelServerError
 
 from .circuit_number_ids import preset_circuit_number_entity_id
-from .circuit_object_ids import CircuitIdBase, circuit_object_id_base, compose_circuit_object_id
+from .circuit_object_ids import (
+    CircuitIdBase,
+    CircuitIdBaseSource,
+    circuit_object_id_base_now,
+    compose_circuit_object_id,
+)
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import (
     CONTROL_CALLER,
@@ -51,24 +56,31 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
 
     _attr_has_entity_name = True
 
-    _span_object_id_base: str | None = None
-    """The base Home Assistant composes this entity's id from, when set.
+    _span_id_base_source: CircuitIdBaseSource | None = None
+    """What this entity's id base is worked out from, for a circuit entity on its circuit's device.
 
-    Circuit entities on their circuit's device set it from
-    `_circuit_object_id_base`, and it is their suffix alone, since Core
-    composes the circuit's name from the device. Every other entity leaves it
-    None and Core composes from the display name as it always has. Core reads
-    `suggested_object_id` only for an entity that has not preset `entity_id`,
-    which is every entity here but one being created in circuit-numbers mode
-    (`_circuit_number_entity_id`). That one's row takes the base from its next
-    add on.
+    Circuit entities on their circuit's device set it through
+    `_circuit_id_base_source`, and their base is their suffix alone, since
+    Core composes the circuit's name from the device. Every other entity
+    leaves it None and Core composes from the display name as it always has.
+    Core reads `suggested_object_id` only for an entity that has not preset
+    `entity_id`, which is every entity here but one being created in
+    circuit-numbers mode (`_circuit_number_entity_id`). That one's row takes
+    the base from its next add on.
     """
 
     @property
     def suggested_object_id(self) -> str | None:
-        """Hand Core the base, or the stock answer when there is none."""
-        if self._span_object_id_base is not None:
-            return self._span_object_id_base
+        """Hand Core the base, worked out as it asks, or the stock answer when there is none.
+
+        Core asks only as it adds the entity, and it adds a live entity again
+        each time its id is edited. Worked out then, from the row as it stands
+        (`circuit_object_ids.circuit_object_id_base_now`), the base Core writes
+        is the one the edited id calls for, and not the one the entity was
+        built with, whenever Core's write falls against the listener's.
+        """
+        if self._span_id_base_source is not None:
+            return circuit_object_id_base_now(self.coordinator.hass, self._span_id_base_source)
         return super().suggested_object_id
 
     _residual_field_paths: ClassVar[tuple[str, ...]] = ()
@@ -315,7 +327,7 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         )
 
     @staticmethod
-    def _circuit_object_id_base(
+    def _circuit_id_base_source(
         coordinator: SpanPanelCoordinator,
         snapshot: SpanPanelSnapshot,
         circuit: SpanCircuitSnapshot,
@@ -325,35 +337,34 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         unique_id: str,
         id_identifier: str,
         suffix: str,
-        existing_entity_id: str | None,
-    ) -> str:
-        """Return the base of a circuit entity's id on its circuit's device: the suffix alone.
+    ) -> CircuitIdBaseSource:
+        """Return what a circuit entity's id base on its circuit's device is worked out from.
 
-        The base under which Core composes the id the entity already has, as
-        `circuit_object_ids.circuit_object_id_base` finds it. `id_identifier`
-        is what the naming flag resolves today, the name ids were built from
-        before the circuit had a device: its tabs in circuit-numbers mode, its
-        name or an unnamed circuit's fallback otherwise.
+        The base is the suffix alone, under which Core composes the id the
+        entity has, as `circuit_object_ids.circuit_object_id_base` finds it,
+        and `suggested_object_id` works it out each time Core asks.
+        `id_identifier` is what the naming flag resolves today, the name ids
+        were built from before the circuit had a device: its tabs in
+        circuit-numbers mode, its name or an unnamed circuit's fallback
+        otherwise.
 
-        What the base was worked out from is recorded with the entry, under
-        the entity's `domain` and `unique_id`, so it can be worked out again
-        when the circuit's device or the panel's is renamed in Home Assistant,
-        an area is set on either or on the entity, an area or a floor is
-        renamed, or the entity's id is edited, none of which builds an entity
-        again (`circuit_object_ids.async_keep_circuit_id_bases_current`).
+        What the base is worked out from is recorded with the entry too,
+        under the entity's `domain` and `unique_id`, so the listener can work
+        it out again when the circuit's device or the panel's is renamed in
+        Home Assistant, an area is set on either or on the entity, an area or
+        a floor is renamed, or the entity's id is edited, none of which builds
+        an entity again (`circuit_object_ids.async_keep_circuit_id_bases_current`).
         """
         entry = coordinator.config_entry
         recipe = CircuitIdBase(domain, unique_id, id_identifier, suffix)
         entry.runtime_data.circuit_id_bases.setdefault(circuit_id, []).append(recipe)
-        return circuit_object_id_base(
-            coordinator.hass,
+        return CircuitIdBaseSource(
             panel_device_id=entry.runtime_data.panel_device_id,
             config_entry_id=entry.entry_id,
             serial=snapshot.serial_number,
             circuit=circuit,
             circuit_id=circuit_id,
             recipe=recipe,
-            existing_entity_id=existing_entity_id,
         )
 
     @staticmethod
@@ -376,7 +387,7 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         what the naming flag resolves, which in this mode is the circuit's
         tabs (`Circuit 15`), or its label for a meter with no breaker space to
         number. It is the identifier the base is read back against
-        (`_circuit_object_id_base`), so the id reads as built from it on every
+        (`_circuit_id_base_source`), so the id reads as built from it on every
         later load.
 
         None, which leaves the id to Core, in circuit-names mode and for an

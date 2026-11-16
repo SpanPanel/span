@@ -171,8 +171,12 @@ class _Install[E: SpanPanelEntity]:
         self._entity._handle_coordinator_update()
         await self._hass.async_block_till_done()
 
-    async def load(self, circuit_name: str) -> E:
-        """Tear down any previous platform, then set one up from fresh panel data."""
+    async def load(self, circuit_name: str, *, added: bool = True) -> E:
+        """Tear down any previous platform, then set one up from fresh panel data.
+
+        With `added` False the entity's row is disabled, so Core registers it
+        and does not add it.
+        """
         if self._platform is not None:
             await self._platform.async_reset()
 
@@ -202,7 +206,10 @@ class _Install[E: SpanPanelEntity]:
         await self._platform.async_add_entities([entity])
         await self._hass.async_block_till_done()
 
-        assert entity.hass is not None, "entity was rejected before it reached the registry"
+        if added:
+            assert entity.hass is not None, "entity was rejected before it reached the registry"
+        else:
+            assert entity.hass is None, "a disabled entity was added"
         self._entity = entity
         return entity
 
@@ -3918,6 +3925,9 @@ async def test_an_entity_id_edited_by_hand_is_offered_what_a_restart_offers(
     stop = async_keep_circuit_id_bases_current(hass, entry)
 
     registry.async_update_entity(created, new_entity_id=edited)
+    # Core removes the live entity and adds it again under its new id, and the
+    # add writes the base the entity hands it.
+    await hass.async_block_till_done()
 
     row = _offer_as_stored(hass, edited)
     stop()
@@ -3964,9 +3974,112 @@ async def test_an_accepted_offer_read_as_it_is_stored_offers_nothing_more(
     assert offered == (f"{composed}_2" if taken else composed)
 
     registry.async_update_entity(created, new_entity_id=offered)
+    await hass.async_block_till_done()
 
     row = _offer_as_stored(hass, offered)
     stop()
     assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("power", offered)
     row = await _assert_recreate_offers_nothing(hass, install, ORIGINAL_NAME, offered)
     assert row.object_id_base == "power"
+
+
+@pytest.mark.parametrize(
+    ("parts", "created", "edited", "base"),
+    [
+        pytest.param(
+            None,
+            ORIGINAL_ENTITY_ID,
+            "sensor.span_panel_refrigerator_current_power",
+            "current power",
+            id="default-a-wording-of-the-label",
+        ),
+        pytest.param(
+            None,
+            ORIGINAL_ENTITY_ID,
+            "sensor.span_panel_refrigerator",
+            "",
+            id="default-stopping-at-the-name",
+        ),
+        pytest.param(
+            DEVICE_ENTITY,
+            "sensor.refrigerator_power",
+            "sensor.refrigerator_current_power",
+            "current power",
+            id="device-entity-a-wording-of-the-label",
+        ),
+        pytest.param(
+            DEVICE_ENTITY,
+            "sensor.refrigerator_power",
+            "sensor.refrigerator",
+            "",
+            id="device-entity-stopping-at-the-name",
+        ),
+    ],
+)
+async def test_a_hand_edit_is_read_whichever_of_core_and_the_listener_writes_last(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    parts: tuple[EntityNamePart, ...] | None,
+    created: str,
+    edited: str,
+    base: str,
+) -> None:
+    """The base ends on the edited id's, whether Core's re-add writes before the listener or after it.
+
+    Core re-adds an entity whose id changed, and the add writes the base the
+    entity hands it. Here the listener subscribes before the entity is added,
+    so the bus gives it the edit first and Core's re-add writes after it: the
+    order a Core whose re-add waits a turn would give. Handed the base it was
+    built with, the re-add wrote `power` over the listener's answer, and the old
+    id was offered back.
+    """
+    if parts is not None:
+        er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+    install = _SensorInstall(hass, entry)
+    assert (await install.load(ORIGINAL_NAME)).entity_id == created
+    registry = er.async_get(hass)
+
+    registry.async_update_entity(created, new_entity_id=edited)
+    await hass.async_block_till_done()
+
+    row = _offer_as_stored(hass, edited)
+    stop()
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (base, edited)
+    await install.load(ORIGINAL_NAME)
+    row = _offer_as_stored(hass, edited)
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (base, edited)
+
+
+async def test_a_disabled_entity_edited_by_hand_is_offered_what_a_restart_offers(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Core adds no disabled entity again after its id is edited, so the listener keeps its base.
+
+    Its row is registered as the entry sets up, with the base worked out then,
+    but the entity is not added, so no re-add follows an edit to its id. Left
+    to that, the base offered the old id back until the next restart.
+    """
+    install = _SensorInstall(hass, entry)
+    created = (await install.load(ORIGINAL_NAME)).entity_id
+    registry = er.async_get(hass)
+    registry.async_update_entity(created, disabled_by=er.RegistryEntryDisabler.USER)
+    await hass.async_block_till_done()
+    await install.load(ORIGINAL_NAME, added=False)
+    stop = async_keep_circuit_id_bases_current(hass, entry)
+
+    registry.async_update_entity(created, new_entity_id="sensor.span_panel_refrigerator")
+    await hass.async_block_till_done()
+
+    row = _offer_as_stored(hass, "sensor.span_panel_refrigerator")
+    stop()
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (
+        "",
+        "sensor.span_panel_refrigerator",
+    )
+    await install.load(ORIGINAL_NAME, added=False)
+    row = _offer_as_stored(hass, "sensor.span_panel_refrigerator")
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (
+        "",
+        "sensor.span_panel_refrigerator",
+    )

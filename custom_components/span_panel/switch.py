@@ -122,7 +122,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             if use_circuit_numbers
             else circuit_device_name(circuit, circuit_id)
         )
-        self._span_object_id_base = self._circuit_object_id_base(
+        self._span_id_base_source = self._circuit_id_base_source(
             coordinator,
             snapshot,
             circuit,
@@ -131,7 +131,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             unique_id=self._attr_unique_id,
             id_identifier=id_identifier,
             suffix="breaker",
-            existing_entity_id=existing_entity_id,
         )
 
         # The one exception is a switch being created in circuit-numbers mode,

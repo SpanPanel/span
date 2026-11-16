@@ -37,7 +37,7 @@ A circuit entity has four naming-relevant values. Keeping them apart is the whol
 | ------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Circuit's name**  | The panel                     | `Kitchen Outlets`, the circuit's name in the SPAN app, or the fallback an unnamed circuit gets (§4.1). Same string in both naming modes.                   | The `name` of the circuit's device, from `helpers.circuit_device_name` through `util.circuit_device_info`. A name the user gives that device in Home Assistant (`name_by_user`) is theirs, and Core reads it ahead of the panel's. |
 | **Label**           | The integration               | What the entity measures or controls: `Power`, `Consumed Energy`, `Breaker`, `Circuit Priority`. Same string in both naming modes.                         | `_attr_name` → registry `original_name`.                                                                                                                                                                                           |
-| **Object-ID base**  | The ID the entity already has | The suffix words alone, `power` or `energy consumed`, in the form the existing ID carries, or empty where that ID stops at the circuit's name (§4.3).      | `SpanPanelEntity._span_object_id_base` → `suggested_object_id` property → registry `object_id_base`.                                                                                                                               |
+| **Object-ID base**  | The ID the entity already has | The suffix words alone, `power` or `energy consumed`, in the form the existing ID carries, or empty where that ID stops at the circuit's name (§4.3).      | `SpanPanelEntity.suggested_object_id`, worked out from `_span_id_base_source` as Core asks → registry `object_id_base`.                                                                                                            |
 | **Registry `name`** | The user                      | Whatever they typed in the entity's settings. It takes the label's place in the displayed name, and outranks both a preset and the base in ID composition. | Registry `name`. Read, never written, except by the §6.1 release and the conversion's trim (§6.2).                                                                                                                                 |
 
 Home Assistant composes what is displayed from the two devices and the label: `Span Panel Kitchen Outlets Power`. The circuit's name is in no entity's name and
@@ -274,11 +274,15 @@ Circuit-numbers mode, same parts, the circuit on tab 15:
 
 ### 4.4 Delivery to Core
 
-`SpanPanelEntity` (`entity.py`) carries `_span_object_id_base: str | None = None` and overrides the `suggested_object_id` property to return it when set, or
-`super().suggested_object_id` (the display name) when not. An empty base is a base: Core then composes the ID from the other parts alone. Core's
-`type.__getattribute__` guard covers the `name` property only, so this override is supported. Circuit sensors, the switch and the select set the base at
-construction, through `SpanPanelEntity._circuit_object_id_base`, which also records what the base was worked out from (§5.3). Every other entity leaves it
-`None` and composes from its label as it always has.
+`SpanPanelEntity` (`entity.py`) carries `_span_id_base_source: CircuitIdBaseSource | None = None` and overrides the `suggested_object_id` property. Where a
+source is set, the property works the base out from it as Core asks (`circuit_object_ids.circuit_object_id_base_now`), from the entity's registry row as it
+stands. Where none is, it returns `super().suggested_object_id` (the display name). An empty base is a base: Core then composes the ID from the other parts
+alone. Core's `type.__getattribute__` guard covers the `name` property only, so this override is supported. Circuit sensors, the switch and the select set the
+source at construction, through `SpanPanelEntity._circuit_id_base_source`, which also records it with the entry for the listener (§5.3). Every other entity
+leaves it `None` and composes from its label as it always has.
+
+Core reads `suggested_object_id` only as it adds an entity: as the entry sets up, and again each time an entity's ID is edited, when Core removes the live
+entity and adds it once more. So the base Core writes is the one the row's ID calls for at that moment, not the one the entity was built with (§5.3).
 
 `entity_id` is preset in one case only: a circuit entity being created in circuit-numbers mode (§4.7). Nothing else in this integration assigns
 `self.entity_id`, and nothing assigns `_attr_entity_id`.
@@ -351,9 +355,9 @@ carried the identifier with the suffix (`Kitchen Outlets power` or `Circuit 15 p
 There is one name path, in both modes:
 
 1. **Construction** (`sensor_base.py`, `switch.py`, `select.py`): `_attr_name` is the label alone, unconditionally, existing entity or not. It reaches the
-   registry as `original_name`. The entity's device info names the circuit's device with the _panel's_ current name for the circuit (§4.1). The base (§4.3) is
-   computed at the same time and handed to Core through `suggested_object_id`, and in circuit-numbers mode an entity being created is given its preset (§4.7).
-   If an existing row carries a `name` a pre-2.1.0 release wrote, it is released (§6.1).
+   registry as `original_name`. The entity's device info names the circuit's device with the _panel's_ current name for the circuit (§4.1). What the base (§4.3)
+   is worked out from is recorded at the same time, `suggested_object_id` works the base out from it as Core adds the entity (§4.4), and in circuit-numbers mode
+   an entity being created is given its preset (§4.7). If an existing row carries a `name` a pre-2.1.0 release wrote, it is released (§6.1).
 2. **Every coordinator update** (`_handle_coordinator_update` / `_sync_circuit_name`): the entity compares the panel's current circuit name with the one it was
    built from.
    - A registry `name` the user set changes nothing here. Their name is the entity's own and is never written; the circuit's name is the device's, and a rename
@@ -409,11 +413,14 @@ an icon or an alias as well, without saying what changed, so the listener keeps 
 every circuit, rather than only those composed in that area, because which areas an ID is composed in is the composer's to say, and a second statement of it
 could drift.
 
-The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
-works that entity's base out again when the row's `entity_id` changes, as it does for its `area_id`. Edited to `sensor.span_panel_refrigerator`, which Core
-composes from the device with nothing after it, the entity is offered nothing. A base left as it was offered the old ID back,
-`sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is such an edit too, and reading the
-accepted ID again gives the base it was composed from, so nothing more is offered.
+The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. Core removes
+the live entity and adds it again under its new ID, and that add writes the base the entity hands it, which is worked out then from the row (§4.4). The listener
+also works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, which keeps a disabled entity current, since Core adds
+no disabled entity again. Both work it out from the same row, so the row ends on the edited ID's base whichever of the two writes last. Edited to
+`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was
+built offered the old ID back, `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit, wherever Core's re-add wrote
+after the listener. Accepting a Recreate offer is such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is
+offered.
 
 One change applies only after the next restart: a saved entity-ID format, for which Core announces no event. Everything else the base is worked out from either
 reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the integration's own entry do, or is watched above. The panel

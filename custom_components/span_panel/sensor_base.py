@@ -24,6 +24,7 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 from span_panel_api import SpanPanelSnapshot
 
+from .circuit_object_ids import CircuitIdBaseSource
 from .const import DEFAULT_ENERGY_DIP_COMPENSATION, DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
@@ -154,8 +155,8 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                 # The id itself is Home Assistant's to compose. This entity
                 # supplies at most its base; `entity_id` is left unset so Core
                 # assembles the rest from the user's `entity_id_parts`.
-                self._span_object_id_base = self._object_id_base(
-                    snapshot, description, self._attr_unique_id, existing_entity_id
+                self._span_id_base_source = self._id_base_source(
+                    snapshot, description, self._attr_unique_id
                 )
 
                 # The one exception is a circuit sensor being created in
@@ -218,24 +219,22 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    def _object_id_base(
+    def _id_base_source(
         self,
         snapshot: SpanPanelSnapshot,
         description: T,
         unique_id: str,
-        existing_entity_id: str | None,
-    ) -> str | None:
-        """Return the base this entity's id is composed from, or None to leave it to Core.
+    ) -> CircuitIdBaseSource | None:
+        """Return what this entity's id base is worked out from, or None to leave the id to Core.
 
         `None` -- the default, and the answer for every entity that is not a
-        circuit sensor on its circuit's device -- leaves `_span_object_id_base`
+        circuit sensor on its circuit's device -- leaves `_span_id_base_source`
         unset, so Home Assistant composes the id from the display name exactly
         as it always has.
 
-        `existing_entity_id` is the id the entity's registry row has, or None
-        for an entity being created, which a circuit sensor reads its suffix's
-        spelling back from. `unique_id` is the entity's own, which a circuit
-        sensor records its base under.
+        `unique_id` is the entity's own, which a circuit sensor records its
+        base's recipe under and finds its registry row by, to read its
+        suffix's spelling back from the id the row has each time Core asks.
         """
         return None
 
