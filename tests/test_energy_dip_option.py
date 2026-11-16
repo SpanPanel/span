@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+import probatio as vol
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-import voluptuous as vol
 
 from custom_components.span_panel.const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 

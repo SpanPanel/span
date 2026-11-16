@@ -25,6 +25,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
@@ -36,6 +37,7 @@ from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 
 from .adapter_fixtures import schema_one_snapshot, schema_one_tree
 from .factories import pv_binding_for
+from .helpers import register_panel_device
 
 #: The capture's one circuit whose relay is locked: `switch/relay-controllable`
 #: is `false` and `switch/relay` carries no `$settable`. It still publishes a
@@ -52,24 +54,26 @@ RELAY_POLICIES = frozenset({"shed_priority", "pcs_managed", "pcs_priority"})
 RELAY_FACTS = frozenset({"always_on", "is_sheddable", "relay_state", "relay_requester"})
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     """Return a coordinator-like mock carrying one snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -77,17 +81,21 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     return coordinator
 
 
-def _power_sensor(snapshot: SpanPanelSnapshot, circuit_id: str) -> SpanCircuitPowerSensor:
+def _power_sensor(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, circuit_id: str
+) -> SpanCircuitPowerSensor:
     """Return the power sensor the platform creates for one circuit, which carries these attributes."""
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     for sensor in create_circuit_sensors(coordinator, snapshot, coordinator.config_entry):
         if isinstance(sensor, SpanCircuitPowerSensor) and sensor.circuit_id == circuit_id:
             return sensor
     raise AssertionError(f"no power sensor created for circuit {circuit_id}")
 
 
-def _attributes(snapshot: SpanPanelSnapshot, circuit_id: str) -> dict[str, Any]:
-    return _power_sensor(snapshot, circuit_id).extra_state_attributes or {}
+def _attributes(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, circuit_id: str
+) -> dict[str, Any]:
+    return _power_sensor(hass, snapshot, circuit_id).extra_state_attributes or {}
 
 
 def _republishing(device_id: str, **topics: str) -> SpanPanelSnapshot:
@@ -128,32 +136,34 @@ def test_the_capture_publishes_both_policies_on_a_locked_relay() -> None:
 
 
 @pytest.mark.parametrize("stored", ["UNKNOWN", "NEVER", "SOC_THRESHOLD", "OFF_GRID"])
-def test_a_locked_relay_reports_no_policy_whatever_priority_is_stored(stored: str) -> None:
+def test_a_locked_relay_reports_no_policy_whatever_priority_is_stored(
+    hass: HomeAssistant, stored: str
+) -> None:
     """Every value the reporter's five locked circuits published, and none of them is shown.
 
     `OFF_GRID` is the one that misled: it reads as "turns off in an outage" on a
     circuit the panel never turns off.
     """
     attributes = _attributes(
-        _republishing(LOCKED_CIRCUIT, **{"load-shed/priority": stored}), LOCKED_CIRCUIT
+        hass, _republishing(LOCKED_CIRCUIT, **{"load-shed/priority": stored}), LOCKED_CIRCUIT
     )
 
     assert not RELAY_POLICIES & attributes.keys(), attributes
 
 
-def test_a_locked_relay_still_reports_what_it_is() -> None:
+def test_a_locked_relay_still_reports_what_it_is(hass: HomeAssistant) -> None:
     """The facts about the relay stay, and they are the ones that are true of it."""
-    attributes = _attributes(schema_one_snapshot(), LOCKED_CIRCUIT)
+    attributes = _attributes(hass, schema_one_snapshot(), LOCKED_CIRCUIT)
 
     assert attributes.keys() >= RELAY_FACTS, attributes
     assert attributes["always_on"] is True
     assert attributes["is_sheddable"] is False
 
 
-def test_a_controllable_relay_still_reports_both_policies() -> None:
+def test_a_controllable_relay_still_reports_both_policies(hass: HomeAssistant) -> None:
     """The omission is the locked relay's alone."""
     tree = schema_one_tree()
-    attributes = _attributes(schema_one_snapshot(), CONTROLLABLE_CIRCUIT)
+    attributes = _attributes(hass, schema_one_snapshot(), CONTROLLABLE_CIRCUIT)
 
     assert attributes["shed_priority"] == tree[CONTROLLABLE_CIRCUIT]["load-shed/priority"]
     assert attributes["pcs_managed"] is True
@@ -161,13 +171,13 @@ def test_a_controllable_relay_still_reports_both_policies() -> None:
     assert attributes["always_on"] is False
 
 
-def test_the_rule_follows_the_relay_on_every_update() -> None:
+def test_the_rule_follows_the_relay_on_every_update(hass: HomeAssistant) -> None:
     """Re-commissioning a circuit in place moves its relay, and the attributes go with it.
 
     One sensor across updates, in both directions, so a rule decided once at
     creation -- or a value latched from the first read -- would show here.
     """
-    sensor = _power_sensor(schema_one_snapshot(), LOCKED_CIRCUIT)
+    sensor = _power_sensor(hass, schema_one_snapshot(), LOCKED_CIRCUIT)
     assert not RELAY_POLICIES & (sensor.extra_state_attributes or {}).keys()
 
     sensor.coordinator.data = _republishing(LOCKED_CIRCUIT, **{"switch/relay-controllable": "true"})
@@ -178,7 +188,7 @@ def test_the_rule_follows_the_relay_on_every_update() -> None:
     sensor.coordinator.data = schema_one_snapshot()
     assert not RELAY_POLICIES & (sensor.extra_state_attributes or {}).keys()
 
-    controllable = _power_sensor(schema_one_snapshot(), CONTROLLABLE_CIRCUIT)
+    controllable = _power_sensor(hass, schema_one_snapshot(), CONTROLLABLE_CIRCUIT)
     controllable.coordinator.data = _republishing(
         CONTROLLABLE_CIRCUIT, **{"switch/relay-controllable": "false"}
     )
@@ -188,7 +198,7 @@ def test_the_rule_follows_the_relay_on_every_update() -> None:
 
 
 @pytest.mark.spec_only
-def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
+def test_a_circuit_that_declares_no_relay_reports_no_policy(hass: HomeAssistant) -> None:
     """Load-shed and PCS need a relay to act on, and this circuit declares none.
 
     Pins the field the omission reads. With no relay there is nothing to be
@@ -203,13 +213,13 @@ def test_a_circuit_that_declares_no_relay_reports_no_policy() -> None:
     assert circuit.measures_outside_panel is False
     assert circuit.pcs_managed is not None
 
-    attributes = _attributes(snapshot, CONTROLLABLE_CIRCUIT)
+    attributes = _attributes(hass, snapshot, CONTROLLABLE_CIRCUIT)
 
     assert not RELAY_POLICIES & attributes.keys(), attributes
 
 
 @pytest.mark.spec_only
-def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
+def test_a_circuit_that_declares_no_relay_reports_no_relay_facts(hass: HomeAssistant) -> None:
     """Nor does it report a relay it does not have.
 
     `always_on`, `relay_state`, `relay_requester` and `is_sheddable` are facts
@@ -217,7 +227,7 @@ def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
     -- not locked, state UNKNOWN, requester UNKNOWN, never shed -- which read as
     a relay whose state is unknown. The circuit's other attributes stay.
     """
-    attributes = _attributes(_without_a_relay(CONTROLLABLE_CIRCUIT), CONTROLLABLE_CIRCUIT)
+    attributes = _attributes(hass, _without_a_relay(CONTROLLABLE_CIRCUIT), CONTROLLABLE_CIRCUIT)
 
     assert not RELAY_FACTS & attributes.keys(), attributes
     assert "tabs" in attributes
@@ -225,7 +235,9 @@ def test_a_circuit_that_declares_no_relay_reports_no_relay_facts() -> None:
 
 @pytest.mark.spec_only
 @pytest.mark.parametrize("circuit_id", [CONTROLLABLE_CIRCUIT, LOCKED_CIRCUIT])
-def test_a_relay_that_has_not_reported_is_still_a_relay(circuit_id: str) -> None:
+def test_a_relay_that_has_not_reported_is_still_a_relay(
+    hass: HomeAssistant, circuit_id: str
+) -> None:
     """Whether a circuit has a relay is the declaration's to say, not the reading's.
 
     The `switch` node is declared and `switch/relay` carries no value, as on a
@@ -238,7 +250,7 @@ def test_a_relay_that_has_not_reported_is_still_a_relay(circuit_id: str) -> None
     snapshot = schema_one_snapshot(tree)
     assert snapshot.circuits[circuit_id].relay_state == "UNKNOWN"
 
-    attributes = _attributes(snapshot, circuit_id)
+    attributes = _attributes(hass, snapshot, circuit_id)
 
     assert attributes.keys() >= RELAY_FACTS, attributes
     assert attributes["relay_state"] == "UNKNOWN"

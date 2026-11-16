@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import State
+from homeassistant.core import HomeAssistant, State
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
@@ -39,8 +39,7 @@ from custom_components.span_panel.sensor_base import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
-    _resolve_circuit_identifier_for_sync,
-    _unnamed_circuit_fallback,
+    _resolve_circuit_identifier,
 )
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
@@ -81,6 +80,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 
 
 @pytest.fixture(autouse=True)
@@ -95,23 +95,25 @@ def _mock_entity_registry():
         yield registry
 
 
-def _make_coordinator(snapshot, *, options: dict | None = None) -> MagicMock:
+def _make_coordinator(hass: HomeAssistant, snapshot, *, options: dict | None = None) -> MagicMock:
     """Create a coordinator-like mock for direct sensor tests."""
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.panel_offline = False
     coordinator.transport_dead = False
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},
         options=options or {},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -122,10 +124,10 @@ def _make_coordinator(snapshot, *, options: dict | None = None) -> MagicMock:
     return coordinator
 
 
-def test_panel_power_sensor_extra_state_attributes_include_amperage() -> None:
+def test_panel_power_sensor_extra_state_attributes_include_amperage(hass: HomeAssistant) -> None:
     """Panel power sensors should expose 240V and derived amperage."""
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -140,10 +142,10 @@ def test_panel_power_sensor_extra_state_attributes_include_amperage() -> None:
     }
 
 
-def test_panel_power_sensor_reports_no_amperage_when_value_not_numeric() -> None:
+def test_panel_power_sensor_reports_no_amperage_when_value_not_numeric(hass: HomeAssistant) -> None:
     """A power that is unknown has no amperage either, rather than a 0 A nobody measured."""
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -157,7 +159,7 @@ def test_panel_power_sensor_reports_no_amperage_when_value_not_numeric() -> None
     }
 
 
-def test_grid_power_says_when_the_lugs_are_not_the_utility_connection() -> None:
+def test_grid_power_says_when_the_lugs_are_not_the_utility_connection(hass: HomeAssistant) -> None:
     """The attribute exists for the case where the two grid figures disagree.
 
     A BESS ahead of the main lugs, or a panel fed by another panel, leaves this
@@ -168,7 +170,7 @@ def test_grid_power_says_when_the_lugs_are_not_the_utility_connection() -> None:
     snapshot = SpanPanelSnapshotFactory.create(
         instant_grid_power_w=480.0, lugs_at_service_entrance=False
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -179,7 +181,7 @@ def test_grid_power_says_when_the_lugs_are_not_the_utility_connection() -> None:
     assert sensor.native_value == 480.0
 
 
-def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
+def test_only_the_grid_sensor_carries_the_topology_attribute(hass: HomeAssistant) -> None:
     """The same class backs four sensors and only one reads a topology-dependent meter.
 
     Feedthrough, battery and PV are what they say they are wherever the panel
@@ -189,7 +191,7 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
     snapshot = SpanPanelSnapshotFactory.create(
         instant_grid_power_w=480.0, feedthrough_power_w=120.0, lugs_at_service_entrance=False
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "feedthroughPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -198,7 +200,9 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
     assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
-def test_the_topology_attribute_reports_what_the_parent_child_panel_published() -> None:
+def test_the_topology_attribute_reports_what_the_parent_child_panel_published(
+    hass: HomeAssistant,
+) -> None:
     """schema_1 resolves the field, so the attribute is a reading and is published.
 
     The reference capture's upstream lugs carry `connection/fed-by-device-id =
@@ -206,7 +210,7 @@ def test_the_topology_attribute_reports_what_the_parent_child_panel_published() 
     topology the attribute exists to report.
     """
     snapshot = schema_one_snapshot()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -215,7 +219,7 @@ def test_the_topology_attribute_reports_what_the_parent_child_panel_published() 
     assert sensor.extra_state_attributes["at_service_entrance"] is False
 
 
-def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None:
+def test_the_topology_attribute_still_says_true_when_true_is_a_reading(hass: HomeAssistant) -> None:
     """Omission must turn on where the value came from, never on what it is.
 
     Republishing the capture with the upstream lugs' `fed-by-device-id` empty
@@ -225,7 +229,7 @@ def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None
     tree = schema_one_tree()
     tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = schema_one_snapshot(tree)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -234,7 +238,7 @@ def test_the_topology_attribute_still_says_true_when_true_is_a_reading() -> None
     assert sensor.extra_state_attributes["at_service_entrance"] is True
 
 
-def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it() -> None:
+def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it(hass: HomeAssistant) -> None:
     """The same empty value, delivered message by message as the broker replays it.
 
     On that path a zero-length payload is a clear, which the library reads as
@@ -247,7 +251,7 @@ def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it() -> None:
     tree["lugs-upstream"]["connection/fed-by-device-id"] = ""
     snapshot = replayed_snapshot(tree)
     assert snapshot.lugs_at_service_entrance is True
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -256,7 +260,9 @@ def test_the_empty_feed_is_still_a_reading_when_the_broker_replays_it() -> None:
     assert sensor.extra_state_attributes["at_service_entrance"] is True
 
 
-def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> None:
+def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said(
+    hass: HomeAssistant,
+) -> None:
     """Declared and not yet published, the feed may still name a device.
 
     schema_1 reads that as None rather than either answer, and the attribute
@@ -266,7 +272,7 @@ def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> Non
     del tree["lugs-upstream"]["connection/fed-by-device-id"]
     snapshot = schema_one_snapshot(tree)
     assert snapshot.lugs_at_service_entrance is None
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
@@ -275,7 +281,7 @@ def test_the_topology_attribute_is_omitted_while_the_lugs_have_not_said() -> Non
     assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
-def test_the_topology_attribute_does_not_ask_which_adapter_produced_it() -> None:
+def test_the_topology_attribute_does_not_ask_which_adapter_produced_it(hass: HomeAssistant) -> None:
     """The snapshot's answer is the reading, whichever schema generation supplied it.
 
     A gate that also named the running adapter's key would silence the
@@ -283,7 +289,7 @@ def test_the_topology_attribute_does_not_ask_which_adapter_produced_it() -> None
     lugs' `None` is the one value that says the question is unanswered.
     """
     snapshot = schema_one_snapshot()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.client.schema_major = "schema_2"
     description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
@@ -293,7 +299,9 @@ def test_the_topology_attribute_does_not_ask_which_adapter_produced_it() -> None
     assert sensor.extra_state_attributes["at_service_entrance"] is False
 
 
-def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label() -> None:
+def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label(
+    hass: HomeAssistant,
+) -> None:
     """One shared answer replaces the per-class fallbacks, and it is name-only.
 
     `_generate_panel_name` returns the description's own label and nothing else;
@@ -310,7 +318,7 @@ def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label()
         battery=battery,
         pv=SpanPVSnapshot(vendor_name="SolarEdge"),
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     status_desc = next(desc for desc in STATUS_SENSORS if desc.key == "software_version")
     assert not isinstance(status_desc.name, str), (
@@ -321,10 +329,10 @@ def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label()
     assert status_sensor._generate_panel_name(snapshot, status_desc) == "Sensor"
 
 
-def test_a_panel_sensor_with_a_name_shows_it() -> None:
+def test_a_panel_sensor_with_a_name_shows_it(hass: HomeAssistant) -> None:
     """The other half of the same answer, with the label spelled on the description."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     unnamed = next(desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state")
     described = replace(unnamed, name="Main Relay")
 
@@ -332,12 +340,12 @@ def test_a_panel_sensor_with_a_name_shows_it() -> None:
     assert sensor._generate_panel_name(snapshot, described) == "Main Relay"
 
 
-def test_panel_metadata_sensors_return_expected_data_sources() -> None:
+def test_panel_metadata_sensors_return_expected_data_sources(hass: HomeAssistant) -> None:
     """BESS and PV metadata sensors should read their expected snapshots."""
     battery = SpanBatterySnapshotFactory.create(vendor_name="Tesla")
     pv_snapshot = SpanPVSnapshot(vendor_name="SolarEdge")
     snapshot = SpanPanelSnapshotFactory.create(battery=battery, pv=pv_snapshot)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     bess_sensor = SpanBessMetadataSensor(
         coordinator,
@@ -357,10 +365,12 @@ def test_panel_metadata_sensors_return_expected_data_sources() -> None:
     assert pv_sensor.get_data_source(snapshot) is pv_snapshot
 
 
-def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace() -> None:
+def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace(
+    hass: HomeAssistant,
+) -> None:
     """Panel energy sensors should merge grace-period and voltage attributes."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -377,21 +387,21 @@ def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace() -> Non
     assert "grace_period_remaining" in attrs
 
 
-def test_panel_battery_sensor_uses_battery_snapshot() -> None:
+def test_panel_battery_sensor_uses_battery_snapshot(hass: HomeAssistant) -> None:
     """Battery sensors should read from the nested battery snapshot."""
     battery = SpanBatterySnapshotFactory.create(soe_percentage=77.0)
     snapshot = SpanPanelSnapshotFactory.create(battery=battery)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot)
 
     assert sensor.get_data_source(snapshot) is battery
 
 
-def test_panel_status_attributes_return_none_without_coordinator_data() -> None:
+def test_panel_status_attributes_return_none_without_coordinator_data(hass: HomeAssistant) -> None:
     """Panel status attributes should disappear when coordinator data is missing."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanPanelStatus(
         coordinator,
@@ -404,12 +414,12 @@ def test_panel_status_attributes_return_none_without_coordinator_data() -> None:
     assert sensor.extra_state_attributes is None
 
 
-def test_bess_metadata_sensor_uses_device_override() -> None:
+def test_bess_metadata_sensor_uses_device_override(hass: HomeAssistant) -> None:
     """BESS metadata sensors should preserve the provided sub-device info."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(vendor_name="Tesla")
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     device_info = {"identifiers": {("span_panel", "sp3-242424-001_bess")}}
 
     sensor = SpanBessMetadataSensor(coordinator, BESS_METADATA_SENSORS[0], snapshot, device_info)
@@ -417,7 +427,9 @@ def test_bess_metadata_sensor_uses_device_override() -> None:
     assert sensor.device_info == device_info
 
 
-def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> None:
+def test_circuit_power_sensor_extra_attributes_include_circuit_metadata(
+    hass: HomeAssistant,
+) -> None:
     """Circuit power/current sensors should expose circuit attributes.
 
     A circuit whose relay the panel can open, which is the only kind that carries
@@ -435,7 +447,7 @@ def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> Non
         current_a=12.5,
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
@@ -450,43 +462,41 @@ def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> Non
     }
 
 
-def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab() -> None:
+def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab(hass: HomeAssistant) -> None:
     """An unnamed circuit in friendly-name mode falls back to its breaker position.
 
+    Its device is named by it, and the entity carries its label alone.
     Answering `None` here let Home Assistant name every unnamed circuit on the
     panel alike, and the id followed: they collided and were disambiguated with
     `_2`, `_3`, ... in whatever order they happened to be added.
     """
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name=None, tabs=[7])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot, options={"use_circuit_numbers": False})
+    coordinator = _make_coordinator(hass, snapshot, options={"use_circuit_numbers": False})
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snapshot, "c1")
 
-    assert sensor.name == "Circuit 7 Breaker Rating"
+    assert sensor.name == "Breaker Rating"
+    assert sensor.device_info is not None
+    assert sensor.device_info.get("name") == "Circuit 7"
+    assert sensor.suggested_object_id == "breaker rating"
 
 
 def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
-    """Unnamed PV and EVSE circuits should use special fallback labels."""
+    """Unnamed PV and EVSE circuits' sensor ids were built from special fallback labels."""
     solar_circuit = SpanCircuitSnapshotFactory.create(circuit_id="pv1", name="", device_type="pv")
     evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
+    names_mode = {USE_CIRCUIT_NUMBERS: False}
 
-    assert _unnamed_circuit_fallback(solar_circuit, "pv1") == "Solar"
-    assert _unnamed_circuit_fallback(evse_circuit, "ev1") == "EV Charger"
-
-
-def test_resolve_circuit_identifier_for_sync_falls_back_when_name_missing() -> None:
-    """Panel-name sync should use unnamed fallback labels when needed."""
-    evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
-
-    assert _resolve_circuit_identifier_for_sync(evse_circuit, "ev1") == "EV Charger"
+    assert _resolve_circuit_identifier(solar_circuit, "pv1", names_mode) == "Solar"
+    assert _resolve_circuit_identifier(evse_circuit, "ev1", names_mode) == "EV Charger"
 
 
-def test_circuit_power_sensor_subdevice_uses_short_name() -> None:
+def test_circuit_power_sensor_subdevice_uses_short_name(hass: HomeAssistant) -> None:
     """EVSE sub-device circuit sensors should omit circuit prefix in the name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanCircuitPowerSensor(
         coordinator,
@@ -499,37 +509,54 @@ def test_circuit_power_sensor_subdevice_uses_short_name() -> None:
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Current"
 
 
-def test_circuit_power_sensor_missing_circuit_uses_fallback_name() -> None:
-    """A missing circuit is named by its id, as the energy sensor names it."""
+@pytest.mark.parametrize(
+    ("sensor_class", "description"),
+    [
+        (SpanCircuitPowerSensor, CIRCUIT_CURRENT_SENSOR),
+        (
+            SpanCircuitEnergySensor,
+            next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"),
+        ),
+    ],
+    ids=["power", "energy"],
+)
+def test_a_circuit_sensor_needs_its_circuit_in_the_snapshot_it_is_built_from(
+    hass: HomeAssistant,
+    sensor_class: type[SpanCircuitPowerSensor] | type[SpanCircuitEnergySensor],
+    description: SpanPanelCircuitsSensorEntityDescription,
+) -> None:
+    """The circuit names the device the sensor goes on, so there is no sensor without it.
+
+    Setup builds circuit sensors from the circuits of the snapshot it is handed,
+    as the switch and the select are built, so this is a programming error and
+    not a state a panel can put the integration in.
+    """
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
-    sensor = SpanCircuitPowerSensor(
-        coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "missing_circuit"
-    )
-
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit missing_circuit Current"
-    )
+    with pytest.raises(KeyError, match="Circuit missing_circuit not found"):
+        sensor_class(coordinator, description, snapshot, "missing_circuit")
 
 
-def test_circuit_power_sensor_get_data_source_raises_for_missing_circuit() -> None:
+def test_circuit_power_sensor_get_data_source_raises_for_missing_circuit(
+    hass: HomeAssistant,
+) -> None:
     """Missing circuit data should raise a clear KeyError."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
-    coordinator = _make_coordinator(snapshot)
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     with pytest.raises(KeyError, match="Circuit c1 not found"):
-        sensor.get_data_source(snapshot)
+        sensor.get_data_source(SpanPanelSnapshotFactory.create(circuits={}))
 
 
-def test_circuit_energy_sensor_registers_consumed_sensor_on_add() -> None:
+def test_circuit_energy_sensor_registers_consumed_sensor_on_add(hass: HomeAssistant) -> None:
     """Consumed/produced energy sensors should register with the coordinator."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
@@ -587,7 +614,7 @@ def _added(sensor: SpanCircuitEnergySensor | SpanPanelEnergySensor) -> None:
     ids=["produced-only", "consumed-only", "produced-larger", "consumed-larger"],
 )
 def test_circuit_net_is_compensated_credit_minus_compensated_debit(
-    device_type: str, produced_offset: float, consumed_offset: float
+    hass: HomeAssistant, device_type: str, produced_offset: float, consumed_offset: float
 ) -> None:
     raw_produced, raw_consumed = 50.0, 4.0
     circuit = SpanCircuitSnapshotFactory.create(
@@ -598,7 +625,7 @@ def test_circuit_net_is_compensated_credit_minus_compensated_debit(
         device_type=device_type,
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(
         CircuitMeter("c1"), produced=produced_offset, consumed=consumed_offset
     )
@@ -612,12 +639,14 @@ def test_circuit_net_is_compensated_credit_minus_compensated_debit(
     assert sensor.native_value == pytest.approx(expected)
 
 
-def test_a_circuit_retyped_to_pv_flips_its_value_and_its_adjustment_together() -> None:
+def test_a_circuit_retyped_to_pv_flips_its_value_and_its_adjustment_together(
+    hass: HomeAssistant,
+) -> None:
     load = SpanCircuitSnapshotFactory.create(
         circuit_id="c1", name="Inverter 2", produced_energy_wh=50.0, consumed_energy_wh=4.0
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": load})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=36.0)
     sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
 
@@ -629,13 +658,13 @@ def test_a_circuit_retyped_to_pv_flips_its_value_and_its_adjustment_together() -
     assert sensor.native_value == pytest.approx(1000.0 - 40.0)
 
 
-def test_net_stays_unknown_while_a_counter_is_unreported() -> None:
+def test_net_stays_unknown_while_a_counter_is_unreported(hass: HomeAssistant) -> None:
     """Review Focus 2: an offset on one counter never stands in for the missing other."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="c1", name="Solar", produced_energy_wh=None, consumed_energy_wh=4.0, device_type="pv"
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=0.0)
     sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
 
@@ -644,13 +673,13 @@ def test_net_stays_unknown_while_a_counter_is_unreported() -> None:
     assert sensor.native_value is None
 
 
-def test_offline_grace_holds_the_compensated_net() -> None:
+def test_offline_grace_holds_the_compensated_net(hass: HomeAssistant) -> None:
     """Review Focus 3: the offline path neither re-reads nor re-applies the adjustment."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="c1", name="Solar", produced_energy_wh=50.0, consumed_energy_wh=4.0, device_type="pv"
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=36.0)
     sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
     sensor._update_native_value()
@@ -664,10 +693,10 @@ def test_offline_grace_holds_the_compensated_net() -> None:
     assert coordinator.dip_offset.call_count == reads
 
 
-def test_a_net_sensor_never_registers_as_an_offset_source() -> None:
+def test_a_net_sensor_never_registers_as_an_offset_source(hass: HomeAssistant) -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
 
     _added(sensor)
@@ -684,9 +713,11 @@ def test_a_net_sensor_never_registers_as_an_offset_source() -> None:
         ("feedthroughEnergyConsumedWh", PanelMeter.FEEDTHROUGH, EnergyCounter.CONSUMED),
     ],
 )
-def test_panel_counters_register_under_their_meter(key: str, meter: PanelMeter, counter: EnergyCounter) -> None:
+def test_panel_counters_register_under_their_meter(
+    hass: HomeAssistant, key: str, meter: PanelMeter, counter: EnergyCounter
+) -> None:
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     sensor = SpanPanelEnergySensor(coordinator, _panel_description(key), snapshot)
 
     _added(sensor)
@@ -694,11 +725,13 @@ def test_panel_counters_register_under_their_meter(key: str, meter: PanelMeter, 
     coordinator.register_energy_sensor.assert_called_once_with(meter, counter, sensor)
 
 
-def test_main_meter_net_is_compensated_consumed_minus_compensated_produced() -> None:
+def test_main_meter_net_is_compensated_consumed_minus_compensated_produced(
+    hass: HomeAssistant,
+) -> None:
     snapshot = SpanPanelSnapshotFactory.create(
         main_meter_energy_consumed_wh=100.0, main_meter_energy_produced_wh=10.0
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(PanelMeter.MAIN_METER, produced=290.0, consumed=2400.0)
     sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterNetEnergyWh"), snapshot)
 
@@ -738,7 +771,9 @@ def _offset_of(meter: EnergyMeter) -> Callable[[EnergyMeter, EnergyCounter], flo
 
 
 @pytest.mark.parametrize("device_type", ["pv", "circuit", "evse"])
-def test_a_circuit_nets_adjustment_is_oriented_as_its_value(device_type: str) -> None:
+def test_a_circuit_nets_adjustment_is_oriented_as_its_value(
+    hass: HomeAssistant, device_type: str
+) -> None:
     """Net under offsets is the value function of the compensated counters, never the other sign."""
     description = _circuit_description("circuit_energy_net")
     circuit = SpanCircuitSnapshotFactory.create(
@@ -748,7 +783,7 @@ def test_a_circuit_nets_adjustment_is_oriented_as_its_value(device_type: str) ->
         produced_energy_wh=RAW[EnergyCounter.PRODUCED],
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offset_of(CircuitMeter("c1"))
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
@@ -768,6 +803,7 @@ def test_a_circuit_nets_adjustment_is_oriented_as_its_value(device_type: str) ->
     ids=lambda d: d.key,
 )
 def test_a_panel_nets_adjustment_is_oriented_as_its_value(
+    hass: HomeAssistant,
     description: SpanPanelDataSensorEntityDescription,
 ) -> None:
     """Main Meter Net and Feed Through Net, through the same path a circuit's Net takes."""
@@ -777,7 +813,7 @@ def test_a_panel_nets_adjustment_is_oriented_as_its_value(
         SpanPanelSnapshotFactory.create(),
         **{fields[counter]: RAW[counter] for counter in EnergyCounter},
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offset_of(description.panel_meter)
     sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
 
@@ -792,7 +828,9 @@ def test_a_panel_nets_adjustment_is_oriented_as_its_value(
 # ---------------------------------------------------------------------------
 
 
-def test_an_energy_sensor_that_never_binds_its_energy_fails_at_construction() -> None:
+def test_an_energy_sensor_that_never_binds_its_energy_fails_at_construction(
+    hass: HomeAssistant,
+) -> None:
     class _Forgetful(SpanPanelEnergySensor):
         def __init__(
             self,
@@ -805,24 +843,28 @@ def test_an_energy_sensor_that_never_binds_its_energy_fails_at_construction() ->
     snapshot = SpanPanelSnapshotFactory.create()
 
     with pytest.raises(TypeError, match="_bind_energy"):
-        _Forgetful(_make_coordinator(snapshot), _panel_description("mainMeterNetEnergyWh"), snapshot)
+        _Forgetful(
+            _make_coordinator(hass, snapshot), _panel_description("mainMeterNetEnergyWh"), snapshot
+        )
 
 
-def test_an_energy_sensor_cannot_be_bound_twice() -> None:
+def test_an_energy_sensor_cannot_be_bound_twice(hass: HomeAssistant) -> None:
     snapshot = SpanPanelSnapshotFactory.create()
     sensor = SpanPanelEnergySensor(
-        _make_coordinator(snapshot), _panel_description("mainMeterEnergyConsumedWh"), snapshot
+        _make_coordinator(hass, snapshot), _panel_description("mainMeterEnergyConsumedWh"), snapshot
     )
 
     with pytest.raises(RuntimeError, match="twice"):
         sensor._bind_energy(EnergyBinding(meter=None, role=None, net=None))
 
 
-def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference() -> None:
+def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference(
+    hass: HomeAssistant,
+) -> None:
     snapshot = SpanPanelSnapshotFactory.create(
         feedthrough_energy_consumed_wh=5.0, feedthrough_energy_produced_wh=1.0
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.dip_offset.side_effect = _offsets(PanelMeter.FEEDTHROUGH, produced=0.0, consumed=0.0)
     sensor = SpanPanelEnergySensor(coordinator, _panel_description("feedthroughNetEnergyWh"), snapshot)
 
@@ -831,25 +873,11 @@ def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference() ->
     assert sensor.native_value == pytest.approx(4.0)
 
 
-def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:
-    """Circuit energy sensors should format fallback names when the circuit is gone."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
-    coordinator = _make_coordinator(snapshot)
-    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
-
-    sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c9")
-
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Consumed Energy"
-    )
-
-
-def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
+def test_circuit_energy_sensor_subdevice_uses_description_only(hass: HomeAssistant) -> None:
     """EVSE sub-device energy sensors should use the description name directly."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(
@@ -863,13 +891,17 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Consumed Energy"
 
 
-def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing() -> None:
+def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing(
+    hass: HomeAssistant,
+) -> None:
     """Missing circuit data should still return grace-period attributes without tabs."""
-    snapshot = SpanPanelSnapshotFactory.create(circuits={})
-    coordinator = _make_coordinator(snapshot)
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
 
     sensor._last_valid_state = 12.0
     sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
@@ -917,6 +949,7 @@ _PANEL_LEVEL_POWER_SENSORS: Final = (
 
 @pytest.mark.parametrize("description", _PANEL_LEVEL_POWER_SENSORS, ids=lambda d: d.key)
 def test_panel_power_sensor_reads_unknown_while_panel_offline(
+    hass: HomeAssistant,
     description: SpanPanelDataSensorEntityDescription,
 ) -> None:
     """An offline panel's power is unknown, never a 0 W nobody measured.
@@ -932,7 +965,7 @@ def test_panel_power_sensor_reads_unknown_while_panel_offline(
         power_flow_grid=300.0,
         power_flow_site=1300.0,
     )
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
     sensor._update_native_value()
     assert isinstance(sensor.native_value, float)
@@ -947,13 +980,15 @@ def test_panel_power_sensor_reads_unknown_while_panel_offline(
     assert attributes["amperage"] is None
 
 
-def test_circuit_power_reads_unknown_offline_and_recovers_when_the_panel_returns() -> None:
+def test_circuit_power_reads_unknown_offline_and_recovers_when_the_panel_returns(
+    hass: HomeAssistant,
+) -> None:
     """The offline unknown lasts only as long as the outage."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="c1", name="Kitchen", instant_power_w=1200.0
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_power")
     sensor = SpanCircuitPowerSensor(coordinator, description, snapshot, "c1")
 
@@ -976,10 +1011,10 @@ def test_circuit_power_reads_unknown_offline_and_recovers_when_the_panel_returns
     assert sensor.native_value == 900.0
 
 
-def test_panel_status_sensor_reports_unknown_when_offline() -> None:
+def test_panel_status_sensor_reports_unknown_when_offline(hass: HomeAssistant) -> None:
     """Enum-like sensors should report unknown when offline."""
     snapshot = SpanPanelSnapshotFactory.create(main_relay_state="CLOSED")
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state")
 
@@ -990,10 +1025,10 @@ def test_panel_status_sensor_reports_unknown_when_offline() -> None:
     assert sensor.native_value == STATE_UNKNOWN
 
 
-def test_panel_data_sensor_missing_value_function_reports_unknown() -> None:
+def test_panel_data_sensor_missing_value_function_reports_unknown(hass: HomeAssistant) -> None:
     """Sensors without a value function should fall back to unknown."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = SpanPanelDataSensorEntityDescription(
         key="missing_value",
         value_fn=None,
@@ -1010,10 +1045,10 @@ def test_panel_data_sensor_missing_value_function_reports_unknown() -> None:
     assert sensor.native_value == STATE_UNKNOWN
 
 
-def test_panel_data_sensor_adds_enum_option_for_new_value() -> None:
+def test_panel_data_sensor_adds_enum_option_for_new_value(hass: HomeAssistant) -> None:
     """Enum sensors should normalize and append unseen options."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = SpanPanelDataSensorEntityDescription(
         key="dynamic_enum",
         value_fn=lambda _: "NEW_STATE",
@@ -1031,10 +1066,10 @@ def test_panel_data_sensor_adds_enum_option_for_new_value() -> None:
     assert "new_state" in sensor.options
 
 
-def test_panel_data_sensor_initializes_missing_enum_options() -> None:
+def test_panel_data_sensor_initializes_missing_enum_options(hass: HomeAssistant) -> None:
     """Enum sensors should initialize the options list when it is missing."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = SpanPanelDataSensorEntityDescription(
         key="dynamic_enum_missing_options",
         value_fn=lambda _: "BRAND_NEW",
@@ -1057,23 +1092,11 @@ def test_energy_extra_stored_data_invalid_input_returns_none() -> None:
     assert SpanEnergyExtraStoredData.from_dict("invalid") is None
 
 
-def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
+def test_energy_sensor_coerces_invalid_grace_period_value(hass: HomeAssistant) -> None:
     """Grace period options should be normalized to a safe integer."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
-    coordinator.config_entry = MockConfigEntry(
-        domain="span_panel",
-        data={CONF_HOST: "192.168.1.50"},
-        options={"energy_reporting_grace_period": "abc"},
-        title="SPAN Panel",
-        unique_id=snapshot.serial_number,
-    )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator,
-        panel_device_id="panel-device-id",
-        curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(snapshot),
-        setup_snapshot=snapshot,
+    coordinator = _make_coordinator(
+        hass, snapshot, options={"energy_reporting_grace_period": "abc"}
     )
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -1090,10 +1113,10 @@ def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
     assert attrs["grace_period_remaining"] == "13"
 
 
-def test_energy_sensor_offline_without_last_valid_state_reports_none() -> None:
+def test_energy_sensor_offline_without_last_valid_state_reports_none(hass: HomeAssistant) -> None:
     """Energy sensors without restored state should become unknown when offline."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -1108,6 +1131,7 @@ def test_energy_sensor_offline_without_last_valid_state_reports_none() -> None:
 
 
 def test_circuit_power_sensor_logs_debug_info_for_instant_power(
+    hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Circuit sensors should emit debug info when power data is available."""
@@ -1117,7 +1141,7 @@ def test_circuit_power_sensor_logs_debug_info_for_instant_power(
         instant_power_w=150.0,
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
@@ -1129,24 +1153,26 @@ def test_circuit_power_sensor_logs_debug_info_for_instant_power(
     assert "CIRCUIT_POWER_DEBUG: Circuit c1" in caplog.text
 
 
-def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
+def test_evse_sensor_uses_evse_subdevice_info_and_name(hass: HomeAssistant) -> None:
     """EVSE sensors should attach to the EVSE sub-device and keep static names."""
     evse = SpanEvseSnapshotFactory.create(node_id="evse-0", feed_circuit_id="c1")
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={"c1": SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")},
         evse={"evse-0": evse},
     )
-    coordinator = _make_coordinator(snapshot, options={"use_circuit_numbers": False})
-    coordinator.config_entry = MockConfigEntry(
+    coordinator = _make_coordinator(hass, snapshot, options={"use_circuit_numbers": False})
+    entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50", "device_name": "Main House"},
         options={"use_circuit_numbers": False},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -1161,10 +1187,10 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
     assert sensor.get_data_source(snapshot) is evse
 
 
-def test_evse_sensor_returns_empty_snapshot_when_missing_mid_session() -> None:
+def test_evse_sensor_returns_empty_snapshot_when_missing_mid_session(hass: HomeAssistant) -> None:
     """EVSE sensors should tolerate missing EVSE data after creation."""
     snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": SpanEvseSnapshotFactory.create()})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in EVSE_SENSORS if desc.key == "evse_status")
 
     sensor = SpanEvseSensor(coordinator, description, snapshot, "evse-0")
@@ -1176,11 +1202,11 @@ def test_evse_sensor_returns_empty_snapshot_when_missing_mid_session() -> None:
     assert data_source.feed_circuit_id == ""
 
 
-def test_existing_circuit_entity_uses_panel_name_on_init() -> None:
+def test_existing_circuit_entity_uses_panel_name_on_init(hass: HomeAssistant) -> None:
     """Existing registry entities should initialize with panel-sync naming."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
@@ -1189,15 +1215,15 @@ def test_existing_circuit_entity_uses_panel_name_on_init() -> None:
 
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    assert sensor._attr_name == "Kitchen Current"
+    assert sensor._attr_name == "Current"
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_circuit_sensor_first_update_requests_reload_for_name_sync() -> None:
+def test_circuit_sensor_first_update_requests_reload_for_name_sync(hass: HomeAssistant) -> None:
     """First coordinator update should request a reload for dynamic name sync."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
@@ -1221,11 +1247,14 @@ def test_circuit_sensor_first_update_requests_reload_for_name_sync() -> None:
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_circuit_sensor_user_override_skips_reload_on_name_change() -> None:
-    """Customized entity names should suppress automatic sync reloads."""
+def test_a_user_named_circuit_sensor_still_reloads_on_a_name_change(hass: HomeAssistant) -> None:
+    """A name the user gave the sensor does not hold its circuit's device on the old name.
+
+    The circuit's name lives on its device, which only the reload renames.
+    """
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         init_registry = MagicMock()
@@ -1246,14 +1275,15 @@ def test_circuit_sensor_user_override_skips_reload_on_name_change() -> None:
         mock_async_get.return_value = runtime_registry
         sensor._handle_coordinator_update()
 
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
     assert sensor._previous_circuit_name == "Renamed Kitchen"
 
 
-def test_sensor_online_state_handles_lookup_error_as_unknown() -> None:
+def test_sensor_online_state_handles_lookup_error_as_unknown(hass: HomeAssistant) -> None:
     """Lookup errors from the value function path should fall back to unknown."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = SpanPanelDataSensorEntityDescription(
         key="lookup_error",
         value_fn=lambda data: data.missing_attribute,
@@ -1271,11 +1301,12 @@ def test_sensor_online_state_handles_lookup_error_as_unknown() -> None:
 
 
 def test_sensor_online_state_handles_unexpected_exception_as_unknown(
+    hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Unexpected value function errors should log a warning and fall back."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = SpanPanelDataSensorEntityDescription(
         key="boom",
         value_fn=lambda _: (_ for _ in ()).throw(RuntimeError("boom")),
@@ -1294,10 +1325,11 @@ def test_sensor_online_state_handles_unexpected_exception_as_unknown(
     assert "Value function failed" in caplog.text
 
 
-def test_energy_sensor_restores_extra_data_on_add() -> None:
+def test_energy_sensor_restores_extra_data_on_add(hass: HomeAssistant) -> None:
     """Energy sensors should restore grace-period and dip state from extra data."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
     coordinator = _make_coordinator(
+        hass,
         snapshot,
         options={
             ENABLE_ENERGY_DIP_COMPENSATION: True,
@@ -1340,7 +1372,7 @@ def test_energy_sensor_restores_extra_data_on_add() -> None:
     assert sensor._last_dip_delta == 2.5
 
 
-def test_dip_offset_applied_before_coordinator_listener_fires() -> None:
+def test_dip_offset_applied_before_coordinator_listener_fires(hass: HomeAssistant) -> None:
     """Dip offset must be set before the coordinator listener is registered.
 
     If an MQTT push arrives right when the listener is registered inside
@@ -1356,6 +1388,7 @@ def test_dip_offset_applied_before_coordinator_listener_fires() -> None:
 
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=753930.6)
     coordinator = _make_coordinator(
+        hass,
         snapshot,
         options={
             ENABLE_ENERGY_DIP_COMPENSATION: True,
@@ -1409,11 +1442,12 @@ def test_dip_offset_applied_before_coordinator_listener_fires() -> None:
 
 
 def test_energy_sensor_restores_invalid_timestamp_logs_warning(
+    hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Invalid restored timestamps should be ignored with a warning."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1447,10 +1481,10 @@ def test_energy_sensor_restores_invalid_timestamp_logs_warning(
     assert "Failed to parse restored last_valid_changed" in caplog.text
 
 
-def test_energy_sensor_initializes_grace_period_from_last_state() -> None:
+def test_energy_sensor_initializes_grace_period_from_last_state(hass: HomeAssistant) -> None:
     """Energy sensors should seed grace tracking from the last HA state."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1478,10 +1512,10 @@ def test_energy_sensor_initializes_grace_period_from_last_state() -> None:
     assert sensor._restored_from_storage is True
 
 
-def test_energy_sensor_extra_restore_state_data_includes_offsets() -> None:
+def test_energy_sensor_extra_restore_state_data_includes_offsets(hass: HomeAssistant) -> None:
     """Restore payload should include tracked grace and dip data."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
+    coordinator = _make_coordinator(hass, snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1504,10 +1538,12 @@ def test_energy_sensor_extra_restore_state_data_includes_offsets() -> None:
     assert data["last_dip_delta"] == 1.5
 
 
-def test_energy_sensor_offline_seeds_last_valid_from_current_native_value() -> None:
+def test_energy_sensor_offline_seeds_last_valid_from_current_native_value(
+    hass: HomeAssistant,
+) -> None:
     """Offline grace handling should seed tracking from a restored native value."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -1524,10 +1560,10 @@ def test_energy_sensor_offline_seeds_last_valid_from_current_native_value() -> N
     assert sensor._last_valid_changed is not None
 
 
-def test_energy_sensor_negative_grace_period_is_coerced_to_zero() -> None:
+def test_energy_sensor_negative_grace_period_is_coerced_to_zero(hass: HomeAssistant) -> None:
     """Negative grace periods should be normalized to zero."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1545,10 +1581,12 @@ def test_energy_sensor_negative_grace_period_is_coerced_to_zero() -> None:
     assert sensor._grace_period_minutes == 0
 
 
-def test_energy_sensor_extra_attributes_mark_using_grace_period_when_offline() -> None:
+def test_energy_sensor_extra_attributes_mark_using_grace_period_when_offline(
+    hass: HomeAssistant,
+) -> None:
     """Grace-period attributes should expose when offline state is being used."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     coordinator.panel_offline = True
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -1565,11 +1603,11 @@ def test_energy_sensor_extra_attributes_mark_using_grace_period_when_offline() -
     assert attrs["using_grace_period"] == "True"
 
 
-def test_energy_sensor_first_update_requests_reload_for_name_sync() -> None:
+def test_energy_sensor_first_update_requests_reload_for_name_sync(hass: HomeAssistant) -> None:
     """Energy sensors should request reload on the first synced panel name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
@@ -1593,11 +1631,11 @@ def test_energy_sensor_first_update_requests_reload_for_name_sync() -> None:
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_energy_sensor_name_change_requests_reload() -> None:
+def test_energy_sensor_name_change_requests_reload(hass: HomeAssistant) -> None:
     """Energy sensors should request reload when the panel circuit name changes."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot)
+    coordinator = _make_coordinator(hass, snapshot)
     description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
@@ -1622,11 +1660,11 @@ def test_energy_sensor_name_change_requests_reload() -> None:
     assert sensor._previous_circuit_name == "Renamed Kitchen"
 
 
-def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode() -> None:
-    """The name follows the panel; the entity_id does not follow the name."""
+def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode(hass: HomeAssistant) -> None:
+    """The device's name follows the panel; the entity_id does not follow the name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
+    coordinator = _make_coordinator(hass, snapshot, options={USE_CIRCUIT_NUMBERS: True})
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
@@ -1638,17 +1676,21 @@ def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode() -> None:
 
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    assert sensor._attr_name == "Kitchen Current"
-    assert sensor.suggested_object_id == "Circuit 5 current"
+    assert sensor._attr_name == "Current"
+    assert sensor.device_info is not None
+    assert sensor.device_info.get("name") == "Kitchen"
+    assert sensor.suggested_object_id == "current"
     assert sensor.entity_id is None  # Core assigns it when the platform adds the entity
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_circuit_sensor_name_change_requests_reload_in_circuit_numbers_mode() -> None:
+def test_circuit_sensor_name_change_requests_reload_in_circuit_numbers_mode(
+    hass: HomeAssistant,
+) -> None:
     """A renamed circuit reloads, which is what rebuilds original_name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
-    coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
+    coordinator = _make_coordinator(hass, snapshot, options={USE_CIRCUIT_NUMBERS: True})
 
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         init_registry = MagicMock()
@@ -1693,19 +1735,21 @@ def test_option_bool_reads_only_a_bool(stored: object, expected: bool) -> None:
     assert option_bool(stored, False) is expected
 
 
-def test_a_non_bool_compensation_option_compensates_nothing() -> None:
+def test_a_non_bool_compensation_option_compensates_nothing(hass: HomeAssistant) -> None:
     """A truthy string is not "on": the sensor and its Net would otherwise disagree with the option."""
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: "false"})
+    coordinator = _make_coordinator(
+        hass, snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: "false"}
+    )
 
     sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterEnergyConsumedWh"), snapshot)
 
     assert sensor._dip_compensation_enabled is False
 
 
-def test_the_compensation_option_is_reread_as_a_bool_on_each_update() -> None:
+def test_the_compensation_option_is_reread_as_a_bool_on_each_update(hass: HomeAssistant) -> None:
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
+    coordinator = _make_coordinator(hass, snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
     sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterEnergyConsumedWh"), snapshot)
     assert sensor._dip_compensation_enabled is True
 

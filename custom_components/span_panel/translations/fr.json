@@ -64,9 +64,9 @@
           "entity_naming_pattern": "Modèle de nommage"
         },
         "data_description": {
-          "entity_naming_pattern": "Les noms conviviaux utilisent les étiquettes de circuit du panneau. Les noms basés sur les onglets utilisent les numéros d'onglets de disjoncteur pour des identifiants d'entité stables."
+          "entity_naming_pattern": "Les deux choix construisent l'identifiant de chaque nouvelle entité une seule fois, à sa création : les noms de circuit à partir du nom du circuit dans l'application SPAN, les numéros de circuit à partir de la position de son disjoncteur. Dans les deux cas, les noms affichés suivent l'application SPAN."
         },
-        "description": "Choisissez comment les entités liées aux circuits sont nommées dans Home Assistant.",
+        "description": "Choisissez comment sont construits les identifiants d'entité des nouvelles entités de circuit.",
         "title": "Nommage des entités de circuit"
       },
       "choose_v2_auth": {
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Numéros de Circuit (ex., span_panel_circuit_15_power)",
-        "friendly_names": "Noms Conviviaux (ex., span_panel_cuisine_prises_power)"
+        "circuit_numbers": "Numéros de circuit (ex., span_panel_circuit_15_power)",
+        "friendly_names": "Noms de circuit (ex., span_panel_cuisine_prises_power)"
       }
     }
   },
@@ -1053,6 +1053,14 @@
     "panel_firmware_flat": {
       "title": "Le micrologiciel du SPAN Panel doit être mis à jour",
       "description": "{panel} utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat que cette intégration ne prend plus en charge. Mettez à jour le micrologiciel du panneau ; une fois à jour, le panneau se reconnectera de lui-même."
+    },
+    "circuit_devices_converted": {
+      "title": "Les circuits du SPAN Panel ont désormais leurs propres appareils",
+      "description": "Chaque circuit de {panel} est désormais un appareil à part entière sous le panneau, nommé d'après le nom du circuit dans l'application SPAN, et ses entités sont nommées d'après ce qu'elles mesurent, par exemple Power. Aucun identifiant d'entité n'a changé ; les automatisations, les scripts et les tableaux de bord qui utilisent des identifiants d'entité continuent donc de fonctionner.\n\n**Noms affichés qui ont changé :**\n\n{renamed}\n\n**Zones déplacées vers l'appareil du circuit**, de sorte que les entités d'un circuit partagent désormais une même zone :\n\n{area_changes}\n\n**Circuits dont les zones ont été laissées telles quelles**, parce que l'interrupteur de leur disjoncteur n'a pas de zone. Leurs entités s'affichent sans le nom du circuit. Pour le rétablir, attribuez une zone à l'appareil du circuit et retirez les zones propres aux entités, en sachant que l'interrupteur du disjoncteur rejoint alors lui aussi cette zone, où une extinction de toute la zone l'atteint.\n\n{circuits_left_in_areas}\n\nLes modèles qui lisent l'appareil d'une entité, comme `device_name` ou `device_entities`, voient désormais l'appareil du circuit au lieu du panneau. Ignorez cet avis une fois que vous l'avez lu."
+    },
+    "breaker_switch_in_area": {
+      "title": "Un interrupteur de disjoncteur du SPAN Panel a rejoint une zone",
+      "description": "{switch} est un nouvel interrupteur de disjoncteur sur un circuit dont l'appareil se trouve dans {area} ; l'interrupteur se trouve donc lui aussi dans {area}. Une action sur toute la zone, comme tout éteindre dans {area}, coupe désormais ce disjoncteur. Pour le tenir à l'écart de telles actions, attribuez à l'interrupteur une autre zone qui lui soit propre ou retirez la zone de l'appareil de son circuit. Ignorez cet avis une fois que vous l'avez lu."
     }
   }
 }

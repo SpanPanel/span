@@ -49,6 +49,7 @@ from custom_components.span_panel.services import (
 )
 
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 OLD_BROKER_PASSWORD = "old-broker-password"
 NEW_BROKER_PASSWORD = "new-broker-password"
@@ -89,12 +90,13 @@ def _add_v2_entry(hass: HomeAssistant) -> MockConfigEntry:
     )
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-test-001")
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     return entry
 
@@ -268,12 +270,13 @@ async def test_no_v2_entry_is_reported(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-test-002")
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     _async_register_credential_services(hass)
 
@@ -296,12 +299,13 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
     )
     second.add_to_hass(hass)
     second.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-test-003")
     second.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
-        panel_device_id="panel-device-id-two",
+        panel_device_id=register_panel_device(hass, second, snapshot.serial_number),
         curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     _async_register_credential_services(hass)
 
@@ -402,12 +406,13 @@ async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
     )
     second.add_to_hass(hass)
     second.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-test-004")
     second.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
-        panel_device_id="panel-device-id-two",
+        panel_device_id=register_panel_device(hass, second, snapshot.serial_number),
         curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     _async_register_credential_services(hass)
 

@@ -11,8 +11,8 @@ switch, select), and sub-devices (BESS, MID, EVSE, PV) with their entities.
 A custom card rendering the physical panel needs to know which breaker slot each circuit occupies, which entity provides its power reading, which switch
 controls its relay, and so on. Without this command, the card would need to query the device registry, entity registry, and individual entity states in separate
 calls, then infer which entities belong to the same circuit by parsing naming conventions. That correlation is fragile — entity naming patterns can differ
-between installs, and EVSE feed circuit sensors live on the EVSE sub-device rather than the panel device. The topology command provides all of these
-relationships explicitly, keyed by circuit UUID, so the card reads a single structured response instead of guessing.
+between installs, each circuit's entities live on a device of the circuit's own, and EVSE feed circuit sensors live on the EVSE sub-device. The topology command
+provides all of these relationships explicitly, keyed by circuit UUID, so the card reads a single structured response instead of guessing.
 
 ### Request
 
@@ -46,6 +46,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "monitoring_rating_offered": true,
   "circuits": {
     "a1b2c3d4e5f6": {
+      "device_id": "c7d8e9f0a1b2",
       "tabs": [5, 6],
       "name": "Kitchen",
       "outside_panel": false,
@@ -79,6 +80,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
       }
     },
     "f6e5d4c3b2a1": {
+      "device_id": "d8e9f0a1b2c3",
       "tabs": [15],
       "name": "Master Bedroom",
       "outside_panel": false,
@@ -210,6 +212,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 | Field                        | Type        | Description                                                                                                                                                                                  |
 | ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `device_id`                  | string/null | HA device registry ID of the circuit's own device, a child device of the panel's; null where the circuit has none                                                                            |
 | `tabs`                       | int[]       | Sorted breaker slot positions (1-indexed)                                                                                                                                                    |
 | `name`                       | string/null | Circuit name from the panel (null if unnamed)                                                                                                                                                |
 | `outside_panel`              | bool        | Whether the circuit is a meter outside the panel, such as a remote current transformer                                                                                                       |
@@ -336,13 +339,13 @@ inverter repeats; `vendor` and `model` are read live, as the PV Vendor and PV Pr
 
 ### Errors
 
-| Code             | Description                                   |
-| ---------------- | --------------------------------------------- |
-| device_not_found | The device_id does not exist in HA            |
-| not_span_panel   | The device is not a SPAN Panel device         |
-| not_panel_device | The device_id is a sub-device, not the panel  |
-| not_loaded       | The integration or config entry is not loaded |
-| no_data          | The coordinator has no panel data yet         |
+| Code             | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
+| device_not_found | The device_id does not exist in HA                                 |
+| not_span_panel   | The device is not a SPAN Panel device                              |
+| not_panel_device | The device_id is a sub-device or a circuit's device, not the panel |
+| not_loaded       | The integration or config entry is not loaded                      |
+| no_data          | The coordinator has no panel data yet                              |
 
 ### Usage from a Custom Card
 
@@ -471,13 +474,13 @@ does. Curation is keyed on the wire address rather than on a registry ID, so a r
 
 ### Errors
 
-| Code             | Description                                   |
-| ---------------- | --------------------------------------------- |
-| device_not_found | The device_id does not exist in HA            |
-| not_span_panel   | The device is not a SPAN Panel device         |
-| not_panel_device | The device_id is a sub-device, not the panel  |
-| not_loaded       | The integration or config entry is not loaded |
-| no_data          | The coordinator has no panel data yet         |
+| Code             | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
+| device_not_found | The device_id does not exist in HA                                 |
+| not_span_panel   | The device is not a SPAN Panel device                              |
+| not_panel_device | The device_id is a sub-device or a circuit's device, not the panel |
+| not_loaded       | The integration or config entry is not loaded                      |
+| no_data          | The coordinator has no panel data yet                              |
 
 ## `span_panel/adopted/curate`
 
@@ -561,7 +564,7 @@ Warnings are never refusals. They name effects the stored record does not show o
 | -------------------------- | ------------------------------------------------------------------------------------- |
 | device_not_found           | The device_id does not exist in HA                                                    |
 | not_span_panel             | The device is not a SPAN Panel device                                                 |
-| not_panel_device           | The device_id is a sub-device, not the panel                                          |
+| not_panel_device           | The device_id is a sub-device or a circuit's device, not the panel                    |
 | not_loaded                 | The integration or config entry is not loaded                                         |
 | no_data                    | The coordinator has no panel data yet                                                 |
 | unknown_key                | No curatable row on this panel carries that key                                       |

@@ -339,13 +339,15 @@ async def test_a_restored_control_returns_with_its_identity_and_customisations(h
     )
     select_after = registry.async_get(select_id)
     assert select_after is not None and select_after.id == select_before.id
-    # A named control asks for no reload; an unnamed one asks once, to sync its name.
+    # Each asks once, as a new entity does: it had no active row when it was
+    # built. The name the user gave the switch does not change that -- the
+    # reload is what settles its circuit's device, and leaves their name alone.
     request_reload = controls.coordinator.request_reload
     request_reload.reset_mock()
     controls.entity(switch_id)._handle_coordinator_update()
-    assert request_reload.call_count == 0
-    controls.entity(select_id)._handle_coordinator_update()
     assert request_reload.call_count == 1
+    controls.entity(select_id)._handle_coordinator_update()
+    assert request_reload.call_count == 2
 
 
 async def test_a_user_disabled_control_comes_back_disabled(hass: HomeAssistant) -> None:

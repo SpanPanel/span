@@ -393,39 +393,49 @@ on what the panel publishes (`firmware_schema.py`), whether or not its adapter i
 ## Circuit entity ids: a base, not a preset
 
 Since Home Assistant 2026.8 the user owns entity id composition — `entity_id_parts` says whether the area, the device and the entity name are in an id, and Core
-assembles it. This integration no longer presets `entity_id` for circuit entities. It supplies one _base_ per entity and Core does the rest, which is how every
-non-circuit entity here has always worked.
+assembles it. This integration supplies one _base_ per circuit entity and Core does the rest, which is how every non-circuit entity here has always worked. The
+one `entity_id` it presets is a circuit entity's in circuit-numbers mode, once, when the entity is created, and that id is composed under the same settings
+(`circuit_number_ids`). `developer_entity_id_and_name_handling.md` holds the rules, R1 to R5, and is the document to check a naming change against.
 
-`naming.py` is the only place the wording of a circuit id is written down. `circuit_object_id_base(identifier, suffix, existing_entity_id)` joins the
-naming-flag half — `Circuit 15`, `Kitchen Outlets` — to the suffix wording, and it is the base, not the display name: the two are decoupled on purpose so a
-label can be reworded without a migration. The suffix wording is read back from the id an entity already has, because two spellings have shipped
-(`consumed_energy` before ids were preset, `energy_consumed` after); a new entity gets the noun-last form, matching the panel-level ids.
-`ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another is _discovered_, never to introduce one.
+`naming.py` is the only place the wording of a circuit id is written down. Each circuit's entities live on the circuit's own device, a child of the panel's, so
+Core composes the panel's name and the circuit's from the two devices and the base is the suffix alone: `power` or `energy consumed`, or nothing where the
+existing id leaves the suffix out. It is the base, not the display name: the two are decoupled on purpose so a label can be reworded without a migration. The
+suffix wording is read back from the id an entity already has, because two spellings have shipped (`consumed_energy` before ids were preset, `energy_consumed`
+after); a new entity gets the noun-last form, matching the panel-level ids. `ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only
+when another is _discovered_, never to introduce one.
+
+`circuit_object_ids.py` is where the base meets Core's composition. `circuit_object_id_base` gives an entity the wording under which Core composes the id it
+already has, tried under the user's entity-id format as it stands, so an id Core composes is offered nothing whatever order the format puts its parts in. An id
+no wording reproduces, such as one an older release preset, is read by
+`naming.circuit_object_id_suffix(id_identifier, device_name, suffix, existing_entity_id)`, which is told whether the format ends with the device and then the
+entity. The base depends on the device's name, and a device renamed in Home Assistant reloads nothing, so each circuit entity records what its base was worked
+out from and `async_keep_circuit_id_bases_current` works it out again as the rename is stored.
 
 `SpanPanelEntity.suggested_object_id` hands Core that base. It reads `_span_object_id_base`, which circuit entities set and every other entity leaves `None`, in
 which case the property falls through to Core's own answer — composition from the display name, exactly as before. Core consults `suggested_object_id` only for
 an entity that has not preset `entity_id`. **The property and a preset `entity_id` are not two routes to the same place**: `_async_derive_object_ids`
 (`entity_platform.py`) files what the property returns as the registry's `object_id_base`, which Core then prefixes with the device and the area per the user's
 parts, and files a preset `entity_id` as `suggested_object_id`, which outranks the base and is taken verbatim with no prefix at all. Setting `entity_id` to the
-base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and
-the switch and the select directly.
+base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route, `SpanPanelEntity._circuit_object_id_base`: the
+sensors through `_object_id_base`, and the switch and the select directly.
 
 ### What R1 bounds, and what it does not
 
 R1 — "Recreate entity IDs" must never propose a change the user did not cause — bounds the _base_ and nothing else. Read exactly: the base must reproduce an
 existing entity's id **where Home Assistant composes it under the entity-id options that match how that install was built**. That is why the suffix wording is
-read back and why the name half is anchored on the circuit's own name: two spellings of ours, or a relabel, must never produce an offer.
+read back and why the name half comes from the circuit's device, which the panel names: two spellings of ours, or a relabel, must never produce an offer. In
+circuit-numbers mode the id an entity is created with carries its circuit number, and Recreate afterwards offers the circuit's name (R3).
 
 It is **not** a license to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
 device is the charger and not the panel; a second panel the config flow named "Span Panel 2", whose circuit ids all say `span_panel_` because the old builder
 was never told the panel's name; an install with `USE_DEVICE_PREFIX` off, whose ids carry no device at all where `has_entity_name` prefixes one — that is the
 user's own configuration at work, and the offer is legitimate. Recreate offers it; nothing moves until the user presses the button (R5). The "legacy preset"
-exceptions written for those three shapes were withdrawn by the maintainer on 2026-08-26, and there is no `self.entity_id = …` left in any of the four
-platforms.
+exceptions written for those three shapes were withdrawn by the maintainer on 2026-08-26. The only `self.entity_id = …` left in the platforms is the
+circuit-numbers creation preset, which is composed under the user's `entity_id_parts` and made once.
 
 One consequence worth naming: a circuit sensor on a sub-device card supplies **no base at all**. Its label there is the bare description name (`Power`), so it
-composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity sets its base
-whenever `_object_id_parts` answers.
+composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity is on its
+circuit's device and sets its base.
 
 **The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_base`, and a sub-device
 sensor never calls it — with no base, Core composes the entity half from the description label, which is the current one. So an existing feed energy sensor
@@ -442,9 +452,11 @@ else when generating an entity id, so occupying it made Recreate propose a frien
 have written — `"{circuit_name} {description name}"`, for the description's current label and every label it has carried, which is what
 `SpanPanelCircuitsSensorEntityDescription.legacy_names` exists to record. Anything else in that field is the user's and is left alone.
 
-The display name now travels as `original_name` via `_attr_name` for both modes, which means a rename pushed from the SPAN app is picked up by rebuilding the
-entity: `_sync_circuit_name` asks the coordinator for a reload rather than writing the registry in place. It skips both the reload and the name where the
-registry holds a `name`, since the user's field outranks the panel's and reloading could not change what is displayed.
+The display name now travels through the circuit's device for both modes: each entity carries only its label as `original_name` via `_attr_name`, and the
+circuit's name is its device's. A rename pushed from the SPAN app is therefore picked up by adding the entities again: `_sync_circuit_name` asks the coordinator
+for a reload rather than writing the registry in place, and the reload renames the device. It asks whether or not the user has named the entity. Their `name` is
+the entity's own and the reload leaves it alone, while skipping the reload would leave the device on the old name, for good where the user has named every
+entity on the circuit.
 
 ## The suffix mappings are closed
 
@@ -452,9 +464,9 @@ registry holds a `name`, since the user's field outranks the panel's and reloadi
 the suffixes their entities have carried since before 2.0.8. **Do not add entries.** A new description key needs none: it resolves to itself, which is what the
 sub-device builders (`build_bess_unique_id`, `build_mid_unique_id`, `build_evse_unique_id`) have always done, since their keys were written snake_case.
 
-The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (it is the `suffix` half of
-`naming.circuit_object_id_base`, and `get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id`
-costs the long-term statistics, and the `entity_id` breaks whatever templates and automations a user wrote against it.
+The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (it is the suffix `naming.circuit_object_id_suffix`
+reads back, and `get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id` costs the long-term
+statistics, and the `entity_id` breaks whatever templates and automations a user wrote against it.
 
 `tests/test_suffix_mappings_are_closed.py` holds all three dictionaries to their exact contents and fails on an added key, a removed key or a changed value —
 verified by mutation, not by inspection.

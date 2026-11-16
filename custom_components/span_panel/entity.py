@@ -8,12 +8,19 @@ from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from span_panel_api import PublishOutcome, SpanPanelSnapshot
+from span_panel_api import PublishOutcome, SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
-from .const import CONF_DEVICE_NAME, DOMAIN
+from .circuit_number_ids import preset_circuit_number_entity_id
+from .circuit_object_ids import (
+    CircuitIdBase,
+    CircuitIdBaseSource,
+    circuit_object_id_base_now,
+    compose_circuit_object_id,
+)
+from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import (
     CONTROL_CALLER,
     async_bind_caller,
@@ -22,7 +29,9 @@ from .control_gate import (
 )
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
-from .util import snapshot_to_device_info
+from .id_builder import build_circuit_device_identifier
+from .naming import circuit_object_id_suffix
+from .util import circuit_device_info, snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,20 +56,31 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
 
     _attr_has_entity_name = True
 
-    _span_object_id_base: str | None = None
-    """The base Home Assistant composes this entity's id from, when set.
+    _span_id_base_source: CircuitIdBaseSource | None = None
+    """What this entity's id base is worked out from, for a circuit entity on its circuit's device.
 
-    Circuit entities set it from `naming.circuit_object_id_base`; every other
-    entity leaves it None and Core composes from the display name as it
-    always has. Core reads `suggested_object_id` only for an entity that has
-    not preset `entity_id`, which after this release is every entity here.
+    Circuit entities on their circuit's device set it through
+    `_circuit_id_base_source`, and their base is their suffix alone, since
+    Core composes the circuit's name from the device. Every other entity
+    leaves it None and Core composes from the display name as it always has.
+    Core reads `suggested_object_id` only for an entity that has not preset
+    `entity_id`, which is every entity here but one being created in
+    circuit-numbers mode (`_circuit_number_entity_id`). That one's row takes
+    the base from its next add on.
     """
 
     @property
     def suggested_object_id(self) -> str | None:
-        """Hand Core the base, or the stock answer when there is none."""
-        if self._span_object_id_base is not None:
-            return self._span_object_id_base
+        """Hand Core the base, worked out as it asks, or the stock answer when there is none.
+
+        Core asks only as it adds the entity, and it adds a live entity again
+        each time its id is edited. Worked out then, from the row as it stands
+        (`circuit_object_ids.circuit_object_id_base_now`), the base Core writes
+        is the one the edited id calls for, and not the one the entity was
+        built with, whenever Core's write falls against the listener's.
+        """
+        if self._span_id_base_source is not None:
+            return circuit_object_id_base_now(self.coordinator.hass, self._span_id_base_source)
         return super().suggested_object_id
 
     _residual_field_paths: ClassVar[tuple[str, ...]] = ()
@@ -290,3 +310,119 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         )
         host = coordinator.config_entry.data.get(CONF_HOST)
         return snapshot_to_device_info(snapshot, device_name, host=host)
+
+    @staticmethod
+    def _build_circuit_device_info(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit: SpanCircuitSnapshot,
+        circuit_id: str,
+    ) -> ChildDeviceInfo:
+        """Construct the device info of a circuit's own device, a child of the panel's."""
+        return circuit_device_info(
+            snapshot.serial_number,
+            circuit,
+            circuit_id,
+            panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+        )
+
+    @staticmethod
+    def _circuit_id_base_source(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit: SpanCircuitSnapshot,
+        circuit_id: str,
+        *,
+        domain: str,
+        unique_id: str,
+        id_identifier: str,
+        suffix: str,
+    ) -> CircuitIdBaseSource:
+        """Return what a circuit entity's id base on its circuit's device is worked out from.
+
+        The base is the suffix alone, under which Core composes the id the
+        entity has, as `circuit_object_ids.circuit_object_id_base` finds it,
+        and `suggested_object_id` works it out each time Core asks.
+        `id_identifier` is what the naming flag resolves today, the name ids
+        were built from before the circuit had a device: its tabs in
+        circuit-numbers mode, its name or an unnamed circuit's fallback
+        otherwise.
+
+        What the base is worked out from is recorded with the entry too,
+        under the entity's `domain` and `unique_id`, so the listener can work
+        it out again when the circuit's device or the panel's is renamed in
+        Home Assistant, an area is set on either or on the entity, an area or
+        a floor is renamed, or the entity's id is edited, none of which builds
+        an entity again (`circuit_object_ids.async_keep_circuit_id_bases_current`).
+        """
+        entry = coordinator.config_entry
+        recipe = CircuitIdBase(domain, unique_id, id_identifier, suffix)
+        entry.runtime_data.circuit_id_bases.setdefault(circuit_id, []).append(recipe)
+        return CircuitIdBaseSource(
+            panel_device_id=entry.runtime_data.panel_device_id,
+            config_entry_id=entry.entry_id,
+            serial=snapshot.serial_number,
+            circuit=circuit,
+            circuit_id=circuit_id,
+            recipe=recipe,
+        )
+
+    @staticmethod
+    def _circuit_number_entity_id(
+        coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
+        circuit_id: str,
+        *,
+        domain: str,
+        unique_id: str,
+        id_identifier: str,
+        suffix: str,
+    ) -> str | None:
+        """Return the id circuit-numbers mode creates a circuit entity with, or None.
+
+        The circuit's device is named by the circuit, so Core would compose a
+        new entity's id from that name. In circuit-numbers mode the entity is
+        given its circuit number instead: the id Core would compose under the
+        user's entity-id format were the device named `id_identifier`. That is
+        what the naming flag resolves, which in this mode is the circuit's
+        tabs (`Circuit 15`), or its label for a meter with no breaker space to
+        number. It is the identifier the base is read back against
+        (`_circuit_id_base_source`), so the id reads as built from it on every
+        later load.
+
+        None, which leaves the id to Core, in circuit-names mode and for an
+        entity that is not being created: one with a registry row, or one Core
+        remembers deleting (`preset_circuit_number_entity_id`). The suffix is
+        the wording a new entity gets, decided against the number and not the
+        device's name, so a circuit named "Solar Power" is created as
+        `..._circuit_15_power`.
+
+        None as well where the user's entity-id format holds a part the
+        composer does not know, as one saved under a later Home Assistant
+        could. The entity is then created with the id Core composes, which
+        carries the circuit's name, rather than not created at all.
+        """
+        entry = coordinator.config_entry
+        if not entry.options.get(USE_CIRCUIT_NUMBERS, False):
+            return None
+        object_id = compose_circuit_object_id(
+            coordinator.hass,
+            panel_device_id=entry.runtime_data.panel_device_id,
+            circuit_device_identifier=(
+                DOMAIN,
+                build_circuit_device_identifier(snapshot.serial_number, circuit_id),
+            ),
+            device_name=id_identifier,
+            suffix_words=circuit_object_id_suffix(id_identifier, id_identifier, suffix, None),
+            config_entry_id=entry.entry_id,
+        )
+        if object_id is None:
+            _LOGGER.debug(
+                "No circuit-number ID is preset for %s %s: Home Assistant composes its ID",
+                domain,
+                unique_id,
+            )
+            return None
+        return preset_circuit_number_entity_id(
+            coordinator.hass, domain=domain, unique_id=unique_id, object_id=object_id
+        )

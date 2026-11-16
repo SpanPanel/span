@@ -55,6 +55,7 @@ class SpanCircuitSnapshotFactory:
         instant_power_update_time_s: int = 0,
         relay_state_target: str | None = None,
         priority_target: str | None = None,
+        measures_outside_panel: bool = False,
     ) -> SpanCircuitSnapshot:
         """Create a SpanCircuitSnapshot with reasonable defaults."""
         if tabs is None:
@@ -83,6 +84,7 @@ class SpanCircuitSnapshotFactory:
             instant_power_update_time_s=instant_power_update_time_s,
             relay_state_target=relay_state_target,
             priority_target=priority_target,
+            measures_outside_panel=measures_outside_panel,
         )
 
     @staticmethod

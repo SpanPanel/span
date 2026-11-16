@@ -59,6 +59,7 @@ from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .factories import pv_binding_for
+from .helpers import register_panel_device
 
 EVSE_PART_NUMBER_KEY = "evse_part_number"
 DSM_STATE_KEY = "dsm_state"
@@ -130,7 +131,7 @@ def _evse_snapshot(**rewrites: str | None) -> SpanPanelSnapshot:
     return schema_one_snapshot(tree)
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     """A coordinator-like mock carrying one snapshot."""
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -138,16 +139,18 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_HOST: "192.168.1.50"},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -155,16 +158,16 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     return coordinator
 
 
-def _panel_sensors(snapshot: SpanPanelSnapshot) -> dict[str, Any]:
+def _panel_sensors(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, Any]:
     """Every panel-level sensor the platform creates, keyed by description key."""
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     created = create_panel_sensors(coordinator, snapshot, coordinator.config_entry)
     return {sensor.entity_description.key: sensor for sensor in created}
 
 
-def _attributes(snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
+def _attributes(hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str) -> dict[str, Any]:
     """The attributes one panel sensor reports, or an empty dict for none."""
-    sensor = _panel_sensors(snapshot)[key]
+    sensor = _panel_sensors(hass, snapshot)[key]
     return sensor.extra_state_attributes or {}
 
 
@@ -176,7 +179,7 @@ async def _binary_sensors(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> d
     here, and a direct construction would only assert the class the test itself
     picked.
     """
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     added = MagicMock()
     await binary_sensor_async_setup_entry(hass, coordinator.config_entry, added)
     return {entity.entity_description.key: entity for entity in added.call_args.args[0]}
@@ -307,7 +310,7 @@ def test_the_panel_identity_paths_are_enumerated_as_device_card_reads() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_ssid_moved_off_the_software_version_sensor() -> None:
+def test_the_ssid_moved_off_the_software_version_sensor(hass: HomeAssistant) -> None:
     """The old site, asserted absent — deliberately, and not coming back.
 
     A network name on a firmware-version sensor was incoherent; it only ever sat
@@ -318,7 +321,7 @@ def test_the_ssid_moved_off_the_software_version_sensor() -> None:
     Asserted against a snapshot that *does* publish an SSID, so restoring the
     read fails here rather than passing on a panel that happens to carry none.
     """
-    attributes = _attributes(_snapshot(), SOFTWARE_VERSION_KEY)
+    attributes = _attributes(hass, _snapshot(), SOFTWARE_VERSION_KEY)
 
     assert _published(SCHEMA_ONE_PANEL, WIFI_SSID_TOPIC)
     assert "wifi_ssid" not in attributes
@@ -404,14 +407,14 @@ async def test_only_the_wifi_link_sensor_declares_the_ssid_it_reads(
 # ---------------------------------------------------------------------------
 
 
-def test_the_shed_policy_reaches_dsm_state_as_its_two_thresholds() -> None:
+def test_the_shed_policy_reaches_dsm_state_as_its_two_thresholds(hass: HomeAssistant) -> None:
     """The numbers that make the panel's shed behaviour predictable.
 
     Compared against the document the capture publishes rather than against
     literals, so the parse is checked against the producer's own encoding of it.
     """
     document = json.loads(_published(SCHEMA_ONE_PANEL, POLICY_TOPIC))
-    attributes = _attributes(_snapshot(), DSM_STATE_KEY)
+    attributes = _attributes(hass, _snapshot(), DSM_STATE_KEY)
 
     assert attributes["shed_algorithm"] == document["algorithm"]
     assert attributes["soc_threshold_shed"] == document["parameters"]["soc-threshold-shed"]
@@ -420,7 +423,7 @@ def test_the_shed_policy_reaches_dsm_state_as_its_two_thresholds() -> None:
     assert "shed_policy" not in attributes
 
 
-def test_the_thresholds_follow_a_republished_policy() -> None:
+def test_the_thresholds_follow_a_republished_policy(hass: HomeAssistant) -> None:
     """A panel reconfigured to shed later says so."""
     rewritten = json.dumps(
         {
@@ -429,13 +432,13 @@ def test_the_thresholds_follow_a_republished_policy() -> None:
         }
     )
 
-    attributes = _attributes(_snapshot(shed__policy=rewritten), DSM_STATE_KEY)
+    attributes = _attributes(hass, _snapshot(shed__policy=rewritten), DSM_STATE_KEY)
 
     assert attributes["soc_threshold_shed"] == 5
     assert attributes["soc_threshold_release"] == 15
 
 
-def test_an_unknown_algorithm_degrades_to_the_raw_document() -> None:
+def test_an_unknown_algorithm_degrades_to_the_raw_document(hass: HomeAssistant) -> None:
     """The policy schema is versioned in its own `$id`, so another algorithm may arrive.
 
     Reporting `soc-priority.v1`'s thresholds for a document that never had them
@@ -444,7 +447,7 @@ def test_an_unknown_algorithm_degrades_to_the_raw_document() -> None:
     """
     other = json.dumps({"algorithm": "runtime-priority.v2", "parameters": {"minutes-shed": 30}})
 
-    attributes = _attributes(_snapshot(shed__policy=other), DSM_STATE_KEY)
+    attributes = _attributes(hass, _snapshot(shed__policy=other), DSM_STATE_KEY)
 
     assert attributes["shed_algorithm"] == "runtime-priority.v2"
     assert attributes["shed_policy"] == other
@@ -452,35 +455,35 @@ def test_an_unknown_algorithm_degrades_to_the_raw_document() -> None:
     assert "soc_threshold_release" not in attributes
 
 
-def test_an_unparseable_policy_still_leaves_the_sensor_standing() -> None:
+def test_an_unparseable_policy_still_leaves_the_sensor_standing(hass: HomeAssistant) -> None:
     """A panel is a publisher this integration does not control.
 
     One malformed string must not take `dsm_state` -- the sensor a button reads
     to decide whether the panel is already on grid -- down with it.
     """
-    sensor = _panel_sensors(_snapshot(shed__policy="{not json"))[DSM_STATE_KEY]
+    sensor = _panel_sensors(hass, _snapshot(shed__policy="{not json"))[DSM_STATE_KEY]
     sensor._update_native_value()
 
     assert sensor.native_value is not None
     assert (sensor.extra_state_attributes or {}) == {"shed_policy": "{not json"}
 
 
-def test_a_panel_publishing_no_policy_reports_no_policy_attributes() -> None:
+def test_a_panel_publishing_no_policy_reports_no_policy_attributes(hass: HomeAssistant) -> None:
     """`dsm_state` keeps its state and simply carries nothing extra."""
-    sensor = _panel_sensors(_snapshot(shed__policy=None))[DSM_STATE_KEY]
+    sensor = _panel_sensors(hass, _snapshot(shed__policy=None))[DSM_STATE_KEY]
     sensor._update_native_value()
 
     assert sensor.native_value is not None
     assert sensor.extra_state_attributes is None
 
 
-def test_the_policy_attributes_hang_off_dsm_state_and_nothing_else() -> None:
+def test_the_policy_attributes_hang_off_dsm_state_and_nothing_else(hass: HomeAssistant) -> None:
     """One sensor's attributes, not every sensor this class renders.
 
     `SpanPanelPanelStatus` renders the relay state and the run config too, and a
     shed policy repeated on each of them is noise on three cards.
     """
-    sensors = _panel_sensors(_snapshot())
+    sensors = _panel_sensors(hass, _snapshot())
     carrying = {
         key
         for key, sensor in sensors.items()
@@ -496,10 +499,10 @@ def test_the_policy_attributes_hang_off_dsm_state_and_nothing_else() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _evse_states(snapshot: SpanPanelSnapshot, key: str) -> set[Any]:
+def _evse_states(hass: HomeAssistant, snapshot: SpanPanelSnapshot, key: str) -> set[Any]:
     """What every charger's sensor of this key reports."""
     states: set[Any] = set()
-    for sensor in create_evse_sensors(_coordinator(snapshot), snapshot):
+    for sensor in create_evse_sensors(_coordinator(hass, snapshot), snapshot):
         if sensor.entity_description.key != key:
             continue
         sensor._update_native_value()
@@ -507,24 +510,30 @@ def _evse_states(snapshot: SpanPanelSnapshot, key: str) -> set[Any]:
     return states
 
 
-def test_the_charger_reports_the_part_number_the_panel_publishes() -> None:
+def test_the_charger_reports_the_part_number_the_panel_publishes(hass: HomeAssistant) -> None:
     """The BESS has shown its SKU since it shipped; the charger beside it had none."""
-    assert _evse_states(_snapshot(), EVSE_PART_NUMBER_KEY) == {_published(EVSE, PART_NUMBER_TOPIC)}
+    assert _evse_states(hass, _snapshot(), EVSE_PART_NUMBER_KEY) == {
+        _published(EVSE, PART_NUMBER_TOPIC)
+    }
 
 
-def test_the_part_number_follows_a_republished_value() -> None:
+def test_the_part_number_follows_a_republished_value(hass: HomeAssistant) -> None:
     """Two chargers, one rewritten, so the sensor cannot be reading a constant.
 
     The capture publishes the same SKU on both, which is what makes this the
     mutation worth running: a rewrite of one has to show up as two distinct
     states rather than as one.
     """
-    states = _evse_states(_evse_snapshot(info__part_number="SPN-DRV-999"), EVSE_PART_NUMBER_KEY)
+    states = _evse_states(
+        hass, _evse_snapshot(info__part_number="SPN-DRV-999"), EVSE_PART_NUMBER_KEY
+    )
 
     assert states == {"SPN-DRV-999", _published(EVSE, PART_NUMBER_TOPIC)}
 
 
-def test_a_charger_publishing_no_part_number_reports_unknown_rather_than_a_default() -> None:
+def test_a_charger_publishing_no_part_number_reports_unknown_rather_than_a_default(
+    hass: HomeAssistant,
+) -> None:
     """An unpublished SKU is unknown, and no charger invents one for another.
 
     `STATE_UNKNOWN` rather than `None` because the platform renders a
@@ -533,7 +542,7 @@ def test_a_charger_publishing_no_part_number_reports_unknown_rather_than_a_defau
     its value in the same breath, so this is one charger going quiet rather than
     the sensor failing.
     """
-    states = _evse_states(_evse_snapshot(info__part_number=None), EVSE_PART_NUMBER_KEY)
+    states = _evse_states(hass, _evse_snapshot(info__part_number=None), EVSE_PART_NUMBER_KEY)
 
     assert states == {STATE_UNKNOWN, _published(EVSE, PART_NUMBER_TOPIC)}
 

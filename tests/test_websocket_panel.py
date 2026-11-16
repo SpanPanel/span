@@ -17,7 +17,7 @@ the old device's primary.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -31,9 +31,15 @@ from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.util import SUB_DEVICE_BESS
 from custom_components.span_panel.websocket import handle_panel_topology
 from custom_components.span_panel.websocket_adopted import handle_adopted_list
+from custom_components.span_panel.websocket_panel import resolve_panel_device
 
-from .factories import SpanPanelSnapshotFactory, pv_binding_for
-from .helpers import unwrap_websocket_command
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import (
+    add_panel_entry,
+    register_circuit_device,
+    register_panel_device,
+    unwrap_websocket_command,
+)
 
 # The registry is loaded from the store below rather than started empty.
 pytestmark = pytest.mark.parametrize("load_registries", [False])
@@ -228,3 +234,116 @@ async def test_an_old_id_split_into_devices_span_owns_none_of_is_not_a_panel(
     connection.send_error.assert_called_once_with(
         1, "not_span_panel", "Device is not a SPAN Panel device"
     )
+
+
+async def _empty_registries(hass: HomeAssistant) -> None:
+    """Load the registries with nothing in them, which this module otherwise loads from a store."""
+    dr.async_setup(hass)
+    await dr.async_load(hass)
+    await er.async_load(hass)
+
+
+async def test_circuit_device_id_is_not_a_panel(hass: HomeAssistant) -> None:
+    """A circuit's own device is a part of the panel, and is refused as one.
+
+    A SPAN entry owns it, so it is no stranger's device, and it is not the
+    panel: the request has to carry the panel device's ID.
+    """
+    await _empty_registries(hass)
+    entry = add_panel_entry(hass, SPAN_ENTRY_ID, SERIAL)
+    circuit_device = register_circuit_device(
+        hass,
+        entry,
+        SERIAL,
+        SpanCircuitSnapshotFactory.create(circuit_id="circuit-7", name="Kitchen Outlets"),
+        panel_device_id=register_panel_device(hass, entry, SERIAL),
+    )
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": circuit_device.id})
+
+    assert resolved is None
+    connection.send_error.assert_called_once_with(
+        1, "not_panel_device", "Use the SPAN panel device registry ID, not a circuit device."
+    )
+
+
+async def test_another_integrations_child_device_is_not_a_span_panel(hass: HomeAssistant) -> None:
+    """A child device is judged by the entry that owns it, as every other device is."""
+    await _empty_registries(hass)
+    other = MockConfigEntry(domain="other_domain", data={}, entry_id="other_entry")
+    other.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=other.entry_id, identifiers={("other_domain", "strip-1")}
+    )
+    outlet = registry.async_get_or_create_child(
+        config_entry_id=other.entry_id,
+        identifiers={("other_domain", "strip-1_outlet-1")},
+        name="Outlet 1",
+        parent_device_id=parent.id,
+    )
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": outlet.id})
+
+    assert resolved is None
+    connection.send_error.assert_called_once_with(
+        1, "not_span_panel", "Device is not a SPAN Panel device"
+    )
+
+
+async def test_the_panel_device_id_answers_with_the_panel_and_its_entry(
+    hass: HomeAssistant,
+) -> None:
+    """The id of the panel's own device is the one request this accepts."""
+    await _empty_registries(hass)
+    entry = add_panel_entry(hass, SPAN_ENTRY_ID, SERIAL)
+    panel_device_id = register_panel_device(hass, entry, SERIAL)
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": panel_device_id})
+
+    assert resolved is not None
+    device, owner = resolved
+    assert device.id == panel_device_id
+    assert owner is entry
+    connection.send_error.assert_not_called()
+
+
+async def test_an_id_no_device_has_is_not_found(hass: HomeAssistant) -> None:
+    await _empty_registries(hass)
+    add_panel_entry(hass, SPAN_ENTRY_ID, SERIAL)
+    connection = MagicMock()
+
+    resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": "no-such-device"})
+
+    assert resolved is None
+    connection.send_error.assert_called_once_with(1, "device_not_found", "Device not found")
+
+
+@pytest.mark.parametrize("primary", [SPAN_ENTRY_ID, HELPER_ENTRY_ID])
+async def test_the_device_is_looked_up_by_home_assistant_s_own_helper(
+    hass: HomeAssistant, hass_storage: dict[str, Any], primary: str
+) -> None:
+    """One lookup, Core's, answers an id from before 2026.8 and a current one alike.
+
+    Home Assistant resolves a device id to the device an integration's entry
+    owns, an old id's split included. A second copy of that kept here could
+    drift from it, so the request is handed to the helper and to nothing else.
+    """
+    panel = await _split_panel(hass, hass_storage, primary=primary)
+    connection = MagicMock()
+
+    with patch.object(
+        dr,
+        "async_get_device_and_config_entry_for_domain",
+        wraps=dr.async_get_device_and_config_entry_for_domain,
+    ) as lookup:
+        resolved = resolve_panel_device(hass, connection, {"id": 1, "device_id": OLD_PANEL_ID})
+
+    lookup.assert_called_once_with(hass, OLD_PANEL_ID, domain=DOMAIN)
+    assert resolved is not None
+    assert resolved[0].id == panel.id
+    assert resolved[1].entry_id == SPAN_ENTRY_ID
+    connection.send_error.assert_not_called()

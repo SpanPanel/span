@@ -60,6 +60,7 @@ from .adapter_fixtures import (
     schema_one_tree,
 )
 from .factories import pv_binding_for
+from .helpers import register_panel_device
 from .test_declared_but_unread import SOURCES
 
 _SYNTHETIC = DiscoveredMetadata(unit="°C", datatype="float", retained=True)
@@ -179,7 +180,7 @@ def test_a_discovered_row_raises_no_unit_mismatch() -> None:
 # --- the diagnostics block -------------------------------------------------
 
 
-def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
+def _entry(hass: HomeAssistant, findings: SchemaFindings | None) -> MockConfigEntry:
     snapshot = _snapshot()
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -189,9 +190,10 @@ def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
     coordinator.schema_findings = findings
     coordinator.client.masked_tree.return_value = None
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="example-40t-001")
+    entry.add_to_hass(hass)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -208,7 +210,7 @@ def _snapshot() -> SpanPanelSnapshot:
 async def test_diagnostics_carries_the_discovery_report(hass: HomeAssistant) -> None:
     """The block a maintainer reads off an issue attachment."""
     findings = evaluate_field_metadata(schema_one_metadata_raw())
-    result = await async_get_config_entry_diagnostics(hass, _entry(findings))
+    result = await async_get_config_entry_diagnostics(hass, _entry(hass, findings))
 
     block = result["schema_discovery"]
     assert block["available"] is True
@@ -236,7 +238,7 @@ async def test_diagnostics_carries_the_discovery_report(hass: HomeAssistant) -> 
 
 async def test_diagnostics_says_unavailable_rather_than_empty(hass: HomeAssistant) -> None:
     """No metadata yet is a real state on a reconnect, and it is not "nothing to report"."""
-    block = (await async_get_config_entry_diagnostics(hass, _entry(None)))["schema_discovery"]
+    block = (await async_get_config_entry_diagnostics(hass, _entry(hass, None)))["schema_discovery"]
     assert block == {"available": False, "count": 0, "properties": []}
 
 
@@ -268,7 +270,9 @@ async def test_no_published_value_reaches_the_discovery_block(hass: HomeAssistan
             vocabulary.add(token)
 
     findings = evaluate_field_metadata(schema_one_metadata_raw())
-    block = (await async_get_config_entry_diagnostics(hass, _entry(findings)))["schema_discovery"]
+    block = (await async_get_config_entry_diagnostics(hass, _entry(hass, findings)))[
+        "schema_discovery"
+    ]
 
     # `retained` is scanned by type rather than by content: it is a bool, so it
     # has no room for a value, and its JSON rendering collides with the literal

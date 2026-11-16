@@ -34,8 +34,8 @@ Use the **Enable Switches** toggle in the banner to globally enable or disable c
 Beyond the panel grid, each panel (and the cross-panel Favorites view) exposes two list-oriented tabs:
 
 - **By Activity** — circuits sorted by live power (or current, when the unit toggle is on Amps), highest first. A search box filters rows by name.
-- **By Area** — circuits grouped by their Home Assistant area (entity-level assignment first, then device-level fallback). Unassigned circuits land in a
-  dedicated group at the bottom.
+- **By Area** — circuits grouped by their Home Assistant area: the area of the circuit's device first, then an area one of its entities has of its own, then the
+  area of a device its entities are on, such as a charger's, then the panel's. Unassigned circuits land in a dedicated group at the bottom.
 
 Each row shows breaker rating, live utilization %, circuit name, shedding-priority icon, an ON/OFF toggle (tappable once the **Enable Switches** slider is
 armed), live power / current value, a gear icon that opens the side panel, and a chevron to expand the row's chart.
@@ -75,17 +75,17 @@ that monitoring judges both breakers together; see [Tandem and Multi-Load Breake
 - **Priority** — Notification priority level (controls iOS interruption level and Android notification channel)
 - **Title/Message Templates** — Customizable templates with the following variables:
 
-  | Variable             | Description                                  | Example                     |
-  | -------------------- | -------------------------------------------- | --------------------------- |
-  | `{name}`             | Circuit or mains friendly name               | Kitchen Oven                |
-  | `{entity_id}`        | HA entity ID                                 | sensor.kitchen_oven_current |
-  | `{alert_type}`       | Alert category                               | spike, continuous_overload  |
-  | `{current_a}`        | Current draw in amps                         | 18.3                        |
-  | `{breaker_rating_a}` | Rating in amps the circuit is judged against | 20                          |
-  | `{threshold_pct}`    | Configured threshold percentage              | 80                          |
-  | `{utilization_pct}`  | Actual utilization percentage                | 91.5                        |
-  | `{window_m}`         | Window duration in minutes                   | 5                           |
-  | `{local_time}`       | Local time of the alert                      | 2:15 PM                     |
+  | Variable             | Description                                          | Example                     |
+  | -------------------- | ---------------------------------------------------- | --------------------------- |
+  | `{name}`             | The circuit's name in the SPAN app, or the mains leg | Kitchen Oven                |
+  | `{entity_id}`        | HA entity ID                                         | sensor.kitchen_oven_current |
+  | `{alert_type}`       | Alert category                                       | spike, continuous_overload  |
+  | `{current_a}`        | Current draw in amps                                 | 18.3                        |
+  | `{breaker_rating_a}` | Rating in amps the circuit is judged against         | 20                          |
+  | `{threshold_pct}`    | Configured threshold percentage                      | 80                          |
+  | `{utilization_pct}`  | Actual utilization percentage                        | 91.5                        |
+  | `{window_m}`         | Window duration in minutes                           | 5                           |
+  | `{local_time}`       | Local time of the alert                              | 2:15 PM                     |
 
   `{breaker_rating_a}` keeps its name so existing templates still work, but it carries the rating the circuit is judged against: both breakers of a tandem whose
   ratings you copied from the SPAN app, else the breaker rating the panel publishes.
@@ -96,7 +96,7 @@ that monitoring judges both breakers together; see [Tandem and Multi-Load Breake
   | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
   | `alert_source`               | `circuit` or `mains`                                                                                                                       |
   | `alert_id`                   | The circuit's id, or the mains leg (such as `upstream_l1`)                                                                                 |
-  | `alert_name`                 | Circuit or mains friendly name                                                                                                             |
+  | `alert_name`                 | The circuit's name in the SPAN app, or the mains leg                                                                                       |
   | `alert_type`                 | `spike` or `continuous_overload`                                                                                                           |
   | `current_a`                  | Current draw in amps                                                                                                                       |
   | `breaker_rating_a`           | The breaker rating the panel publishes; for circuits that share a meter, the group's capacity over those ratings, and null if any has none |

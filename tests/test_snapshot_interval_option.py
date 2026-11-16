@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 
 from custom_components.span_panel.config_flow_options import GENERAL_OPTIONS_SCHEMA
 from custom_components.span_panel.const import DEFAULT_SNAPSHOT_INTERVAL

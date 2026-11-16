@@ -13,7 +13,8 @@ What that setup registers is compared, row for row, with
 `tests/fixtures/expected_entities/<stem>.json`:
 
     {"devices":  {identifier: {name, manufacturer, model, hw_version,
-                               sw_version, serial_number, via_device}},
+                               sw_version, serial_number, via_device}
+                              | {name, parent_device}},
      "entities": {unique_id: {platform, entity_id, original_name,
                               translation_key, device, device_class,
                               state_class, unit_of_measurement,
@@ -22,6 +23,8 @@ What that setup registers is compared, row for row, with
 
 and what `span_panel/panel_topology` answers for it with
 `tests/fixtures/topology/<stem>.json`, which the card renders in its own suite.
+A circuit's own device is a child device of the panel's, so its device row is
+the second shape: its name and its parent's identifier.
 
 **The files are the record, and changing one is the decision.** A change that
 moves any of these -- an entity added, removed, renamed or re-homed, disabled or
@@ -277,9 +280,16 @@ def _text(value: object) -> str | None:
 
 
 def _device_rows(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, dict[str, str | None]]:
+    """Every device the entry registers: the panel and its sub-devices, then each circuit's.
+
+    A circuit's device is a child device, which carries only a name and its
+    parent: no manufacturer, model, versions or serial, which `ChildDeviceEntry`
+    has no field for.
+    """
     registry = dr.async_get(hass)
     devices = dr.async_entries_for_config_entry(registry, entry.entry_id)
-    identifiers = {device.id: _device_identifier(device) for device in devices}
+    children = dr.async_child_entries_for_config_entry(registry, entry.entry_id)
+    identifiers = {device.id: _device_identifier(device) for device in (*devices, *children)}
     rows: dict[str, dict[str, str | None]] = {}
     for device in devices:
         assert isinstance(device, dr.DeviceEntry), f"{device.id} is a child device entry"
@@ -291,6 +301,11 @@ def _device_rows(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, dict[
             "sw_version": device.sw_version,
             "serial_number": device.serial_number,
             "via_device": identifiers.get(device.via_device_id) if device.via_device_id else None,
+        }
+    for child in children:
+        rows[identifiers[child.id]] = {
+            "name": child.name,
+            "parent_device": identifiers[child.parent_device_id],
         }
     return rows
 
@@ -344,8 +359,9 @@ async def _topology(
 
     Device registry ids are minted afresh by every installation, so each one is
     replaced by its device's identifier wherever it appears, as a key or as a
-    value. The card treats them as opaque handles, so the substitution changes
-    nothing it renders.
+    value: the panel's, each sub-device's, and each circuit's own device's,
+    which a circuit record carries as its `device_id`. The card treats them as
+    opaque handles, so the substitution changes nothing it renders.
     """
     devices = dr.async_get(hass)
     panel = devices.async_get_device_by_identifier((DOMAIN, str(entry.unique_id)), entry.entry_id)
@@ -356,7 +372,10 @@ async def _topology(
     assert response["success"], response
     aliases = {
         device.id: _device_identifier(device)
-        for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+        for device in (
+            *dr.async_entries_for_config_entry(devices, entry.entry_id),
+            *dr.async_child_entries_for_config_entry(devices, entry.entry_id),
+        )
     }
     return _normalised(response["result"], aliases)
 

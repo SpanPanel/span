@@ -209,7 +209,7 @@ async def test_the_pv_flow_with_no_source_is_a_diagnostics_row(
     """A published flow with no source device to attribute it to is reported as published, 0.0 included."""
     panel = _roles_panel(_circuit(KITCHEN, [1], role="LOADS"), power_flow_pv=power)
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(panel))
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(hass, panel))
 
     assert result["pv_power_without_source_w"] == row
 
@@ -217,7 +217,7 @@ async def test_the_pv_flow_with_no_source_is_a_diagnostics_row(
 async def test_a_pv_flow_with_a_solar_source_is_no_diagnostics_row(hass: HomeAssistant) -> None:
     panel = _roles_panel(_circuit(ROOF, [2, 4], role="SOLAR"), power_flow_pv=-2500.0)
 
-    result = await async_get_config_entry_diagnostics(hass, _reference_entry(panel))
+    result = await async_get_config_entry_diagnostics(hass, _reference_entry(hass, panel))
 
     assert result["pv_power_without_source_w"] is None
 

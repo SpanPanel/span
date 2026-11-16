@@ -6,7 +6,9 @@ import asyncio
 from collections.abc import Callable
 import dataclasses
 import ipaddress
+import json
 import logging
+from pathlib import Path
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +22,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.selector import SelectSelector
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
@@ -59,7 +62,10 @@ from custom_components.span_panel.const import (
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
     DOMAIN,
+    ENTITY_NAMING_PATTERN,
     PANEL_CA_PENDING,
+    USE_CIRCUIT_NUMBERS,
+    USE_DEVICE_PREFIX,
 )
 from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.id_builder import (
@@ -71,6 +77,8 @@ from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
 from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL, CONTROL_MODE
 
 from .conftest import FLAT_PANEL_SCHEMA, VALIDATED_PANEL_STATUS
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .test_circuit_number_ids import _set_up as _set_up_circuit_platforms
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -769,7 +777,7 @@ async def test_v6_migration_drops_the_stored_passphrase(hass: HomeAssistant) -> 
 
     assert await async_migrate_entry(hass, entry) is True
 
-    assert entry.version == 7
+    assert entry.version == CURRENT_CONFIG_VERSION
     assert CONF_HOP_PASSPHRASE not in entry.data
     assert entry.data[CONF_ACCESS_TOKEN] == "v2-token-abc"
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
@@ -943,7 +951,7 @@ async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
     )
     entry.add_to_hass(hass)
     other_entry = MockConfigEntry(
-        version=7,
+        version=CURRENT_CONFIG_VERSION,
         minor_version=CURRENT_CONFIG_MINOR_VERSION,
         domain=DOMAIN,
         title="Span Panel 2",
@@ -1099,6 +1107,83 @@ async def test_home_assistant_actually_runs_the_v7_4_migration(hass: HomeAssista
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
+
+
+def _v7_4_entry() -> MockConfigEntry:
+    """Build a v2 entry as the last 7.x release left it, with every choice already stored."""
+    return MockConfigEntry(
+        version=7,
+        minor_version=4,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_SERIAL: "sp3-242424-001",
+            PANEL_CA_PENDING: True,
+        },
+        source=config_entries.SOURCE_USER,
+        options={
+            ALLOW_CONTEXTLESS_CONTROL: False,
+            CONTROL_MODE: ControlMode.ADMIN_ONLY.value,
+        },
+        unique_id="sp3-242424-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v7_4_migrates_to_8_0_unchanged(hass: HomeAssistant) -> None:
+    """The 8.0 step moves the version and nothing else.
+
+    Run through `async_setup`, so it is core that decides to migrate: a flow
+    left at 7.4 would never reach the step.
+    """
+    entry = _v7_4_entry()
+    entry.add_to_hass(hass)
+    data_before = dict(entry.data)
+    options_before = dict(entry.options)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert (entry.version, entry.minor_version) == (8, 0)
+    assert dict(entry.data) == data_before
+    assert dict(entry.options) == options_before
+
+
+@pytest.mark.asyncio
+async def test_an_8_0_entry_is_refused_by_a_7_x_release(hass: HomeAssistant) -> None:
+    """A 7.x release is never handed an entry this release has migrated.
+
+    The refusal is core's: it compares the entry's version with the flow's
+    `VERSION` and stops at a higher one before it calls the integration. So the
+    7.x release is modelled by putting both the flow and the constants it is
+    built from back to 7.4, with the migration itself left real. That migration
+    answers True for any entry at or past its own version, so nothing but core's
+    check stands between a downgrade and a setup on converted data.
+    """
+    entry = _v7_4_entry()
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry) is True
+    assert (entry.version, entry.minor_version) == (8, 0)
+
+    setup_entry = AsyncMock(return_value=True)
+    with (
+        patch("custom_components.span_panel.migrations.CURRENT_CONFIG_VERSION", 7),
+        patch("custom_components.span_panel.migrations.CURRENT_CONFIG_MINOR_VERSION", 4),
+        patch.object(SpanPanelConfigFlow, "VERSION", 7),
+        patch.object(SpanPanelConfigFlow, "MINOR_VERSION", 4),
+        patch("custom_components.span_panel.async_setup_entry", setup_entry),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR
+    setup_entry.assert_not_awaited()
+    assert (entry.version, entry.minor_version) == (8, 0)
 
 
 # ---------- zeroconf v2 discovery ----------
@@ -5050,3 +5135,175 @@ async def test_a_configured_flat_panel_still_takes_the_ports_its_add_on_publishe
     assert result["reason"] == "already_configured"
     assert existing.data[CONF_HTTP_PORT] == 9090
     panel_schema.assert_not_awaited()
+
+
+# ---------- the naming choice's labels ----------
+
+STRINGS_PATH = Path(__file__).resolve().parent.parent / "custom_components/span_panel/strings.json"
+
+NAMING_OPTION_LABELS = {
+    "friendly_names": "Circuit names (e.g., span_panel_kitchen_outlets_power)",
+    "circuit_numbers": "Circuit numbers (e.g., span_panel_circuit_15_power)",
+}
+"""The stored value of each naming choice, and the label the user reads for it.
+
+`friendly_names` is the value entries have stored since the option existed, so
+it stays, while its label no longer uses the term.
+"""
+
+
+def _naming_fields(form: ConfigFlowResult) -> list[object]:
+    """Return the fields of a shown form that offer the naming choice."""
+    schema = form["data_schema"]
+    assert schema is not None
+    return [field for key, field in schema.schema.items() if str(key) == ENTITY_NAMING_PATTERN]
+
+
+async def _first_setup_naming_form(hass: HomeAssistant) -> ConfigFlowResult:
+    """Drive a passphrase flow to the form that asks for the naming choice."""
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+    ):
+        result = await flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+        result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+        result = await flow.async_configure(result["flow_id"], {"next_step_id": "auth_passphrase"})
+        result = await flow.async_configure(
+            result["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+    assert result["step_id"] == "choose_entity_naming_initial"
+    return result
+
+
+async def test_naming_option_labels_come_from_strings(hass: HomeAssistant) -> None:
+    """First setup offers the stored values and leaves their labels to `strings.json`.
+
+    The form names a translation key and carries no label of its own, so the
+    frontend reads each label from `selector.entity_naming_pattern`, in the
+    user's language.
+    """
+    (naming,) = _naming_fields(await _first_setup_naming_form(hass))
+
+    assert isinstance(naming, SelectSelector)
+    assert naming.config["translation_key"] == ENTITY_NAMING_PATTERN
+    assert naming.config["options"] == list(NAMING_OPTION_LABELS)
+
+    strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
+    assert strings["selector"][ENTITY_NAMING_PATTERN]["options"] == NAMING_OPTION_LABELS
+
+
+async def test_naming_option_labels_come_from_strings_in_the_options_flow(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow has no naming labels of its own to disagree with first setup.
+
+    The naming choice is made at first setup, and the options flow carries the
+    stored choice through without offering it. Should it offer the choice, the
+    field must be the same translated selector, which this test then has to
+    say.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={}, entry_id="entry-with-options")
+    entry.add_to_hass(hass)
+
+    form = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert form["type"] is FlowResultType.FORM
+    assert _naming_fields(form) == []
+
+
+def test_first_setup_explains_the_naming_choice_without_the_retired_term() -> None:
+    """No English text about the naming choice calls a circuit's name "friendly"."""
+    strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
+    step = strings["config"]["step"]["choose_entity_naming_initial"]
+    shown = [
+        *step["data"].values(),
+        *step["data_description"].values(),
+        step["description"],
+        step["title"],
+        *strings["selector"][ENTITY_NAMING_PATTERN]["options"].values(),
+    ]
+
+    assert [text for text in shown if "friendly" in text.lower()] == []
+    assert step["data_description"][ENTITY_NAMING_PATTERN] == (
+        "Both choices build each new entity's ID once, when it is created: circuit names from "
+        "the circuit's name in the SPAN app, circuit numbers from its breaker's position. "
+        "Displayed names follow the SPAN app either way."
+    )
+
+
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+@pytest.mark.parametrize(
+    ("choice", "use_circuit_numbers", "circuit_half"),
+    [
+        pytest.param("circuit_numbers", True, "circuit_15", id="circuit-numbers"),
+        pytest.param("friendly_names", False, "kitchen_outlets", id="circuit-names"),
+    ],
+)
+async def test_the_naming_choice_at_first_setup_builds_the_ids_of_new_circuit_entities(
+    hass: HomeAssistant,
+    choice: str,
+    use_circuit_numbers: bool,
+    circuit_half: str,
+    expected_lingering_timers: bool,
+) -> None:
+    """The choice the form takes is the one the platforms build each new entity's ID from.
+
+    The flow is driven to the entry it creates, and the three circuit
+    platforms then set up for that entry as it stands: "Circuit numbers" gives
+    every entity of the circuit its breaker position, "Circuit names" the
+    circuit's name. The displayed name is the same either way, since the
+    circuit's device is named by the circuit.
+    """
+    form = await _first_setup_naming_form(hass)
+    # The entry is created and its platforms are run below, without the
+    # panel connection a whole setup opens.
+    with patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)):
+        created = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {ENTITY_NAMING_PATTERN: choice}
+        )
+        await hass.async_block_till_done()
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY, created
+    entry = created["result"]
+    assert entry.options[USE_CIRCUIT_NUMBERS] is use_circuit_numbers
+    assert entry.options[USE_DEVICE_PREFIX] is True
+
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="kitchen",
+        name="Kitchen Outlets",
+        tabs=[15],
+        current_a=1.5,
+        breaker_rating_a=20.0,
+    )
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number=entry.unique_id, circuits={circuit.circuit_id: circuit}
+    )
+    loaded = await _set_up_circuit_platforms(hass, entry, snapshot)
+
+    registry = er.async_get(hass)
+    rows = er.async_entries_for_config_entry(registry, entry.entry_id)
+    assert {row.entity_id for row in rows} >= {
+        f"sensor.span_panel_{circuit_half}_power",
+        f"sensor.span_panel_{circuit_half}_current",
+        f"sensor.span_panel_{circuit_half}_breaker_rating",
+        f"sensor.span_panel_{circuit_half}_produced_energy",
+        f"sensor.span_panel_{circuit_half}_consumed_energy",
+        f"sensor.span_panel_{circuit_half}_net_energy",
+        f"switch.span_panel_{circuit_half}_breaker",
+        f"select.span_panel_{circuit_half}_circuit_priority",
+    }
+    other_half = "kitchen_outlets" if use_circuit_numbers else "circuit_15"
+    assert [row.entity_id for row in rows if other_half in row.entity_id] == []
+    power = registry.async_get(f"sensor.span_panel_{circuit_half}_power")
+    assert power is not None
+    panel_name = entry.data["device_name"]
+    assert er.async_get_full_entity_name(hass, power) == f"{panel_name} Kitchen Outlets Power"
+    await loaded.unload()

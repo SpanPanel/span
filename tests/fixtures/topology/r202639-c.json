@@ -3,6 +3,7 @@
     "circuit-1": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-7814-15i6h_circuit_circuit-1",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bedroom_lights_breaker_rating",
@@ -38,6 +39,7 @@
     "circuit-2": {
       "always_on": false,
       "breaker_rating_a": 20.0,
+      "device_id": "xg-7814-15i6h_circuit_circuit-2",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
@@ -73,6 +75,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-7814-15i6h_circuit_circuit-3",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_living_room_lights_breaker_rating",
@@ -108,6 +111,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 30.0,
+      "device_id": "xg-7814-15i6h_circuit_circuit-4",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_other_breaker_rating",
@@ -143,6 +147,7 @@
     "circuit-5": {
       "always_on": true,
       "breaker_rating_a": 60.0,
+      "device_id": "xg-7814-15i6h_circuit_circuit-5",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_tesla_breaker_rating",

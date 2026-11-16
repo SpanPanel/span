@@ -10,7 +10,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
 )
-import voluptuous as vol
+import probatio as vol
 
 from .const import (
     DEFAULT_ENERGY_DIP_COMPENSATION,

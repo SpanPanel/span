@@ -18,6 +18,7 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
     build_select_unique_id_for_entry,
+    circuit_device_name,
     circuit_has_a_priority_select,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
@@ -25,22 +26,8 @@ from .helpers import (
     construct_voltage_attribute,
     remove_withdrawn_controls,
 )
-from .naming import (
-    circuit_object_id_base,
-    release_registry_name_written_by_older_release,
-)
+from .naming import release_registry_name_written_by_older_release
 from .runtime import SpanPanelConfigEntry
-
-# Device types that use "Solar" as the fallback identifier when unnamed.
-_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
-
-
-def _unnamed_select_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return a descriptive identifier for an unnamed circuit select."""
-    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
-        return "Solar"
-    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,8 +87,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
     # Read in entity code rather than through a description: the wrapper
     # class is not a frozen dataclass description, so it cannot carry the
-    # declaration. `priority` is the selected option (~96); `name` and
-    # `tabs` build the display name and the id base (~153-171).
+    # declaration. `priority` is the selected option (`current_option_fn`);
+    # `name` and `tabs` name its circuit's device and build its id base
+    # (`__init__`).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.priority",
         "circuit.name",
@@ -117,9 +105,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
     ) -> None:
         """Initialize the select.
 
-        The circuit's name is not passed in: both the display name and the id
-        base are read from the circuit in the current snapshot, so a circuit
-        renamed on the panel reaches both on the next reload.
+        The circuit's name is not passed in: its device's name and the id base
+        are read from the circuit in the current snapshot, so a circuit renamed
+        on the panel reaches both on the next reload.
         """
         super().__init__(coordinator)
         snapshot: SpanPanelSnapshot = coordinator.data
@@ -135,7 +123,12 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         self._attr_unique_id = self._construct_select_unique_id(coordinator, snapshot, self.id)
 
-        self._attr_device_info = self._build_device_info(coordinator, snapshot)
+        # On the circuit's own device, which carries the circuit's name. A
+        # charger's feed circuit's select is no exception: its sensors are on
+        # the charger's device, but the select was never there.
+        self._attr_device_info = self._build_circuit_device_info(
+            coordinator, snapshot, circuit, circuit_id
+        )
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -143,29 +136,56 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             "select", DOMAIN, self._attr_unique_id
         )
 
-        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        # One name path, in both naming modes: the description's label, carried
+        # as `original_name`. The device says which circuit, and that field
+        # ranks below the object-id base below, so what is displayed can no
+        # longer decide what "Recreate entity IDs" proposes.
         desc_name = description.name
-        circuit_name = circuit.name or _unnamed_select_fallback(circuit, circuit_id)
-
-        # One name path, in both naming modes: the panel's name, carried as
-        # `original_name`. That field ranks below the object-id base below, so
-        # what is displayed can no longer decide what "Recreate entity IDs"
-        # proposes.
-        self._attr_name = f"{circuit_name} {desc_name}"
+        self._attr_name = desc_name
 
         # The id itself is Home Assistant's to compose. This entity supplies only
-        # its base -- the naming-flag half plus the description's key -- and
+        # its base -- the description's key, read back from the id it has -- and
         # leaves `entity_id` unset so Core assembles the rest from the user's
         # `entity_id_parts`. The key is used as the suffix verbatim:
         # `get_user_friendly_suffix` maps `circuit_priority` to `priority`, which
         # is the unique_id's spelling and not this entity's.
-        suffix = description.entity_description.key
-        identifier = (
+        #
+        # The identifier is the name the id was built from before the circuit
+        # had a device: its tabs in circuit-numbers mode, otherwise the name
+        # its device has, the unnamed circuit's fallback included. That is
+        # one rule, and `circuit_device_name` owns it.
+        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        id_identifier = (
             construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
             if use_circuit_numbers
-            else circuit_name
+            else circuit_device_name(circuit, circuit_id)
         )
-        self._span_object_id_base = circuit_object_id_base(identifier, suffix, existing_entity_id)
+        self._span_id_base_source = self._circuit_id_base_source(
+            coordinator,
+            snapshot,
+            circuit,
+            circuit_id,
+            domain="select",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix=description.entity_description.key,
+        )
+
+        # The one exception is a select being created in circuit-numbers mode,
+        # which is given its circuit number as its id, once. Core keeps the
+        # preset only until the entity is next added, and composes from the
+        # base above from then on.
+        creation_entity_id = self._circuit_number_entity_id(
+            coordinator,
+            snapshot,
+            circuit_id,
+            domain="select",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix=description.entity_description.key,
+        )
+        if creation_entity_id is not None:
+            self.entity_id = creation_entity_id
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant
@@ -276,38 +296,25 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
-        The circuit's name is watched here: the entity carries it as
-        `original_name`, which can only be refreshed by being rebuilt, so a
-        rename earns a reload. Whether the panel still lets this circuit's shed
-        priority be set -- the answer that decided this entity exists -- is
-        watched by `SpanPanelCoordinator._check_settability_change` instead,
-        because the opposite edge happens on circuits that have no entity here
-        to see it.
+        The circuit's name is watched here: it lives on the circuit's device,
+        which only adding the entity again renames, so a rename earns a reload.
+        Whether the panel still lets this circuit's shed priority be set -- the
+        answer that decided this entity exists -- is watched by
+        `SpanPanelCoordinator._check_settability_change` instead, because the
+        opposite edge happens on circuits that have no entity here to see it.
         """
         snapshot: SpanPanelSnapshot = self.coordinator.data
         circuit = snapshot.circuits.get(self.id)
         if circuit:
             current_circuit_name = circuit.name
 
-            # One path for both modes: the name is carried by `original_name`,
-            # which is written when the entity is added, so a reload is what
-            # refreshes it. A name in the registry is one the user set.
-            user_has_override = False
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry and entity_entry.name:
-                    user_has_override = True
-                    _LOGGER.debug(
-                        "User has customized name for %s, skipping sync",
-                        self.entity_id,
-                    )
-
-            if user_has_override:
-                self._previous_circuit_name = current_circuit_name
-            elif self._previous_circuit_name is _NAME_UNSET:
+            # One path for both modes, whether or not the user has named this
+            # entity: their name is the entity's own and the reload leaves it
+            # alone, while the circuit's name is the device's, which a skipped
+            # reload would leave on the old one.
+            if self._previous_circuit_name is _NAME_UNSET:
                 _LOGGER.info(
-                    "First update: syncing entity name to panel name '%s' for select, requesting reload",
+                    "First update: syncing circuit device name to panel name '%s' for select, requesting reload",
                     current_circuit_name,
                 )
                 self._previous_circuit_name = current_circuit_name

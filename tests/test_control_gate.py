@@ -858,6 +858,7 @@ async def test_a_refused_relay_leaves_the_switch_where_it_was(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.options = {}
@@ -899,6 +900,7 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.options = {}
@@ -951,6 +953,7 @@ async def test_a_handed_over_relay_command_still_shows_the_requested_state(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
     coordinator = MagicMock()
+    coordinator.hass = hass
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.options = {}

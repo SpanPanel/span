@@ -15,7 +15,6 @@ from span_panel_api import SpanPanelSnapshot
 from .adoption import create_adopted_sensors
 from .const import (
     CONF_DEVICE_NAME,
-    ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     USE_CIRCUIT_NUMBERS,
 )
@@ -42,9 +41,6 @@ from .sensor_definitions import (
     BATTERY_SENSOR,
     BESS_METADATA_SENSORS,
     BESS_TELEMETRY_SENSORS,
-    CIRCUIT_BREAKER_RATING_SENSOR,
-    CIRCUIT_CURRENT_SENSOR,
-    CIRCUIT_SENSORS,
     DECLARED_PANEL_READINGS,
     DOWNSTREAM_L1_CURRENT_SENSOR,
     DOWNSTREAM_L2_CURRENT_SENSOR,
@@ -65,6 +61,7 @@ from .sensor_definitions import (
     STATUS_SENSORS,
     UPSTREAM_L1_CURRENT_SENSOR,
     UPSTREAM_L2_CURRENT_SENSOR,
+    circuit_sensor_descriptions,
 )
 from .sensor_evse import SpanEvseSensor
 from .sensor_panel import (
@@ -245,7 +242,9 @@ def _build_evse_device_info_map(
     """Build a mapping of EVSE feed circuit IDs to their EVSE DeviceInfo.
 
     Circuit sensors for EVSE feed circuits are assigned to the EVSE sub-device
-    instead of the panel device, keeping all charger-related entities together.
+    instead of their circuit's own device, keeping all charger-related entities
+    together. Only the sensors: the feed circuit's breaker switch and priority
+    select go on its circuit's device like every other circuit's.
     """
     if not snapshot.evse:
         return {}
@@ -278,64 +277,31 @@ def create_circuit_sensors(
     snapshot: SpanPanelSnapshot,
     config_entry: ConfigEntry,
 ) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor]:
-    """Create circuit-level sensors for named circuits."""
+    """Create each circuit's sensors: the ones `circuit_sensor_descriptions` lists for it.
+
+    Which sensors a circuit gets is decided there and nowhere else, because the
+    conversion to circuit devices reads the same answer to know which registry
+    rows this platform is about to add again.
+    """
     entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
 
     # Build EVSE device info so feed circuit sensors land on the charger device
     evse_device_map = _build_evse_device_info_map(coordinator, snapshot)
 
-    circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
-
-    for circuit_id in snapshot.circuits:
+    for circuit_id, circuit in snapshot.circuits.items():
         device_override = evse_device_map.get(circuit_id)
-        circuit_data = snapshot.circuits.get(circuit_id)
-
-        for circuit_description in CIRCUIT_SENSORS:
-            # Skip net energy sensors if disabled
-            is_net_energy_sensor = circuit_description.energy_role is EnergyRole.NET
-
-            if not circuit_net_energy_enabled and is_net_energy_sensor:
-                continue
-
-            if circuit_description.key == "circuit_power":
-                entities.append(
-                    SpanCircuitPowerSensor(
-                        coordinator,
-                        circuit_description,
-                        snapshot,
-                        circuit_id,
-                        device_info_override=device_override,
-                    )
-                )
-            else:
-                entities.append(
-                    SpanCircuitEnergySensor(
-                        coordinator,
-                        circuit_description,
-                        snapshot,
-                        circuit_id,
-                        device_info_override=device_override,
-                    )
-                )
-
-        # Per-circuit current sensor (v2 only)
-        if circuit_data and circuit_data.current_a is not None:
-            entities.append(
-                SpanCircuitPowerSensor(
-                    coordinator,
-                    CIRCUIT_CURRENT_SENSOR,
-                    snapshot,
-                    circuit_id,
-                    device_info_override=device_override,
-                )
+        for description in circuit_sensor_descriptions(circuit, config_entry.options):
+            # An energy sensor is a description that declares its part in the
+            # circuit's energy. Power, Current and Breaker Rating declare none.
+            sensor_class = (
+                SpanCircuitPowerSensor
+                if description.energy_role is None
+                else SpanCircuitEnergySensor
             )
-
-        # Per-circuit breaker rating sensor (v2 only)
-        if circuit_data and circuit_data.breaker_rating_a is not None:
             entities.append(
-                SpanCircuitPowerSensor(
+                sensor_class(
                     coordinator,
-                    CIRCUIT_BREAKER_RATING_SENSOR,
+                    description,
                     snapshot,
                     circuit_id,
                     device_info_override=device_override,

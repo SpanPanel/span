@@ -4,9 +4,15 @@ from dataclasses import dataclass
 import logging
 from typing import Final
 
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import (
+    ChildDeviceEntry,
+    ChildDeviceInfo,
+    DeviceInfo,
+    DeviceRegistry,
+)
 from span_panel_api import (
     SpanBatterySnapshot,
+    SpanCircuitSnapshot,
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
@@ -14,6 +20,8 @@ from span_panel_api import (
 )
 
 from .const import DOMAIN
+from .helpers import circuit_device_name
+from .id_builder import build_circuit_device_identifier, circuit_id_from_device_identifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -397,3 +405,91 @@ def pv_inverter_device_info(
         sw_version=pv.software_version,
         via_device_id=panel_device_id,
     )
+
+
+def circuit_device_info(
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    circuit_id: str,
+    *,
+    panel_device_id: str,
+) -> ChildDeviceInfo:
+    """Create ChildDeviceInfo for a circuit's own device, a child of the panel device.
+
+    A child device rather than a sub-device. A circuit is a part of the panel,
+    not hardware with an identity of its own, so it links to the panel with
+    `parent_device_id` and carries no manufacturer, model or serial, which
+    `ChildDeviceInfo` has no field for. The parent is the panel device's
+    registry id, as `via_device_id` is for a sub-device.
+
+    `serial` is the panel's serial as its own device identifier carries it, and
+    `circuit_id` the snapshot's circuit key. Named by `circuit_device_name`.
+    """
+    return ChildDeviceInfo(
+        identifiers={(DOMAIN, build_circuit_device_identifier(serial, circuit_id))},
+        name=circuit_device_name(circuit, circuit_id),
+        parent_device_id=panel_device_id,
+    )
+
+
+def circuit_device(
+    device_registry: DeviceRegistry,
+    serial: str,
+    circuit_id: str,
+    *,
+    config_entry_id: str,
+) -> ChildDeviceEntry | None:
+    """Return a circuit's own device, or None where the registry holds none for it.
+
+    Looked up by the identifier `circuit_device_info` registers it under, within
+    the entry that owns the panel. A circuit has no device until its first
+    entity is added, and a charger's feed circuit has none at all where it has
+    neither a breaker switch nor a priority select.
+    """
+    return device_registry.async_get_child_device_by_identifier(
+        (DOMAIN, build_circuit_device_identifier(serial, circuit_id)), config_entry_id
+    )
+
+
+def circuit_id_of_device(serial: str, device: ChildDeviceEntry) -> str | None:
+    """Return the circuit a child device is the device of, on the panel with this serial, or None.
+
+    The reading end of `circuit_device_info`. A child device is a circuit's
+    only when an identifier of this integration's says so for this panel, so
+    another panel's circuit device and a child device of any other kind answer
+    None, whatever they are called and whatever they hang off.
+    """
+    for domain, identifier in device.identifiers:
+        if domain != DOMAIN:
+            continue
+        circuit_id = circuit_id_from_device_identifier(serial, identifier)
+        if circuit_id is not None:
+            return circuit_id
+    return None
+
+
+def effective_circuit_device_name(
+    device_registry: DeviceRegistry,
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    circuit_id: str,
+    *,
+    config_entry_id: str,
+) -> str:
+    """Return the name Home Assistant composes a circuit's entity ids and names from.
+
+    Core reads a device's `name_by_user` ahead of its `name`, so a name the user
+    gave the circuit's device in Home Assistant is the answer wherever there is
+    one, whatever the panel calls the circuit.
+
+    Otherwise it is the name `circuit_device_info` gives the device now, not the
+    name the registry holds for it. A circuit entity is built before it is
+    added, and adding it writes that name over the registry's, so the
+    registry's is the circuit's name from before the rename on the panel that
+    this reload follows. An id read against the old name is answered for a
+    device that no longer carries it.
+    """
+    device = circuit_device(device_registry, serial, circuit_id, config_entry_id=config_entry_id)
+    if device is not None and device.name_by_user:
+        return device.name_by_user
+    return circuit_device_name(circuit, circuit_id)

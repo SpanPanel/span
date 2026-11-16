@@ -3,6 +3,7 @@
     "circuit-3": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-3940-9ooto_circuit_circuit-3",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_7_bathroom_outlets_breaker_rating",
@@ -38,6 +39,7 @@
     "circuit-4": {
       "always_on": false,
       "breaker_rating_a": 15.0,
+      "device_id": "xg-3940-9ooto_circuit_circuit-4",
       "device_type": "circuit",
       "entities": {
         "breaker_rating": "sensor.span_panel_6_kitchen_outlets_breaker_rating",
@@ -73,6 +75,7 @@
     "remote-ct-3": {
       "always_on": null,
       "breaker_rating_a": null,
+      "device_id": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_type": "circuit",
       "entities": {
         "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",

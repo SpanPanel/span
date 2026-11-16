@@ -125,7 +125,7 @@ def test_the_panel_entity_suffix_mapping_is_frozen() -> None:
 def test_the_entity_id_suffix_forms_are_frozen() -> None:
     """The wordings an entity id has shipped with, which R1 turns on.
 
-    `naming.circuit_object_id_base` reads an existing id's suffix back through
+    `naming.circuit_object_id_suffix` reads an existing id's suffix back through
     this table so the entity is proposed its own id. A wording missing from it
     reads as unknown and the entity is offered the new spelling instead; a
     wording invented into it is offered to entities that never had it.

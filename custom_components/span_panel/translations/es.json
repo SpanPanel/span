@@ -64,9 +64,9 @@
           "entity_naming_pattern": "Patrón de nomenclatura"
         },
         "data_description": {
-          "entity_naming_pattern": "Los nombres amigables usan etiquetas de circuito del panel. Los nombres basados en pestañas usan números de pestaña de interruptor para IDs de entidad estables."
+          "entity_naming_pattern": "Ambas opciones construyen el ID de cada entidad nueva una sola vez, cuando se crea: los nombres de circuito a partir del nombre del circuito en la app de SPAN, los números de circuito a partir de la posición de su interruptor. Los nombres mostrados siguen a la app de SPAN en ambos casos."
         },
-        "description": "Elija cómo se nombran las entidades relacionadas con circuitos en Home Assistant.",
+        "description": "Elija cómo se construyen los ID de entidad de las entidades de circuito nuevas.",
         "title": "Nomenclatura de entidades de circuito"
       },
       "choose_v2_auth": {
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Números de Circuito (ej., span_panel_circuit_15_power)",
-        "friendly_names": "Nombres Amigables (ej., span_panel_cocina_tomacorrientes_power)"
+        "circuit_numbers": "Números de circuito (ej., span_panel_circuit_15_power)",
+        "friendly_names": "Nombres de circuito (ej., span_panel_cocina_tomacorrientes_power)"
       }
     }
   },
@@ -1053,6 +1053,14 @@
     "panel_firmware_flat": {
       "title": "El firmware del SPAN Panel necesita una actualización",
       "description": "{panel} usa el firmware spanos2, que publica el antiguo esquema eBus plano con el que esta integración ya no es compatible. Actualice el firmware del panel; el panel se reconectará por sí solo una vez actualizado."
+    },
+    "circuit_devices_converted": {
+      "title": "Los circuitos del SPAN Panel ahora tienen sus propios dispositivos",
+      "description": "Cada circuito de {panel} es ahora un dispositivo propio bajo el panel, con el nombre que el circuito tiene en la app de SPAN, y sus entidades se nombran por lo que miden, como Power. Ningún ID de entidad ha cambiado, por lo que las automatizaciones, los scripts y los paneles de control que usan IDs de entidad siguen funcionando.\n\n**Nombres mostrados que cambiaron:**\n\n{renamed}\n\n**Áreas trasladadas al dispositivo del circuito**, de modo que las entidades de un circuito comparten ahora una misma área:\n\n{area_changes}\n\n**Circuitos cuyas áreas se dejaron como estaban**, porque el interruptor de su disyuntor no tiene área. Sus entidades se muestran sin el nombre del circuito. Para recuperarlo, asigne un área al dispositivo del circuito y quite las áreas propias de las entidades, sabiendo que el interruptor del disyuntor pasa entonces también a esa área, donde lo alcanza un apagado de toda el área.\n\n{circuits_left_in_areas}\n\nLas plantillas que leen el dispositivo de una entidad, como `device_name` o `device_entities`, ven ahora el dispositivo del circuito en lugar del panel. Ignore este aviso una vez que lo haya leído."
+    },
+    "breaker_switch_in_area": {
+      "title": "Un interruptor de disyuntor del SPAN Panel se ha unido a un área",
+      "description": "{switch} es un nuevo interruptor de disyuntor en un circuito cuyo dispositivo está en {area}, por lo que el interruptor también está en {area}. Una acción sobre toda el área, como apagar todo en {area}, apaga ahora este disyuntor. Para mantenerlo fuera de esas acciones, asigne al interruptor un área propia distinta o quite el área del dispositivo de su circuito. Ignore este aviso una vez que lo haya leído."
     }
   }
 }

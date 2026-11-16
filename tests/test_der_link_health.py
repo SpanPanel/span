@@ -85,7 +85,7 @@ from .adapter_fixtures import (
     schema_one_tree,
 )
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
-from .helpers import PANEL_NAME, add_panel_entry
+from .helpers import PANEL_NAME, add_panel_entry, register_panel_device
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
 
@@ -183,23 +183,25 @@ def _without_records(*ders: str) -> SpanPanelSnapshot:
 # ---------------------------------------------------------------------------
 
 
-def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
+def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.unresolved_paths = frozenset()
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -215,7 +217,7 @@ async def _created(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[Lin
     because the gate under test is a creation gate: an entity that must not
     exist cannot be observed by asking an entity for its state.
     """
-    coordinator = _coordinator(snapshot)
+    coordinator = _coordinator(hass, snapshot)
     config_entry = coordinator.config_entry
     async_add_entities = MagicMock()
 

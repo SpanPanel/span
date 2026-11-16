@@ -16,6 +16,7 @@ from dataclasses import replace
 from typing import Final
 from unittest.mock import MagicMock
 
+from homeassistant.core import HomeAssistant
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
@@ -35,6 +36,7 @@ from .factories import (
     SpanPanelSnapshotFactory,
     pv_binding_for,
 )
+from .helpers import register_panel_device
 from .test_current_monitor import _make_hass, _make_monitor
 
 READINGS: Final = {
@@ -47,18 +49,20 @@ POWER: Final = next(d for d in CIRCUIT_SENSORS if d.key == "circuit_power")
 
 
 def _coordinator(
-    snapshot: SpanPanelSnapshot, metadata: dict[str, FieldMetadata] | None
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, metadata: dict[str, FieldMetadata] | None
 ) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
-    coordinator.hass = MagicMock()
+    coordinator.hass = hass
     coordinator.client.field_metadata = metadata
-    coordinator.config_entry = MockConfigEntry(
+    entry = MockConfigEntry(
         domain=DOMAIN, data={}, title="SPAN Panel", options={}, unique_id=snapshot.serial_number
     )
-    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
@@ -66,30 +70,30 @@ def _coordinator(
     return coordinator
 
 
-def _panel_keys(metadata: dict[str, FieldMetadata] | None) -> set[str]:
+def _panel_keys(hass: HomeAssistant, metadata: dict[str, FieldMetadata] | None) -> set[str]:
     snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _coordinator(snapshot, metadata)
+    coordinator = _coordinator(hass, snapshot, metadata)
     return {
         entity.entity_description.key
         for entity in create_panel_sensors(coordinator, snapshot, coordinator.config_entry)
     }
 
 
-def test_each_reading_is_created_only_where_declared() -> None:
+def test_each_reading_is_created_only_where_declared(hass: HomeAssistant) -> None:
     declared = {path: FieldMetadata(unit="A", datatype="float") for path in READINGS}
 
-    assert set(READINGS.values()) <= _panel_keys(declared)
-    assert not set(READINGS.values()) & _panel_keys({})
-    assert not set(READINGS.values()) & _panel_keys(None)
+    assert set(READINGS.values()) <= _panel_keys(hass, declared)
+    assert not set(READINGS.values()) & _panel_keys(hass, {})
+    assert not set(READINGS.values()) & _panel_keys(hass, None)
 
 
-def test_a_declared_gap_creates_no_reading() -> None:
+def test_a_declared_gap_creates_no_reading(hass: HomeAssistant) -> None:
     """A row the adapter marks unresolved is a property the panel stopped declaring."""
     unresolved = {
         path: FieldMetadata(unit=None, datatype="unknown", resolved=False) for path in READINGS
     }
 
-    assert not set(READINGS.values()) & _panel_keys(unresolved)
+    assert not set(READINGS.values()) & _panel_keys(hass, unresolved)
 
 
 @pytest.mark.parametrize(
@@ -103,12 +107,12 @@ def test_a_declared_gap_creates_no_reading() -> None:
     ids=["declared", "undeclared", "unresolved", "metadata-unknown"],
 )
 def test_the_advertised_current_is_created_only_where_declared(
-    metadata: dict[str, FieldMetadata] | None, created: bool
+    hass: HomeAssistant, metadata: dict[str, FieldMetadata] | None, created: bool
 ) -> None:
     snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": SpanEvseSnapshotFactory.create()})
     keys = {
         entity.entity_description.key
-        for entity in create_evse_sensors(_coordinator(snapshot, metadata), snapshot)
+        for entity in create_evse_sensors(_coordinator(hass, snapshot, metadata), snapshot)
     }
 
     assert ("evse_advertised_current" in keys) is created
@@ -133,14 +137,14 @@ def test_the_declared_nominal_voltage_comes_first(
     assert construct_voltage_attribute(circuit) == expected
 
 
-def test_protection_functions_are_an_attribute_only_where_listed() -> None:
+def test_protection_functions_are_an_attribute_only_where_listed(hass: HomeAssistant) -> None:
     listed = replace(
         SpanCircuitSnapshotFactory.create(circuit_id="1"),
         protection_functions=("OVERCURRENT", "ARC_FAULT"),
     )
     unlisted = SpanCircuitSnapshotFactory.create(circuit_id="2")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"1": listed, "2": unlisted})
-    coordinator = _coordinator(snapshot, None)
+    coordinator = _coordinator(hass, snapshot, None)
 
     with_list = SpanCircuitPowerSensor(coordinator, POWER, snapshot, "1").extra_state_attributes
     without = SpanCircuitPowerSensor(coordinator, POWER, snapshot, "2").extra_state_attributes

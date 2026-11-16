@@ -29,6 +29,7 @@ from custom_components.span_panel.sensor_base import SpanEnergySensorBase
 from custom_components.span_panel.sensor_circuit import SpanCircuitEnergySensor
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 PV: Final = "pv-circuit"
 LOAD: Final = "load-circuit"
@@ -113,7 +114,7 @@ async def _set_up(
     coordinator.data = BEFORE
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, SERIAL),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(BEFORE),
         setup_snapshot=BEFORE,

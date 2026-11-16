@@ -5,7 +5,7 @@
     "intro_many": "Esta actualización añadió {count} entidades nuevas a tu Panel SPAN.",
     "enabled_heading": "Añadidas y listas para usar",
     "disabled_heading": "Añadidas pero desactivadas",
-    "how_to_enable": "Las entidades desactivadas no registran nada hasta que las actives. Abre la página del dispositivo Panel SPAN, muestra sus entidades desactivadas y activa las que quieras.",
+    "how_to_enable": "Las entidades desactivadas no registran nada hasta que las actives. Abre la página del dispositivo del circuito al que pertenecen, o la del panel para las lecturas de todo el panel, muestra sus entidades desactivadas y activa las que quieras.",
     "nothing_broken": "No hay ningún problema y no se requiere ninguna acción. Las entidades aparecen por varios motivos: una actualización que expone más de lo que informa tu panel, un circuito añadido al panel, o hardware como una batería, paneles solares o un cargador que se pone en línea."
   },
   "extension_overflow": {

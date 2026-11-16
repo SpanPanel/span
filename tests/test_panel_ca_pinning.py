@@ -14,7 +14,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import PassphraseRotation
 from span_panel_api.exceptions import SpanPanelCAChangedError, SpanPanelConnectionError
 
-from custom_components.span_panel import _async_pinned_ca, async_migrate_entry
+from custom_components.span_panel import (
+    SpanPanelRuntimeData,
+    _async_pinned_ca,
+    async_migrate_entry,
+)
 from custom_components.span_panel.ca_repairs import (
     async_clear_ca_changed,
     async_raise_ca_changed,
@@ -35,6 +39,7 @@ from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import register_panel_device
 
 PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 OTHER_PEM = "-----BEGIN CERTIFICATE-----\nb3RoZXI=\n-----END CERTIFICATE-----\n"
@@ -299,6 +304,14 @@ def _panel_reading_1200_watts(
     coordinator = SpanPanelCoordinator(hass, client, entry)
     # A previous good snapshot, which the ordinary offline path would keep serving.
     coordinator.data = snapshot
+    # The circuit's device names the panel's as its parent.
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
 
     power = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_power")
     return coordinator, SpanCircuitPowerSensor(coordinator, power, snapshot, "c1")
@@ -557,10 +570,7 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
     from homeassistant.core import Context
     from pytest_homeassistant_custom_component.common import MockUser
 
-    from custom_components.span_panel import (
-        SpanPanelRuntimeData,
-        _async_register_credential_services,
-    )
+    from custom_components.span_panel import _async_register_credential_services
     from custom_components.span_panel.const import CONF_EBUS_BROKER_PASSWORD
 
     entry = _entry(
@@ -568,12 +578,13 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
         **{CONF_PANEL_CA_PEM: PEM, CONF_EBUS_BROKER_PASSWORD: "old", CONF_HTTP_PORT: 8080},
     )
     entry.mock_state(hass, ConfigEntryState.LOADED)
+    snapshot = SpanPanelSnapshotFactory.create()
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
-        panel_device_id="panel-device-id",
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
         curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     _async_register_credential_services(hass)
 

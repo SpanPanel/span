@@ -13,6 +13,9 @@ directions.
 When there is no user, the originating automation or script is resolved from the
 context so a contextless write is attributed to *what* rather than left blank —
 which is the case the audit exists for.
+
+That automation or script is named from the entity registry, not from the
+`friendly_name` attribute on its state, which Home Assistant plans to retire.
 """
 
 from __future__ import annotations
@@ -25,7 +28,8 @@ from homeassistant.components.logbook import (
     LOGBOOK_ENTRY_NAME,
 )
 from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, EVENT_CONTROL_COMMAND
 
@@ -57,6 +61,23 @@ def _describe_outcome(outcome: str) -> str:
     return _OUTCOME_PHRASES.get(outcome, f"with an unrecognised outcome ({outcome})")
 
 
+def _caller_name(hass: HomeAssistant, state: State) -> str:
+    """Name an automation or script as Home Assistant's own screens name it.
+
+    The full name Core composes from the entity registry, which for an entity
+    with no device is the name it was configured with or the one the user gave
+    it. An entry that composes to no name at all is named by its entity ID.
+
+    An automation written in YAML without an `id` has no registry entry, and
+    only then is `State.name` read. That accessor is Core's, so Core decides
+    what it answers once the state no longer carries a name.
+    """
+    registry_entry = er.async_get(hass).async_get(state.entity_id)
+    if registry_entry is None:
+        return state.name or state.entity_id
+    return er.async_get_full_entity_name(hass, registry_entry) or state.entity_id
+
+
 def _describe_actor(hass: HomeAssistant, user_id: str | None, parent_id: str | None) -> str:
     """Name who or what issued the command.
 
@@ -76,7 +97,7 @@ def _describe_actor(hass: HomeAssistant, user_id: str | None, parent_id: str | N
         return "an unattended caller"
     for state in hass.states.async_all(("automation", "script")):
         if state.context.id == parent_id:
-            return str(state.name) or state.entity_id
+            return _caller_name(hass, state)
     return "an automation or script"
 
 

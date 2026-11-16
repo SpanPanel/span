@@ -60,6 +60,8 @@ from .ca_repairs import (
     async_raise_ca_unusable,
     async_raise_rest_tls_untrusted,
 )
+from .circuit_device_conversion import async_convert_circuit_entities
+from .circuit_object_ids import async_keep_circuit_id_bases_current
 from .config_flow_validation import (
     LeafVerdict,
     PanelCaUnusableError,
@@ -85,6 +87,12 @@ from .const import (
     PANEL_CA_PENDING,
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
+from .conversion_repairs import (
+    async_clear_conversion_notice,
+    async_raise_breaker_switch_area_notices,
+    async_raise_conversion_notice,
+    async_registered_breaker_switches,
+)
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
@@ -158,7 +166,7 @@ from .services import (  # noqa: F401
     _build_set_mains_threshold_schema,
     rotation_in_progress,
 )
-from .util import snapshot_to_device_info
+from .util import circuit_id_of_device, snapshot_to_device_info
 from .websocket import async_register_commands
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -895,7 +903,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             hass, entry.entry_id, snapshot, panel_device_id=entry.runtime_data.panel_device_id
         )
 
+        # Before the forward, so the platforms add every circuit entity onto its
+        # circuit's own device: an install from before circuits had devices still
+        # has them on the panel's. A later setup converts only the entities it is
+        # the first to build, such as controls switched on since.
+        conversion = async_convert_circuit_entities(
+            hass, entry, snapshot, entry.runtime_data.panel_device_id
+        )
+
+        # Read before the forward, so a breaker switch the platforms add can be
+        # told from one that was already registered.
+        breaker_switches_before = async_registered_breaker_switches(hass, entry, snapshot)
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # A circuit entity's id base depends on its device's name, and renaming
+        # that device in Home Assistant builds no entity again. After the
+        # forward, where every circuit entity has recorded what its base is
+        # worked out from.
+        entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
+
+        # After the forward, so the names it lists as changed are the ones Home
+        # Assistant composes for the entities as the platforms left them.
+        async_raise_conversion_notice(hass, entry, conversion)
+
+        # After the forward too: only then is a new breaker switch certain to be
+        # in the registry, on its circuit's device, where it may have joined an
+        # area. The conversion's switches are checked here with the new ones.
+        async_raise_breaker_switch_area_notices(
+            hass,
+            entry,
+            snapshot,
+            registered_before=breaker_switches_before,
+            converted=conversion.breaker_switches_joining_areas,
+        )
 
         # After the forward, because it reports on what the platforms just built
         # -- and once, rather than from each platform's own call to `adoptable`.
@@ -981,6 +1022,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     async_clear_leaf_name_mismatch(hass, entry)
     async_clear_unvalidated_hardware(hass, entry)
     async_clear_flat_firmware(hass, entry)
+    async_clear_conversion_notice(hass, entry.entry_id)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)
@@ -991,12 +1033,15 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
-    device_entry: dr.DeviceEntry,
+    device_entry: dr.AnyDeviceEntry,
 ) -> bool:
-    """Allow manual removal of a device (e.g., stale EVSE sub-device).
+    """Allow manual removal of a device the panel no longer has.
 
-    The main panel device cannot be removed — only sub-devices (like EVSE
-    chargers) that are no longer present can be removed by the user.
+    The main panel device cannot be removed, and neither can the device of a
+    circuit the panel still publishes: its entities would go with it, and the
+    next reload would register both again. What the user may remove is what
+    has gone from the panel: a stale sub-device, such as a charger, and the
+    device of a circuit the panel no longer publishes.
     """
     runtime_data = loaded_runtime_data(config_entry)
     if runtime_data is None:
@@ -1004,6 +1049,11 @@ async def async_remove_config_entry_device(
 
     coordinator = runtime_data.coordinator
     snapshot = coordinator.data
+
+    # A child device is a circuit's own device, which stays while its circuit does.
+    if isinstance(device_entry, dr.ChildDeviceEntry):
+        circuit_id = circuit_id_of_device(snapshot.serial_number, device_entry)
+        return circuit_id is None or circuit_id not in snapshot.circuits
 
     # Identify the main panel device identifier
     panel_identifier = snapshot.serial_number

@@ -18,6 +18,26 @@
       "sw_version": null,
       "via_device": "xg-7814-15i6h"
     },
+    "xg-7814-15i6h_circuit_circuit-1": {
+      "name": "Bedroom / Lights",
+      "parent_device": "xg-7814-15i6h"
+    },
+    "xg-7814-15i6h_circuit_circuit-2": {
+      "name": "Bathroom / Outlets",
+      "parent_device": "xg-7814-15i6h"
+    },
+    "xg-7814-15i6h_circuit_circuit-3": {
+      "name": "Living room / Lights",
+      "parent_device": "xg-7814-15i6h"
+    },
+    "xg-7814-15i6h_circuit_circuit-4": {
+      "name": "Other",
+      "parent_device": "xg-7814-15i6h"
+    },
+    "xg-7814-15i6h_circuit_circuit-5": {
+      "name": "Tesla",
+      "parent_device": "xg-7814-15i6h"
+    },
     "xg-7814-15i6h_mid": {
       "hw_version": null,
       "manufacturer": "Tesla",
@@ -207,13 +227,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-1_breaker_rating": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_bedroom_lights_breaker_rating",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -221,13 +241,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-1_current": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_lights_current",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -235,13 +255,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-1_energy_consumed": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_lights_consumed_energy",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "184509.3",
       "state_class": "total_increasing",
@@ -249,13 +269,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-1_energy_net": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_lights_net_energy",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "184082.1",
       "state_class": "total",
@@ -263,13 +283,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-1_energy_produced": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_lights_produced_energy",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "427.2",
       "state_class": "total_increasing",
@@ -277,13 +297,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-1_power": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bedroom_lights_power",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -291,13 +311,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-7814-15i6h_circuit-2_breaker_rating": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_bathroom_outlets_breaker_rating",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -305,13 +325,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-2_current": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bathroom_outlets_current",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -319,13 +339,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-2_energy_consumed": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bathroom_outlets_consumed_energy",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "4493.9",
       "state_class": "total_increasing",
@@ -333,13 +353,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-2_energy_net": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bathroom_outlets_net_energy",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "4385.8",
       "state_class": "total",
@@ -347,13 +367,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-2_energy_produced": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bathroom_outlets_produced_energy",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "108.1",
       "state_class": "total_increasing",
@@ -361,13 +381,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-2_power": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_bathroom_outlets_power",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -375,13 +395,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-7814-15i6h_circuit-3_breaker_rating": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_living_room_lights_breaker_rating",
       "hidden_by": null,
-      "original_name": "Living room / Lights Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -389,13 +409,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-3_current": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_living_room_lights_current",
       "hidden_by": null,
-      "original_name": "Living room / Lights Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -403,13 +423,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-3_energy_consumed": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_living_room_lights_consumed_energy",
       "hidden_by": null,
-      "original_name": "Living room / Lights Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "17866.6",
       "state_class": "total_increasing",
@@ -417,13 +437,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-3_energy_net": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_living_room_lights_net_energy",
       "hidden_by": null,
-      "original_name": "Living room / Lights Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "17755.3",
       "state_class": "total",
@@ -431,13 +451,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-3_energy_produced": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_living_room_lights_produced_energy",
       "hidden_by": null,
-      "original_name": "Living room / Lights Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "111.3",
       "state_class": "total_increasing",
@@ -445,13 +465,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-3_power": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_living_room_lights_power",
       "hidden_by": null,
-      "original_name": "Living room / Lights Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.5",
       "state_class": "measurement",
@@ -459,13 +479,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-7814-15i6h_circuit-4_breaker_rating": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_other_breaker_rating",
       "hidden_by": null,
-      "original_name": "Other Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -473,13 +493,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-4_current": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_other_current",
       "hidden_by": null,
-      "original_name": "Other Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -487,13 +507,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-4_energy_consumed": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_other_consumed_energy",
       "hidden_by": null,
-      "original_name": "Other Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "116241.8",
       "state_class": "total_increasing",
@@ -501,13 +521,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-4_energy_net": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_other_net_energy",
       "hidden_by": null,
-      "original_name": "Other Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "115483.1",
       "state_class": "total",
@@ -515,13 +535,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-4_energy_produced": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_other_produced_energy",
       "hidden_by": null,
-      "original_name": "Other Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "758.7",
       "state_class": "total_increasing",
@@ -529,13 +549,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-4_power": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_other_power",
       "hidden_by": null,
-      "original_name": "Other Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.1",
       "state_class": "measurement",
@@ -543,13 +563,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-7814-15i6h_circuit-5_breaker_rating": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_tesla_breaker_rating",
       "hidden_by": null,
-      "original_name": "Tesla Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -557,13 +577,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-5_current": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_tesla_current",
       "hidden_by": null,
-      "original_name": "Tesla Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -571,13 +591,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-7814-15i6h_circuit-5_energy_consumed": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_tesla_consumed_energy",
       "hidden_by": null,
-      "original_name": "Tesla Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "139893.5",
       "state_class": "total_increasing",
@@ -585,13 +605,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-5_energy_net": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_tesla_net_energy",
       "hidden_by": null,
-      "original_name": "Tesla Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "-19816.8",
       "state_class": "total",
@@ -599,13 +619,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-5_energy_produced": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_tesla_produced_energy",
       "hidden_by": null,
-      "original_name": "Tesla Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "159710.3",
       "state_class": "total_increasing",
@@ -613,13 +633,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-7814-15i6h_circuit-5_power": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-5",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_tesla_power",
       "hidden_by": null,
-      "original_name": "Tesla Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.1",
       "state_class": "measurement",
@@ -1089,13 +1109,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_relay_circuit-1": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_bedroom_lights_breaker",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1103,13 +1123,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_relay_circuit-2": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_bathroom_outlets_breaker",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1117,13 +1137,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_relay_circuit-3": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_living_room_lights_breaker",
       "hidden_by": null,
-      "original_name": "Living room / Lights Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1131,13 +1151,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_relay_circuit-4": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-4",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_other_breaker",
       "hidden_by": null,
-      "original_name": "Other Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -1145,13 +1165,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_select_circuit-1": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-1",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_bedroom_lights_circuit_priority",
       "hidden_by": null,
-      "original_name": "Bedroom / Lights Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1159,13 +1179,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_select_circuit-2": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-2",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_bathroom_outlets_circuit_priority",
       "hidden_by": null,
-      "original_name": "Bathroom / Outlets Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -1173,13 +1193,13 @@
       "unit_of_measurement": null
     },
     "span_xg-7814-15i6h_select_circuit-3": {
-      "device": "xg-7814-15i6h",
+      "device": "xg-7814-15i6h_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_living_room_lights_circuit_priority",
       "hidden_by": null,
-      "original_name": "Living room / Lights Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,

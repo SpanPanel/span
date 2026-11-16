@@ -8,6 +8,18 @@
       "serial_number": null,
       "sw_version": "spanos3/r202639/03",
       "via_device": null
+    },
+    "xg-3940-9ooto_circuit_circuit-3": {
+      "name": "7 Bathroom / Outlets",
+      "parent_device": "xg-3940-9ooto"
+    },
+    "xg-3940-9ooto_circuit_circuit-4": {
+      "name": "6 Kitchen / Outlets",
+      "parent_device": "xg-3940-9ooto"
+    },
+    "xg-3940-9ooto_circuit_remote-ct-3": {
+      "name": "Remote CT 3",
+      "parent_device": "xg-3940-9ooto"
     }
   },
   "entities": {
@@ -26,13 +38,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_circuit-3_breaker_rating": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_7_bathroom_outlets_breaker_rating",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -40,13 +52,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_circuit-3_current": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_7_bathroom_outlets_current",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -54,13 +66,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_circuit-3_energy_consumed": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_7_bathroom_outlets_consumed_energy",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "4094.9",
       "state_class": "total_increasing",
@@ -68,13 +80,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-3_energy_net": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_7_bathroom_outlets_net_energy",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "3820.7",
       "state_class": "total",
@@ -82,13 +94,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-3_energy_produced": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_7_bathroom_outlets_produced_energy",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "274.2",
       "state_class": "total_increasing",
@@ -96,13 +108,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-3_power": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_7_bathroom_outlets_power",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -110,13 +122,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-3940-9ooto_circuit-4_breaker_rating": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": null,
       "disabled_by": "integration",
       "entity_category": "diagnostic",
       "entity_id": "sensor.span_panel_6_kitchen_outlets_breaker_rating",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Breaker Rating",
+      "original_name": "Breaker Rating",
       "platform": "sensor",
       "state": null,
       "state_class": null,
@@ -124,13 +136,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_circuit-4_current": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_6_kitchen_outlets_current",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.0",
       "state_class": "measurement",
@@ -138,13 +150,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_circuit-4_energy_consumed": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_6_kitchen_outlets_consumed_energy",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "4153.5",
       "state_class": "total_increasing",
@@ -152,13 +164,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-4_energy_net": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_6_kitchen_outlets_net_energy",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "3857.3",
       "state_class": "total",
@@ -166,13 +178,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-4_energy_produced": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_6_kitchen_outlets_produced_energy",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "296.2",
       "state_class": "total_increasing",
@@ -180,13 +192,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_circuit-4_power": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_6_kitchen_outlets_power",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "-0.1",
       "state_class": "measurement",
@@ -572,13 +584,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_relay_circuit-3": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_7_bathroom_outlets_breaker",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -586,13 +598,13 @@
       "unit_of_measurement": null
     },
     "span_xg-3940-9ooto_relay_circuit-4": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": null,
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "switch.span_panel_6_kitchen_outlets_breaker",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Breaker",
+      "original_name": "Breaker",
       "platform": "switch",
       "state": "on",
       "state_class": null,
@@ -600,13 +612,13 @@
       "unit_of_measurement": null
     },
     "span_xg-3940-9ooto_remote-ct-3_current": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_class": "current",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_remote_ct_3_current",
       "hidden_by": null,
-      "original_name": "Remote CT 3 Current",
+      "original_name": "Current",
       "platform": "sensor",
       "state": "0.1",
       "state_class": "measurement",
@@ -614,13 +626,13 @@
       "unit_of_measurement": "A"
     },
     "span_xg-3940-9ooto_remote-ct-3_energy_consumed": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_remote_ct_3_consumed_energy",
       "hidden_by": null,
-      "original_name": "Remote CT 3 Consumed Energy",
+      "original_name": "Consumed Energy",
       "platform": "sensor",
       "state": "150745.3",
       "state_class": "total_increasing",
@@ -628,13 +640,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_remote-ct-3_energy_net": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_remote_ct_3_net_energy",
       "hidden_by": null,
-      "original_name": "Remote CT 3 Net Energy",
+      "original_name": "Net Energy",
       "platform": "sensor",
       "state": "149800.9",
       "state_class": "total",
@@ -642,13 +654,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_remote-ct-3_energy_produced": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_class": "energy",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_remote_ct_3_produced_energy",
       "hidden_by": null,
-      "original_name": "Remote CT 3 Produced Energy",
+      "original_name": "Produced Energy",
       "platform": "sensor",
       "state": "944.4",
       "state_class": "total_increasing",
@@ -656,13 +668,13 @@
       "unit_of_measurement": "Wh"
     },
     "span_xg-3940-9ooto_remote-ct-3_power": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_remote-ct-3",
       "device_class": "power",
       "disabled_by": null,
       "entity_category": null,
       "entity_id": "sensor.span_panel_remote_ct_3_power",
       "hidden_by": null,
-      "original_name": "Remote CT 3 Power",
+      "original_name": "Power",
       "platform": "sensor",
       "state": "13.5",
       "state_class": "measurement",
@@ -670,13 +682,13 @@
       "unit_of_measurement": "W"
     },
     "span_xg-3940-9ooto_select_circuit-3": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-3",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_7_bathroom_outlets_circuit_priority",
       "hidden_by": null,
-      "original_name": "7 Bathroom / Outlets Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,
@@ -684,13 +696,13 @@
       "unit_of_measurement": null
     },
     "span_xg-3940-9ooto_select_circuit-4": {
-      "device": "xg-3940-9ooto",
+      "device": "xg-3940-9ooto_circuit_circuit-4",
       "device_class": null,
       "disabled_by": null,
       "entity_category": "config",
       "entity_id": "select.span_panel_6_kitchen_outlets_circuit_priority",
       "hidden_by": null,
-      "original_name": "6 Kitchen / Outlets Circuit Priority",
+      "original_name": "Circuit Priority",
       "platform": "select",
       "state": "never",
       "state_class": null,

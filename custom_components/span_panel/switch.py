@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 import logging
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_OFF
@@ -14,7 +14,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanPanelSnapshot
 
 from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
@@ -28,6 +28,7 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
+    circuit_device_name,
     circuit_has_a_breaker_switch,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
@@ -36,10 +37,7 @@ from .helpers import (
     construct_voltage_attribute,
     remove_withdrawn_controls,
 )
-from .naming import (
-    circuit_object_id_base,
-    release_registry_name_written_by_older_release,
-)
+from .naming import release_registry_name_written_by_older_release
 from .runtime import SpanPanelConfigEntry
 from .util import snapshot_to_device_info
 
@@ -50,15 +48,8 @@ PARALLEL_UPDATES = 1
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
-# Device types that use "Solar" as the fallback identifier when unnamed.
-_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
-
-
-def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
-    """Return a descriptive identifier for an unnamed circuit switch."""
-    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
-        return "Solar"
-    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+BREAKER_LABEL: Final = "Breaker"
+"""A breaker switch's name: its label alone, since its circuit's device says which breaker."""
 
 
 class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
@@ -66,8 +57,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
     # Read in entity code rather than through a description: this platform
     # has no entity description at all. `relay_state` is the switch's own
-    # state (~258); `name` and `tabs` build its display name and its id base
-    # (~106-122).
+    # state (`_update_is_on`); `name` and `tabs` name its circuit's device and
+    # build its id base (`__init__`).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.relay_state",
         "circuit.name",
@@ -82,9 +73,9 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     ) -> None:
         """Initialize the values.
 
-        The circuit's name is not passed in: both the display name and the id
-        base are read from the circuit in the current snapshot, so a circuit
-        renamed on the panel reaches both on the next reload.
+        The circuit's name is not passed in: its device's name and the id base
+        are read from the circuit in the current snapshot, so a circuit renamed
+        on the panel reaches both on the next reload.
         """
         snapshot: SpanPanelSnapshot = coordinator.data
 
@@ -96,7 +87,12 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         self._device_name = device_name
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, snapshot, circuit_id)
 
-        self._attr_device_info = self._build_device_info(coordinator, snapshot)
+        # On the circuit's own device, which carries the circuit's name. A
+        # charger's feed circuit's switch is no exception: its sensors are on
+        # the charger's device, but the switch was never there.
+        self._attr_device_info = self._build_circuit_device_info(
+            coordinator, snapshot, circuit, circuit_id
+        )
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -104,28 +100,54 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             "switch", DOMAIN, self._attr_unique_id
         )
 
-        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        circuit_name = circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
-
-        # One name path, in both naming modes: the panel's name, carried as
-        # `original_name`. That field ranks below the object-id base below, so
-        # what is displayed can no longer decide what "Recreate entity IDs"
-        # proposes.
-        self._attr_name = f"{circuit_name} Breaker"
+        # One name path, in both naming modes: the label, carried as
+        # `original_name`. The device says which circuit, and that field ranks
+        # below the object-id base below, so what is displayed can no longer
+        # decide what "Recreate entity IDs" proposes.
+        self._attr_name = BREAKER_LABEL
 
         # The id itself is Home Assistant's to compose. This entity supplies only
-        # its base -- the naming-flag half plus "breaker" -- and leaves
-        # `entity_id` unset so Core assembles the rest from the user's
+        # its base -- the suffix "breaker", read back from the id it has -- and
+        # leaves `entity_id` unset so Core assembles the rest from the user's
         # `entity_id_parts`. The suffix is named outright rather than mapped:
         # `get_user_friendly_suffix` has no entry for a switch at all.
-        identifier = (
+        #
+        # The identifier is the name the id was built from before the circuit
+        # had a device: its tabs in circuit-numbers mode, otherwise the name
+        # its device has, the unnamed circuit's fallback included. That is
+        # one rule, and `circuit_device_name` owns it.
+        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        id_identifier = (
             construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
             if use_circuit_numbers
-            else circuit_name
+            else circuit_device_name(circuit, circuit_id)
         )
-        self._span_object_id_base = circuit_object_id_base(
-            identifier, "breaker", existing_entity_id
+        self._span_id_base_source = self._circuit_id_base_source(
+            coordinator,
+            snapshot,
+            circuit,
+            circuit_id,
+            domain="switch",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix="breaker",
         )
+
+        # The one exception is a switch being created in circuit-numbers mode,
+        # which is given its circuit number as its id, once. Core keeps the
+        # preset only until the entity is next added, and composes from the
+        # base above from then on.
+        creation_entity_id = self._circuit_number_entity_id(
+            coordinator,
+            snapshot,
+            circuit_id,
+            domain="switch",
+            unique_id=self._attr_unique_id,
+            id_identifier=id_identifier,
+            suffix="breaker",
+        )
+        if creation_entity_id is not None:
+            self.entity_id = creation_entity_id
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant
@@ -136,7 +158,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         # any other name is the user's.
         if existing_entity_id:
             release_registry_name_written_by_older_release(
-                entity_registry, existing_entity_id, circuit.name, ("Breaker",)
+                entity_registry, existing_entity_id, circuit.name, (BREAKER_LABEL,)
             )
 
         super().__init__(coordinator)
@@ -161,10 +183,10 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
-        The circuit's name is watched here: the entity carries it as
-        `original_name`, which can only be refreshed by being rebuilt, so a
-        rename earns a reload. Whether the panel still lets this circuit be
-        operated -- the answer that decided this entity exists -- is watched by
+        The circuit's name is watched here: it lives on the circuit's device,
+        which only adding the entity again renames, so a rename earns a reload.
+        Whether the panel still lets this circuit be operated -- the answer that
+        decided this entity exists -- is watched by
         `SpanPanelCoordinator._check_settability_change` instead, because the
         opposite edge happens on circuits that have no entity here to see it.
         """
@@ -173,21 +195,13 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         if circuit:
             current_circuit_name = circuit.name
 
-            # One path for both modes: the name is carried by `original_name`,
-            # which is written when the entity is added, so a reload is what
-            # refreshes it. A name in the registry is one the user set.
-            user_has_override = False
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry and entity_entry.name:
-                    user_has_override = True
-
-            if user_has_override:
-                self._previous_circuit_name = current_circuit_name
-            elif self._previous_circuit_name is _NAME_UNSET:
+            # One path for both modes, whether or not the user has named this
+            # entity: their name is the entity's own and the reload leaves it
+            # alone, while the circuit's name is the device's, which a skipped
+            # reload would leave on the old one.
+            if self._previous_circuit_name is _NAME_UNSET:
                 _LOGGER.info(
-                    "First update: syncing entity name to panel name '%s' for switch, requesting reload",
+                    "First update: syncing circuit device name to panel name '%s' for switch, requesting reload",
                     current_circuit_name,
                 )
                 self._previous_circuit_name = current_circuit_name

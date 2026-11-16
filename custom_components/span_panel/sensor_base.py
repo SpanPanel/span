@@ -24,6 +24,7 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 from span_panel_api import SpanPanelSnapshot
 
+from .circuit_object_ids import CircuitIdBaseSource
 from .const import DEFAULT_ENERGY_DIP_COMPENSATION, DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
@@ -42,10 +43,7 @@ from .grace_period import (  # noqa: F401
     handle_offline_grace_period,
     initialize_from_last_state,
 )
-from .naming import (
-    circuit_object_id_base,
-    release_registry_name_written_by_older_release,
-)
+from .naming import release_registry_name_written_by_older_release
 from .options import ENERGY_REPORTING_GRACE_PERIOD, option_bool
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
@@ -84,7 +82,7 @@ _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
 )
 
 
-def _description_label(description: SensorEntityDescription) -> str:
+def description_label(description: SensorEntityDescription) -> str:
     """Return the description's own label, or a neutral word where it declares none.
 
     A description with a `translation_key` declares no `name` -- it declares
@@ -104,11 +102,12 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     _attr_has_entity_name = True
 
     _is_sub_device: bool = False
-    """True when this entity is shown on a sub-device's card rather than the panel's.
+    """True when this circuit sensor is shown on a sub-device's card rather than its circuit's.
 
-    Set by the circuit classes when they are handed a `device_info_override`.
-    Such a sensor supplies no base at all: it composes from its label on the
-    sub-device's card, which is the shape the sub-device's own sensors have.
+    Set by the circuit classes when they are handed a `device_info_override`,
+    which only a charger's feed circuit is. Such a sensor supplies no base at
+    all: it composes from its label on the sub-device's card, which is the
+    shape the sub-device's own sensors have.
     """
 
     def __init__(
@@ -147,23 +146,28 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     "sensor", DOMAIN, self._attr_unique_id
                 )
 
-                # One name path, in both naming modes: the panel's name, carried
-                # as `original_name`. That field ranks below the object-id base
+                # One name path, in both naming modes, carried as
+                # `original_name`. That field ranks below the object-id base
                 # below, so what is displayed can no longer decide what
                 # "Recreate entity IDs" proposes.
                 self._attr_name = self._generate_panel_name(snapshot, description)
 
                 # The id itself is Home Assistant's to compose. This entity
-                # supplies only its base; `entity_id` is left unset so Core
-                # assembles the rest from the user's `entity_id_parts`. A
-                # sub-device sensor supplies no base either, composing from its
-                # label on the sub-device's card like that device's own sensors.
-                parts = self._object_id_parts(snapshot, description)
-                if parts is not None and not self._is_sub_device:
-                    identifier, suffix = parts
-                    self._span_object_id_base = circuit_object_id_base(
-                        identifier, suffix, existing_entity_id
-                    )
+                # supplies at most its base; `entity_id` is left unset so Core
+                # assembles the rest from the user's `entity_id_parts`.
+                self._span_id_base_source = self._id_base_source(
+                    snapshot, description, self._attr_unique_id
+                )
+
+                # The one exception is a circuit sensor being created in
+                # circuit-numbers mode, which is given its circuit number as
+                # its id, once. Core keeps the preset only until the entity is
+                # next added, and composes from the base above from then on.
+                creation_entity_id = self._entity_id_at_creation(
+                    snapshot, description, self._attr_unique_id
+                )
+                if creation_entity_id is not None:
+                    self.entity_id = creation_entity_id
 
                 if existing_entity_id:
                     self._release_synced_registry_name(
@@ -215,32 +219,44 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    def _object_id_parts(
-        self, snapshot: SpanPanelSnapshot, description: T
-    ) -> tuple[str, str] | None:
-        """Return the identifier and canonical suffix this entity's id is built from.
+    def _id_base_source(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: T,
+        unique_id: str,
+    ) -> CircuitIdBaseSource | None:
+        """Return what this entity's id base is worked out from, or None to leave the id to Core.
 
         `None` -- the default, and the answer for every entity that is not a
-        circuit -- leaves `_span_object_id_base` unset, so Home Assistant
-        composes the id from the display name exactly as it always has.
+        circuit sensor on its circuit's device -- leaves `_span_id_base_source`
+        unset, so Home Assistant composes the id from the display name exactly
+        as it always has.
 
-        A circuit entity answers with the naming-flag half (`Circuit 15`,
-        `Kitchen Outlets`) and the suffix `naming.circuit_object_id_base` keys
-        on. The two travel together because
-        neither is any use alone, and because a circuit entity's
-        `description.key` has been overwritten with the circuit id by then, so
-        there is no suffix a default could compute.
+        `unique_id` is the entity's own, which a circuit sensor records its
+        base's recipe under and finds its registry row by, to read its
+        suffix's spelling back from the id the row has each time Core asks.
+        """
+        return None
+
+    def _entity_id_at_creation(
+        self, snapshot: SpanPanelSnapshot, description: T, unique_id: str
+    ) -> str | None:
+        """Return the id to create this entity with, or None to leave it to Core.
+
+        `None` -- the default -- for every entity Core composes the id of,
+        which is every one but a circuit sensor being created in
+        circuit-numbers mode.
         """
         return None
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate the displayed name for the sensor, in either naming mode.
 
-        Circuit entities override this to prefix the panel's own circuit name,
-        which is what makes a circuit renamed in the SPAN app show through. Every
-        other sensor's name is its description's label -- and a description that
-        declares a `translation_key` instead is normally not asked at all, since
-        its name comes from `translations/en.json`.
+        The description's label, which for a circuit sensor is all of it: the
+        circuit's name is its device's, which is what makes a circuit renamed
+        in the SPAN app show through. A description that declares a
+        `translation_key` instead is normally not asked at all, since its name
+        comes from `translations/en.json`.
 
         Args:
             snapshot: The panel snapshot data
@@ -250,7 +266,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             Panel name string
 
         """
-        return _description_label(description)
+        return description_label(description)
 
     def _release_synced_registry_name(
         self,
@@ -291,17 +307,21 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             entity_registry,
             existing_entity_id,
             circuit.name,
-            (_description_label(description), *legacy_names),
+            (description_label(description), *legacy_names),
         )
 
     def _sync_circuit_name(self) -> None:
-        """Follow a circuit renamed on the panel, by reloading so the name is rebuilt.
+        """Follow a circuit renamed on the panel, by reloading so its device is renamed.
 
-        One path for both modes. The name is carried by `original_name`, which is
-        written when the entity is added, so a reload is what refreshes it --
-        circuit-numbers mode used to write the registry's `name` in place instead,
-        which was quicker but handed that field the last word over entity id
-        generation. See `_release_synced_registry_name`.
+        One path for both modes. The circuit's name lives on the circuit's
+        device, which this entity's device info names and only an add
+        re-registers, so a reload is what renames it -- circuit-numbers mode
+        used to write the registry's `name` in place instead, which was quicker
+        but handed that field the last word over entity id generation. See
+        `_release_synced_registry_name`.
+
+        A charger feed circuit's sensors ask too: in circuit-names mode the
+        charger's device carries the name of the circuit that feeds it.
         """
         if not (hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits")):
             return
@@ -312,20 +332,15 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         current_circuit_name = circuit.name
 
-        # A name in the registry is one the user set: theirs outranks the panel's,
-        # and reloading would not change what is displayed anyway.
-        user_has_override = False
-        if self.entity_id:
-            entity_registry = er.async_get(self.hass)
-            entity_entry = entity_registry.async_get(self.entity_id)
-            if entity_entry and entity_entry.name:
-                user_has_override = True
-
-        if user_has_override:
-            self._previous_circuit_name = current_circuit_name
-        elif self._previous_circuit_name is _NAME_UNSET:
+        # Whether or not the user has named this entity. Their name is the
+        # entity's own and the reload leaves it alone; the circuit's name is
+        # the device's, and an entity that skipped the reload for its own name
+        # would leave the device on the old one -- for good, where the user has
+        # named every entity on the circuit. A name the user gave the device
+        # itself still wins what is displayed; that is Home Assistant's.
+        if self._previous_circuit_name is _NAME_UNSET:
             _LOGGER.info(
-                "First update: syncing sensor name to panel name '%s', requesting reload",
+                "First update: syncing circuit device name to panel name '%s', requesting reload",
                 current_circuit_name,
             )
             self._previous_circuit_name = current_circuit_name

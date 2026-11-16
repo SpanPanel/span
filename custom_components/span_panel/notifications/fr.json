@@ -5,7 +5,7 @@
     "intro_many": "Cette mise à jour a ajouté {count} nouvelles entités à votre Panneau SPAN.",
     "enabled_heading": "Ajoutées et prêtes à l'emploi",
     "disabled_heading": "Ajoutées mais désactivées",
-    "how_to_enable": "Les entités désactivées n'enregistrent rien tant que vous ne les activez pas. Ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez.",
+    "how_to_enable": "Les entités désactivées n'enregistrent rien tant que vous ne les activez pas. Ouvrez la page de l'appareil du circuit auquel elles appartiennent, ou celle du panneau pour les mesures de l'ensemble du panneau, affichez ses entités désactivées et activez celles que vous souhaitez.",
     "nothing_broken": "Rien n'est cassé et aucune action n'est requise. Des entités apparaissent pour plusieurs raisons : une mise à jour qui expose davantage de ce que votre panneau rapporte, un circuit ajouté au panneau, ou du matériel tel qu'une batterie, du solaire ou un chargeur qui se met en ligne."
   },
   "extension_overflow": {

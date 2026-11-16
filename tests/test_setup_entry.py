@@ -19,7 +19,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import device_registry as dr, entity_registry as er, issue_registry as ir
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util import dt as dt_util
 import httpx
@@ -39,6 +39,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
+    async_remove_config_entry_device,
     async_remove_entry,
     async_setup_entry,
 )
@@ -65,7 +66,12 @@ from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
 from .conftest import FLAT_PANEL_SCHEMA, PARENT_CHILD_PANEL_SCHEMA
-from .factories import SpanPanelSnapshotFactory, pv_binding_for
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import (
+    ensure_device_registered_stand_in,
+    register_circuit_device,
+    register_panel_device,
+)
 
 
 def _create_v2_entry(**data_overrides) -> MockConfigEntry:
@@ -115,7 +121,7 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
         ) as mock_coordinator_cls,
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ) as mock_ensure_device,
         patch.object(
             hass.config_entries, "async_forward_entry_setups", AsyncMock()
@@ -128,7 +134,11 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     # links to it with `via_device_id`, and registration is the only place it is known.
     assert isinstance(entry.runtime_data, SpanPanelRuntimeData)
     assert entry.runtime_data.coordinator is coordinator
-    assert entry.runtime_data.panel_device_id == "panel-device-id"
+    panel_device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, snapshot.serial_number), entry.entry_id
+    )
+    assert panel_device is not None
+    assert entry.runtime_data.panel_device_id == panel_device.id
     # The control lock is one object per entry, shared with the gate, so it is
     # compared by identity elsewhere and never by value.
     assert entry.runtime_data.control_lock.armed is False
@@ -178,7 +188,7 @@ async def test_the_panel_client_is_given_home_assistants_shared_http_client(
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
@@ -477,7 +487,7 @@ async def test_setup_syncs_schema_repairs_after_the_platforms(
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(
             hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
@@ -539,7 +549,7 @@ async def test_setup_announces_additions_after_the_platforms(
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(
             hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
@@ -587,7 +597,7 @@ async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forward
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
@@ -665,7 +675,7 @@ async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
         ),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
         patch.object(hass.config_entries, "async_update_entry"),
@@ -697,7 +707,7 @@ async def _forwarded_pv_binding(hass: HomeAssistant, entry: MockConfigEntry, sna
         patch("custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
         patch.object(hass.config_entries, "async_update_entry"),
@@ -835,7 +845,7 @@ def _stand_ins(hass: HomeAssistant, panel: _PanelUnderSetup) -> Iterator[MagicMo
         patch("custom_components.span_panel.SpanPanelCoordinator", return_value=panel.coordinator),
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(return_value="panel-device-id"),
+            AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
         patch.object(hass.config_entries, "async_forward_entry_setups", panel.forward),
     ):
@@ -1498,3 +1508,38 @@ async def test_removing_a_refused_entry_clears_the_flat_firmware_repair(
     await hass.config_entries.async_remove(entry.entry_id)
 
     assert _flat_firmware_issue(hass) is None
+
+
+async def test_a_live_circuit_device_cannot_be_deleted(hass: HomeAssistant) -> None:
+    """A circuit's device goes only once the panel no longer publishes the circuit.
+
+    Deleting the device of a circuit the panel still publishes would take its
+    entities with it until the next reload put them back, so it is refused as
+    deleting the panel is. A device left behind by a circuit that has gone from
+    the panel is the user's to delete.
+    """
+    serial = "sp3-242424-001"
+    kitchen = SpanCircuitSnapshotFactory.create(circuit_id="circuit-7", name="Kitchen Outlets")
+    gone = SpanCircuitSnapshotFactory.create(circuit_id="circuit-9", name="Old Workshop")
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number=serial, circuits={kitchen.circuit_id: kitchen}
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-devices", unique_id=serial)
+    entry.add_to_hass(hass)
+    panel_device_id = register_panel_device(hass, entry, serial)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=panel_device_id,
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    live, orphaned = (
+        register_circuit_device(hass, entry, serial, circuit, panel_device_id=panel_device_id)
+        for circuit in (kitchen, gone)
+    )
+
+    assert await async_remove_config_entry_device(hass, entry, live) is False
+    assert await async_remove_config_entry_device(hass, entry, orphaned) is True

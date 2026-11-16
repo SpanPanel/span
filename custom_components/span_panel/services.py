@@ -14,6 +14,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.json import JsonObjectType, JsonValueType
 import httpx
+import probatio as vol
 from span_panel_api import rotate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -24,7 +25,6 @@ from span_panel_api.exceptions import (
     SpanPanelTimeoutError,
     SpanPanelTLSVerificationError,
 )
-import voluptuous as vol
 
 from .config_flow_validation import PanelCaUnusableError, panel_rest_transport
 from .const import (
@@ -48,6 +48,7 @@ from .options import (
 )
 from .package_ratings import panel_describes_breakers
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
+from .util import circuit_id_of_device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -743,6 +744,68 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
     )
 
 
+def _known_circuit_ids(
+    live: Collection[str] | None,
+    stored: Mapping[str, Mapping[str, Collection[str]]],
+    panel_device_id: str,
+) -> set[str]:
+    """Return the circuit ids a favorite may name: the live ones and the panel's stored ones."""
+    return {*(live or ()), *stored.get(panel_device_id, {}).get("circuits", ())}
+
+
+def _circuit_device_target(
+    device_registry: dr.DeviceRegistry, device_entry: dr.ChildDeviceEntry
+) -> tuple[str, str] | None:
+    """Return ``(panel_device_id, circuit_id)`` for a circuit's own device, or None.
+
+    The panel is the device's parent, and the circuit is the one the
+    device's identifier names on that panel, by the serial the panel
+    device's own identifier carries. Read from the registry alone, so it
+    answers for a panel that is not loaded. Any other child device, and a
+    circuit device naming a panel that is not its parent, is None.
+    """
+    panel_device = device_registry.async_get(
+        device_entry.parent_device_id, include_child_devices=False
+    )
+    if panel_device is None:
+        return None
+    for domain, serial in panel_device.identifiers:
+        if domain != DOMAIN:
+            continue
+        circuit_id = circuit_id_of_device(serial, device_entry)
+        if circuit_id is not None:
+            return panel_device.id, circuit_id
+    return None
+
+
+def _not_on_a_span_device(entity_id: str) -> ServiceValidationError:
+    """Return the refusal for an entity that sits on no device of a SPAN panel."""
+    return ServiceValidationError(
+        f"Entity {entity_id} does not belong to a SPAN Panel device.",
+        translation_domain=DOMAIN,
+        translation_key="favorite_not_span_entity",
+        translation_placeholders={"entity_id": entity_id},
+    )
+
+
+def _names_no_known_circuit(entity_id: str, *, panel_loaded: bool) -> ServiceValidationError:
+    """Return why an entity names no circuit a favorite can be: no panel to ask, or no such circuit."""
+    if not panel_loaded:
+        return ServiceValidationError(
+            f"The SPAN Panel that entity {entity_id} belongs to is not loaded.",
+            translation_domain=DOMAIN,
+            translation_key="favorite_panel_not_loaded",
+            translation_placeholders={"entity_id": entity_id},
+        )
+    return ServiceValidationError(
+        f"Could not derive a favorite target from entity {entity_id}. "
+        "Pick a circuit sensor (current/power) or a sub-device sensor.",
+        translation_domain=DOMAIN,
+        translation_key="favorite_no_circuit_uuid",
+        translation_placeholders={"entity_id": entity_id},
+    )
+
+
 def _async_register_favorites_services(hass: HomeAssistant) -> None:
     """Register cross-panel favorites services (domain-level).
 
@@ -768,9 +831,13 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
-        ``target_id`` is the panel-local circuit id that the entity's unique_id
-        names, among the live snapshot's ids and the panel's circuits in
-        ``stored``. Removal passes the stored favorites, which are ids the panel
+        ``target_id`` is the panel-local circuit id, among the live snapshot's
+        ids and the panel's circuits in ``stored``. A circuit entity sits on its
+        circuit's own device, a child of the panel device, so the circuit is the
+        one that device's identifier names and the panel is the device's parent.
+        An entity the conversion left on the panel device, because its circuit
+        had already gone from the panel, is read by the circuit id its unique_id
+        names. Removal passes the stored favorites, which are ids the panel
         once published, so a circuit that has left the panel, or a panel that is
         not loaded, can still have its favorite removed; adding passes none, so
         only a circuit the panel publishes now becomes one. For sub-devices,
@@ -802,18 +869,23 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         device_registry = dr.async_get(hass)
         device_entry = device_registry.async_get(entry.device_id)
-        # From 2026.9 `async_get` can answer with a child device, a part of
-        # another device with no `via_device_id`. SPAN registers none, so a
-        # child device is not a SPAN Panel device either.
-        if not isinstance(device_entry, dr.DeviceEntry) or not any(
+        # A child device is a part of another device, with no `via_device_id`
+        # to walk. The only ones SPAN registers are its circuits' own devices.
+        if isinstance(device_entry, dr.ChildDeviceEntry):
+            circuit_target = _circuit_device_target(device_registry, device_entry)
+            if circuit_target is None:
+                raise _not_on_a_span_device(entity_id)
+            panel_device_id, device_circuit_id = circuit_target
+            live = _live_circuit_ids(entry.config_entry_id)
+            known = _known_circuit_ids(live, stored, panel_device_id)
+            if device_circuit_id in known:
+                return panel_device_id, "circuits", device_circuit_id
+            raise _names_no_known_circuit(entity_id, panel_loaded=live is not None)
+
+        if device_entry is None or not any(
             domain == DOMAIN for domain, _ in device_entry.identifiers
         ):
-            raise ServiceValidationError(
-                f"Entity {entity_id} does not belong to a SPAN Panel device.",
-                translation_domain=DOMAIN,
-                translation_key="favorite_not_span_entity",
-                translation_placeholders={"entity_id": entity_id},
-            )
+            raise _not_on_a_span_device(entity_id)
 
         # Resolve the panel device id. Sub-devices register with
         # via_device_id; main panels never do, so via_device_id presence is a
@@ -845,8 +917,9 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         if device_entry.via_device_id is not None:
             return panel_device_id, "sub_devices", device_entry.id
 
-        # Main-panel entity (regular breaker circuit) — favorite the
-        # circuit. Its unique_id names a circuit id
+        # An entity on the panel device itself. The entities of a circuit that
+        # had gone from the panel before circuits were given devices of their
+        # own are still here, and their unique_id still names the circuit
         # (``span_{serial}_{circuit_id}_{suffix}``); an id is opaque, so it is
         # found among the ids the panel publishes, or once published, rather
         # than by its shape.
@@ -858,25 +931,12 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
                 translation_placeholders={"entity_id": entity_id},
             )
         live = _live_circuit_ids(entry.config_entry_id)
-        known = {*(live or ()), *stored.get(panel_device_id, {}).get("circuits", ())}
-        circuit_id = match_circuit_id(entry.unique_id, known)
+        circuit_id = match_circuit_id(
+            entry.unique_id, _known_circuit_ids(live, stored, panel_device_id)
+        )
         if circuit_id is not None:
             return panel_device_id, "circuits", circuit_id
-
-        if live is None:
-            raise ServiceValidationError(
-                f"The SPAN Panel that entity {entity_id} belongs to is not loaded.",
-                translation_domain=DOMAIN,
-                translation_key="favorite_panel_not_loaded",
-                translation_placeholders={"entity_id": entity_id},
-            )
-        raise ServiceValidationError(
-            f"Could not derive a favorite target from entity {entity_id}. "
-            "Pick a circuit sensor (current/power) or a sub-device sensor.",
-            translation_domain=DOMAIN,
-            translation_key="favorite_no_circuit_uuid",
-            translation_placeholders={"entity_id": entity_id},
-        )
+        raise _names_no_known_circuit(entity_id, panel_loaded=live is not None)
 
     def _favorites_response(favorites: dict[str, dict[str, list[str]]]) -> ServiceResponse:
         """Wrap the favorites map in the shape all three favorites services return.

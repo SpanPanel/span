@@ -64,9 +64,9 @@
           "entity_naming_pattern": "Naming pattern"
         },
         "data_description": {
-          "entity_naming_pattern": "Friendly names use circuit labels from the panel. Tab-based names use breaker tab numbers for stable entity IDs."
+          "entity_naming_pattern": "Both choices build each new entity's ID once, when it is created: circuit names from the circuit's name in the SPAN app, circuit numbers from its breaker's position. Displayed names follow the SPAN app either way."
         },
-        "description": "Choose how circuit-related entities are named in Home Assistant.",
+        "description": "Choose how the entity IDs of new circuit entities are built.",
         "title": "Circuit entity naming"
       },
       "choose_v2_auth": {
@@ -660,8 +660,8 @@
     },
     "entity_naming_pattern": {
       "options": {
-        "circuit_numbers": "Circuit Numbers (e.g., span_panel_circuit_15_power)",
-        "friendly_names": "Friendly Names (e.g., span_panel_kitchen_outlets_power)"
+        "circuit_numbers": "Circuit numbers (e.g., span_panel_circuit_15_power)",
+        "friendly_names": "Circuit names (e.g., span_panel_kitchen_outlets_power)"
       }
     }
   },
@@ -1053,6 +1053,14 @@
     "panel_firmware_flat": {
       "title": "SPAN panel firmware needs an update",
       "description": "{panel} is on spanos2 firmware, which publishes the older flat eBus schema that this integration no longer supports. Update the panel's firmware; it reconnects on its own once updated."
+    },
+    "circuit_devices_converted": {
+      "title": "SPAN Panel circuits now have their own devices",
+      "description": "Each circuit of {panel} is now a device of its own under the panel, named by the circuit's name in the SPAN app, and its entities are named by what they measure, such as Power. No entity ID has changed, so automations, scripts and dashboards that use entity IDs keep working.\n\n**Displayed names that changed:**\n\n{renamed}\n\n**Areas moved to the circuit's device**, so a circuit's entities now share one area:\n\n{area_changes}\n\n**Circuits whose areas were left as they were**, because their breaker switch has no area. Their entities show without the circuit's name. To restore it, set an area on the circuit's device and clear the entities' own areas, knowing that the breaker switch then joins that area too, where an area-wide turn-off reaches it.\n\n{circuits_left_in_areas}\n\nTemplates that read an entity's device, such as `device_name` or `device_entities`, now see the circuit's device instead of the panel. Dismiss this notice once you have read it."
+    },
+    "breaker_switch_in_area": {
+      "title": "SPAN Panel breaker switch joined an area",
+      "description": "{switch} is a new breaker switch on a circuit whose device is in {area}, so the switch is in {area} too. An area-wide action, such as turning off everything in {area}, now turns this breaker off. To keep it out of such actions, give the switch a different area of its own or remove the area from its circuit's device. Dismiss this notice once you have read it."
     }
   }
 }
