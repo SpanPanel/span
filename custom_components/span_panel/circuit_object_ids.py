@@ -89,8 +89,11 @@ update event, before the change has returned, because Home Assistant asks
 whether to rename the device's entity ids straight after a rename. A reload
 would answer too late.
 
-One change applies only after the next restart: a saved entity-id format,
-for which Core announces no event.
+Two changes reach the base only at the next restart: a saved entity-id
+format, for which Core announces no event, and an entity id the user edits
+by hand, which the listener does not watch. Until then a hand-edited entity
+is offered the id it had. Everything else the base is worked out from either
+reloads the entry when it changes or is watched.
 """
 
 from __future__ import annotations
@@ -321,10 +324,11 @@ def circuit_object_id_base(
     `power`, spells `current_power`.
 
     The answer depends on every part a composition reads: the circuit
-    device's name and area, the panel's name and area, and the entity's own
-    area. On a circuit named for what its entity measures, `sensor.garage_power`
-    is the device "Power" in Garage with the suffix left out while the device
-    is there, and is read for its `power` once it is not.
+    device's name and area, the panel's name and area, the entity's own
+    area, and the names of those areas and of their floors. On a circuit
+    named for what its entity measures, `sensor.garage_power` is the device
+    "Power" in Garage with the suffix left out while the device is there,
+    and is read for its `power` once it is not.
     """
     device_name = effective_circuit_device_name(
         dr.async_get(hass), serial, circuit, circuit_id, config_entry_id=config_entry_id

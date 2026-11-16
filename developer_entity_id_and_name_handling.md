@@ -241,7 +241,8 @@ circuit had and the one a new entity on that device gets. A circuit renamed "Pow
 offered `sensor.span_panel_power_power`, the form at its end with the omission decided from the new name, as rule 3 gives every other rename. "Current Power"
 leaves `power` out, so its `sensor.current_power` stops at the name, the empty base a new entity there gets. The reading is a function of the ID and the names
 alone. Where Core composes such an ID today from the device's name with the suffix left out, as it composes `sensor.garage_power` while the device is in Garage,
-the first rule above gives it the empty base and nothing is offered, so the base follows the device's area and the panel's, and the names of the areas (§5.3).
+the first rule above gives it the empty base and nothing is offered, so the base follows the device's area and the panel's, and the names of the areas and their
+floors (§5.3).
 
 An offer the user accepts is an ID Core composes, so it is given the base it was composed from and the next restart offers nothing more
 (`test_an_accepted_offer_reads_back_to_the_same_suffix`, and under reordered formats `test_an_id_composed_under_another_format_reads_back_to_its_base`).
@@ -393,9 +394,11 @@ device, and the panel device's name and area, which a circuit device with no are
 named "Power" whose label-only ID is `sensor.garage_power` has the empty base while its device is in Garage, where Core composes that ID from the device with
 the suffix left out, and `power` once the device is not. With the entity's area cleared before the device's was set, a base stored for the device with no area
 offered `sensor.garage_power_power` until the next restart, for an ID that is offered nothing after it. So the same listener works a circuit's bases out again
-when its device's `area_id` changes, and every circuit's when the panel device's `name_by_user` or `area_id` changes. Under `(AREA, DEVICE, ENTITY)` the panel's
-area reaches a circuit device with none. Once the panel is renamed "Main Panel", `sensor.span_panel_power` on a circuit named "Power" is no composition, and it
-is offered `sensor.main_panel_power_power` at once rather than after the next restart.
+when its device's `area_id` changes, and every circuit's when the panel device's `name_by_user` or `area_id` changes. A circuit device with no area of its own
+takes the panel's under every format with an area part. Under `(AREA, DEVICE, ENTITY)`, which names no panel, the "Power" sensor's `sensor.garage_power` is
+composed again from the panel's area Garage and the device with the suffix left out, so putting the panel in Garage leaves nothing to offer. Under the default
+and `(PARENT_DEVICE, DEVICE, ENTITY)`, which name the panel, `sensor.span_panel_power` on a circuit named "Power" is no composition once the panel is renamed
+"Main Panel", and it is offered `sensor.main_panel_power_power` at once rather than after the next restart.
 
 A composition reads an area's name too, under a format with an area part, and the floor an area is on and that floor's name under one with a floor part.
 Renaming an area or a floor reloads nothing either. With the device of a circuit named "Power" in Garage and its ID `sensor.garage_power`, renaming Garage
@@ -406,7 +409,15 @@ an icon or an alias as well, without saying what changed, so the listener keeps 
 every circuit, rather than only those composed in that area, because which areas an ID is composed in is the composer's to say, and a second statement of it
 could drift.
 
-One change applies only after the next restart: a saved entity-ID format, for which Core announces no event.
+Two changes reach the base only at the next restart:
+
+- a saved entity-ID format, for which Core announces no event;
+- an entity ID the user edits by hand, which the listener does not watch: it acts on the entity's `area_id` alone. Until the next restart the base is the one
+  worked out from the old ID, so Recreate offers the edited entity its old ID back, as `sensor.span_panel_refrigerator_power` for one edited to
+  `sensor.span_panel_refrigerator`, and nothing after it.
+
+Everything else the base is worked out from either reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the integration's
+own entry do, or is watched above. The panel device's own name is the one the entry was set up with; the user names it through `name_by_user`.
 
 The rename therefore reaches:
 
@@ -539,8 +550,8 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
       composes today is offered nothing under any format (§4.3).
 - [ ] A circuit entity's base is recorded when the entity is built and worked out again when its device is renamed in Home Assistant, when its device's area,
       the panel device's name or the panel device's area changes, when an area or a floor the format reads is renamed or an area moved to another floor, or when
-      its own area is set or cleared (§5.3). A saved entity-ID format reaches the base at the next restart. An entity with an area of its own never has an empty
-      base (§4.3).
+      its own area is set or cleared (§5.3). A saved entity-ID format and an entity ID edited by hand reach the base at the next restart. An entity with an area
+      of its own never has an empty base (§4.3).
 - [ ] The composer answers nothing for an entity-ID format holding a part outside `COMPOSED_PARTS`, and nothing indexes a table of parts by a part it may not
       hold (§4.7).
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
