@@ -4,5 +4,5 @@ setuptools>=84.2.1
 pytest-homeassistant-custom-component==0.13.375
 ebus-panel-sim==0.10.0
 homeassistant==2026.10.4
-span-panel-api==3.9.0
+span-panel-api==3.9.1
 span-panel-api-schema-1==1.5.0

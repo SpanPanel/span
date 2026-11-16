@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">=3.14.3,<3.15"
 dependencies = [
     "homeassistant==2026.10.4",
-    "span-panel-api==3.9.0",
+    "span-panel-api==3.9.1",
     # A separate distribution, not a dependency of the bootstrap: adapters are found
     # through the `span_panel_api.schema_adapters` entry-point group, so the adapter
     # has to be installed for discovery to see it. manifest.json carries the same two
