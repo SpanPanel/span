@@ -5,14 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [2.3.0] - unreleased
 
 **Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
-Home Assistant 2026.11; going back means restoring a backup taken before the upgrade.
+Home Assistant 2026.11. The upgrade is designed to be non-destructive: each entity keeps its entity ID, unique ID and history, and a name you set is kept, less
+a leading circuit name that would show twice. Going back means restoring a backup taken before the upgrade.
 
 ### Added
 
 - **On MAIN 32, a tandem's other breaker rating can be copied from the SPAN app in the Monitoring tab or a circuit's side panel**, so current monitoring judges
   that space against both breakers together; the Breaker Rating sensor keeps showing the panel's rating.
-- **On MAIN 32, a package across two spaces can be recorded the same way**, and since the panel reports only the average of its two legs, the dashboard
-  recommends turning monitoring off for that circuit instead of applying it.
+- **On MAIN 32, the second breaker rating the SPAN app shows for a circuit across two spaces, such as the 30 in 20-30A, can be entered in the Monitoring tab or
+  the circuit's side panel**; since the panel reports only the average of its two legs, the dashboard keeps that rating without applying it and recommends
+  turning monitoring off for that circuit.
 - **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
   circuit's area, where an area-wide turn-off would reach it.
 
