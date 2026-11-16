@@ -10,7 +10,9 @@ least once, so they are held here:
 - the README quotes the naming option's labels and the config entry version a
   downgrade is refused across, and states the oldest Home Assistant the release
   installs on, which `hacs.json` enforces;
-- `AGENTS.md` names the schema library a service is validated with.
+- `AGENTS.md` names the schema library a service is validated with;
+- the card the integration bundles links to a section of the tandem guide
+  (`tandems.md`) by the anchor GitHub gives that section's heading.
 """
 
 from __future__ import annotations
@@ -18,8 +20,9 @@ from __future__ import annotations
 import ast
 import importlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -33,6 +36,8 @@ RULES_DOC = REPO / "developer_entity_id_and_name_handling.md"
 README = REPO / "README.md"
 AGENTS = REPO / "AGENTS.md"
 HACS = REPO / "hacs.json"
+TANDEM_GUIDE = REPO / "tandems.md"
+BUNDLED_PANEL = PACKAGE / "frontend" / "dist" / "span-panel.js"
 
 CITED_MODULES = (
     "circuit_device_conversion",
@@ -299,3 +304,102 @@ def test_agents_names_the_schema_library_services_import() -> None:
     requirements = _section(_read(AGENTS), "## Service Registration Requirements")
 
     assert f"`{libraries[0]}`" in requirements
+
+
+TANDEM_GUIDE_URL = "https://github.com/SpanPanel/span/blob/main/tandems.md#main-32"
+"""Where the card's MAIN 32 tandem note links: the tandem guide's MAIN 32 section, on `main`."""
+
+
+def _headings(text: str) -> list[str]:
+    """Return the text of each heading in `text`, in order.
+
+    A heading is a `#` line outside a fenced code block, so a comment in a
+    fenced example is not one.
+    """
+    headings: list[str] = []
+    fence = ""
+    for line in text.splitlines():
+        marker = re.match(r" {0,3}(`{3,}|~{3,})", line)
+        if fence:
+            if (
+                marker
+                and marker[1][0] == fence[0]
+                and len(marker[1]) >= len(fence)
+                and line.strip() == marker[1]
+            ):
+                fence = ""
+            continue
+        if marker:
+            fence = marker[1]
+            continue
+        heading = re.match(r" {0,3}#{1,6} +(.+?)(?: +#+)? *$", line)
+        if heading:
+            headings.append(heading[1])
+    return headings
+
+
+def github_heading_anchors(text: str) -> list[str]:
+    """Return the anchor GitHub gives each heading in `text`, in order.
+
+    This is GitHub's rule for these headings, which are plain text: lower-case,
+    each space a hyphen, and punctuation dropped. A heading the document has
+    already used takes `-1`, then `-2`, after its anchor.
+    """
+    anchors: list[str] = []
+    for heading in _headings(text):
+        slug = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+        anchor, repeats = slug, 0
+        while anchor in anchors:
+            repeats += 1
+            anchor = f"{slug}-{repeats}"
+        anchors.append(anchor)
+    return anchors
+
+
+def test_the_anchors_are_the_ones_github_gives_these_headings() -> None:
+    """Each heading's anchor is the one GitHub links it by, and a fenced `#` line has none."""
+    text = (
+        "# Tandem and Multi-Load Breakers\n"
+        "\n"
+        "## MAIN 32\n"
+        "\n"
+        "### What the panel publishes\n"
+        "\n"
+        "```text\n"
+        "# a comment in an example\n"
+        "```\n"
+        "\n"
+        "## Other SPAN panels\n"
+        "\n"
+        "### What the panel publishes\n"
+        "\n"
+        "## Per-leg current: what SPAN may publish\n"
+    )
+
+    assert github_heading_anchors(text) == [
+        "tandem-and-multi-load-breakers",
+        "main-32",
+        "what-the-panel-publishes",
+        "other-span-panels",
+        "what-the-panel-publishes-1",
+        "per-leg-current-what-span-may-publish",
+    ]
+
+
+def test_the_bundled_card_links_a_heading_the_tandem_guide_has() -> None:
+    """The card's MAIN 32 note links a section of `tandems.md` that the guide still has.
+
+    The link names `main`, so it follows the guide as the guide changes, and a
+    heading renamed there leaves the bundled card linking to nothing. Its
+    anchor is checked against each heading's, worked out by GitHub's rule for
+    these headings (`github_heading_anchors`). A changed link or a renamed
+    heading fails here until the two agree again. The bundle must hold the
+    link as a whole string, so a longer one that starts with it does not pass.
+    """
+    bundled = re.search(rf"([\"'`]){re.escape(TANDEM_GUIDE_URL)}\1", _read(BUNDLED_PANEL))
+    assert bundled is not None, f"the bundled panel does not link {TANDEM_GUIDE_URL}"
+
+    link = urlsplit(TANDEM_GUIDE_URL)
+
+    assert PurePosixPath(link.path).name == TANDEM_GUIDE.name
+    assert link.fragment in github_heading_anchors(_read(TANDEM_GUIDE))
