@@ -2708,7 +2708,7 @@ wheels = [
 
 [[package]]
 name = "span"
-version = "2.3.1"
+version = "2.3.2"
 source = { virtual = "." }
 dependencies = [
     { name = "homeassistant" },
@@ -2763,7 +2763,7 @@ dev = [
 
 [[package]]
 name = "span-panel-api"
-version = "3.9.0"
+version = "3.9.1"
 source = { editable = "../../span/span-panel-api" }
 dependencies = [
     { name = "httpx" },
