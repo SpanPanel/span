@@ -18,6 +18,9 @@ How circuit devices and their entities are named from then on is described under
 - **The device.** A circuit's entities are on the circuit's device, named by the circuit's name in the SPAN app, and the entities are named by what they
   measure, such as Power. Templates that read an entity's device, such as `device_name`, `device_id` or `device_entities`, now see the circuit's device rather
   than the panel.
+- **The `friendly_name` attribute.** It holds the circuit's name and the entity's, without the panel's, such as "Kitchen Outlets Power", and templates and
+  notifications that read it or a state's `name` see that. A name you gave an entity that keeps an area of its own appears there after the circuit's name. Home
+  Assistant plans to retire `friendly_name`; `entity_name()`, `device_name()` and `area_name()` are its replacements in templates.
 - **Displayed names.** An entity you renamed shows its circuit's name in front of yours, as in "Kitchen Outlets Fridge Power". Other names display as before,
   unless the move changed the entity's area or left it with an area of its own (see [Areas](#areas)).
 - **Circuit numbers.** In circuit-numbers mode, **Recreate entity IDs** now offers an ID built from the circuit's name, matching its displayed name, while new
@@ -48,5 +51,7 @@ switch joined an area**, names the switch and the area.
 2.3.0 raises the config entry to version 8. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and
 there is no automatic downgrade, so going back from 2.3.0 to any earlier release is refused. Reinstall 2.3.0, or restore a backup taken before the upgrade.
 
-Removing and re-adding the integration on the earlier release also works and preserves entity IDs, but needs the panel passphrase or physical access to the door
-again. It puts each circuit's entities back on the panel's device, and the names the upgrade shortened and the areas it moved are not restored.
+You can also remove the panel from Home Assistant while 2.3.0 is still installed, then install the earlier release and add the panel again. Remove it before
+installing the earlier release: 2.3.0 clears its repairs as the panel is removed, and an earlier release cannot. This preserves entity IDs, but needs the panel
+passphrase or physical access to the door again. It puts each circuit's entities back on the panel's device, and the names the upgrade shortened and the areas
+it moved are not restored.
