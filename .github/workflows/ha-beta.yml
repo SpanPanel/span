@@ -27,6 +27,8 @@ jobs:
     name: Newest Home Assistant release
     runs-on: ubuntu-latest
     continue-on-error: true
+    # A hang in a beta ends here rather than at GitHub's six hours.
+    timeout-minutes: 30
     defaults:
       run:
         # Named explicitly for `-o pipefail`, which the implicit shell lacks.
@@ -51,14 +53,25 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Pin the newest Home Assistant test release
-        run: python scripts/ha-beta-pins.py | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          python scripts/ha_beta_pins.py pin | tee -a "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install dependencies
+      - name: Lock from PyPI
         run: |
           # Remove local path source overrides so uv resolves from PyPI
           sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml
           uv lock
-          uv sync
+
+      # Pre-releases are allowed for every package, so a red run can come from
+      # one that is not Core's. The summary names any the lock resolved.
+      - name: List the lock's other pre-releases
+        run: |
+          python scripts/ha_beta_pins.py prereleases | tee -a "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Type check with mypy
         run: uv run mypy custom_components/span_panel
