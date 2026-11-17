@@ -181,7 +181,7 @@ def test_select_initial_install_in_circuit_numbers_mode_is_on_the_circuits_devic
 
     assert select.name == "Circuit Priority"
     assert select.device_info is not None
-    assert select.device_info.get("name") == "name"
+    assert select.device_info.name == "name"
     assert select.suggested_object_id == "circuit priority"
 
 
@@ -207,7 +207,7 @@ def test_select_unnamed_friendly_mode_falls_back_to_the_tabs(hass: HomeAssistant
 
     assert select.name == "Circuit Priority"
     assert select.device_info is not None
-    assert select.device_info.get("name") == "Circuit 1"
+    assert select.device_info.name == "Circuit 1"
     assert select.suggested_object_id == "circuit priority"
 
 
@@ -248,7 +248,7 @@ def test_select_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
 
     assert select.name == "Circuit Priority"
     assert select.device_info is not None
-    assert select.device_info.get("name") == "Solar"
+    assert select.device_info.name == "Solar"
     assert select.suggested_object_id == "circuit priority"
 
 
@@ -571,7 +571,7 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
     # which would outrank the base; the tabs read the existing id back.
     assert select2.name == "Circuit Priority"
     assert select2.device_info is not None
-    assert select2.device_info.get("name") == "Air Conditioner"
+    assert select2.device_info.name == "Air Conditioner"
     assert select2.suggested_object_id == "circuit priority"
 
 

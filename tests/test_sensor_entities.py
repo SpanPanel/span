@@ -469,7 +469,7 @@ def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab(hass: HomeA
 
     assert sensor.name == "Breaker Rating"
     assert sensor.device_info is not None
-    assert sensor.device_info.get("name") == "Circuit 7"
+    assert sensor.device_info.name == "Circuit 7"
     assert sensor.suggested_object_id == "breaker rating"
 
 
@@ -1176,7 +1176,7 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name(hass: HomeAssistant) -> N
 
     assert sensor.entity_description.translation_key == "evse_status"
     assert sensor.unique_id.endswith("_evse_evse-0_evse_status")
-    assert sensor.device_info["name"] == "Main House SPAN Drive (Garage)"
+    assert sensor.device_info.name == "Main House SPAN Drive (Garage)"
     assert sensor.get_data_source(snapshot) is evse
 
 
@@ -1672,7 +1672,7 @@ def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode(hass: HomeA
 
     assert sensor._attr_name == "Current"
     assert sensor.device_info is not None
-    assert sensor.device_info.get("name") == "Kitchen"
+    assert sensor.device_info.name == "Kitchen"
     assert sensor.suggested_object_id == "current"
     assert sensor.entity_id is None  # Core assigns it when the platform adds the entity
     assert sensor._previous_circuit_name == "Kitchen"

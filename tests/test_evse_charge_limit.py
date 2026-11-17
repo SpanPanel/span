@@ -927,7 +927,7 @@ async def test_a_failure_names_the_charger_the_user_sees(hass: HomeAssistant) ->
     assert placeholders is not None
     device_info = entity._attr_device_info
     assert device_info is not None
-    assert placeholders["charger"] == device_info["name"]
+    assert placeholders["charger"] == device_info.name
     assert placeholders["charger"] != entity._evse_id
 
 

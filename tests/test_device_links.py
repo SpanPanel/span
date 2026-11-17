@@ -24,6 +24,7 @@ from typing import Any
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.typing import UNDEFINED
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanMidSnapshot, SpanPVSnapshot
@@ -110,8 +111,7 @@ def test_every_builders_identifier_classifies_as_its_own_kind(label: str, build:
     someone's dashboard.
     """
     info = build()
-    identifiers = info.get("identifiers") or set()
-    kinds = {classify_sub_device_identifier(identifier) for _domain, identifier in identifiers}
+    kinds = {classify_sub_device_identifier(identifier) for _domain, identifier in info.identifiers}
 
     assert kinds == {label}, f"{label} identifier classifies as {kinds}"
 
@@ -150,8 +150,8 @@ def test_sub_devices_link_by_registry_id(label: str, build: Any) -> None:
     """
     info = build()
 
-    assert info.get("via_device_id") == _PANEL_ID, label
-    assert "via_device" not in info, f"{label} still links by identifiers"
+    assert info.via_device_id == _PANEL_ID, label
+    assert info.via_device is UNDEFINED, f"{label} still links by identifiers"
 
 
 async def test_registering_the_panel_answers_with_the_id_sub_devices_need(

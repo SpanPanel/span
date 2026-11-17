@@ -349,7 +349,7 @@ def test_only_a_suffix_equal_to_the_label_is_dropped(
         "serial", SOLAR_CIRCUIT, pv, PANEL_NAME, display_suffix, panel_device_id="panel-device"
     )
 
-    assert info.get("name") == expected
+    assert info.name == expected
 
 
 async def test_circuits_sharing_a_name_fall_back_to_their_breaker_positions(

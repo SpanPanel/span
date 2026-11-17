@@ -183,15 +183,13 @@ class TestEvseDeviceInfo:
             display_suffix="Garage",
             panel_device_id="panel-device-id",
         )
-        identifiers = info.get("identifiers")
-        assert identifiers is not None
-        assert ("span_panel", "panel-serial_evse_evse-0") in identifiers
-        assert info.get("name") == "Main House SPAN Drive (Garage)"
-        assert info.get("manufacturer") == "SPAN"
-        assert info.get("model") == "SPAN Drive"
-        assert info.get("serial_number") == "SN123"
-        assert info.get("sw_version") == "2.0.0"
-        assert info.get("via_device_id") == "panel-device-id"
+        assert info.identifiers == {("span_panel", "panel-serial_evse_evse-0")}
+        assert info.name == "Main House SPAN Drive (Garage)"
+        assert info.manufacturer == "SPAN"
+        assert info.model == "SPAN Drive"
+        assert info.serial_number == "SN123"
+        assert info.sw_version == "2.0.0"
+        assert info.via_device_id == "panel-device-id"
 
     def test_evse_device_info_fallback_names(self):
         evse = SpanEvseSnapshotFactory.create(
@@ -201,9 +199,9 @@ class TestEvseDeviceInfo:
         info = evse_device_info(
             "panel-serial", evse, "Span Panel", display_suffix=None, panel_device_id="pd"
         )
-        assert info.get("name") == "Span Panel EV Charger"
-        assert info.get("manufacturer") == "SPAN"
-        assert info.get("model") == "SPAN Drive"
+        assert info.name == "Span Panel EV Charger"
+        assert info.manufacturer == "SPAN"
+        assert info.model == "SPAN Drive"
 
     def test_evse_device_info_serial_suffix(self):
         evse = SpanEvseSnapshotFactory.create(
@@ -217,12 +215,12 @@ class TestEvseDeviceInfo:
             display_suffix="SN-EVSE-001",
             panel_device_id="pd",
         )
-        assert info.get("name") == "Museum Garage SPAN Drive (SN-EVSE-001)"
+        assert info.name == "Museum Garage SPAN Drive (SN-EVSE-001)"
 
     def test_evse_device_info_no_serial(self):
         evse = SpanEvseSnapshotFactory.create(serial_number=None)
         info = evse_device_info("panel-serial", evse, "Span Panel", panel_device_id="pd")
-        assert info.get("serial_number") is None
+        assert info.serial_number is None
 
 
 class TestEvseStatusOptions:
@@ -273,7 +271,7 @@ class TestEvseMultipleDevices:
         evse_b = SpanEvseSnapshotFactory.create(node_id="evse-1")
         info_a = evse_device_info("panel", evse_a, "Span Panel", panel_device_id="pd")
         info_b = evse_device_info("panel", evse_b, "Span Panel", panel_device_id="pd")
-        assert info_a.get("identifiers") != info_b.get("identifiers")
+        assert info_a.identifiers != info_b.identifiers
 
 
 class TestEvseSnapshotFactory:
