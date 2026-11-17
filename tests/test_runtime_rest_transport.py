@@ -137,7 +137,7 @@ class TestThePinReachesTheRuntimeClient:
             ),
             _full_setup(client, hass) as mock_client_cls,
         ):
-            assert await async_setup_entry(hass, entry) is True
+            await async_setup_entry(hass, entry)
 
         kwargs = mock_client_cls.call_args.kwargs
         assert kwargs["ssl_context"] is context
@@ -162,7 +162,7 @@ class TestThePinReachesTheRuntimeClient:
             ),
             _full_setup(client, hass) as mock_client_cls,
         ):
-            assert await async_setup_entry(hass, entry) is True
+            await async_setup_entry(hass, entry)
 
         assert mock_client_cls.call_args.kwargs["panel_https_port"] == 8443
 
@@ -174,7 +174,7 @@ class TestThePinReachesTheRuntimeClient:
         client = _happy_client()
 
         with _full_setup(client, hass) as mock_client_cls:
-            assert await async_setup_entry(hass, entry) is True
+            await async_setup_entry(hass, entry)
 
         kwargs = mock_client_cls.call_args.kwargs
         assert kwargs["ssl_context"] is None
@@ -528,7 +528,7 @@ class TestFailingClosed:
             ),
             _full_setup(client, hass),
         ):
-            assert await async_setup_entry(hass, entry) is True
+            await async_setup_entry(hass, entry)
 
         assert (
             registry.async_get_issue(DOMAIN, rest_tls_untrusted_issue_id(entry.entry_id)) is None

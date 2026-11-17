@@ -128,7 +128,7 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
         ) as mock_forward,
         patch.object(hass.config_entries, "async_update_entry") as mock_update_entry,
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     # The panel's registry id is carried forward, not recomputed: every sub-device
     # links to it with `via_device_id`, and registration is the only place it is known.
@@ -194,7 +194,7 @@ async def test_the_panel_client_is_given_home_assistants_shared_http_client(
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert mock_client_cls.call_args.kwargs["httpx_client"] is get_async_client(hass)
 
@@ -403,7 +403,7 @@ async def test_async_setup_entry_renames_to_unique_panel_title(
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry") as mock_update_entry,
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert mock_update_entry.call_args_list[-1].kwargs["title"] == "SPAN Panel 2"
 
@@ -495,7 +495,7 @@ async def test_setup_syncs_schema_repairs_after_the_platforms(
         ),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert order == ["forward", "sync"]
 
@@ -561,7 +561,7 @@ async def test_setup_announces_additions_after_the_platforms(
             side_effect=_announce,
         ),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert order == ["forward", "sync", "announce"]
 
@@ -603,7 +603,7 @@ async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forward
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert entry.runtime_data.control_lock.armed is True
 
@@ -681,7 +681,7 @@ async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
         patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert forwarded_overlay[0].record_for("bess/battery-2/cell-voltage") == CurationRecord(
         device_class="voltage"
@@ -713,7 +713,7 @@ async def _forwarded_pv_binding(hass: HomeAssistant, entry: MockConfigEntry, sna
         patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
     (binding,) = forwarded
     return binding
 
@@ -853,9 +853,9 @@ def _stand_ins(hass: HomeAssistant, panel: _PanelUnderSetup) -> Iterator[MagicMo
         yield client_cls
 
 
-async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> bool:
+async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, panel: _PanelUnderSetup) -> None:
     with _stand_ins(hass, panel), patch.object(hass.config_entries, "async_update_entry"):
-        return await async_setup_entry(hass, entry)
+        await async_setup_entry(hass, entry)
 
 
 def _status(hardware_version: str | None) -> V2StatusInfo:
@@ -880,7 +880,7 @@ async def test_validated_hardware_proceeds(
     panel_status.return_value = _status(version)
     panel = _panel_with_model("MAIN_32")
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.forward.assert_awaited_once()
     assert _unvalidated_hardware_issue(hass) is None
@@ -920,7 +920,7 @@ async def test_a_status_that_cannot_be_read_proceeds(
     panel_status.side_effect = failure
     panel = _panel_with_model("OTHER_MODEL")
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.forward.assert_awaited_once()
     assert _unvalidated_hardware_issue(hass) is None
@@ -937,7 +937,7 @@ async def test_a_non_string_hardware_version_proceeds(
     )
     panel = _panel_with_model("OTHER_MODEL")
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.forward.assert_awaited_once()
     assert _unvalidated_hardware_issue(hass) is None
@@ -958,7 +958,7 @@ async def test_a_status_without_hardware_version_proceeds(
         patch("custom_components.span_panel.async_raise_unvalidated_hardware") as raise_issue,
         patch("custom_components.span_panel.async_clear_unvalidated_hardware") as clear_issue,
     ):
-        assert await _set_up(hass, entry, panel) is True
+        await _set_up(hass, entry, panel)
 
     raise_issue.assert_not_called()
     clear_issue.assert_called_once_with(hass, entry)
@@ -973,7 +973,7 @@ async def test_main_32_always_proceeds(hass: HomeAssistant, panel_status: AsyncM
     panel_status.return_value = _status(version)
     panel = _panel_with_model("MAIN_32")
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.coordinator.async_setup_streaming.assert_awaited_once()
     panel.forward.assert_awaited_once()
@@ -987,7 +987,7 @@ async def test_unknown_with_no_model_proceeds(hass: HomeAssistant, panel_status:
     panel_status.return_value = _status("UNKNOWN")
     panel = _panel_with_model(None)
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.forward.assert_awaited_once()
     assert _unvalidated_hardware_issue(hass) is None
@@ -1033,7 +1033,7 @@ async def test_a_validated_hardware_version_string_with_any_model_proceeds(
     panel_status.return_value = _status(version)
     panel = _panel_with_model("OTHER_MODEL")
 
-    assert await _set_up(hass, entry, panel) is True
+    await _set_up(hass, entry, panel)
 
     panel.forward.assert_awaited_once()
     assert _unvalidated_hardware_issue(hass) is None
@@ -1070,7 +1070,7 @@ async def test_a_later_successful_setup_clears_the_repair(hass: HomeAssistant, p
     assert _unvalidated_hardware_issue(hass) is not None
 
     panel_status.return_value = _status("2.0")
-    assert await _set_up(hass, entry, _panel_with_model("OTHER_MODEL")) is True
+    await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
 
     assert _unvalidated_hardware_issue(hass) is None
 
@@ -1087,7 +1087,7 @@ async def test_an_unread_status_leaves_the_repair_up(
     assert _unvalidated_hardware_issue(hass) is not None
 
     panel_status.side_effect = TimeoutError()
-    assert await _set_up(hass, entry, _panel_with_model("OTHER_MODEL")) is True
+    await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
 
     assert _unvalidated_hardware_issue(hass) is not None
 
@@ -1104,7 +1104,7 @@ async def test_unknown_is_read_whatever_its_spelling(
     entry.add_to_hass(hass)
     panel_status.return_value = _status(version)
 
-    assert await _set_up(hass, entry, _panel_with_model(None)) is True
+    await _set_up(hass, entry, _panel_with_model(None))
 
     assert _unvalidated_hardware_issue(hass) is None
 
@@ -1136,7 +1136,7 @@ async def test_the_status_is_read_before_connecting_over_the_entrys_rest_transpo
     panel.client.connect = AsyncMock(side_effect=lambda: order.append("connect"))
 
     with patch("custom_components.span_panel.panel_rest_transport", return_value=transport):
-        assert await _set_up(hass, entry, panel) is True
+        await _set_up(hass, entry, panel)
 
     panel_status.assert_awaited_once_with(
         "192.168.1.50",

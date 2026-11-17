@@ -157,7 +157,7 @@ async def test_v7_flags_a_v2_entry_for_ca_acquisition(hass: HomeAssistant) -> No
         "custom_components.span_panel.migrations.async_migrate_entry",
         wraps=async_migrate_entry,
     ):
-        assert await async_migrate_entry(hass, entry) is True
+        await async_migrate_entry(hass, entry)
 
     assert entry.data[PANEL_CA_PENDING] is True
     # No PEM: the migration does no I/O at all.
@@ -178,7 +178,7 @@ async def test_non_v2_entries_are_never_flagged(hass: HomeAssistant, api_version
     )
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert PANEL_CA_PENDING not in entry.data
 

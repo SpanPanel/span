@@ -16,8 +16,10 @@ from custom_components.span_panel import (
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entry_reloads import async_setup_began
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, CoreState, HomeAssistant
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
 
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
@@ -262,10 +264,8 @@ async def test_ensure_device_registered_creates_missing_device(
     assert created.name == "SPAN Panel"
 
 
-async def test_async_unload_entry_shuts_down_runtime_data(
-    hass: HomeAssistant,
-) -> None:
-    """Unload should stop the coordinator before unloading platforms."""
+def _loaded_entry(hass: HomeAssistant) -> tuple[MockConfigEntry, MagicMock]:
+    """Add an entry whose runtime data holds a stand-in coordinator, and return both."""
     coordinator = MagicMock()
     coordinator.async_shutdown = AsyncMock()
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-789")
@@ -278,11 +278,72 @@ async def test_async_unload_entry_shuts_down_runtime_data(
         pv_binding=pv_binding_for(snapshot),
         setup_snapshot=snapshot,
     )
+    return entry, coordinator
+
+
+async def test_async_unload_entry_shuts_down_runtime_data(
+    hass: HomeAssistant,
+) -> None:
+    """Unload stops the current monitor and the coordinator once the platforms have unloaded."""
+    entry, coordinator = _loaded_entry(hass)
 
     with patch.object(
         hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)
     ) as mock_unload:
-        assert await async_unload_entry(hass, entry) is True
+        await async_unload_entry(hass, entry)
 
-    coordinator.async_shutdown.assert_awaited_once()
     mock_unload.assert_awaited_once()
+    coordinator.current_monitor.async_stop.assert_called_once_with()
+    coordinator.async_shutdown.assert_awaited_once()
+
+
+async def test_an_unload_whose_platforms_fail_raises_and_leaves_the_coordinator_running(
+    hass: HomeAssistant,
+) -> None:
+    """A platform that fails to unload raises Home Assistant's own error, and nothing is torn down.
+
+    Whatever entities the platform did not remove are still in place, so the
+    coordinator and the current monitor must stay up under them.
+    """
+    entry, coordinator = _loaded_entry(hass)
+
+    with (
+        patch.object(hass.config_entries, "async_unload_platforms", AsyncMock(return_value=False)),
+        pytest.raises(ConfigEntryError) as raised,
+    ):
+        await async_unload_entry(hass, entry)
+
+    assert (raised.value.translation_domain, raised.value.translation_key) == (
+        HOMEASSISTANT_DOMAIN,
+        "unload_platforms_failed",
+    )
+    coordinator.current_monitor.async_stop.assert_not_called()
+    coordinator.async_shutdown.assert_not_awaited()
+
+
+async def test_home_assistant_reports_a_failed_platform_unload_in_its_own_words(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant marks the entry failed to unload, with the reason the raise carries.
+
+    Through Home Assistant's own unload, so the translated reason the user sees
+    is shown to come from the error raised, not from a bare False it would
+    report generically. The runtime data stays, since only a successful unload
+    deletes it.
+    """
+    entry, coordinator = _loaded_entry(hass)
+    runtime_data = entry.runtime_data
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+
+    with patch.object(
+        hass.config_entries, "async_unload_platforms", AsyncMock(return_value=False)
+    ):
+        assert await hass.config_entries.async_unload(entry.entry_id) is False
+
+    assert entry.state is ConfigEntryState.FAILED_UNLOAD
+    assert (entry.error_reason_translation_domain, entry.error_reason_translation_key) == (
+        HOMEASSISTANT_DOMAIN,
+        "unload_platforms_failed",
+    )
+    assert entry.runtime_data is runtime_data
+    coordinator.async_shutdown.assert_not_awaited()
