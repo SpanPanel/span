@@ -19,7 +19,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import SelectSelector
@@ -3259,6 +3259,8 @@ async def test_reconfigure_success(hass: HomeAssistant) -> None:
 
         assert result2["type"] == FlowResultType.ABORT
         assert result2["reason"] == "reconfigure_successful"
+        # Home Assistant's own string, which is why the integration carries none.
+        assert result2.get("translation_domain") == HOMEASSISTANT_DOMAIN
 
     assert entry.data[CONF_HOST] == new_host
     # Other data should be preserved

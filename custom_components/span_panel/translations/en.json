@@ -3,12 +3,10 @@
     "abort": {
       "already_configured": "Span Panel already configured. Only a single configuration is possible.",
       "cannot_connect": "Failed to connect to Span Panel",
-      "no_devices_found": "No devices found on the network",
       "no_host": "No host address was provided by the add-on.",
       "no_serial": "Could not determine the panel serial number.",
       "panel_firmware_flat": "This panel is on spanos2 firmware, which publishes the older flat eBus schema. Update the panel's firmware, then try again.",
       "reauth_successful": "Authentication successful.",
-      "reconfigure_successful": "Host updated successfully.",
       "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
       "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
       "host_not_set": "No panel address was set; restart the setup."

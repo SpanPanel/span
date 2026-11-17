@@ -4,12 +4,10 @@
       "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
       "cannot_connect": "Échec de la connexion au Span Panel",
       "host_not_set": "Aucune adresse de panneau n'a été définie ; recommencez la configuration.",
-      "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "no_host": "Aucune adresse d'hôte n'a été fournie par le module complémentaire.",
       "no_serial": "Impossible de déterminer le numéro de série du panneau.",
       "panel_firmware_flat": "Ce panneau utilise le micrologiciel spanos2, qui publie l'ancien schéma eBus plat. Mettez à jour le micrologiciel du panneau, puis réessayez.",
       "reauth_successful": "Authentification réussie.",
-      "reconfigure_successful": "Adresse de l'hôte mise à jour avec succès.",
       "unique_id_mismatch": "Le panneau à cette adresse a un numéro de série différent. Vous ne pouvez pas passer à un panneau différent lors de la reconfiguration.",
       "v1_not_supported": "Le micrologiciel v1 n'est pas pris en charge. Veuillez mettre à jour le micrologiciel de votre panneau vers la version v2."
     },

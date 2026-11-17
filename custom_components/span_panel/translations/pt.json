@@ -4,12 +4,10 @@
       "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
       "cannot_connect": "Falha ao ligar ao Painel Span",
       "host_not_set": "Não foi definido nenhum endereço do painel; reinicie a configuração.",
-      "no_devices_found": "Não foram encontrados dispositivos na rede",
       "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",
       "no_serial": "Não foi possível determinar o número de série do painel.",
       "panel_firmware_flat": "Este painel usa o firmware spanos2, que publica o antigo esquema eBus plano. Atualize o firmware do painel e depois tente novamente.",
       "reauth_successful": "Autenticação bem-sucedida.",
-      "reconfigure_successful": "Anfitrião atualizado com sucesso.",
       "unique_id_mismatch": "O painel neste endereço tem um número de série diferente. Não é possível mudar para um painel diferente durante a reconfiguração.",
       "v1_not_supported": "O firmware v1 não é suportado. Atualize o firmware do seu painel para v2."
     },

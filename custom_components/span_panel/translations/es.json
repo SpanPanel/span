@@ -4,12 +4,10 @@
       "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "host_not_set": "No se ha definido la dirección del panel; reinicie la configuración.",
-      "no_devices_found": "No se hallaron aparatos en la red",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",
       "no_serial": "No se pudo determinar el número de serie del panel.",
       "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a intentarlo.",
       "reauth_successful": "Autenticación exitosa.",
-      "reconfigure_successful": "Host actualizado exitosamente.",
       "unique_id_mismatch": "El panel en esta dirección tiene un número de serie diferente. No puede cambiar a un panel diferente durante la reconfiguración.",
       "v1_not_supported": "El firmware v1 no es compatible. Actualice el firmware de su panel a v2."
     },
