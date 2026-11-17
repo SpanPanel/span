@@ -25,12 +25,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
-    PERCENTAGE,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
+    UnitOfRatio,
     UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
@@ -227,7 +227,7 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
     key="storage_battery_percentage",
     field_path="battery.soe_percentage",
     translation_key="battery_level",
-    native_unit_of_measurement=PERCENTAGE,
+    native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.BATTERY,
