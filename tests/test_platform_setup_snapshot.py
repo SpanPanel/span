@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.core import HomeAssistant
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.binary_sensor import async_setup_entry as binary_sensor_setup

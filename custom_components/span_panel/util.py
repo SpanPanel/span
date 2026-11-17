@@ -341,10 +341,10 @@ def pv_device_info(
     a producer publishes one.
 
     **No area is seeded**, so an upgraded installation has to assign this card to
-    an area the way it assigned the battery's and the chargers'. Both routes were
-    considered and neither is clean. `DeviceInfo`'s `suggested_area` is deprecated
-    with `breaks_in_ha_version="2026.9"`, one release past the version pinned
-    here, so adopting it would be adopting a removal. An explicit
+    an area the way it assigned the battery's and the chargers'. Two routes were
+    considered. `DeviceInfo`'s `suggested_area` seeds an area only when Core
+    creates the device. It is not deprecated: what Core deprecated, and removed
+    in 2026.11, is the `suggested_area` a stored `DeviceEntry` carried. An explicit
     `device_registry.async_update_device(area_id=...)` after setup cannot tell an
     area a user deliberately cleared from one never assigned -- the registry
     records `None` for both -- so it would silently re-assign the card on every

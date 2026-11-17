@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData

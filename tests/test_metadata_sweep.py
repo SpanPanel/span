@@ -31,9 +31,13 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from homeassistant.const import CONF_HOST, STATE_UNKNOWN
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
@@ -50,14 +54,8 @@ from custom_components.span_panel.field_paths import (
 from custom_components.span_panel.sensor import create_evse_sensors, create_panel_sensors
 from custom_components.span_panel.sensor_definitions import EVSE_SENSORS
 from custom_components.span_panel.sensor_panel import SpanPanelPanelStatus, SpanPanelStatus
-from homeassistant.const import CONF_HOST, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from .factories import pv_binding_for
 from .helpers import register_panel_device
 
@@ -81,16 +79,7 @@ FALLBACK_MANUFACTURER = "Span"
 FALLBACK_MODEL = "SPAN Panel"
 
 
-@pytest.fixture(autouse=True)
-def _mock_entity_registry() -> Any:
-    """Patch the entity-registry lookup sensor construction performs."""
-    registry = MagicMock()
-    registry.async_get_entity_id.return_value = None
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get",
-        return_value=registry,
-    ):
-        yield registry
+pytestmark = pytest.mark.usefixtures("sensor_registry_lookup")
 
 
 def _published(device_id: str, topic: str) -> str:

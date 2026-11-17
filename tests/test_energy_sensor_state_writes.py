@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 from homeassistant.const import CONF_HOST, EVENT_STATE_CHANGED
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockEntityPlatform,
     async_capture_events,

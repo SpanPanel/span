@@ -22,7 +22,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE, EntityCategory,
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPVSnapshot
 
 from custom_components.span_panel.const import DOMAIN

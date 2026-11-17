@@ -18,10 +18,11 @@ Only the entities a setup builds are converted by it. A row whose entity no
 platform adds that time stays on the panel's device as it was, and converts at
 the setup that builds its entity again.
 
-The suite runs on Home Assistant 2026.10.4, where an entity the user renamed
-still displays that name whole. Cases about renamed entities therefore assert
-the stored fields (`name`, `device_id`, `original_name`, `area_id`), and their
-composed names are checked on 2026.11 by hand.
+The suite runs on Home Assistant 2026.11, the release line the integration
+requires, where a name the user gave an entity displays after its device's
+unless the entity keeps an area of its own. Cases about renamed entities assert
+the stored fields (`name`, `device_id`, `original_name`, `area_id`) and the name
+Home Assistant composes from them.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from homeassistant.helpers import (
     issue_registry as ir,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 
@@ -577,17 +578,25 @@ async def test_renamed_entity_keeps_its_name_on_the_circuit_device(hass: HomeAss
         assert row.name == "Fridge Power"
         assert row.device_id == install.circuit_device(KITCHEN).id
         assert row.original_name == "Power"
+        # The one displayed name the move changes: the circuit's now stands in front,
+        # and the notice says so.
+        assert install.full_name(row) == "SPAN Panel Kitchen Outlets Fridge Power"
+        assert install.notice_lists()["renamed"] == _listed(
+            ["SPAN Panel Fridge Power → SPAN Panel Kitchen Outlets Fridge Power"]
+        )
 
 
 async def test_a_name_starting_with_the_circuit_is_trimmed(hass: HomeAssistant) -> None:
     """The device now says "Kitchen Outlets", so the user's name stops saying it too."""
     install = _install(hass, _tree())
-    install.update(KITCHEN, POWER, name="Kitchen Outlets Power usage")
+    before = install.full_name(install.update(KITCHEN, POWER, name="Kitchen Outlets Power usage"))
+    assert before == "SPAN Panel Kitchen Outlets Power usage"
 
     async with _set_up(install):
         row = install.row(KITCHEN, POWER)
         assert row.name == "Power usage"
         assert row.device_id == install.circuit_device(KITCHEN).id
+        assert install.full_name(row) == before
 
 
 async def test_a_name_that_is_the_circuit_name_is_emptied(hass: HomeAssistant) -> None:
@@ -597,12 +606,13 @@ async def test_a_name_that_is_the_circuit_name_is_emptied(hass: HomeAssistant) -
     device's, and not cleared: a cleared name would display the label after it.
     """
     install = _install(hass, _tree())
-    install.update(KITCHEN, POWER, name=KITCHEN_OUTLETS)
+    before = install.full_name(install.update(KITCHEN, POWER, name=KITCHEN_OUTLETS))
+    assert before == "SPAN Panel Kitchen Outlets"
 
     async with _set_up(install):
         row = install.row(KITCHEN, POWER)
         assert row.name == ""
-        assert install.full_name(row) == "SPAN Panel Kitchen Outlets"
+        assert install.full_name(row) == before
 
 
 async def test_an_older_release_name_is_released_not_trimmed(hass: HomeAssistant) -> None:
@@ -620,6 +630,7 @@ async def test_an_older_release_name_is_released_not_trimmed(hass: HomeAssistant
             row = install.row(KITCHEN, kind)
             assert row.name is None
             assert at_forward[row.entity_id].name is None
+            assert install.full_name(row) == f"SPAN Panel Kitchen Outlets {kind.label}"
 
 
 async def test_disabled_entities_are_converted(hass: HomeAssistant) -> None:
@@ -644,6 +655,7 @@ async def test_disabled_entities_are_converted(hass: HomeAssistant) -> None:
         assert power.disabled_by is er.RegistryEntryDisabler.USER
         assert (rating.device_id, rating.original_name) == (device.id, "Breaker Rating")
         assert rating.name == "Rating"
+        assert install.full_name(rating) == "SPAN Panel Kitchen Outlets Rating"
         assert rating.disabled_by is er.RegistryEntryDisabler.INTEGRATION
         assert at_forward[power.entity_id] == _stored(power)
         assert at_forward[rating.entity_id] == _stored(rating)
@@ -1416,10 +1428,8 @@ async def test_a_withdrawn_switch_counts_as_the_circuit_switch(
 async def test_other_areas_are_cleared_renamed_entities_included(hass: HomeAssistant) -> None:
     """Once the device has the area, no entity keeps one of its own, whoever named it.
 
-    The renamed entity is held to its stored fields and to the areas on its
-    line of the notice. The name on that line is the one Home Assistant
-    displays, which for a name the user set differs between the release the
-    suite runs on and the one the integration requires.
+    The notice names the renamed entity as Home Assistant now displays it, with
+    its circuit's name in front of the user's, like every other line.
     """
     install = _install(hass, _tree())
     kitchen, garage, basement = (_area(hass, name) for name in ("Kitchen", "Garage", "Basement"))
@@ -1433,18 +1443,14 @@ async def test_other_areas_are_cleared_renamed_entities_included(hass: HomeAssis
         assert (power.name, power.original_name) == ("Fridge Power", "Power")
         assert power.device_id == install.circuit_device(KITCHEN).id
 
-        kinds = [kind for kind in install.kinds(KITCHEN) if kind is not BREAKER]
-        lines = install.notice_lists()["area_changes"].splitlines()
-        assert len(lines) == len(kinds)
-        renamed = lines.pop(kinds.index(POWER))
-        assert renamed.startswith("- ")
-        assert renamed.endswith("Fridge Power: Garage → Kitchen")
-        assert "\n".join(lines) == _listed(
-            "Kitchen Outlets Consumed Energy: Basement → Kitchen"
+        assert install.notice_lists()["area_changes"] == _listed(
+            "Kitchen Outlets Fridge Power: Garage → Kitchen"
+            if kind is POWER
+            else "Kitchen Outlets Consumed Energy: Basement → Kitchen"
             if kind is CONSUMED
             else f"Kitchen Outlets {kind.label}: {NONE_LISTED} → Kitchen"
-            for kind in kinds
-            if kind is not POWER
+            for kind in install.kinds(KITCHEN)
+            if kind is not BREAKER
         )
 
 
@@ -1462,7 +1468,10 @@ async def test_the_trim_skips_an_entity_that_keeps_its_area(hass: HomeAssistant)
     async with _set_up(install):
         power = install.row(KITCHEN, POWER)
         assert (power.name, power.area_id) == ("Kitchen Outlets Power usage", garage)
-        assert install.row(KITCHEN, CURRENT).name == "Amps"
+        assert install.full_name(power) == "Kitchen Outlets Power usage"
+        current = install.row(KITCHEN, CURRENT)
+        assert current.name == "Amps"
+        assert install.full_name(current) == "SPAN Panel Kitchen Outlets Amps"
 
 
 async def test_a_late_entity_joins_the_area_its_circuit_device_has(hass: HomeAssistant) -> None:
@@ -1545,8 +1554,12 @@ async def test_a_late_entity_s_name_is_trimmed_by_the_name_its_user_gave_the_dev
 
         await _change_options(install, NAMES_MODE)
 
-        assert install.row(KITCHEN, NET).name == "Net usage"
-        assert install.row(LIGHTS, NET).name == "Galley Net usage"
+        kitchen_net, lights_net = install.row(KITCHEN, NET), install.row(LIGHTS, NET)
+        assert kitchen_net.name == "Net usage"
+        assert install.full_name(kitchen_net) == "SPAN Panel Galley Net usage"
+        assert lights_net.name == "Galley Net usage"
+        lights = install.circuit_device(LIGHTS).name
+        assert install.full_name(lights_net) == f"SPAN Panel {lights} Galley Net usage"
 
 
 async def test_a_late_entity_with_no_area_is_listed_where_its_device_has_one(

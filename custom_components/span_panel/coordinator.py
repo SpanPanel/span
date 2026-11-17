@@ -28,7 +28,7 @@ from span_panel_api.exceptions import (
 
 from .const import DOMAIN
 from .energy_orientation import EnergyCounter, EnergyMeter
-from .entry_reloads import async_request_rebuild, async_update_entry_applied
+from .entry_reloads import async_request_rebuild, async_update_entry_data_applied
 from .helpers import (
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
@@ -773,7 +773,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """
         updated_data = dict(self.config_entry.data)
         updated_data.pop("solar_migration_pending", None)
-        async_update_entry_applied(self.hass, self.config_entry, data=updated_data)
+        async_update_entry_data_applied(self.hass, self.config_entry, updated_data)
 
     # --- Post-update maintenance ---
 

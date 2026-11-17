@@ -10,7 +10,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant.typing import WebSocketGenerator
 from span_panel_api import shared_meter_groups
 
 from custom_components.span_panel.const import DOMAIN

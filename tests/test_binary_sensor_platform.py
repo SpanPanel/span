@@ -32,7 +32,7 @@ from .factories import (
 )
 from .helpers import register_panel_device
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 
 def _make_coordinator(hass: HomeAssistant, snapshot) -> MagicMock:

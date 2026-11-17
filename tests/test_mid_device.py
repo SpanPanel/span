@@ -85,18 +85,18 @@ def test_the_mid_becomes_its_own_device_hung_off_the_panel() -> None:
         "sim-40t-001", _mid(), "SPAN Panel", panel_device_id="panel-device-id"
     )
 
-    assert info["identifiers"] == {("span_panel", "sim-40t-001_mid")}
-    assert info["name"] == "SPAN Panel Microgrid Interconnect"
-    assert info["manufacturer"] == "Span"
-    assert info["serial_number"] == "SIM-BESS-40T-001-mid"
-    assert info["via_device_id"] == "panel-device-id"
+    assert info.identifiers == {("span_panel", "sim-40t-001_mid")}
+    assert info.name == "SPAN Panel Microgrid Interconnect"
+    assert info.manufacturer == "Span"
+    assert info.serial_number == "SIM-BESS-40T-001-mid"
+    assert info.via_device_id == "panel-device-id"
     # A panel that publishes no MID model still needs a legible card. This was written
     # when no producer published one at all; panelbench does now, so this is the
     # fallback path rather than the only path — `test_the_mid_card_carries_the_identity
     # _a_producer_publishes` covers the other.
-    assert info["model"] == "Microgrid Interconnect Device"
-    assert "sw_version" not in info or info["sw_version"] is None
-    assert "hw_version" not in info or info["hw_version"] is None
+    assert info.model == "Microgrid Interconnect Device"
+    assert info.sw_version is None
+    assert info.hw_version is None
 
 
 def test_the_mid_carries_grid_state_and_nothing_already_surfaced() -> None:
@@ -190,9 +190,9 @@ def test_the_mid_card_carries_the_identity_a_producer_publishes() -> None:
         panel_device_id="panel-device-id",
     )
 
-    assert info["model"] == "SPAN MID"
-    assert info["sw_version"] == "sim-mid/v0.1.0"
-    assert info["hw_version"] == "rev1"
+    assert info.model == "SPAN MID"
+    assert info.sw_version == "sim-mid/v0.1.0"
+    assert info.hw_version == "rev1"
 
 
 def test_an_unpublished_revision_omits_the_row_rather_than_blanking_it() -> None:
@@ -210,5 +210,5 @@ def test_an_unpublished_revision_omits_the_row_rather_than_blanking_it() -> None
         panel_device_id="panel-device-id",
     )
 
-    assert info.get("sw_version") is None
-    assert info.get("hw_version") is None
+    assert info.sw_version is None
+    assert info.hw_version is None

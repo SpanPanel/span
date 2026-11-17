@@ -52,10 +52,15 @@ from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 import json
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.const import CONF_HOST, UnitOfPower
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.typing import StateType
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
@@ -73,17 +78,10 @@ from custom_components.span_panel.sensor_panel import (
     SpanPanelBattery,
     SpanPanelPowerSensor,
 )
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import CONF_HOST, UnitOfPower
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.typing import StateType
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .helpers import register_panel_device
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 BESS = "bess"
 
@@ -113,16 +111,7 @@ def _in_the_old_frame(raw: float) -> float:
     return -raw
 
 
-@pytest.fixture(autouse=True)
-def _mock_entity_registry() -> Any:
-    """Patch entity registry lookups used during sensor construction."""
-    registry = MagicMock()
-    registry.async_get_entity_id.return_value = None
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get",
-        return_value=registry,
-    ):
-        yield registry
+pytestmark = pytest.mark.usefixtures("sensor_registry_lookup")
 
 
 def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:

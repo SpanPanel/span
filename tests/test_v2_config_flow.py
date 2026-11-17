@@ -26,7 +26,7 @@ from homeassistant.helpers.selector import SelectSelector
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
@@ -257,7 +257,7 @@ async def test_user_flow_passes_ha_httpx_client_to_detect_api_version(
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow.get_async_client",
+            "custom_components.span_panel.config_flow.async_get_http_client",
             return_value=fake_client,
         ) as mock_get_client,
         patch(
@@ -4075,7 +4075,7 @@ async def test_zeroconf_invalid_http_port_defaults_to_80(hass: HomeAssistant) ->
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow.get_async_client",
+            "custom_components.span_panel.config_flow.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -4476,7 +4476,7 @@ async def test_reconfigure_switch_from_fqdn_to_ip_clears_registration(
         # The transport is resolved in config_flow_validation, which is where the
         # shared client is taken from when the entry has no pinned CA.
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -5075,7 +5075,7 @@ async def test_the_schema_is_read_from_the_panel_detection_reached(
     """The host, port and client detection used, so the panel judged is the one that answered."""
     client = MagicMock(name="shared-client")
 
-    with patch("custom_components.span_panel.config_flow.get_async_client", return_value=client):
+    with patch("custom_components.span_panel.config_flow.async_get_http_client", return_value=client):
         await _start_flow(hass, source, VALIDATED_PANEL_STATUS)
 
     panel_schema.assert_awaited_once_with(host, port=port, httpx_client=client, ssl_context=None)

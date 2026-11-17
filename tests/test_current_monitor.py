@@ -37,6 +37,12 @@ from custom_components.span_panel.services import _async_register_monitoring_ser
 from span_panel_api import SpanPanelSnapshot
 from tests.factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 
+# A monitor saves its overrides through Core's own `Store`, which reaches the
+# disk through `hass.async_add_executor_job`, and a mock `hass` from `_make_hass`
+# cannot run one. The harness's in-memory storage stands in for the disk, so a
+# test that changes an override need not take a `hass` of its own.
+pytestmark = pytest.mark.usefixtures("hass_storage")
+
 
 def _make_options(**overrides):
     """Create options dict with monitoring enabled and defaults."""

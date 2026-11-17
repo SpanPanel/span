@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
@@ -44,6 +44,10 @@ from .test_websocket import (
     _make_coordinator,
     _make_mock_connection,
 )
+
+# The monitors built over `_make_hass` save through Core's `Store`, which a mock
+# `hass` cannot run; see the same mark in `test_current_monitor`.
+pytestmark = pytest.mark.usefixtures("hass_storage")
 
 SERIAL: Final = "sp3-shared-001"
 POWER: Final = next(d for d in CIRCUIT_SENSORS if d.key == "circuit_power")

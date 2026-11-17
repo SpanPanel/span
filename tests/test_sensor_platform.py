@@ -39,7 +39,7 @@ from .factories import (
 )
 from .helpers import register_panel_device
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 
 async def test_sensor_async_setup_entry_adds_entities_and_refreshes(
@@ -219,7 +219,7 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix(
     mapping = _build_evse_device_info_map(coordinator, snapshot)
 
     assert list(mapping) == ["c1"]
-    assert mapping["c1"]["name"] == "Main House SPAN Drive (Garage Charger)"
+    assert mapping["c1"].name == "Main House SPAN Drive (Garage Charger)"
 
 
 def test_create_circuit_sensors_honors_optional_net_sensors(hass: HomeAssistant) -> None:
@@ -269,7 +269,7 @@ def test_create_circuit_sensors_honors_optional_net_sensors(hass: HomeAssistant)
     assert "circuit_breaker_rating" in keys
     assert {"circuit_power", "circuit_energy_produced", "circuit_energy_consumed"} <= set(keys)
     assert any(
-        entity.device_info["name"] == "Main House SPAN Drive (Kitchen)"
+        entity.device_info.name == "Main House SPAN Drive (Kitchen)"
         for entity in entities
     )
 

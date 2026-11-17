@@ -18,7 +18,6 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from span_panel_api import (
     LeafNameMismatch,
@@ -97,7 +96,8 @@ from .entry_reloads import (
     async_forget_reloads,
     async_setup_began,
     async_setup_failed,
-    async_update_entry_applied,
+    async_update_entry_data_applied,
+    async_update_entry_title_applied,
 )
 from .extension import async_notice_declined_extensions
 from .firmware_schema import (
@@ -132,6 +132,7 @@ from .hardware_repairs import (
     async_clear_unvalidated_hardware,
     async_raise_unvalidated_hardware,
 )
+from .http_client import async_get_http_client
 from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_mismatch
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
@@ -317,7 +318,7 @@ async def _async_pinned_ca(
     data[CONF_PANEL_CA_PEM] = ca_pem
     data.pop(PANEL_CA_PENDING, None)
     # Applied by the setup that pins it, which connects over this CA next.
-    async_update_entry_applied(hass, entry, data=data)
+    async_update_entry_data_applied(hass, entry, data)
     _LOGGER.warning(
         "Pinned the CA advertised by SPAN panel %s: SHA-256 %s. Nothing has confirmed "
         "this certificate — compare it against another install or the panel itself if "
@@ -389,7 +390,7 @@ async def _async_enforce_schema_read(
     schema = await async_read_schema(
         host,
         port=transport.port,
-        httpx_client=get_async_client(hass),
+        httpx_client=async_get_http_client(hass),
         ssl_context=transport.ssl_context,
     )
     if schema == "flat":
@@ -527,7 +528,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
     that first. The update listener is registered next, before anything reads
     the entry: a write that lands while setup runs then asks for one more
     reload instead of being left unapplied. Setup's own writes go through
-    `async_update_entry_applied` and ask for nothing.
+    `async_update_entry_data_applied` and `async_update_entry_title_applied` and
+    ask for nothing.
 
     A setup that fails withdraws the rebuild its own coordinator asked for,
     whatever it fails with, `CancelledError` included: Home Assistant counts a
@@ -682,7 +684,7 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
                 # here would stand up a second connection pool for a flag that
                 # is inert on plaintext. The default client is the one every
                 # other integration already shares.
-                httpx_client=get_async_client(hass),
+                httpx_client=async_get_http_client(hass),
             )
 
             # Before `connect()`, unlike every other subscription here, because
@@ -890,7 +892,7 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         # Update config entry title if it's currently the serial number. Applied by
         # this setup, whose platforms read the title only after this line.
         if entry.title == serial_number:
-            async_update_entry_applied(hass, entry, title=smart_device_name)
+            async_update_entry_title_applied(hass, entry, smart_device_name)
 
         # Before the platforms: which inverter the Solar card's PV entities read,
         # recorded once. Nothing is re-keyed. See `pv_binding`.

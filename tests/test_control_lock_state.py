@@ -19,7 +19,7 @@ from homeassistant.const import CONF_HOST, STATE_OFF, STATE_ON, Platform
 from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockUser,
     mock_restore_cache_with_extra_data,

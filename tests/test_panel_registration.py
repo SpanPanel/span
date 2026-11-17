@@ -36,8 +36,8 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.collection import CHANGE_REMOVED
 from homeassistant.setup import async_setup_component
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, flush_store
-from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
+from pytest_homeassistant.common import MockConfigEntry, flush_store
+from pytest_homeassistant.typing import ClientSessionGenerator
 
 from custom_components.span_panel.const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
 from custom_components.span_panel.frontend import CARD_FILENAME, PANEL_FRONTEND_DIR, PANEL_URL

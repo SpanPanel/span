@@ -107,6 +107,25 @@ hooks = [
   },
 ]
 
+# The beta workflow's pin script, strict, with its test. The hook above checks the
+# integration alone, so nothing else type-checks the script. No config file:
+# pyproject.toml's mypy settings disable error codes the integration needs off,
+# and the script needs none of them. The test imports the script by name, so they
+# are checked together.
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "mypy-ha-beta-pins",
+    name = "mypy --strict ha_beta_pins",
+    entry = "uv run mypy --strict --warn-unreachable --config-file=",
+    language = "system",
+    args = ["scripts/ha_beta_pins.py", "tests/test_ha_beta_pins.py"],
+    pass_filenames = false,
+    files = '^(scripts/ha_beta_pins|tests/test_ha_beta_pins)\.py$',
+  },
+]
+
 # Markdownlint for markdown files
 [[repos]]
 repo = "https://github.com/DavidAnson/markdownlint-cli2"

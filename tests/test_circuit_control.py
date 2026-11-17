@@ -389,7 +389,7 @@ def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
-    assert switch.device_info.get("name") == "Solar"
+    assert switch.device_info.name == "Solar"
     assert switch.suggested_object_id == "breaker"
 
 
@@ -420,7 +420,7 @@ def test_switch_initial_install_in_circuit_numbers_mode_is_on_the_circuits_devic
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
-    assert switch.device_info.get("name") == "Kitchen"
+    assert switch.device_info.name == "Kitchen"
     assert switch.suggested_object_id == "breaker"
 
 
@@ -452,7 +452,7 @@ def test_switch_initial_install_without_name_falls_back_to_the_tabs(
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
-    assert switch.device_info.get("name") == "Circuit 3"
+    assert switch.device_info.name == "Circuit 3"
     assert switch.suggested_object_id == "breaker"
     assert switch._previous_circuit_name is not None
 
@@ -664,7 +664,7 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
     # which would outrank the base; the tabs read the existing id back.
     assert switch2.name == "Breaker"
     assert switch2.device_info is not None
-    assert switch2.device_info.get("name") == "Air Conditioner"
+    assert switch2.device_info.name == "Air Conditioner"
     assert switch2.suggested_object_id == "breaker"
 
 

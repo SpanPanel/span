@@ -53,7 +53,7 @@ async def test_validate_host_returns_true_for_supported_versions() -> None:
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ) as mock_get_client,
         patch(
@@ -81,7 +81,7 @@ async def test_validate_host_returns_false_on_detection_error() -> None:
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -99,7 +99,7 @@ async def test_validate_host_returns_false_when_probe_failed() -> None:
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -121,7 +121,7 @@ async def test_validate_host_rejects_v1_panel() -> None:
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -217,7 +217,7 @@ async def test_the_ca_fetch_returns_none_when_the_panel_will_not_serve_one() -> 
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(
@@ -239,7 +239,7 @@ async def test_the_ca_fetch_forwards_a_custom_http_port() -> None:
     fake_client = MagicMock()
     with (
         patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
+            "custom_components.span_panel.config_flow_validation.async_get_http_client",
             return_value=fake_client,
         ),
         patch(

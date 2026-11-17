@@ -22,7 +22,7 @@ from typing import Final
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import (
@@ -349,7 +349,7 @@ def test_only_a_suffix_equal_to_the_label_is_dropped(
         "serial", SOLAR_CIRCUIT, pv, PANEL_NAME, display_suffix, panel_device_id="panel-device"
     )
 
-    assert info.get("name") == expected
+    assert info.name == expected
 
 
 async def test_circuits_sharing_a_name_fall_back_to_their_breaker_positions(

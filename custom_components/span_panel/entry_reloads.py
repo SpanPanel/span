@@ -37,20 +37,20 @@ A preference or a discovery key written to the entry asks for nothing: Home
 Assistant reloads for the polling preference itself, and nothing here reads the
 others. A writer that applies its own change, as setup does when it pins a CA or
 renames an entry titled with its serial, writes through
-`async_update_entry_applied` and asks for nothing either.
+`async_update_entry_data_applied` or `async_update_entry_title_applied` and asks
+for nothing either.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 
 from homeassistant.config_entries import ConfigEntry, OperationNotAllowed, UnknownEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.start import async_at_started
-from homeassistant.helpers.typing import UNDEFINED, UndefinedType
 from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN
@@ -166,29 +166,55 @@ def async_entry_changed(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 @callback
-def async_update_entry_applied(
+def async_update_entry_data_applied(
+    hass: HomeAssistant, entry: ConfigEntry, data: Mapping[str, object]
+) -> bool:
+    """Write the entry's data for a writer that applies it itself, asking for no reload.
+
+    For setup's own writes, as when it pins a CA, and the running coordinator's
+    bookkeeping. Only the data is written and recorded; see `_async_write_applied`.
+    """
+    return _async_write_applied(
+        hass,
+        entry,
+        lambda applied: replace(applied, data=copy.deepcopy(dict(data))),
+        lambda: hass.config_entries.async_update_entry(entry, data=data),
+    )
+
+
+@callback
+def async_update_entry_title_applied(hass: HomeAssistant, entry: ConfigEntry, title: str) -> bool:
+    """Write the entry's title for a writer that applies it itself, asking for no reload.
+
+    For setup's rename of an entry titled with its serial. Only the title is
+    written and recorded; see `_async_write_applied`.
+    """
+    return _async_write_applied(
+        hass,
+        entry,
+        lambda applied: replace(applied, title=title),
+        lambda: hass.config_entries.async_update_entry(entry, title=title),
+    )
+
+
+@callback
+def _async_write_applied(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    *,
-    data: Mapping[str, object] | UndefinedType = UNDEFINED,
-    title: str | UndefinedType = UNDEFINED,
+    apply: Callable[[_EntryContent], _EntryContent],
+    write: Callable[[], bool],
 ) -> bool:
-    """Write the entry for a writer that applies the change itself, asking for no reload.
+    """Record a writer's change as applied, then write it.
 
-    For setup's own writes and the running coordinator's bookkeeping. The fields
-    written are recorded as applied before the write, so the listener, which Home
-    Assistant starts inside it, finds them equal. A field changed from outside
-    and not applied yet still differs, and still asks.
+    In that order: the field written is recorded as applied before the write, so
+    the listener, which Home Assistant starts inside it, finds it equal. Only that
+    field is recorded, so a field changed from outside and not applied yet still
+    differs, and still asks.
     """
     record = _record(hass, entry.entry_id)
     if (applied := record.applied) is not None:
-        record.applied = _EntryContent(
-            data=applied.data if isinstance(data, UndefinedType) else copy.deepcopy(dict(data)),
-            options=applied.options,
-            title=applied.title if isinstance(title, UndefinedType) else title,
-            unique_id=applied.unique_id,
-        )
-    return hass.config_entries.async_update_entry(entry, data=data, title=title)
+        record.applied = apply(applied)
+    return write()
 
 
 @callback

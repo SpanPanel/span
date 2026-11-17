@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import Event, HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanMqttClient, SpanPanelSnapshot
 
 from custom_components.span_panel import async_setup_entry

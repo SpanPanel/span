@@ -29,7 +29,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel import _async_pinned_ca
 from custom_components.span_panel.const import (

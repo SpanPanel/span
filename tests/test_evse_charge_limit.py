@@ -42,7 +42,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityCategory
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 
@@ -927,7 +927,7 @@ async def test_a_failure_names_the_charger_the_user_sees(hass: HomeAssistant) ->
     assert placeholders is not None
     device_info = entity._attr_device_info
     assert device_info is not None
-    assert placeholders["charger"] == device_info["name"]
+    assert placeholders["charger"] == device_info.name
     assert placeholders["charger"] != entity._evse_id
 
 

@@ -76,8 +76,8 @@ from homeassistant.const import CONF_HOST, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.typing import WebSocketGenerator
 from span_panel_api import SpanBatterySnapshot
 
 from custom_components.span_panel.config_flow import STEP_USER_DATA_SCHEMA

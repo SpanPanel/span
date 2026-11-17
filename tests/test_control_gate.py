@@ -15,7 +15,7 @@ from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+from pytest_homeassistant.common import MockConfigEntry, MockUser
 from span_panel_api import ControlCommand, PublishOutcome, PublishState
 
 from custom_components.span_panel.const import DOMAIN, EVENT_CONTROL_COMMAND

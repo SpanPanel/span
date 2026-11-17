@@ -199,7 +199,7 @@ async def test_child_device_info_names_the_panel_as_parent(hass: HomeAssistant) 
 
     info = circuit_device_info(SERIAL, circuit, "circuit-7", panel_device_id=panel_device_id)
 
-    assert info == {
+    assert info.as_dict() == {
         "identifiers": {identifier},
         "name": "Kitchen Outlets",
         "parent_device_id": panel_device_id,

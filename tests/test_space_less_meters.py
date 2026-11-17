@@ -19,8 +19,8 @@ from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.typing import WebSocketGenerator
 
 from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS
 from custom_components.span_panel.helpers import circuit_device_name, outside_meter_label
