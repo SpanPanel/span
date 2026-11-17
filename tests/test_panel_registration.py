@@ -42,7 +42,7 @@ from pytest_homeassistant.typing import ClientSessionGenerator
 from custom_components.span_panel.const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
 from custom_components.span_panel.frontend import CARD_FILENAME, PANEL_FRONTEND_DIR, PANEL_URL
 
-from .helpers import shown_values
+from .helpers import seed_panel_settings, shown_values
 
 _FRONTEND_LOGGER = "custom_components.span_panel.frontend"
 
@@ -121,16 +121,6 @@ def _seed_resources(
     }
     hass_storage[RESOURCE_STORAGE_KEY] = stored
     return copy.deepcopy(stored)
-
-
-def _seed_panel_settings(hass_storage: dict[str, Any], settings: dict[str, bool]) -> None:
-    """Store the domain-level panel settings as the options flow saves them."""
-    hass_storage["span_panel_settings"] = {
-        "version": 1,
-        "minor_version": 1,
-        "key": "span_panel_settings",
-        "data": settings,
-    }
 
 
 async def _flush_resource_storage(hass: HomeAssistant) -> None:
@@ -249,7 +239,7 @@ async def test_hidden_panel_still_loads_the_card(
     hass: HomeAssistant, hass_storage: dict[str, Any], sidebar_panel: _SidebarPanel
 ) -> None:
     """Hiding the sidebar panel removes it and leaves the card loaded on every dashboard."""
-    _seed_panel_settings(hass_storage, {PANEL_SHOW_SIDEBAR: False})
+    seed_panel_settings(hass_storage, {PANEL_SHOW_SIDEBAR: False})
     changes = await _set_up_frontend(hass)
 
     assert await async_setup_component(hass, DOMAIN, {})
@@ -263,7 +253,7 @@ async def test_panel_admin_only_when_configured(
     hass: HomeAssistant, hass_storage: dict[str, Any], sidebar_panel: _SidebarPanel
 ) -> None:
     """The panel requires an administrator when the settings say so."""
-    _seed_panel_settings(hass_storage, {PANEL_SHOW_SIDEBAR: True, PANEL_ADMIN_ONLY: True})
+    seed_panel_settings(hass_storage, {PANEL_SHOW_SIDEBAR: True, PANEL_ADMIN_ONLY: True})
     await _set_up_frontend(hass)
 
     assert await async_setup_component(hass, DOMAIN, {})

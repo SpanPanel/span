@@ -89,6 +89,20 @@ def shown_values(schema: vol.Schema) -> dict[str, object]:
     return shown
 
 
+PANEL_SETTINGS_STORAGE_KEY: Final = "span_panel_settings"
+"""Where the options flow stores the domain-level sidebar panel settings."""
+
+
+def seed_panel_settings(hass_storage: dict[str, Any], settings: Mapping[str, bool]) -> None:
+    """Store the domain-level panel settings as the options flow saves them."""
+    hass_storage[PANEL_SETTINGS_STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": PANEL_SETTINGS_STORAGE_KEY,
+        "data": dict(settings),
+    }
+
+
 def count_panel_describes_breakers(
     monkeypatch: pytest.MonkeyPatch, *modules: ModuleType
 ) -> list[SpanPanelSnapshot]:
