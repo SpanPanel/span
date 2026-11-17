@@ -53,16 +53,18 @@ def _create_coordinator(
     options: dict | None = None,
 ) -> SpanPanelCoordinator:
     """Create a coordinator with mocked dependencies."""
-    return SpanPanelCoordinator(
-        hass,
-        cast(SpanMqttClient, client or MagicMock()),
-        MockConfigEntry(
-            domain="span_panel",
-            options=options or {},
-            entry_id="entry-123",
-            title="SPAN Panel",
-        ),
+    entry = MockConfigEntry(
+        domain="span_panel",
+        options=options or {},
+        entry_id="entry-123",
+        title="SPAN Panel",
     )
+    # Known to Home Assistant, as the entry of a coordinator in service is: the
+    # coordinator's rebuild is asked for by entry id, and a request for an entry
+    # Home Assistant does not know does nothing.
+    if hass.config_entries.async_get_entry(entry.entry_id) is None:
+        entry.add_to_hass(hass)
+    return SpanPanelCoordinator(hass, cast(SpanMqttClient, client or MagicMock()), entry)
 
 
 async def test_capability_change_requests_reload(hass: HomeAssistant) -> None:

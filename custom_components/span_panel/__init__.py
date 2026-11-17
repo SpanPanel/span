@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
@@ -21,9 +19,7 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.util.hass_dict import HassKey
 from span_panel_api import (
     LeafNameMismatch,
     SpanMqttClient,
@@ -96,6 +92,13 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
+from .entry_reloads import (
+    async_entry_changed,
+    async_forget_reloads,
+    async_setup_began,
+    async_setup_failed,
+    async_update_entry_applied,
+)
 from .extension import async_notice_declined_extensions
 from .firmware_schema import (
     FLAT_ADAPTER_KEY,
@@ -189,18 +192,6 @@ PLATFORMS: list[Platform] = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class _DeferredReload:
-    """A reload waiting for Home Assistant to start; see `_defer_reload_until_started`."""
-
-    cancel: CALLBACK_TYPE | None = None
-    """Unsubscribes the wait; None until `async_at_started` has answered."""
-
-
-_DEFERRED_RELOADS: HassKey[dict[str, _DeferredReload]] = HassKey(f"{DOMAIN}_deferred_reloads")
-"""Per entry, the reload waiting for Home Assistant to start; see `update_listener`."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -325,7 +316,8 @@ async def _async_pinned_ca(
     data = dict(entry.data)
     data[CONF_PANEL_CA_PEM] = ca_pem
     data.pop(PANEL_CA_PENDING, None)
-    hass.config_entries.async_update_entry(entry, data=data)
+    # Applied by the setup that pins it, which connects over this CA next.
+    async_update_entry_applied(hass, entry, data=data)
     _LOGGER.warning(
         "Pinned the CA advertised by SPAN panel %s: SHA-256 %s. Nothing has confirmed "
         "this certificate — compare it against another install or the panel itself if "
@@ -529,7 +521,30 @@ async def _async_rest_tls_verdict(
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
-    """Set up Span Panel from a config entry."""
+    """Set up Span Panel from a config entry.
+
+    This setup applies every reload asked for before it began, so it records
+    that first. The update listener is registered next, before anything reads
+    the entry: a write that lands while setup runs then asks for one more
+    reload instead of being left unapplied. Setup's own writes go through
+    `async_update_entry_applied` and ask for nothing.
+
+    A setup that fails withdraws the rebuild its own coordinator asked for,
+    whatever it fails with, `CancelledError` included: Home Assistant counts a
+    cancellation the task did not ask for as a setup error. Requests for a
+    change made meanwhile stand, so the next setup begins straight away.
+    """
+    async_setup_began(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+    try:
+        return await _async_setup_entry(hass, entry)
+    except BaseException:
+        async_setup_failed(hass, entry.entry_id)
+        raise
+
+
+async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
+    """Set up Span Panel from a config entry; see `async_setup_entry`."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
     # Register WebSocket commands once per HA instance
@@ -853,8 +868,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
         # --- Common setup for all transport modes ---
 
-        entry.async_on_unload(entry.add_update_listener(update_listener))
-
         snapshot: SpanPanelSnapshot = coordinator.data
         serial_number = snapshot.serial_number
 
@@ -874,9 +887,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             smart_device_name = f"{base_name} {counter}"
             counter += 1
 
-        # Update config entry title if it's currently the serial number
+        # Update config entry title if it's currently the serial number. Applied by
+        # this setup, whose platforms read the title only after this line.
         if entry.title == serial_number:
-            hass.config_entries.async_update_entry(entry, title=smart_device_name)
+            async_update_entry_applied(hass, entry, title=smart_device_name)
 
         # Before the platforms: which inverter the Solar card's PV entities read,
         # recorded once. Nothing is re-keyed. See `pv_binding`.
@@ -1013,7 +1027,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     the same panel would load and apply, re-asserting metadata the user is no
     longer here to have asked for. The copied package ratings go for that
     reason too: they are keyed by wire circuit ids.
+
+    The pending reloads go first, before anything here can raise: Home Assistant
+    catches what this function raises, and a reload still waiting for the
+    removed entry would otherwise try it and warn.
     """
+    async_forget_reloads(hass, entry.entry_id)
     async_clear_schema_issues(hass, entry)
     # The CA family too, for the same reason — and the two persistent ones most
     # of all, since nothing else can ever clear an issue whose entry is gone:
@@ -1069,75 +1088,15 @@ async def async_remove_config_entry_device(
 
 
 async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Reload the entry after an update: now, or once Home Assistant has started.
+    """Ask for a reload when the entry changed in what setup reads.
 
-    While Home Assistant is starting the reload waits for it to finish rather
-    than being dropped. Dropped, it left the entry running on options it was
-    never set up with until the next restart -- a change to energy dip
-    compensation, for one, reached the sensors, which re-read it on every
-    update, but not the offsets only a reload restores or discards.
+    Every change to the entry's data, options, title or unique ID is applied by
+    a reload, which the naming rules rely on: the panel device's name comes
+    from the entry. The reload itself starts later, once Home Assistant has
+    started and after the write that called this has returned. See
+    `entry_reloads`.
     """
-    _LOGGER.debug("Configuration options changed for entry: %s", entry.entry_id)
-
-    if hass.state is not CoreState.running:
-        _defer_reload_until_started(hass, entry)
-        return
-
-    await _async_reload_after_update(hass, entry)
-
-
-@callback
-def _defer_reload_until_started(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Reload the entry once Home Assistant has started, once however many updates ask.
-
-    One-shot: the pending reload is forgotten when it runs, and cancelled with
-    the entry if it unloads first. The record is stored before `async_at_started`
-    is asked, and only its own job or canceller removes it, because that helper
-    runs the job at once when Home Assistant has already started: a record
-    stored afterwards would outlive its job and block every later deferral.
-    """
-    pending = hass.data.setdefault(_DEFERRED_RELOADS, {})
-    if entry.entry_id in pending:
-        return
-    deferred = _DeferredReload()
-    pending[entry.entry_id] = deferred
-
-    @callback
-    def _forget() -> bool:
-        """Remove this deferral's record if it is still the pending one."""
-        if pending.get(entry.entry_id) is not deferred:
-            return False
-        del pending[entry.entry_id]
-        return True
-
-    async def _reload_once_started(hass: HomeAssistant) -> None:
-        if _forget():
-            await _async_reload_after_update(hass, entry)
-
-    deferred.cancel = async_at_started(hass, _reload_once_started)
-
-    @callback
-    def _cancel() -> None:
-        if _forget() and deferred.cancel is not None:
-            deferred.cancel()
-
-    entry.async_on_unload(_cancel)
-
-
-async def _async_reload_after_update(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Reload the entry to apply an update, unless a credential rotation is applying it."""
-    try:
-        # `rotate_credentials` stored the new password and reloads it itself.
-        if rotation_in_progress(hass, entry.entry_id):
-            return
-
-        await hass.config_entries.async_reload(entry.entry_id)
-        _LOGGER.debug("Successfully reloaded SPAN Panel integration")
-
-    except asyncio.CancelledError:
-        raise
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.error("Failed to reload SPAN Panel integration: %s", err)
+    async_entry_changed(hass, entry)
 
 
 async def ensure_device_registered(

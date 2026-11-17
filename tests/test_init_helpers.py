@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
-    _defer_reload_until_started,
     async_remove_config_entry_device,
     async_unload_entry,
     ensure_device_registered,
@@ -17,6 +15,7 @@ from custom_components.span_panel import (
 )
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.entry_reloads import async_setup_began
 from homeassistant.const import CONF_HOST, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -81,13 +80,18 @@ async def test_async_remove_config_entry_device_allows_subdevice_removal(
     assert await async_remove_config_entry_device(hass, entry, device) is True
 
 
-async def test_update_listener_reloads_running_entry(hass: HomeAssistant) -> None:
-    """Options updates should reload the entry once Home Assistant is running."""
+async def test_update_listener_asks_for_a_reload_that_starts_after_it_returns(
+    hass: HomeAssistant,
+) -> None:
+    """A change reloads the entry once Home Assistant is running, never inside the write."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
-    hass.state = CoreState.running
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.running)
 
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
         await update_listener(hass, entry)
+        mock_reload.assert_not_awaited()
+        await hass.async_block_till_done()
 
     mock_reload.assert_awaited_once_with("entry-123")
 
@@ -145,40 +149,17 @@ async def test_each_entry_updated_while_starting_reloads_once_started(hass: Home
     assert sorted(call.args for call in mock_reload.await_args_list) == [("entry-first",), ("entry-second",)]
 
 
-async def test_a_deferral_made_while_running_reloads_now_and_leaves_nothing_pending(
+async def test_a_setup_that_begins_before_start_applies_the_deferred_reload(
     hass: HomeAssistant,
 ) -> None:
-    """`async_at_started` runs the job at once when started, before the helper has stored anything.
-
-    Unreachable through `update_listener`, whose guard is the same predicate; pinned so
-    the bookkeeping cannot leave a stale handle that blocks every later deferral.
-    """
-    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
-    entry.add_to_hass(hass)
-    hass.set_state(CoreState.running)
-
-    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
-        _defer_reload_until_started(hass, entry)
-        await hass.async_block_till_done()
-        assert mock_reload.await_count == 1
-
-        hass.set_state(CoreState.starting)
-        await update_listener(hass, entry)
-        hass.set_state(CoreState.running)
-        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
-        await hass.async_block_till_done()
-
-    assert mock_reload.await_count == 2
-
-
-async def test_unloading_before_start_cancels_the_deferred_reload(hass: HomeAssistant) -> None:
+    """Any setup satisfies the requests made before it began, so the deferred one finds nothing."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
     entry.add_to_hass(hass)
     hass.set_state(CoreState.starting)
 
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload:
         await update_listener(hass, entry)
-        await entry._async_process_on_unload(hass)
+        async_setup_began(hass, entry)
         hass.set_state(CoreState.running)
         hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
         await hass.async_block_till_done()
@@ -187,7 +168,7 @@ async def test_unloading_before_start_cancels_the_deferred_reload(hass: HomeAssi
 
 
 async def test_an_update_after_the_deferred_reload_ran_defers_again(hass: HomeAssistant) -> None:
-    """The deferral is one-shot: once it has run, a later start-up update gets its own."""
+    """Once a reload has run, a later start-up update gets its own."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
     entry.add_to_hass(hass)
     hass.set_state(CoreState.starting)
@@ -207,38 +188,29 @@ async def test_an_update_after_the_deferred_reload_ran_defers_again(hass: HomeAs
     assert mock_reload.await_count == 2
 
 
-async def test_update_listener_propagates_cancelled_error(hass: HomeAssistant) -> None:
-    """Cancellation should not be swallowed by the update listener."""
-    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
-    hass.state = CoreState.running
-
-    with (
-        patch.object(
-            hass.config_entries,
-            "async_reload",
-            AsyncMock(side_effect=asyncio.CancelledError),
-        ),
-        pytest.raises(asyncio.CancelledError),
-    ):
-        await update_listener(hass, entry)
-
-
-async def test_update_listener_logs_unexpected_reload_failure(
+async def test_an_unexpected_reload_failure_is_logged_and_can_be_asked_for_again(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Unexpected reload errors should be logged for diagnosis."""
-    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123")
-    hass.state = CoreState.running
+    """An unexpected reload error is logged with its traceback, and the next change still reloads."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-123", title="Span Panel 1")
+    entry.add_to_hass(hass)
+    hass.set_state(CoreState.running)
     caplog.set_level("ERROR")
 
     with patch.object(
         hass.config_entries,
         "async_reload",
-        AsyncMock(side_effect=RuntimeError("reload boom")),
-    ):
+        AsyncMock(side_effect=[RuntimeError("reload boom"), True]),
+    ) as mock_reload:
         await update_listener(hass, entry)
+        await hass.async_block_till_done()
+        assert "Reloading Span Panel 1 failed" in caplog.text
+        assert "reload boom" in caplog.text
 
-    assert "Failed to reload SPAN Panel integration: reload boom" in caplog.text
+        await update_listener(hass, entry)
+        await hass.async_block_till_done()
+
+    assert mock_reload.await_count == 2
 
 
 async def test_ensure_device_registered_renames_placeholder_device(

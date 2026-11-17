@@ -56,6 +56,7 @@ from .curation import (
     record_as_dict,
     validate_record,
 )
+from .entry_reloads import async_request_reload
 from .extension import adoptable, extension_curation_key, resolve_platform
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .websocket_panel import resolve_panel_device
@@ -284,7 +285,9 @@ async def handle_adopted_curate(
             return
 
     await async_save_record(hass, entry, key, record)
-    hass.config_entries.async_schedule_reload(entry.entry_id)
+    # Asked for once the save is on disk, and started after this handler has
+    # replied, never inside it.
+    async_request_reload(hass, entry.entry_id)
     connection.send_result(
         msg["id"],
         {

@@ -217,16 +217,16 @@ async def _curate(
 ) -> dict[str, Any]:
     """Send one adopted/curate request over a real websocket and return the reply.
 
-    The reload a successful save schedules is patched out in every call. Letting
+    The reload a successful save asks for is patched out in every call. Letting
     it run would set the integration up for real against a panel no test has, and
     what the handler owes is that it *asked* for one -- which the `scheduled_reload`
-    a test passes in is how that is asserted.
+    a test passes in is how that is asserted. The request's own scheduling is
+    `entry_reloads`', and tested there.
     """
     async_register_commands(hass)
     client = await hass_ws_client(hass)
-    with patch.object(
-        hass.config_entries,
-        "async_schedule_reload",
+    with patch(
+        "custom_components.span_panel.websocket_adopted.async_request_reload",
         MagicMock() if scheduled_reload is None else scheduled_reload,
     ):
         await client.send_json_auto_id(
@@ -896,7 +896,7 @@ async def test_a_save_schedules_exactly_one_reload(
     )
 
     assert reply["success"] is True
-    scheduled.assert_called_once_with(ENTRY_ID)
+    scheduled.assert_called_once_with(hass, ENTRY_ID)
 
 
 async def test_a_refused_record_schedules_no_reload(

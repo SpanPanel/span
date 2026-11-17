@@ -15,7 +15,7 @@ from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.json import JsonObjectType, JsonValueType
 import httpx
 import probatio as vol
-from span_panel_api import rotate_passphrase
+from span_panel_api import PassphraseRotation, rotate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -26,7 +26,7 @@ from span_panel_api.exceptions import (
     SpanPanelTLSVerificationError,
 )
 
-from .config_flow_validation import PanelCaUnusableError, panel_rest_transport
+from .config_flow_validation import PanelCaUnusableError, PanelRestTransport, panel_rest_transport
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_PASSWORD,
@@ -70,11 +70,11 @@ _ROTATION_LOCKS: HassKey[dict[str, asyncio.Lock]] = HassKey(f"{DOMAIN}_rotation_
 
 
 def rotation_in_progress(hass: HomeAssistant, entry_id: str) -> bool:
-    """Return whether `rotate_credentials` is reconnecting this entry.
+    """Return whether `rotate_credentials` is replacing this entry's credential or reconnecting it.
 
-    While it is, setup reports a broker credential refusal as not ready rather
-    than starting a reauth flow, and the options listener leaves the reload to
-    the service.
+    While it is, from before the panel replaces the broker password until the
+    last reconnect attempt, setup reports a broker credential refusal as not
+    ready rather than starting a reauth flow.
     """
     return entry_id in hass.data.get(_ROTATIONS_IN_PROGRESS, set())
 
@@ -1071,43 +1071,12 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
 
         return candidates[0]
 
-    async def _async_rotate(entry: ConfigEntry) -> ServiceResponse:
-        host = str(entry.data[CONF_HOST])
-        token = str(entry.data.get(CONF_ACCESS_TOKEN, ""))
-        if not token:
-            raise ServiceValidationError(
-                "This SPAN panel has no stored access token. Reauthenticate before rotating.",
-                translation_domain=DOMAIN,
-                translation_key="rotate_credentials_no_token",
-            )
-
-        # Over the pinned CA where this entry has one. A credential-rotation
-        # service that delivered fresh secrets over unverified HTTP would undo
-        # the point of pinning at the one moment it matters most, so an entry
-        # whose stored CA no longer parses is refused rather than downgraded.
-        # (An entry that was never pinned is plaintext by design; that is the
-        # transport it has always used, and this service does not change it.)
+    async def _async_rotate_on_panel(
+        host: str, token: str, transport: PanelRestTransport, passphrase_only: bool
+    ) -> PassphraseRotation:
+        """Have the panel replace its passphrase and broker password, and return both."""
         try:
-            transport = panel_rest_transport(hass, entry.data, allow_plaintext_fallback=False)
-        except PanelCaUnusableError as err:
-            raise ServiceValidationError(
-                "The stored certificate authority for this SPAN panel cannot be "
-                "read, so the rotation would have to travel unencrypted. "
-                "Nothing was changed. Repair the panel's certificate authority, "
-                "then rotate again.",
-                translation_domain=DOMAIN,
-                translation_key="rotate_credentials_ca_unusable",
-            ) from err
-
-        # Read first, while the panel is known to be answering: it only chooses
-        # which recovery an unknown outcome describes, and fails open to the
-        # message every panel had before.
-        passphrase_only = registers_by_passphrase_only(
-            await async_read_hardware_version(hass, host, transport)
-        )
-
-        try:
-            rotation = await rotate_passphrase(
+            return await rotate_passphrase(
                 host,
                 token,
                 port=transport.port,
@@ -1154,18 +1123,44 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
                 translation_placeholders={"host": host},
             ) from err
 
-        # The hop passphrase is handed back to the caller and never stored: the
-        # entry keeps only what the integration needs, the broker password.
-        updated_data = dict(entry.data)
-        updated_data[CONF_EBUS_BROKER_PASSWORD] = rotation.ebus_broker_password
+    async def _async_rotate(entry: ConfigEntry) -> ServiceResponse:
+        host = str(entry.data[CONF_HOST])
+        token = str(entry.data.get(CONF_ACCESS_TOKEN, ""))
+        if not token:
+            raise ServiceValidationError(
+                "This SPAN panel has no stored access token. Reauthenticate before rotating.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_no_token",
+            )
 
-        # Reload with the new password only, retrying while the broker may
-        # still be refusing it. Marked in progress first, so that a refusal in
-        # this window is not taken for a revoked credential and the options
-        # listener does not race a reload of its own.
+        # Over the pinned CA where this entry has one. A credential-rotation
+        # service that delivered fresh secrets over unverified HTTP would undo
+        # the point of pinning at the one moment it matters most, so an entry
+        # whose stored CA no longer parses is refused rather than downgraded.
+        # (An entry that was never pinned is plaintext by design; that is the
+        # transport it has always used, and this service does not change it.)
+        try:
+            transport = panel_rest_transport(hass, entry.data, allow_plaintext_fallback=False)
+        except PanelCaUnusableError as err:
+            raise ServiceValidationError(
+                "The stored certificate authority for this SPAN panel cannot be "
+                "read, so the rotation would have to travel unencrypted. "
+                "Nothing was changed. Repair the panel's certificate authority, "
+                "then rotate again.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_ca_unusable",
+            ) from err
+
+        # Read first, while the panel is known to be answering: it only chooses
+        # which recovery an unknown outcome describes, and fails open to the
+        # message every panel had before.
+        passphrase_only = registers_by_passphrase_only(
+            await async_read_hardware_version(hass, host, transport)
+        )
+
+        # A reload that raises counts as not reconnected, so the response carrying
+        # the new passphrase still reaches the caller.
         async def _reload() -> bool:
-            # A reload that raises counts as not reconnected, so the response
-            # carrying the new passphrase still reaches the caller.
             try:
                 return await hass.config_entries.async_reload(entry.entry_id)
             except Exception:
@@ -1174,9 +1169,25 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
                 )
                 return False
 
+        # Marked in progress before the PUT, not after it: the panel replaces the
+        # broker password during the PUT, and a setup already under way then
+        # connects with the old one. Marked, that refusal is reported as not ready
+        # rather than taken for a revoked credential, which would open a reauth
+        # for one that is fine. Cleared on every way out.
         in_progress = hass.data.setdefault(_ROTATIONS_IN_PROGRESS, set())
         in_progress.add(entry.entry_id)
         try:
+            rotation = await _async_rotate_on_panel(host, token, transport, passphrase_only)
+
+            # The hop passphrase is handed back to the caller and never stored:
+            # the entry keeps only what the integration needs, the broker password.
+            updated_data = dict(entry.data)
+            updated_data[CONF_EBUS_BROKER_PASSWORD] = rotation.ebus_broker_password
+
+            # Reload with the new password only, retrying while the broker may
+            # still be refusing it. The write's own listener asks for a reload as
+            # well, and finds it applied once the first of these has set the entry
+            # up: the rotation takes the entry's setup lock in this same pass.
             hass.config_entries.async_update_entry(entry, data=updated_data)
             reconnected = await _reload()
             for delay in _ROTATION_RECONNECT_DELAYS_S:

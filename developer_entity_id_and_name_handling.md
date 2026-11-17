@@ -329,8 +329,9 @@ position instead (R3), and keeps the promise with the one `entity_id` this integ
   run time a saved format holding any other part gets no composition: the entity is created without a preset, with the ID Core composes, which is logged at
   debug, and an existing ID is read by its tail (§4.3). No platform fails to set up over it.
 - **How it is spent.** Core stores the preset as the row's `suggested_object_id` and uses it verbatim. The entity's next add supplies none, so Core clears it
-  (§3.3). A new entity asks for a reload on its first update (§5.2), so that add follows its creation directly. The ID stays where it is (R5), and from then on
-  Recreate composes from the circuit's device and the base, and offers the circuit's name.
+  (§3.3). A new entity asks for a reload on its first update (§5.2), so that add follows its creation directly, or, for an entity created while Home Assistant
+  is starting, once it has started. The ID stays where it is (R5), and from then on Recreate composes from the circuit's device and the base, and offers the
+  circuit's name.
 - **Where there is none.** In circuit-names mode, for a sub-device sensor (§4.5), where the user's format composes nothing for the entity, which is left to
   Core's own fallback, and where it holds a part the composer does not know.
 
@@ -368,7 +369,8 @@ There is one name path, in both modes:
    - If the entity was **not** in the registry at construction (`_previous_circuit_name is _NAME_UNSET`), the first update requests one reload. This is the
      surviving trace of "phase 2": a freshly created entity's registry row is settled by that reload, which is also what spends a creation preset.
    - If the name **changed**, the entity requests a reload (`coordinator.request_reload()`).
-3. **Reload** (`coordinator.py`, end of the update cycle): the entry is torn down and rebuilt. The integration names a circuit's device only through the device
+3. **Reload** (requested at the end of the update cycle in `coordinator.py`, started by `entry_reloads` once that update has returned, or once Home Assistant
+   has started): the entry is torn down and rebuilt. The integration names a circuit's device only through the device
    info of the entities it adds, so a rebuild is the only way to refresh the name — that is why a rename costs a reload rather than a registry write. The
    rebuild also recomputes the base against the device's new name and, per §3.3, rewrites the row's `object_id_base`.
 
@@ -426,7 +428,8 @@ composes from the device with nothing after it, the entity is offered nothing. A
 Recreate offer is such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is offered.
 
 One change applies only after the next restart: a saved entity-ID format, for which Core announces no event. Everything else the base is worked out from either
-reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the integration's own entry do, or is watched above. The panel
+reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the entry's data, options, title or unique ID do, or is watched
+above. The panel
 device's own name is the one the entry was set up with; the user names it through `name_by_user`.
 
 The rename therefore reaches:

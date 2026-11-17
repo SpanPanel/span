@@ -41,9 +41,9 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.entry_reloads import async_setup_began
 from custom_components.span_panel.services import (
     _ROTATION_RECONNECT_DELAYS_S,
-    _ROTATIONS_IN_PROGRESS,
     _rotation_outcome_unknown,
     rotation_in_progress,
 )
@@ -522,18 +522,87 @@ async def test_reconnect_retries_until_the_broker_accepts_the_new_password(
 
 
 @pytest.mark.asyncio
-async def test_the_options_listener_leaves_the_reload_to_the_rotation(
+async def test_storing_the_new_password_adds_no_reload_to_the_rotations_own(
     hass: HomeAssistant,
 ) -> None:
-    """Storing the new password must not start a second, unguarded reload."""
+    """The write's listener asks for a reload, and the rotation's own applies it.
+
+    The rotation takes the entry's setup lock in the same pass as its write, and
+    the listener's reload waits for whatever holds that lock before deciding. By
+    then the rotation's reload has set the entry up, so nothing is left to do.
+    """
     entry = _add_v2_entry(hass)
+    entry.add_update_listener(update_listener)
     hass.set_state(CoreState.running)
-    hass.data.setdefault(_ROTATIONS_IN_PROGRESS, set()).add(entry.entry_id)
+    _async_register_credential_services(hass)
 
-    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload_mock:
-        await update_listener(hass, entry)
+    async def _reload(entry_id: str) -> bool:
+        """Do what a real reload does with the lock and the setup it begins."""
+        async with entry.setup_lock:
+            await asyncio.sleep(0)
+            async_setup_began(hass, entry)
+            await asyncio.sleep(0)
+        return True
 
-    reload_mock.assert_not_awaited()
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", AsyncMock(side_effect=_reload)
+        ) as reload_mock,
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+        await hass.async_block_till_done()
+
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
+    reload_mock.assert_awaited_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_the_rotation_is_marked_in_progress_before_the_panel_replaces_the_password(
+    hass: HomeAssistant,
+) -> None:
+    """A setup already under way during the PUT connects with the old password.
+
+    Marked from before the PUT, setup reports that refusal as not ready rather
+    than opening a reauth for a credential that is fine.
+    """
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+    marked_during_the_put: list[bool] = []
+
+    async def _rotate(*_args: object, **_kwargs: object) -> PassphraseRotation:
+        marked_during_the_put.append(rotation_in_progress(hass, entry.entry_id))
+        return ROTATION
+
+    with (
+        patch("custom_components.span_panel.services.rotate_passphrase", side_effect=_rotate),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
+    ):
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert marked_during_the_put == [True]
+    assert not rotation_in_progress(hass, entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_a_refused_rotation_leaves_no_mark(hass: HomeAssistant) -> None:
+    """The mark is cleared on every way out, a refused PUT included."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(side_effect=SpanPanelAuthError("rejected")),
+        ),
+        pytest.raises(ServiceValidationError),
+    ):
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert not rotation_in_progress(hass, entry.entry_id)
 
 
 @pytest.mark.asyncio

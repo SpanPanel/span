@@ -21,6 +21,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er, issue_registry as ir
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.typing import UNDEFINED
 from homeassistant.util import dt as dt_util
 import httpx
 import pytest
@@ -151,7 +152,8 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     coordinator.async_setup_streaming.assert_awaited_once()
     mock_ensure_device.assert_awaited_once_with(hass, entry, snapshot, "SPAN Panel")
     mock_forward.assert_awaited_once()
-    mock_update_entry.assert_called_once_with(entry, title="SPAN Panel")
+    # Written as applied by this setup, which asks for no reload of its own.
+    mock_update_entry.assert_called_once_with(entry, data=UNDEFINED, title="SPAN Panel")
 
 
 async def test_the_panel_client_is_given_home_assistants_shared_http_client(

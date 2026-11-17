@@ -22,6 +22,19 @@ Home Assistant 2026.11.
   that adds some, and two panels' reloads waited for each other, so neither ran. A reload also no longer waits for unrelated work, such as a script in a long
   delay, and a panel that asks for one more than once reloads once.
 
+- **A panel reloads once, not twice, after reauthentication, reconfiguration or re-pinning its certificate authority.** Reconfiguring no longer logs Home
+  Assistant's warning that the integration "has an update listener and should use it for scheduling a reload".
+
+- **A change made while a panel is setting up is applied.** An options save that landed during setup was stored but not used until the next restart, and a
+  reconfigure completed while the panel was retrying waited for Home Assistant's next retry, up to ten minutes later. Both now reload the panel straight away.
+
+- **Rotating credentials no longer asks to reauthenticate a panel whose password is fine**, which could happen when the panel was already reloading as the
+  rotation began. A certificate-authority repair raised again by the reload after a re-pin now stays raised instead of disappearing.
+
+- **A reload no longer starts in the middle of the panel's own update**, and a change that nothing in the integration reads, such as the system option for
+  new entities, or a rediscovery that changes nothing, no longer reloads the panel. A reload a panel asks for while Home Assistant is starting, as it does for
+  new entities after an upgrade, now runs once Home Assistant has started.
+
 ## [2.3.2] - 11/2026
 
 **Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
