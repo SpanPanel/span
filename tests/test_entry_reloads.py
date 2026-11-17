@@ -608,7 +608,7 @@ async def test_an_option_changed_and_changed_back_in_one_pass_still_reloads(
 async def test_home_assistant_starts_the_listener_inside_the_write(
     hass: HomeAssistant, panels: _Panels
 ) -> None:
-    """`async_update_entry_applied` relies on it, so a Home Assistant that stopped doing it fails here."""
+    """The applied writers rely on it, so a Home Assistant that stopped doing it fails here."""
     entry = await _loaded_and_quiet(hass, panels)
 
     with patch.object(
@@ -678,7 +678,7 @@ async def test_a_change_from_outside_during_setup_survives_setups_own_rename(
 
 
 def test_only_the_flows_the_repair_the_rotation_and_the_migrations_write_the_entry_directly() -> None:
-    """Everything else writes through `async_update_entry_applied`.
+    """Everything else writes through the applied writers in `entry_reloads`.
 
     The listener is registered before setup runs, so a plain write in setup
     would cost a reload, and one that never converges, a timestamp or a
