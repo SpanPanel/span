@@ -77,10 +77,15 @@ LOCK = (
     'version = "1.0+local"\n'
     "\n"
     "[[package]]\n"
+    'name = "winrt-runtime"\n'
+    'version = "4!10.0.28000.2957"\n'
+    "\n"
+    "[[package]]\n"
     'name = "span"\n'
     'source = { virtual = "." }\n'
 )
-"""A miniature uv lock: Core's two pre-releases, three others, a release and a post release."""
+"""A miniature uv lock: Core's two pre-releases, three others, a release, a post release
+and an epoch release, the form a fresh lock resolves the winrt packages to."""
 
 
 def _project(releases: Mapping[str, list[JSON]]) -> JSON:
@@ -136,11 +141,28 @@ def test_versions_order_as_pep_440_orders_them() -> None:
     assert sorted(shuffled, key=_sort_key) == ordered
 
 
+def test_a_later_epoch_sorts_after_every_version_of_an_earlier_one() -> None:
+    """Whatever the release: the epoch is compared first, and no epoch is epoch 0."""
+    ordered = [
+        "2026.12.0",
+        "1!0.1.dev1",
+        "1!0.1b1",
+        "1!0.1",
+        "1!10.0.28000.2957",
+        "4!10.0.28000.2957",
+    ]
+    shuffled = ordered[:]
+    random.Random(4).shuffle(shuffled)
+
+    assert sorted(shuffled, key=_sort_key) == ordered
+    assert pins.parse_version("0!2026.12.0") == pins.parse_version("2026.12.0")
+
+
 def test_trailing_zeros_of_the_release_do_not_count() -> None:
     assert pins.parse_version("2026.11") == pins.parse_version("2026.11.0")
 
 
-@pytest.mark.parametrize("version", ["1!2026.11.0", "2026.11.0+local", "latest", ""])
+@pytest.mark.parametrize("version", ["2026.11.0+local", "!2026.11.0", "latest", ""])
 def test_a_form_it_does_not_read_is_left_out_rather_than_guessed(version: str) -> None:
     assert pins.parse_version(version) is None
 
@@ -154,6 +176,8 @@ def test_a_form_it_does_not_read_is_left_out_rather_than_guessed(version: str) -
         ("2026.12.0rc1", True),
         ("2026.12.0.dev3", True),
         ("2026.12.0.post1.dev1", True),
+        ("4!10.0.28000.2957", False),
+        ("1!2.0b1", True),
     ],
 )
 def test_a_pre_release_is_an_a_b_rc_or_dev_release(version: str, prerelease: bool) -> None:
@@ -315,7 +339,7 @@ def test_the_repository_pins_the_two_as_a_pair_the_script_can_rewrite() -> None:
 
 
 def test_the_lock_s_pre_releases_are_listed_besides_core_s_own() -> None:
-    """A post release is a release; a version in another form is listed, saying so."""
+    """A post or epoch release is a release; a version in another form is listed, saying so."""
     assert pins.lock_prereleases(LOCK) == [
         "freezegun 1.6.0rc1",
         "sqlalchemy 2.1.0.dev4",

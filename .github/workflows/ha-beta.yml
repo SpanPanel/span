@@ -64,8 +64,11 @@ jobs:
           uv lock
 
       # Pre-releases are allowed for every package, so a red run can come from
-      # one that is not Core's. The summary names any the lock resolved.
+      # one that is not Core's. The summary names any the lock resolved. Only a
+      # report: should it fail, as on a change in uv's lock format, mypy and the
+      # suite still run.
       - name: List the lock's other pre-releases
+        continue-on-error: true
         run: |
           python scripts/ha_beta_pins.py prereleases | tee -a "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"

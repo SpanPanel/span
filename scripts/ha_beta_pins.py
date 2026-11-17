@@ -61,15 +61,17 @@ type TOML = dict[str, TOML] | list[TOML] | str | int | float | bool | datetime |
 """A TOML value as `tomllib.loads` returns it."""
 
 _VERSION = re.compile(
-    r"^(?P<release>\d+(?:\.\d+)*)"
+    r"^(?:(?P<epoch>\d+)!)?"
+    r"(?P<release>\d+(?:\.\d+)*)"
     r"(?:(?P<pre_phase>a|b|rc)(?P<pre_number>\d+))?"
     r"(?:\.post(?P<post>\d+))?"
     r"(?:\.dev(?P<dev>\d+))?$"
 )
-"""A version as PyPI's JSON spells it, normalized: no epoch and no local part.
+"""A version as PyPI's JSON and a uv lock spell it, normalized: no local part.
 
-Home Assistant publishes `2026.11.2` and `2026.12.0b0`; the post and dev parts
-are here so such a version is ordered correctly rather than skipped.
+Home Assistant publishes `2026.11.2` and `2026.12.0b0`; the epoch, post and dev
+parts are here so such a version is ordered correctly rather than skipped. A
+lock resolves several packages to an epoch release, such as `4!10.0.28000.2957`.
 """
 
 _PRE_PHASES = {"a": 0, "b": 1, "rc": 2}
@@ -80,8 +82,13 @@ class PinError(Exception):
 
 
 class Version(NamedTuple):
-    """A version's PEP 440 sort key, for the forms `_VERSION` reads."""
+    """A version's PEP 440 sort key, for the forms `_VERSION` reads.
 
+    The epoch comes first: any version of a later epoch sorts after every
+    version of an earlier one, whatever its release.
+    """
+
+    epoch: int
     release: tuple[int, ...]
     pre: tuple[int, ...]
     post: tuple[int, ...]
@@ -96,12 +103,14 @@ class Version(NamedTuple):
 def parse_version(text: str) -> Version | None:
     """Return the version's sort key, or None for a form this does not read.
 
-    Ordered as PEP 440 orders them: a dev release before the pre-releases of
-    the same release, those before the release, and a post release after it.
-    Trailing zeros of the release do not count, so `2026.11` equals `2026.11.0`.
+    Ordered as PEP 440 orders them: by epoch first, which is 0 when none is
+    written; then a dev release before the pre-releases of the same release,
+    those before the release, and a post release after it. Trailing zeros of
+    the release do not count, so `2026.11` equals `2026.11.0`.
     """
     if (match := _VERSION.match(text)) is None:
         return None
+    epoch = 0 if match["epoch"] is None else int(match["epoch"])
     release = tuple(int(part) for part in match["release"].split("."))
     while len(release) > 1 and release[-1] == 0:
         release = release[:-1]
@@ -114,7 +123,7 @@ def parse_version(text: str) -> Version | None:
         pre = (len(_PRE_PHASES),)
     post = (-1,) if match["post"] is None else (int(match["post"]),)
     dev = (1,) if match["dev"] is None else (0, int(match["dev"]))
-    return Version(release, pre, post, dev)
+    return Version(epoch, release, pre, post, dev)
 
 
 def available_versions(project: JSON) -> list[str]:
