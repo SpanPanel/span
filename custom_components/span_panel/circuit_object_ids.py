@@ -93,7 +93,8 @@ An edit to an entity's id is the one of these Core acts on itself, and it
 writes no base for it. It changes a live entity's id in place, which every
 entity here opts into (`SpanPanelEntity.async_entity_id_changed`), and a
 disabled entity has no live entity for it to change. So the listener is the
-one thing that reads an edited id again.
+one thing that reads an edited id again, and setup registers it before the
+platforms add the first entity, which leaves no edit outside it.
 
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out

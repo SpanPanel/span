@@ -22,13 +22,14 @@ the entities keep moves or stays as it should.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 import importlib
 import json
 import logging
 from typing import Final
 from unittest.mock import MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, restore_state
@@ -52,6 +53,7 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.control_gate import ControlMode
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entity import SpanPanelEntity
+from custom_components.span_panel.id_builder import build_circuit_unique_id
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
     CURRENT_CONFIG_VERSION,
@@ -85,6 +87,9 @@ GENERATOR: Final = "generator-1"
 
 VENDOR_NODE: Final = "vendor"
 """A node of vendor readings added to the panel's own device, which become extension entities."""
+
+KITCHEN_LIGHTS: Final = "0ab966b95f92a6a51ec548485aa85f54"
+"""A circuit of the capture whose name does not end on what its power sensor measures."""
 
 
 @pytest.fixture(autouse=True)
@@ -538,3 +543,47 @@ async def test_an_energy_sensor_keeps_its_dip_offset_and_grace_state_across_an_i
     assert offline.attributes["last_valid_state"] == "1260.0"
     assert offline.attributes["using_grace_period"] == "True"
     assert hass.states.get(old) is None
+
+
+# ---------------------------------------------------------------------------
+# The base of an id edited as the entry sets up
+# ---------------------------------------------------------------------------
+
+
+async def test_an_id_edited_as_the_entry_sets_up_is_given_the_base_it_calls_for(
+    hass: HomeAssistant,
+) -> None:
+    """The listener that keeps circuit bases current is in place before any circuit entity is.
+
+    Core changes a live entity's id in place and writes no base for it, so the
+    listener is the one thing that reads an edited id again
+    (`circuit_object_ids.async_keep_circuit_id_bases_current`). Here a circuit's
+    power sensor is edited to stop at its device's name the moment the
+    platforms are forwarded, before the entry has finished setting up, and the
+    row is given the empty base that id calls for, so Recreate offers it
+    nothing. Registered once the setup had finished, the listener missed the
+    edit and the old id was offered back until the next restart.
+    """
+    registry = er.async_get(hass)
+    forward = hass.config_entries.async_forward_entry_setups
+    edited: list[str] = []
+
+    async def forward_then_edit(entry: ConfigEntry, platforms: Iterable[Platform | str]) -> None:
+        await forward(entry, platforms)
+        created = registry.async_get_entity_id(
+            Platform.SENSOR,
+            DOMAIN,
+            build_circuit_unique_id(entry.unique_id or "", KITCHEN_LIGHTS, "instantPowerW"),
+        )
+        assert created is not None
+        assert created.endswith("_power")
+        edited.append(created.removesuffix("_power"))
+        registry.async_update_entity(created, new_entity_id=edited[0])
+
+    with patch.object(hass.config_entries, "async_forward_entry_setups", forward_then_edit):
+        await _install(hass, schema_one_tree())
+
+    (entity_id,) = edited
+    row = registry.async_get(entity_id)
+    assert row is not None
+    assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", entity_id)

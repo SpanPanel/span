@@ -421,8 +421,9 @@ could drift.
 
 The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
 works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, and nothing else does. Core changes a live entity's ID in
-place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. Edited to `sensor.span_panel_refrigerator`, which Core composes
-from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
+place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the
+first entity, and the unload stops it only after the last is removed, which leaves no edit outside it. Edited to `sensor.span_panel_refrigerator`, which Core
+composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
 `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is such an edit too, and reading the
 accepted ID again gives the base it was composed from, so nothing more is offered.
 

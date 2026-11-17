@@ -965,13 +965,17 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         # told from one that was already registered.
         breaker_switches_before = async_registered_breaker_switches(hass, entry, snapshot)
 
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-        # A circuit entity's id base depends on its device's name, and renaming
-        # that device in Home Assistant builds no entity again. After the
-        # forward, where every circuit entity has recorded what its base is
-        # worked out from.
+        # A circuit entity's id base depends on its device's name and on its own
+        # id, and neither a rename of that device in Home Assistant nor an edit
+        # to the id builds an entity again: Core changes an edited id in place
+        # and writes no base. So the listener that keeps the bases current is in
+        # place before the forward adds the first entity, and the unload stops it
+        # only after the last is removed. It reads what each circuit entity
+        # records only as an event arrives, and an entity the forward has yet to
+        # build writes its own base as it is added.
         entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
+
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # After the forward, so the names it lists as changed are the ones Home
         # Assistant composes for the entities as the platforms left them.
