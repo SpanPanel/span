@@ -99,7 +99,11 @@ def async_create_entry_issue(
     translation_placeholders: dict[str, str] | None = None,
     data: dict[str, str | int | float | None] | None = None,
 ) -> None:
-    """Raise an issue of this integration's, or raise it again, linked to its entry."""
+    """Raise an issue of this integration's, or raise it again, linked to its entry.
+
+    Home Assistant refuses to link an issue to an entry it does not know, so a
+    caller that can outlive its entry asks `entry_removed` first.
+    """
     ir.async_create_issue(
         hass,
         DOMAIN,
@@ -112,6 +116,17 @@ def async_create_entry_issue(
         translation_key=translation_key,
         translation_placeholders=translation_placeholders,
     )
+
+
+@callback
+def entry_removed(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Return whether Home Assistant no longer knows the entry, so nothing may be raised for it.
+
+    A callback the panel's client fires can outlive the entry. An unload that
+    fails leaves the client running and its callbacks registered, and removing
+    the entry afterwards deletes it without unloading it again.
+    """
+    return hass.config_entries.async_get_entry(entry.entry_id) is None
 
 
 @callback

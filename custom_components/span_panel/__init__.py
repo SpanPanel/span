@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -90,7 +91,7 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
-from .entry_issues import async_clear_unlinked_issues
+from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
     async_entry_changed,
     async_forget_reloads,
@@ -520,6 +521,45 @@ async def _async_rest_tls_verdict(
     )
 
 
+def _leaf_name_mismatch_reporter(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry
+) -> Callable[[LeafNameMismatch], None]:
+    """Return the client callback that raises the name-mismatch Repair.
+
+    The callback raises nothing once the entry has been removed: the client
+    can outlive it (`entry_removed`).
+    """
+
+    @callback
+    def _on_leaf_name_mismatch(mismatch: LeafNameMismatch) -> None:
+        if entry_removed(hass, entry):
+            return
+        async_raise_leaf_name_mismatch(hass, entry, mismatch)
+
+    return _on_leaf_name_mismatch
+
+
+def _fatal_transport_error_reporter(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry
+) -> Callable[[SpanPanelError], None]:
+    """Return the client callback that raises the CA-changed Repair for a transport that stopped.
+
+    The callback raises nothing once the entry has been removed: the client
+    can outlive it (`entry_removed`).
+    """
+
+    @callback
+    def _on_fatal_transport_error(error: SpanPanelError) -> None:
+        if entry_removed(hass, entry):
+            return
+        if isinstance(error, SpanPanelCAChangedError):
+            async_raise_ca_changed(
+                hass, entry, error.expected_fingerprint, error.observed_fingerprint
+            )
+
+    return _on_fatal_transport_error
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Set up Span Panel from a config entry.
 
@@ -694,11 +734,9 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # the retry builds a new client -- so every attempt would fire the
             # signal into a client with no subscriber and the user would keep
             # getting the log line and nothing else.
-            @callback
-            def _on_leaf_name_mismatch(mismatch: LeafNameMismatch) -> None:
-                async_raise_leaf_name_mismatch(hass, entry, mismatch)
-
-            entry.async_on_unload(client.register_leaf_mismatch_callback(_on_leaf_name_mismatch))
+            entry.async_on_unload(
+                client.register_leaf_mismatch_callback(_leaf_name_mismatch_reporter(hass, entry))
+            )
 
             try:
                 # Its flat refusal is a `ConfigEntryNotReady`, which none of the
@@ -810,14 +848,9 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # fire-and-forget, so a CA that changes mid-session cannot surface as
             # an exception on anybody's call stack. The library gives it a
             # channel of its own precisely so a consumer can act on it.
-            @callback
-            def _on_fatal_transport_error(error: SpanPanelError) -> None:
-                if isinstance(error, SpanPanelCAChangedError):
-                    async_raise_ca_changed(
-                        hass, entry, error.expected_fingerprint, error.observed_fingerprint
-                    )
-
-            entry.async_on_unload(client.register_fatal_error_callback(_on_fatal_transport_error))
+            entry.async_on_unload(
+                client.register_fatal_error_callback(_fatal_transport_error_reporter(hass, entry))
+            )
 
             # One interceptor, installed before the coordinator starts streaming
             # so no control command can reach the panel ungated — including one

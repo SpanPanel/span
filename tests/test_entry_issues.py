@@ -11,17 +11,23 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable
 import itertools
+import logging
 from pathlib import Path
 from typing import Final
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryDisabler
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.setup import async_setup_component
+import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.typing import WebSocketGenerator
-from span_panel_api import LeafNameMismatch
+from span_panel_api import FieldMetadata, LeafNameMismatch
+from span_panel_api.exceptions import SpanPanelCAChangedError
 
+from custom_components.span_panel import async_setup_entry
 from custom_components.span_panel.ca_repairs import (
     async_raise_ca_changed,
     async_raise_ca_unusable,
@@ -32,11 +38,20 @@ from custom_components.span_panel.circuit_device_conversion import (
     ConversionReport,
     ConvertedEntity,
 )
-from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_HOST,
+    CONF_EBUS_BROKER_PASSWORD,
+    CONF_EBUS_BROKER_PORT,
+    CONF_EBUS_BROKER_USERNAME,
+    CONF_HTTP_PORT,
+    DOMAIN,
+)
 from custom_components.span_panel.conversion_repairs import (
     async_raise_breaker_switch_area_notice,
     async_raise_conversion_notice,
 )
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.entry_issues import EntryIssue, EntryIssueFamily
 from custom_components.span_panel.flat_firmware_repairs import (
     async_raise_flat_firmware,
@@ -49,6 +64,8 @@ from custom_components.span_panel.hardware_repairs import (
 from custom_components.span_panel.leaf_repairs import async_raise_leaf_name_mismatch
 from custom_components.span_panel.schema_repairs import async_sync_schema_issues
 from custom_components.span_panel.schema_validation import SchemaFindings, UnitMismatch
+
+from .factories import SpanPanelSnapshotFactory
 
 _PACKAGE: Final = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
 
@@ -321,3 +338,90 @@ async def test_a_disabled_entry_s_issues_are_hidden_and_kept(
 
     assert issue_id not in await listed()
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
+# ---------- callbacks that outlive their entry ----------
+
+
+def _v2_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Add an entry carrying everything `async_setup_entry` needs of a v2 panel."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_API_VERSION: "v2",
+            CONF_HOST: "192.168.1.100",
+            CONF_EBUS_BROKER_HOST: "span-panel.local",
+            CONF_EBUS_BROKER_USERNAME: "mqtt-user",
+            CONF_EBUS_BROKER_PASSWORD: "mqtt-pass",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_HTTP_PORT: 80,
+        },
+        entry_id="entry-outlived",
+        title="sp3-outlived-001",
+        unique_id="sp3-outlived-001",
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_the_client_s_callbacks_raise_nothing_once_the_entry_is_removed(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A client whose unload failed keeps calling back after its entry is gone.
+
+    Set up outside Home Assistant's own setup, the entry is not loaded as far as
+    Home Assistant knows, so removing it unloads nothing, as after a failed
+    unload: the callbacks stay registered. Home Assistant would refuse an issue
+    linked to the gone entry, and the user has no panel left to act on.
+    """
+    entry = _v2_entry(hass)
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.package_rating_manager.async_load = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-outlived-001")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch("custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator),
+        patch("custom_components.span_panel.ensure_device_registered", AsyncMock()),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        await async_setup_entry(hass, entry)
+    on_mismatch = client.register_leaf_mismatch_callback.call_args.args[0]
+    on_fatal = client.register_fatal_error_callback.call_args.args[0]
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="custom_components.span_panel"):
+        on_mismatch(_MOVED)
+        on_fatal(SpanPanelCAChangedError("aa" * 32, "bb" * 32))
+
+    assert _issues(hass) == []
+    assert caplog.records == []
+
+
+async def test_a_coordinator_that_outlives_its_entry_raises_no_schema_repair(
+    hass: HomeAssistant,
+) -> None:
+    """A validation pass that first succeeds after removal reconciles nothing."""
+    entry = _entry(hass, "entry-outlived")
+    client = MagicMock()
+    client.field_metadata = None
+    coordinator = SpanPanelCoordinator(hass, client, entry)
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.kitchen_power")
+    # Setup's reconcile point, with nothing validated yet.
+    coordinator.async_sync_schema_repairs()
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    client.field_metadata = {
+        "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+    }
+    coordinator._run_schema_validation()
+
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+    assert _issues(hass) == []
