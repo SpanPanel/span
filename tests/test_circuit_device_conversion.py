@@ -578,8 +578,12 @@ async def test_renamed_entity_keeps_its_name_on_the_circuit_device(hass: HomeAss
         assert row.name == "Fridge Power"
         assert row.device_id == install.circuit_device(KITCHEN).id
         assert row.original_name == "Power"
-        # The one displayed name the move changes: the circuit's now stands in front.
+        # The one displayed name the move changes: the circuit's now stands in front,
+        # and the notice says so.
         assert install.full_name(row) == "SPAN Panel Kitchen Outlets Fridge Power"
+        assert install.notice_lists()["renamed"] == _listed(
+            ["SPAN Panel Fridge Power → SPAN Panel Kitchen Outlets Fridge Power"]
+        )
 
 
 async def test_a_name_starting_with_the_circuit_is_trimmed(hass: HomeAssistant) -> None:

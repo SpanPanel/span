@@ -97,9 +97,10 @@ def sensor_registry_lookup(hass: HomeAssistant) -> Iterator[MagicMock]:
     `hass` is itself a mock, which the real registry cannot read; they request
     it with `pytestmark`. The patch reaches further than `sensor_base`: the `er`
     it names is Home Assistant's own module, so `er.async_get` is replaced for
-    everything, including the `hass` fixture's own registry load. Hence the
-    dependency on `hass`: the patch starts once Home Assistant is set up and
-    ends before it is torn down.
+    everything while it is active. Started before the `hass` fixture, it would
+    reach that fixture's own registry load and break it. Hence the dependency
+    on `hass`: the patch starts once Home Assistant is set up and ends before it
+    is torn down.
     """
     registry = MagicMock()
     registry.async_get_entity_id.return_value = None

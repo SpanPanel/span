@@ -24,7 +24,6 @@ from typing import Any
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.typing import UNDEFINED
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanMidSnapshot, SpanPVSnapshot
@@ -151,7 +150,7 @@ def test_sub_devices_link_by_registry_id(label: str, build: Any) -> None:
     info = build()
 
     assert info.via_device_id == _PANEL_ID, label
-    assert info.via_device is UNDEFINED, f"{label} still links by identifiers"
+    assert "via_device" not in info.as_dict(), f"{label} still links by identifiers"
 
 
 async def test_registering_the_panel_answers_with_the_id_sub_devices_need(
