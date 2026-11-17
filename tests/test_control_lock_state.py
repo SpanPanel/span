@@ -1,4 +1,4 @@
-"""The control lock's state across a reload, and what it is before there is one.
+"""The control lock's state across a reload and an id edit, and what it is before there is one.
 
 Separate from `test_control_gate.py` because these go through a real config
 entry setup and a real `async_reload`. The gate tests construct the switch
@@ -17,6 +17,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import CONF_HOST, STATE_OFF, STATE_ON, Platform
 from homeassistant.core import Context, HomeAssistant, State
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant.common import (
@@ -43,9 +46,10 @@ from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .common import async_fire_time_changed
 from .factories import SpanPanelSnapshotFactory
-from .helpers import ensure_device_registered_stand_in
+from .helpers import ensure_device_registered_stand_in, watch_add_and_remove
 
 LOCK_ENTITY = "switch.span_panel_control_lock"
+EDITED_LOCK_ENTITY = "switch.panel_control_lock"
 SERIAL = "sp3-lock-001"
 
 
@@ -122,6 +126,12 @@ def _lock(entry: MockConfigEntry) -> ControlLock:
     lock = entry.runtime_data.control_lock
     assert isinstance(lock, ControlLock)
     return lock
+
+
+def _lock_switch(hass: HomeAssistant) -> Entity:
+    """Return the live switch entity that arms and disarms the lock."""
+    (platform,) = async_get_platforms(hass, DOMAIN)
+    return platform.entities[LOCK_ENTITY]
 
 
 async def _reload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -204,6 +214,46 @@ async def test_a_pending_auto_relock_survives_a_reload(hass: HomeAssistant) -> N
 
         assert _lock(entry).armed is False
         assert _lock(entry).relock_in_seconds == pytest.approx(1800, abs=5)
+
+
+# ---------- across an entity-id edit ----------
+
+
+@pytest.mark.asyncio
+async def test_an_id_edit_leaves_the_lock_open_and_its_relock_due(hass: HomeAssistant) -> None:
+    """Core changes the switch's id in place: nothing is restored and the countdown runs on.
+
+    Removed and added again, the switch read its armed state back from what the
+    removal had just stored and scheduled a fresh write for the deadline. In
+    place it is the same switch: the lock stays as it was, the relock write it
+    already scheduled falls due when it always would have, and that write lands
+    under the new id, because the switch writes under the id it has by then.
+    """
+    async with _panel(hass, timeout=1) as entry:
+        await _disarm(hass)
+        due = _lock(entry).relock_in_seconds
+        assert due == pytest.approx(60, abs=5)
+
+        with watch_add_and_remove(_lock_switch(hass)) as calls:
+            er.async_get(hass).async_update_entity(LOCK_ENTITY, new_entity_id=EDITED_LOCK_ENTITY)
+            await hass.async_block_till_done()
+
+        assert calls.count == (0, 0)
+        assert _lock(entry).armed is False
+        assert _lock(entry).relock_in_seconds == pytest.approx(due, abs=5)
+        assert hass.states.get(LOCK_ENTITY) is None
+        state = hass.states.get(EDITED_LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_OFF
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=90))
+        await hass.async_block_till_done()
+
+        assert _lock(entry).armed is True
+        state = hass.states.get(EDITED_LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_ON
+        assert hass.states.get(LOCK_ENTITY) is None
 
 
 # ---------- the state before there is one to restore ----------

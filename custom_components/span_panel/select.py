@@ -218,10 +218,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         snapshot: SpanPanelSnapshot = self.coordinator.data
         return snapshot.circuits.get(self.id)
 
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up when entity is removed."""
-        await super().async_will_remove_from_hass()
-
     async def async_select_option(self, option: str) -> None:
         """Change the selected option.
 

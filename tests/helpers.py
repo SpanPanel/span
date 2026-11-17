@@ -1,16 +1,19 @@
 """Helper functions for testing the Span Panel integration."""
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
+import contextlib
+from dataclasses import dataclass
 import datetime
 import inspect
 from types import ModuleType
 from typing import Any, Final
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 from homeassistant.util.dt import utcnow
 import probatio as vol
 import pytest
@@ -34,6 +37,40 @@ def unwrap_websocket_command(command: Callable[..., object]) -> WebSocketHandler
     """
     handler: WebSocketHandler = inspect.unwrap(command, stop=inspect.iscoroutinefunction)
     return handler
+
+
+@dataclass(frozen=True, slots=True)
+class AddAndRemoveCalls:
+    """The calls one entity's own add and remove hooks received while they were watched."""
+
+    added: AsyncMock
+    removed: AsyncMock
+
+    @property
+    def count(self) -> tuple[int, int]:
+        """How many times each ran: `(async_added_to_hass, async_will_remove_from_hass)`."""
+        return self.added.await_count, self.removed.await_count
+
+
+@contextlib.contextmanager
+def watch_add_and_remove(entity: Entity) -> Iterator[AddAndRemoveCalls]:
+    """Count the runs of an entity's own add and remove hooks while the block runs.
+
+    Each hook still runs as written: the watch wraps the entity's bound method
+    on the instance, which is where Core looks it up both when it adds an
+    entity and when it removes one. So a block in which Core removes the entity
+    and adds it again, as it does on an entity-id edit for a class that has not
+    taken the in-place path, counts one of each.
+    """
+    calls = AddAndRemoveCalls(
+        added=AsyncMock(wraps=entity.async_added_to_hass),
+        removed=AsyncMock(wraps=entity.async_will_remove_from_hass),
+    )
+    with (
+        patch.object(entity, "async_added_to_hass", calls.added),
+        patch.object(entity, "async_will_remove_from_hass", calls.removed),
+    ):
+        yield calls
 
 
 def shown_values(schema: vol.Schema) -> dict[str, object]:

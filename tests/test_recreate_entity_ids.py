@@ -72,6 +72,7 @@ from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
+from .helpers import watch_add_and_remove
 
 CIRCUIT_ID = "15"
 SERIAL = "sp3-recreate-001"
@@ -3925,8 +3926,8 @@ async def test_an_entity_id_edited_by_hand_is_offered_what_a_restart_offers(
     stop = async_keep_circuit_id_bases_current(hass, entry)
 
     registry.async_update_entity(created, new_entity_id=edited)
-    # Core removes the live entity and adds it again under its new id, and the
-    # add writes the base the entity hands it.
+    # Core changes the live entity's id in place and writes no base, so the
+    # listener stores the one the edited id calls for.
     await hass.async_block_till_done()
 
     row = _offer_as_stored(hass, edited)
@@ -4016,7 +4017,7 @@ async def test_an_accepted_offer_read_as_it_is_stored_offers_nothing_more(
         ),
     ],
 )
-async def test_a_hand_edit_is_read_whichever_of_core_and_the_listener_writes_last(
+async def test_a_hand_edit_is_read_when_the_listener_hears_it_before_the_entity(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     parts: tuple[EntityNamePart, ...] | None,
@@ -4024,25 +4025,32 @@ async def test_a_hand_edit_is_read_whichever_of_core_and_the_listener_writes_las
     edited: str,
     base: str,
 ) -> None:
-    """The base ends on the edited id's, whether Core's re-add writes before the listener or after it.
+    """The base ends on the edited id's when the listener is handed the edit before the entity is.
 
-    Core re-adds an entity whose id changed, and the add writes the base the
-    entity hands it. Here the listener subscribes before the entity is added,
-    so the bus gives it the edit first and Core's re-add writes after it: the
-    order a Core whose re-add waits a turn would give. Handed the base it was
-    built with, the re-add wrote `power` over the listener's answer, and the old
-    id was offered back.
+    Core changes a live entity's id in place and writes no base, so the listener
+    alone stores it, as it does for a disabled entity. Here the listener
+    subscribes before the entity is added, so the bus gives it the edit first:
+    it stores the base while the entity is still under its old id, and Core
+    moves the entity after it, without removing it.
+    `test_an_entity_id_edited_by_hand_is_offered_what_a_restart_offers` has the
+    other order. When Core removed the entity and added it again instead, that
+    add wrote the base the entity handed it after the listener's, and a base
+    kept from when the entity was built offered the old id back.
     """
     if parts is not None:
         er.async_get(hass).async_update_settings(entity_id_parts=list(parts))
     stop = async_keep_circuit_id_bases_current(hass, entry)
     install = _SensorInstall(hass, entry)
-    assert (await install.load(ORIGINAL_NAME)).entity_id == created
+    entity = await install.load(ORIGINAL_NAME)
+    assert entity.entity_id == created
     registry = er.async_get(hass)
 
-    registry.async_update_entity(created, new_entity_id=edited)
-    await hass.async_block_till_done()
+    with watch_add_and_remove(entity) as calls:
+        registry.async_update_entity(created, new_entity_id=edited)
+        await hass.async_block_till_done()
 
+    assert calls.count == (0, 0)
+    assert entity.entity_id == edited
     row = _offer_as_stored(hass, edited)
     stop()
     assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == (base, edited)
@@ -4054,11 +4062,12 @@ async def test_a_hand_edit_is_read_whichever_of_core_and_the_listener_writes_las
 async def test_a_disabled_entity_edited_by_hand_is_offered_what_a_restart_offers(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Core adds no disabled entity again after its id is edited, so the listener keeps its base.
+    """A disabled entity is not live, so nothing of Core's handles its id edit, and the listener keeps its base.
 
     Its row is registered as the entry sets up, with the base worked out then,
-    but the entity is not added, so no re-add follows an edit to its id. Left
-    to that, the base offered the old id back until the next restart.
+    but the entity is not added, so there is no entity for Core to move when
+    its id is edited. Left to that, the base offered the old id back until the
+    next restart.
     """
     install = _SensorInstall(hass, entry)
     created = (await install.load(ORIGINAL_NAME)).entity_id

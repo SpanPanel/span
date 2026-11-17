@@ -175,10 +175,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
                 circuit.name,
             )
 
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up when entity is removed."""
-        await super().async_will_remove_from_hass()
-
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
@@ -412,6 +408,24 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
         if last_state is not None and last_state.state == STATE_OFF:
             self._lock.resume_disarm(await self._async_restored_relock_seconds())
         self._async_schedule_relock_write()
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        """Keep the lock and its countdown across an edit to this switch's id.
+
+        Defined so that Core changes this switch's id in place: this class
+        defines `async_added_to_hass`, and Core removes and adds again an entity
+        whose class defines an add hook unless that class or a subclass of it
+        defines this method (`SpanPanelEntity.async_entity_id_changed`).
+
+        Nothing is needed beyond the base class's. The armed state lives in
+        `ControlLock`, which is the entry's, so in place it is not read back
+        from the last run. The scheduled relock write calls back into this
+        switch, which writes under whatever id it has by then, so it falls due
+        at the deadline it always had. Core moves the restore-state tracking to
+        the new id, so the next run restores the lock from it.
+        """
+        super().async_entity_id_changed(old_entity_id)
 
     async def _async_restored_relock_seconds(self) -> float | None:
         """Return what is left of the previous run's auto-relock window.

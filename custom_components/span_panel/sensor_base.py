@@ -19,6 +19,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import STATE_UNKNOWN
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
@@ -890,6 +891,25 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         # Seed grace period tracking from the last stored HA state when extra data
         # is missing (e.g., after first install or early offline event).
         await self._initialize_grace_period_from_last_state()
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        """Keep everything this sensor holds across an edit to its id.
+
+        Defined so that Core changes this sensor's id in place: this class
+        defines `async_added_to_hass`, and Core removes and adds again an entity
+        whose class defines an add hook unless that class or a subclass of it
+        defines this method (`SpanPanelEntity.async_entity_id_changed`).
+
+        Nothing is needed beyond the base class's. The dip offset, the pending
+        and corroborated dips and the grace period's last valid reading are this
+        object's own, so in place none of them is restored again from what was
+        stored before. Core moves the restore-state tracking to the new id, so
+        a shutdown stores them under it. The coordinator holds this sensor by
+        its meter and counter (`register_energy_sensor`), not by its id, and a
+        settled dip is reported under the id the sensor has when it settles.
+        """
+        super().async_entity_id_changed(old_entity_id)
 
     async def _initialize_grace_period_from_last_state(self) -> None:
         """Seed grace tracking from HA's last stored state when extra data is missing."""
