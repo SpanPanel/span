@@ -90,9 +90,11 @@ Assistant asks whether to rename the device's entity ids straight after a
 rename. A reload would answer too late.
 
 An edit to an entity's id is the one of these Core acts on itself, and it
-writes no base for it. It changes a live entity's id in place, which every
-entity here opts into (`SpanPanelEntity.async_entity_id_changed`), and a
-disabled entity has no live entity for it to change. So the listener is the
+writes no base for it. It changes a live entity's id in place, since each
+class here that defines an add or remove hook defines
+`async_entity_id_changed` beside it, as `SpanPanelEntity`,
+`SpanEnergySensorBase` and `SpanPanelControlLockSwitch` do, and a disabled
+entity has no live entity for it to change. So the listener is the
 one thing that reads an edited id again, and setup registers it before the
 platforms add the first entity, which leaves no edit outside it.
 

@@ -214,8 +214,9 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         when its id is edited. Home Assistant 2026.11 instead removes and adds
         again an entity of a custom integration wherever a class in its MRO
         defines an add or remove hook, as this one defines both, and neither
-        that class nor a subclass of it defines this method; that path goes in
-        2027.11. In place, Core has already moved what it keeps for the entity,
+        that class nor a subclass of it defines this method, a compatibility
+        path Core says can be removed in 2027.11, when its deprecation period
+        ends. In place, Core has already moved what it keeps for the entity,
         the restore-state tracking among it, and nothing calls the two hooks
         above.
 

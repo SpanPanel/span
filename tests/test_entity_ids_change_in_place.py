@@ -10,7 +10,7 @@ removes the entity and adds it again, which it does to a custom integration's
 entity wherever a class in its MRO defines `async_added_to_hass`,
 `async_will_remove_from_hass` or `async_prepare_to_add_to_hass` and neither
 that class nor a subclass of it defines `async_entity_id_changed`. That path
-is a compatibility one, which Core removes in 2027.11.
+is for compatibility, and Core says it can be removed in 2027.11.
 
 Every class here inherits both hooks from `SpanPanelEntity`, and two define
 `async_added_to_hass` again, so each of those three defines

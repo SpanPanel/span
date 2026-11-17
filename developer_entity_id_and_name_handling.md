@@ -281,12 +281,12 @@ alone. Core's `type.__getattribute__` guard covers the `name` property only, so 
 source at construction, through `SpanPanelEntity._circuit_id_base_source`, which also records it with the entry for the listener (§5.3). Every other entity
 leaves it `None` and composes from its label as it always has.
 
-Core reads `suggested_object_id` only as it adds an entity, which is as the entry sets up. So the base Core writes at an add is the one the row's ID calls for at
-that moment, not one fixed when the entity was built. An edit to a live entity's ID adds nothing. Home Assistant 2026.11 removes a custom integration's entity
-and adds it again wherever a class in its MRO defines an add or remove hook and neither that class nor a subclass defines `async_entity_id_changed`
-(`_entity_class_requires_readd` in Core's `helpers/entity.py`, a path Core removes in 2027.11). Each class here that defines such a hook defines
-`async_entity_id_changed` beside it, so Core changes the ID in place, which `tests/test_entity_ids_change_in_place.py` holds for every entity class. In place
-Core writes no base, and the listener keeps it current (§5.3).
+Core reads `suggested_object_id` only as it adds an entity, which is as the entry sets up. So the base Core writes at an add is the one the row's ID calls for
+at that moment, not one fixed when the entity was built. An edit to a live entity's ID adds nothing. Home Assistant 2026.11 removes a custom integration's
+entity and adds it again wherever a class in its MRO defines an add or remove hook and neither that class nor a subclass defines `async_entity_id_changed`
+(`_entity_class_requires_readd` in Core's `helpers/entity.py`, a compatibility path Core says can be removed in 2027.11). Each class here that defines such a
+hook defines `async_entity_id_changed` beside it, so Core changes the ID in place, which `tests/test_entity_ids_change_in_place.py` holds for every entity
+class. In place Core writes no base, and the listener keeps it current (§5.3).
 
 `entity_id` is preset in one case only: a circuit entity being created in circuit-numbers mode (§4.7). Nothing else in this integration assigns
 `self.entity_id`, and nothing assigns `_attr_entity_id`.
@@ -421,9 +421,9 @@ could drift.
 
 The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
 works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, and nothing else does. Core changes a live entity's ID in
-place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the
-first entity, and the unload stops it only after the last is removed, which leaves no edit outside it. Edited to `sensor.span_panel_refrigerator`, which Core
-composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
+place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the first
+entity, and the unload stops it only after the last is removed, which leaves no edit outside it. Edited to `sensor.span_panel_refrigerator`, which Core composes
+from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
 `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is such an edit too, and reading the
 accepted ID again gives the base it was composed from, so nothing more is offered.
 
