@@ -206,7 +206,9 @@ async def test_child_device_info_names_the_panel_as_parent(hass: HomeAssistant) 
     }
 
     registry = dr.async_get(hass)
-    device = registry.async_get_or_create_child(config_entry_id=entry.entry_id, **info)
+    device = registry.async_get_or_create_child_from_info(
+        config_entry_id=entry.entry_id, device_info=info
+    )
 
     assert device.parent_device_id == panel_device_id
     assert device.name == "Kitchen Outlets"

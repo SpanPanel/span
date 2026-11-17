@@ -181,8 +181,10 @@ def register_panel_device(hass: HomeAssistant, entry: MockConfigEntry, serial: s
     `entry` must already be added to `hass`, because the device registry
     refuses a device for an unknown config entry.
     """
-    device_info = DeviceInfo(identifiers={(DOMAIN, serial)}, name=PANEL_NAME)
-    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    device = dr.async_get(hass).async_get_or_create_from_info(
+        config_entry_id=entry.entry_id,
+        device_info=DeviceInfo(identifiers={(DOMAIN, serial)}, name=PANEL_NAME),
+    )
     return device.id
 
 
@@ -200,8 +202,12 @@ def register_circuit_device(
     device `register_panel_device` answered with, under the circuit's
     identifier and name.
     """
-    info = circuit_device_info(serial, circuit, circuit.circuit_id, panel_device_id=panel_device_id)
-    return dr.async_get(hass).async_get_or_create_child(config_entry_id=entry.entry_id, **info)
+    return dr.async_get(hass).async_get_or_create_child_from_info(
+        config_entry_id=entry.entry_id,
+        device_info=circuit_device_info(
+            serial, circuit, circuit.circuit_id, panel_device_id=panel_device_id
+        ),
+    )
 
 
 async def ensure_device_registered_stand_in(

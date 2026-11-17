@@ -16,6 +16,7 @@ from custom_components.span_panel import (
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entry_reloads import async_setup_began
+from custom_components.span_panel.util import snapshot_to_device_info
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, CoreState, HomeAssistant
@@ -244,7 +245,7 @@ async def test_ensure_device_registered_renames_placeholder_device(
 async def test_ensure_device_registered_creates_missing_device(
     hass: HomeAssistant,
 ) -> None:
-    """A missing panel device should be created from the snapshot."""
+    """A missing panel device is created with every field of the snapshot's device info."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_HOST: "192.168.1.21"},
@@ -261,7 +262,17 @@ async def test_ensure_device_registered_creates_missing_device(
         (DOMAIN, "sp3-create-001"), entry.entry_id
     )
     assert created is not None
-    assert created.name == "SPAN Panel"
+    info = snapshot_to_device_info(snapshot, "SPAN Panel", host="192.168.1.21")
+    assert {
+        "identifiers": created.identifiers,
+        "manufacturer": created.manufacturer,
+        "model": created.model,
+        "name": created.name,
+        "sw_version": created.sw_version,
+        "hw_version": created.hw_version,
+        "configuration_url": created.configuration_url,
+    } == info.as_dict()
+    assert info.name == "SPAN Panel"
 
 
 def _loaded_entry(hass: HomeAssistant) -> tuple[MockConfigEntry, MagicMock]:

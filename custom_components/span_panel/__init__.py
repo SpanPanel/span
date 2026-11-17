@@ -1130,6 +1130,8 @@ async def ensure_device_registered(
             device_registry.async_update_device(existing_device.id, name=device_name)
         return existing_device.id
 
-    device_info = snapshot_to_device_info(snapshot, device_name, host=host)
-    created = device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    created = device_registry.async_get_or_create_from_info(
+        config_entry_id=entry.entry_id,
+        device_info=snapshot_to_device_info(snapshot, device_name, host=host),
+    )
     return created.id

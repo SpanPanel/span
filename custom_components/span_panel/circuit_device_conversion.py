@@ -377,9 +377,11 @@ def async_convert_circuit_entities(
             if (row := entity_registry.async_get(entity_id)) is not None
         }
 
-        device = device_registry.async_get_or_create_child(
+        device = device_registry.async_get_or_create_child_from_info(
             config_entry_id=entry.entry_id,
-            **circuit_device_info(serial, circuit, circuit_id, panel_device_id=panel_device_id),
+            device_info=circuit_device_info(
+                serial, circuit, circuit_id, panel_device_id=panel_device_id
+            ),
         )
         # The name Home Assistant puts in front of each entity's: the user's own
         # name for the device where a conversion cut short left one to rename.
