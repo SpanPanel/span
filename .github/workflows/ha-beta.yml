@@ -1,0 +1,67 @@
+name: HA beta
+
+# The suite on the newest Home Assistant test release, betas included, so a
+# change in a Core beta is seen about a week before the release ships it. Until
+# a newer release than the pinned one is published, this runs the same versions
+# as the main CI job, and says so in the run's summary.
+#
+# Advisory: a beta can break for reasons that are Core's to fix, so this never
+# blocks a merge. Read its result before a release.
+
+on:
+  pull_request:
+    branches: [ main, "prerelease/**" ]
+  # Daily, so a beta is tried the day it is published rather than at the next PR.
+  schedule:
+    - cron: "17 6 * * *"
+  # On demand, against any ref:
+  #
+  #   gh workflow run ha-beta.yml --ref <branch>
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newest-home-assistant:
+    name: Newest Home Assistant release
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        # Named explicitly for `-o pipefail`, which the implicit shell lacks.
+        shell: bash
+    env:
+      # `--prerelease=allow` for every uv command: a beta's own pins may be
+      # pre-releases too. Set for the job rather than on `uv lock` alone, so
+      # `uv sync` and the sync each `uv run` performs read the lock with the
+      # setting it was made with, rather than re-locking without it.
+      UV_PRERELEASE: allow
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Pin the newest Home Assistant test release
+        run: python scripts/ha-beta-pins.py | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install dependencies
+        run: |
+          # Remove local path source overrides so uv resolves from PyPI
+          sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml
+          uv lock
+          uv sync
+
+      - name: Type check with mypy
+        run: uv run mypy custom_components/span_panel
+
+      - name: Run tests
+        run: uv run pytest tests/

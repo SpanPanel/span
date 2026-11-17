@@ -48,7 +48,7 @@ updates:
       - dependency-name: "span-panel-api-schema-1"
       # Bumped by hand as a pair: each `pytest-homeassistant` release pins the
       # `homeassistant` of its own version, so bumping either alone breaks the
-      # pairing.
+      # pairing. The HA beta workflow runs the suite on the newest pair daily.
       - dependency-name: "pytest-homeassistant"
       - dependency-name: "homeassistant"
 

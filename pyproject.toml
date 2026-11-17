@@ -34,7 +34,8 @@ dev = [
     # one in `dependencies` move together. 2026.11 is the line hacs.json
     # requires. Always an exact pin: PyPI also carries an unrelated
     # `pytest-homeassistant` 0.1.x from another author, which a range would
-    # admit.
+    # admit. The beta workflow (.github/workflows/ha-beta.yml) runs the suite on
+    # the newest release, betas included.
     "pytest-homeassistant==2026.11.2",
     # The coverage runs in CI and the prek coverage hook. The plugin this one
     # replaced brought it in; this one does not.
