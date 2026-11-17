@@ -21,7 +21,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_START
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, entity_registry as er, label_registry as lr
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered

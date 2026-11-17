@@ -18,7 +18,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -100,6 +99,7 @@ from .entry_reloads import async_request_reload
 from .firmware_schema import SchemaRead, async_read_schema
 from .flat_firmware_repairs import FLAT_FIRMWARE_TRANSLATION_KEY
 from .hardware_guard import registers_by_passphrase_only
+from .http_client import async_get_http_client
 from .migrations import CURRENT_CONFIG_MINOR_VERSION, CURRENT_CONFIG_VERSION
 from .options import (
     ALLOW_CONTEXTLESS_CONTROL,
@@ -690,7 +690,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
         else:
             detection = await detect_api_version(
-                configured, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
+                configured,
+                port=port,
+                httpx_client=async_get_http_client(self.hass, verify_ssl=False),
             )
         reached = (
             detection.api_version == "v2"
@@ -817,7 +819,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 self._https_port = https_port
                 self._https_port_known = True
 
-            httpx_client = get_async_client(self.hass, verify_ssl=False)
+            httpx_client = async_get_http_client(self.hass, verify_ssl=False)
             detection = await detect_api_version(host, port=http_port, httpx_client=httpx_client)
             if detection.api_version != "v2" or detection.status_info is None:
                 return self.async_abort(reason="not_span_panel")
@@ -889,7 +891,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Validate panel is reachable and v2
         self._http_port = port
-        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        httpx_client = async_get_http_client(self.hass, verify_ssl=False)
         detection = await detect_api_version(host, port=port, httpx_client=httpx_client)
         if detection.api_version != "v2" or detection.status_info is None:
             return self.async_abort(reason="not_span_panel")
@@ -971,7 +973,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Detect API version — only v2 is supported
-        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        httpx_client = async_get_http_client(self.hass, verify_ssl=False)
         detection = await detect_api_version(host, port=self._http_port, httpx_client=httpx_client)
         if detection.probe_failed:
             return self.async_show_form(

@@ -15,7 +15,7 @@ from homeassistant.components.persistent_notification import async_dismiss
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.notices import (

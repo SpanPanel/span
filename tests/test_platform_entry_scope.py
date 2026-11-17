@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import AdoptedDevice, AdoptedProperty, ExtensionProperty, ExtensionSubject
 
 from custom_components.span_panel import SpanPanelRuntimeData

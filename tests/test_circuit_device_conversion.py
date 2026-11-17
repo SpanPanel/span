@@ -42,7 +42,7 @@ from homeassistant.helpers import (
     issue_registry as ir,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 

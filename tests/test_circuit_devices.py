@@ -31,7 +31,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import Entity
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 

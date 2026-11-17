@@ -14,7 +14,7 @@ from homeassistant.core import Context, CoreState, HomeAssistant, ServiceRespons
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import httpx
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+from pytest_homeassistant.common import MockConfigEntry, MockUser
 from span_panel_api import PassphraseRotation
 from span_panel_api.exceptions import (
     SpanPanelAPIError,

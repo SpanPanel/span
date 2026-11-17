@@ -25,7 +25,7 @@ from homeassistant.helpers.typing import UNDEFINED
 from homeassistant.util import dt as dt_util
 import httpx
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot, V2StatusInfo
 from span_panel_api.exceptions import (
     SpanPanelAdapterIncompatibleError,

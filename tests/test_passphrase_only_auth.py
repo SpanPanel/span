@@ -25,7 +25,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import DetectionResult
 from span_panel_api.exceptions import SpanPanelRateLimitError, SpanPanelServerError
 

@@ -87,7 +87,7 @@ from .adapter_fixtures import (
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .helpers import PANEL_NAME, add_panel_entry, register_panel_device
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 
 CONNECTION_NODE = "connection"
 FEEDS_ID_TOPIC = f"{CONNECTION_NODE}/feeds-device-id"

@@ -12,9 +12,14 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.const import CONF_HOST, UnitOfTime
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
@@ -28,16 +33,10 @@ from custom_components.span_panel.helpers import detect_capabilities, has_shed_f
 from custom_components.span_panel.sensor import create_shed_forecast_sensors
 from custom_components.span_panel.sensor_definitions import SHED_FORECAST_SENSORS
 from custom_components.span_panel.sensor_panel import SpanShedForecastSensor
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import CONF_HOST, UnitOfTime
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
 
 from .adapter_fixtures import SCHEMA_ONE_PANEL, schema_one_snapshot, schema_one_tree
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .helpers import register_panel_device
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 NODE = "shed-forecast"
 
@@ -51,16 +50,7 @@ TIME_TO_PRIORITY_SHED_KEY = "time_to_priority_shed"
 TOTAL_TIME_REMAINING_KEY = "shed_total_time_remaining"
 
 
-@pytest.fixture(autouse=True)
-def _mock_entity_registry() -> Any:
-    """Patch entity registry lookups used during sensor construction."""
-    registry = MagicMock()
-    registry.async_get_entity_id.return_value = None
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get",
-        return_value=registry,
-    ):
-        yield registry
+pytestmark = pytest.mark.usefixtures("sensor_registry_lookup")
 
 
 def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:

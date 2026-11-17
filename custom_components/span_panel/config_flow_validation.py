@@ -12,7 +12,6 @@ import socket
 import ssl
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.httpx_client import get_async_client
 import httpx
 from span_panel_api import (
     V2AuthResponse,
@@ -37,6 +36,7 @@ from .const import (
     CONF_PANEL_CA_PEM,
     DEFAULT_HTTPS_PORT,
 )
+from .http_client import async_get_http_client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def validate_host(
     port: int = 80,
 ) -> bool:
     """Validate the host connection by probing the panel's status endpoint."""
-    client = get_async_client(hass, verify_ssl=False)
+    client = async_get_http_client(hass, verify_ssl=False)
     try:
         result = await detect_api_version(host, port=port, httpx_client=client)
     except (
@@ -158,7 +158,7 @@ async def async_download_ca_or_none(
     the panel regenerates it, the anchor does not. Only a caller knows whether it
     is polling, so only a caller can decide how often to pay for this.
     """
-    client = get_async_client(hass, verify_ssl=False)
+    client = async_get_http_client(hass, verify_ssl=False)
     try:
         return await download_ca_cert(fqdn, port=http_port, httpx_client=client)
     except (
@@ -238,7 +238,7 @@ async def async_fetch_panel_ca(hass: HomeAssistant, host: str, http_port: int = 
     at setup.
     """
     return await download_ca_cert(
-        host, port=http_port, httpx_client=get_async_client(hass, verify_ssl=False)
+        host, port=http_port, httpx_client=async_get_http_client(hass, verify_ssl=False)
     )
 
 
@@ -673,6 +673,6 @@ def panel_rest_transport(
     return PanelRestTransport(
         port=as_port(entry_data.get(CONF_HTTP_PORT), 80),
         ssl_context=None,
-        httpx_client=get_async_client(hass, verify_ssl=False),
+        httpx_client=async_get_http_client(hass, verify_ssl=False),
         ca_pem=None,
     )

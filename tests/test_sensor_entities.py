@@ -13,7 +13,7 @@ from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot, SpanPVSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
@@ -82,17 +82,7 @@ from .factories import (
 )
 from .helpers import register_panel_device
 
-
-@pytest.fixture(autouse=True)
-def _mock_entity_registry():
-    """Patch entity registry lookups used during sensor construction."""
-    registry = MagicMock()
-    registry.async_get_entity_id.return_value = None
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get",
-        return_value=registry,
-    ):
-        yield registry
+pytestmark = pytest.mark.usefixtures("sensor_registry_lookup")
 
 
 def _make_coordinator(hass: HomeAssistant, snapshot, *, options: dict | None = None) -> MagicMock:

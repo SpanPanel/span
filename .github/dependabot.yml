@@ -46,11 +46,10 @@ updates:
       # manifest.json, so the manifest and the pip pins never drift.
       - dependency-name: "span-panel-api"
       - dependency-name: "span-panel-api-schema-1"
-      # Bumped by hand as a pair, as in #281: each harness release pins one
-      # exact Home Assistant, often a beta, so the harness moves only to the
-      # release that pins the `homeassistant` version chosen. `homeassistant`
-      # is ignored too, because bumping it alone breaks the same pairing.
-      - dependency-name: "pytest-homeassistant-custom-component"
+      # Bumped by hand as a pair: each `pytest-homeassistant` release pins the
+      # `homeassistant` of its own version, so bumping either alone breaks the
+      # pairing.
+      - dependency-name: "pytest-homeassistant"
       - dependency-name: "homeassistant"
 
   # GitHub Actions dependencies

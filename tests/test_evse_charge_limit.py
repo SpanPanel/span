@@ -42,7 +42,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityCategory
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanPanelSnapshot
 from span_panel_api.protocol import SchemaAdapter
 

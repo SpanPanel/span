@@ -7,14 +7,18 @@ import sys
 import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.core import HomeAssistant
 import pytest
 from span_panel_api import V2HomieSchema, V2StatusInfo
 
 # The real span_panel_api library is used directly (no sys.modules mocking).
 # Individual tests mock SpanMqttClient as needed.
-
-_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
-_CC_DIR = str(Path(_PROJECT_ROOT) / "custom_components")
+#
+# `custom_components.span_panel` imports as this checkout's package with no help:
+# `pythonpath = .` in pytest.ini puts the checkout first on `sys.path`, and the
+# harness's configuration directory (`tests/testing_config`, absent here) holds
+# no `custom_components` of its own to shadow it. The `hass` fixture enables
+# custom integrations by itself.
 
 UPDATE_CAPTURE_FIXTURES = "--update-capture-fixtures"
 
@@ -37,43 +41,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def update_capture_fixtures(request: pytest.FixtureRequest) -> bool:
     """Whether this run rewrites the capture-derived fixtures it would otherwise compare."""
     return bool(request.config.getoption(UPDATE_CAPTURE_FIXTURES))
-
-
-def _ensure_span_panel_importable() -> None:
-    """Ensure custom_components.span_panel can be imported.
-
-    The HA test plugin initialises the ``custom_components`` namespace package
-    from a temporary config directory.  When tests that don't use the ``hass``
-    fixture run in isolation, our project's ``custom_components`` directory is
-    never added to the namespace path.  This helper repairs that at call time.
-    """
-    import importlib
-
-    if _PROJECT_ROOT not in sys.path:
-        sys.path.insert(0, _PROJECT_ROOT)
-
-    # If custom_components is already cached in sys.modules (pointing to the
-    # HA temp config dir), extend its __path__ to include our directory.
-    if "custom_components" in sys.modules:
-        cc_mod = sys.modules["custom_components"]
-        if hasattr(cc_mod, "__path__") and _CC_DIR not in list(cc_mod.__path__):
-            cc_mod.__path__.append(_CC_DIR)  # type: ignore[union-attr]
-    else:
-        importlib.import_module("custom_components")
-
-
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
-    """Enable custom integrations defined in the test dir."""
-    yield
-
-
-@pytest.fixture(autouse=True)
-def ensure_custom_components_imported():
-    """Ensure custom_components module is imported before tests run."""
-    _ensure_span_panel_importable()
-    import custom_components.span_panel  # noqa: F401 # pylint: disable=unused-import
-    yield
 
 
 @pytest.fixture(autouse=True)
@@ -122,6 +89,27 @@ def async_add_entities():
     return AsyncMock()
 
 
+@pytest.fixture
+def sensor_registry_lookup(hass: HomeAssistant) -> Iterator[MagicMock]:
+    """Answer the entity-registry lookup of sensors built by hand, as for an entity not yet registered.
+
+    For modules that construct sensors directly over a coordinator mock whose
+    `hass` is itself a mock, which the real registry cannot read; they request
+    it with `pytestmark`. The patch reaches further than `sensor_base`: the `er`
+    it names is Home Assistant's own module, so `er.async_get` is replaced for
+    everything, including the `hass` fixture's own registry load. Hence the
+    dependency on `hass`: the patch starts once Home Assistant is set up and
+    ends before it is torn down.
+    """
+    registry = MagicMock()
+    registry.async_get_entity_id.return_value = None
+    with patch(
+        "custom_components.span_panel.sensor_base.er.async_get",
+        return_value=registry,
+    ):
+        yield registry
+
+
 VALIDATED_PANEL_STATUS = V2StatusInfo(
     serial_number="sp3-status-001",
     firmware_version="spanos3/r202639/03",
@@ -131,7 +119,7 @@ VALIDATED_PANEL_STATUS = V2StatusInfo(
 
 
 @pytest.fixture(autouse=True)
-def panel_status(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:
+def panel_status() -> Iterator[AsyncMock]:
     """Answer the unauthenticated status read without touching the network.
 
     Autouse because every test that runs `async_setup_entry` or a credential
@@ -165,7 +153,7 @@ FLAT_PANEL_SCHEMA = V2HomieSchema(
 
 
 @pytest.fixture(autouse=True)
-def panel_schema(ensure_custom_components_imported: None) -> Iterator[AsyncMock]:
+def panel_schema() -> Iterator[AsyncMock]:
     """Answer the unauthenticated schema read without touching the network.
 
     Autouse for the reason `panel_status` is: every test that runs

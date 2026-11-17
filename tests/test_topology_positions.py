@@ -13,7 +13,7 @@ from typing import Final
 
 from homeassistant.core import HomeAssistant
 import pytest
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant.typing import WebSocketGenerator
 
 from .captures_replay import CAPTURES, Capture, RetainedTree, capture, panel_device_id, snapshot
 from .test_expected_entities import R202639_CAPTURE, _install, _topology

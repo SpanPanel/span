@@ -36,7 +36,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_registry import EntityNamePart
 import pytest
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockEntityPlatform,
 )

@@ -77,8 +77,8 @@ SCHEMA_BODY: Final[Mapping[str, object]] = {
 # Where the flow looks up Home Assistant's shared client on the way to the
 # schema read: the discovery and user steps, and the user step's reachability
 # check.
-_CONFIG_FLOW_CLIENT = "custom_components.span_panel.config_flow.get_async_client"
-_VALIDATION_CLIENT = "custom_components.span_panel.config_flow_validation.get_async_client"
+_CONFIG_FLOW_CLIENT = "custom_components.span_panel.config_flow.async_get_http_client"
+_VALIDATION_CLIENT = "custom_components.span_panel.config_flow_validation.async_get_http_client"
 
 
 class FakePanel:

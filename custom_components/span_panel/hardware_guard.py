@@ -15,12 +15,12 @@ import logging
 from typing import Final, Literal
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.httpx_client import get_async_client
 import httpx
 from span_panel_api import get_v2_status
 from span_panel_api.exceptions import SpanPanelError
 
 from .config_flow_validation import PanelRestTransport
+from .http_client import async_get_http_client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ async def async_read_hardware_version(
             status = await get_v2_status(
                 host,
                 port=transport.port,
-                httpx_client=get_async_client(hass),
+                httpx_client=async_get_http_client(hass),
                 ssl_context=transport.ssl_context,
             )
     except FAIL_OPEN_READ_ERRORS as err:

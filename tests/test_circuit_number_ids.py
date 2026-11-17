@@ -42,7 +42,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.entity_registry import EntityNamePart
 from homeassistant.util import slugify
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEntityPlatform
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import (

@@ -86,7 +86,7 @@ from .factories import pv_binding_for
 from .helpers import PANEL_NAME, add_panel_entry
 from .test_declared_but_unread import REFERENCE
 
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockEntityPlatform,
     async_test_home_assistant,

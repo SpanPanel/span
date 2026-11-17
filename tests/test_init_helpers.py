@@ -23,7 +23,7 @@ from homeassistant.helpers import device_registry as dr
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
 from .helpers import register_panel_device
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 
 async def test_async_remove_config_entry_device_allows_removal_without_runtime_data(

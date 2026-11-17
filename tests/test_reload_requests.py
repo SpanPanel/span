@@ -22,7 +22,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 
 from custom_components.span_panel import update_listener

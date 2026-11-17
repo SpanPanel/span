@@ -18,7 +18,6 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from span_panel_api import (
     LeafNameMismatch,
@@ -132,6 +131,7 @@ from .hardware_repairs import (
     async_clear_unvalidated_hardware,
     async_raise_unvalidated_hardware,
 )
+from .http_client import async_get_http_client
 from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_mismatch
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
@@ -389,7 +389,7 @@ async def _async_enforce_schema_read(
     schema = await async_read_schema(
         host,
         port=transport.port,
-        httpx_client=get_async_client(hass),
+        httpx_client=async_get_http_client(hass),
         ssl_context=transport.ssl_context,
     )
     if schema == "flat":
@@ -682,7 +682,7 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
                 # here would stand up a second connection pool for a flag that
                 # is inert on plaintext. The default client is the one every
                 # other integration already shares.
-                httpx_client=get_async_client(hass),
+                httpx_client=async_get_http_client(hass),
             )
 
             # Before `connect()`, unlike every other subscription here, because

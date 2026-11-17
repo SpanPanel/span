@@ -14,7 +14,7 @@ from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant.common import MockConfigEntry, async_capture_events
 from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry

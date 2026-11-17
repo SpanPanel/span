@@ -4,7 +4,7 @@ import logging
 
 from homeassistant.helpers import issue_registry as ir
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN, EVENT_SCHEMA_ISSUE
 from custom_components.span_panel.curation import CurationOverlay
@@ -613,7 +613,7 @@ async def _entities_by_declared_path(hass):
 
 async def _add_to_platform(hass, config_entry, entities, platform_domain: str) -> None:
     """Add real entities to a real entity platform, as HA does at setup."""
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     platform = MockEntityPlatform(hass, domain=platform_domain, platform_name=DOMAIN)
     platform.config_entry = config_entry

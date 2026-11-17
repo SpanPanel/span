@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import PassphraseRotation
 from span_panel_api.exceptions import SpanPanelCAChangedError, SpanPanelConnectionError
 
@@ -572,7 +572,7 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
     """Fresh secrets over unverified HTTP would undo the pin where it matters most."""
     from homeassistant.config_entries import ConfigEntryState
     from homeassistant.core import Context
-    from pytest_homeassistant_custom_component.common import MockUser
+    from pytest_homeassistant.common import MockUser
 
     from custom_components.span_panel import _async_register_credential_services
     from custom_components.span_panel.const import CONF_EBUS_BROKER_PASSWORD
