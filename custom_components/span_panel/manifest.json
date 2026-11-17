@@ -1,6 +1,10 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
+  "categories": [
+    "energy.meters_monitoring",
+    "energy.solar_batteries"
+  ],
   "codeowners": [
     "@SpanPanel"
   ],
