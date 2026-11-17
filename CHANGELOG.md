@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.3] - 11/2026
+
+**Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
+Home Assistant 2026.11.
+
+- **The upgrade is designed to be non-destructive:** each entity keeps its entity ID, unique ID and history, and a name you set is kept, less a leading circuit
+  name that would show twice. Going back means restoring a backup (or a copy of config/.storage) taken before the upgrade.
+
+- **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
+  circuit's area, where an area-wide turn-off would reach it. Repairs are normal and not a sign of fault but take action if recommended.
+
+- **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
+  correctly only from 2026.11.
+
+### Fixed
+
+- **With two panels, the reload each one needs no longer hangs.** A panel reloads once its new entities first update, on a fresh install or after an upgrade
+  that adds some, and two panels' reloads waited for each other, so neither ran. A reload also no longer waits for unrelated work, such as a script in a long
+  delay, and a panel that asks for one more than once reloads once.
+
 ## [2.3.2] - 11/2026
 
 **Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
