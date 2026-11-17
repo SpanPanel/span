@@ -470,6 +470,35 @@ async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
 
 
+# --- One refresh per pass ---------------------------------------------------
+#
+# Each pass is a refresh of this entry's defect issues: what it raises again is
+# kept as it stands, dismissal included, and what it does not is deleted when it
+# finishes.
+
+
+async def test_a_pass_keeps_a_dismissed_issue_that_still_applies_and_deletes_a_resolved_one(
+    hass, entry
+) -> None:
+    """Both outcomes of one refresh, in the same pass."""
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"]}
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
+    )
+    ir.async_ignore_issue(hass, DOMAIN, _issue_id(entry, "a.one"), True)
+    registry = ir.async_get(hass)
+    dismissed = registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one")).dismissed_version
+
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), affected
+    )
+
+    still_applies = registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one"))
+    assert still_applies is not None
+    assert still_applies.dismissed_version == dismissed
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two")) is None
+
+
 # --- The retired firmware-upgrade Repair ----------------------------------
 #
 # Installs from older versions may still hold one. Nothing raises it any more,

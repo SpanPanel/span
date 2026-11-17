@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
+import re
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -40,7 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 _MAX_EXAMPLES = 3
 
 # Issue-id prefixes. `_DEFECT_PREFIXES` is what the reconcile pass owns; the
-# new-entity notice is deliberately not among them. See `_scoped_issue_ids`.
+# new-entity notice is deliberately not among them. See `_defect_issue_pattern`.
 _DEFECT_PREFIXES = ("unresolved_", "unit_mismatch_")
 _NEW_ENTITIES_PREFIX = "new_entities_"
 """Id prefix of the retired new-entity Repair.
@@ -71,6 +72,23 @@ def _unresolved_id(entry_id: str, field_path: str) -> str:
 
 def _unit_id(entry_id: str, field_path: str) -> str:
     return f"unit_mismatch_{entry_id}_{field_path}"
+
+
+def _defect_issue_pattern(entry_id: str) -> str:
+    """Return the pattern matching the id of every defect issue of one entry.
+
+    Scoped to the entry because panels share the domain: a healthy panel's
+    pass would otherwise delete a degraded panel's issues on every cycle. Home
+    Assistant matches the pattern from the start of each id, and the entry's
+    part of each prefix is closed with a separator, so one entry's pattern
+    matches no other entry's issues.
+
+    Defect prefixes only: the pass deletes every issue in its set that it did
+    not raise again, so an issue it cannot derive, such as the new-entity
+    notice, must never be in that set.
+    """
+    alternatives = "|".join(re.escape(f"{prefix}{entry_id}_") for prefix in _DEFECT_PREFIXES)
+    return f"(?:{alternatives})"
 
 
 def _affected(entity_ids_by_path: Mapping[str, list[str]], field_path: str) -> list[str]:
@@ -116,76 +134,70 @@ def async_sync_schema_issues(
     user who dismissed an aggregate would never be told when another field
     joined it.
 
-    A finding with no affected entity is suppressed rather than raised, and a
-    suppressed path leaves `wanted`, so an issue raised while entities existed is
-    deleted once the last one goes — the same path that clears a genuinely
-    resolved finding.
+    One refresh of this entry's defect issues (`ir.async_refresh_issues`).
+    Each finding raised again touches its issue, which keeps its dismissal, and
+    when the pass finishes the refresh deletes every issue in its set that the
+    pass did not touch: a finding that resolved, and one suppressed because no
+    entity reads its field any more, so an issue raised while entities existed
+    goes once the last one does. An exception inside the pass cancels the
+    refresh instead, and nothing the pass left untouched is deleted.
 
-    Re-raises idempotently and deletes only on genuine resolution. Deleting is
-    the one thing that clears a dismissal — `dismissed_version` is never
-    compared against the running HA version, and neither the update branch nor
-    the store reload touches it — so a delete-then-recreate loop would wipe
-    every dismissal on every pass and turn an accepted notice into a permanent
-    nag.
+    Nothing else is deleted. Deleting is the one thing that clears a dismissal
+    -- `dismissed_version` is never compared against the running HA version,
+    and neither the update branch nor the store reload touches it -- so a pass
+    that deleted an issue to raise it again would wipe every dismissal and turn
+    an accepted notice into a permanent nag.
     """
-    registry = ir.async_get(hass)
-    wanted: set[str] = set()
     raised_unresolved: list[str] = []
     raised_mismatches: list[str] = []
 
-    for field_path in sorted(findings.unresolved):
-        affected = _affected(entity_ids_by_path, field_path)
-        if not affected:
-            _log_suppressed("unresolved-field", field_path)
-            continue
-        issue_id = _unresolved_id(entry.entry_id, field_path)
-        wanted.add(issue_id)
-        raised_unresolved.append(field_path)
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            # Derived from live state, so it is re-asserted at every startup. A
-            # non-persistent issue reloads as a tombstone carrying only the
-            # dismissal, which is what lets re-assertion happen without
-            # resurrecting one the user already accepted.
-            is_persistent=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="schema_field_unresolved",
-            translation_placeholders={"field_path": field_path, **_placeholders(affected)},
-        )
+    with ir.async_refresh_issues(
+        hass, DOMAIN, issue_id_pattern=_defect_issue_pattern(entry.entry_id)
+    ):
+        for field_path in sorted(findings.unresolved):
+            affected = _affected(entity_ids_by_path, field_path)
+            if not affected:
+                _log_suppressed("unresolved-field", field_path)
+                continue
+            raised_unresolved.append(field_path)
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                _unresolved_id(entry.entry_id, field_path),
+                is_fixable=False,
+                # Derived from live state, so it is re-asserted at every startup.
+                # A non-persistent issue reloads as a tombstone carrying only the
+                # dismissal, which is what lets re-assertion happen without
+                # resurrecting one the user already accepted.
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="schema_field_unresolved",
+                translation_placeholders={"field_path": field_path, **_placeholders(affected)},
+            )
 
-    for mismatch in findings.unit_mismatches:
-        affected = _affected(entity_ids_by_path, mismatch.field_path)
-        if not affected:
-            _log_suppressed("unit-mismatch", mismatch.field_path)
-            continue
-        issue_id = _unit_id(entry.entry_id, mismatch.field_path)
-        wanted.add(issue_id)
-        raised_mismatches.append(mismatch.field_path)
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            is_persistent=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="schema_unit_mismatch",
-            translation_placeholders={
-                "field_path": mismatch.field_path,
-                "ha_unit": mismatch.ha_unit,
-                "schema_unit": mismatch.schema_unit,
-                **_placeholders(affected),
-            },
-        )
+        for mismatch in findings.unit_mismatches:
+            affected = _affected(entity_ids_by_path, mismatch.field_path)
+            if not affected:
+                _log_suppressed("unit-mismatch", mismatch.field_path)
+                continue
+            raised_mismatches.append(mismatch.field_path)
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                _unit_id(entry.entry_id, mismatch.field_path),
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="schema_unit_mismatch",
+                translation_placeholders={
+                    "field_path": mismatch.field_path,
+                    "ha_unit": mismatch.ha_unit,
+                    "schema_unit": mismatch.schema_unit,
+                    **_placeholders(affected),
+                },
+            )
 
-    # Defect prefixes only: everything in this scope is re-derived on every pass,
-    # and the new-entity notice is not re-derivable at all.
-    for issue_id in _scoped_issue_ids(registry, entry.entry_id, _DEFECT_PREFIXES) - wanted:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
-
-    if wanted:
+    if raised_unresolved or raised_mismatches:
         # The event mirrors what the user was actually told: a suppressed finding
         # is deliberately not user-facing, and an automation reacting to one
         # would be reacting to a defect that took nothing down.
@@ -205,16 +217,12 @@ def _scoped_issue_ids(
 ) -> set[str]:
     """Return this entry's issue ids under the given id prefixes.
 
-    Scoping by entry is not cosmetic: with a shared namespace, a healthy panel's
-    reconcile pass would delete a degraded panel's issues on every cycle, and
-    removing one panel would clear every panel's issues.
+    Scoping by entry is not cosmetic: with a shared namespace, removing one
+    panel would clear every panel's issues.
 
-    Which prefixes is not cosmetic either, and is why this takes them rather than
-    answering for the whole domain. The reconcile pass deletes every id it did
-    not re-derive, so it may only ever see `_DEFECT_PREFIXES`; the new-entity
-    notice is derived exactly once and would not survive being reconciled against
-    a pass that cannot re-derive it. Removal, which deletes unconditionally, is
-    the one caller that passes every prefix.
+    It takes the prefixes rather than answering for the whole domain because
+    its callers want different ones: setup clears only the retired new-entity
+    notices, and removal, which deletes unconditionally, passes every prefix.
     """
     scoped = tuple(f"{prefix}{entry_id}_" for prefix in prefixes)
     return {
