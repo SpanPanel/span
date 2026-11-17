@@ -8,11 +8,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    ConfigEntryNotReady,
-    HomeAssistantError,
-)
+from homeassistant.exceptions import ConfigEntryAuthFailed
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import (
@@ -146,18 +142,15 @@ async def test_run_post_update_tasks_validates_once_and_schedules_reload(
             coordinator, "_run_schema_validation", side_effect=_succeed
         ) as mock_validate,
         patch.object(coordinator, "_fire_dip_notification", AsyncMock()) as mock_notify,
-        patch.object(coordinator, "_async_reload_task", AsyncMock()) as mock_reload,
-        patch.object(hass, "async_create_task") as mock_create_task,
+        patch.object(hass.config_entries, "async_reload", AsyncMock()) as mock_reload,
     ):
         await coordinator._run_post_update_tasks(snapshot)
         await coordinator._run_post_update_tasks(snapshot)
+        await hass.async_block_till_done()
 
     assert mock_validate.call_count == 1
     assert mock_notify.await_count == 2
-    assert mock_create_task.call_count == 1
-    reload_coro = mock_create_task.call_args.args[0]
-    reload_coro.close()
-    mock_reload.assert_called_once()
+    mock_reload.assert_awaited_once_with("entry-123")
     assert coordinator._reload_requested is False
 
 
@@ -254,11 +247,14 @@ async def test_a_schema_generation_change_reloads_the_entry_and_says_so_in_the_l
     coordinator = _create_coordinator(hass)
     caplog.set_level(logging.WARNING, logger="custom_components.span_panel.coordinator")
 
-    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
         coordinator._on_schema_generation_change(previous, current)
+        # Called from the client's own callback fan-out, which the reload tears
+        # down: nothing starts until the callback has returned.
+        reload.assert_not_awaited()
         await hass.async_block_till_done()
 
-    schedule_reload.assert_called_once_with("entry-123")
+    reload.assert_awaited_once_with("entry-123")
     (warning,) = [
         record.getMessage()
         for record in caplog.records
@@ -421,42 +417,6 @@ async def test_async_update_data_logs_unavailable_and_recovery_once(
     assert caplog.text.count("SPAN Panel is unavailable: panel offline") == 1
     assert "SPAN Panel is unavailable: still offline" not in caplog.text
     assert caplog.text.count("SPAN Panel is back online") == 1
-
-
-async def test_async_reload_task_handles_expected_errors(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Reload task should log and suppress reload-related errors."""
-    coordinator = _create_coordinator(hass)
-
-    caplog.set_level(logging.WARNING)
-
-    with (
-        patch.object(hass, "async_block_till_done", AsyncMock()),
-        patch.object(
-            hass.config_entries,
-            "async_reload",
-            AsyncMock(side_effect=ConfigEntryNotReady("not ready")),
-        ),
-    ):
-        await coordinator._async_reload_task()
-
-    assert "Config entry not ready during reload: not ready" in caplog.text
-
-    caplog.clear()
-    caplog.set_level(logging.ERROR)
-
-    with (
-        patch.object(hass, "async_block_till_done", AsyncMock()),
-        patch.object(
-            hass.config_entries,
-            "async_reload",
-            AsyncMock(side_effect=HomeAssistantError("reload failed")),
-        ),
-    ):
-        await coordinator._async_reload_task()
-
-    assert "Home Assistant error during reload: reload failed" in caplog.text
 
 
 async def test_connection_callback_registered_and_unregistered_on_lifecycle(

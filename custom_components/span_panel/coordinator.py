@@ -14,12 +14,9 @@ if TYPE_CHECKING:
     from .runtime import SpanPanelConfigEntry
 
 from homeassistant.components.persistent_notification import async_create
+from homeassistant.config_entries import OperationNotAllowed, UnknownEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    ConfigEntryNotReady,
-    HomeAssistantError,
-)
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from span_panel_api import FieldMetadata, SpanMqttClient, SpanPanelSnapshot
@@ -92,6 +89,13 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
         self._reload_requested = False
+        # Set once this coordinator has started its entry's reload, which shuts
+        # it down: one reload per coordinator, however many requests arrive.
+        # See `_async_schedule_reload`.
+        self._reload_scheduled = False
+        # Set by `async_shutdown`. A reload asked for by a coordinator already
+        # shut down is moot: whatever shut it down rebuilt or removed the entry.
+        self._shut_down = False
         # Flag to track if panel is offline/unreachable
         self._panel_offline = False
         # Flag to track a transport that has stopped for good. Distinct from
@@ -205,8 +209,64 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         return self._transport_dead
 
     def request_reload(self) -> None:
-        """Request a reload of the integration."""
+        """Request a reload of the integration, started once the current update is done."""
         self._reload_requested = True
+
+    @callback
+    def _async_schedule_reload(self) -> None:
+        """Start this entry's reload on the next pass of the event loop, once per coordinator.
+
+        **Deferred, never started in place.** A request is made from inside an
+        update: the client's own push callback, or the poll. The reload shuts
+        this coordinator and its client down, so it must not begin until that
+        caller has returned. `hass.async_create_task` starts a task eagerly by
+        default, and an eager reload runs the whole unload before the call
+        returns, so the deferral is asked for explicitly.
+
+        **Waits for nothing else.** An earlier version awaited
+        `hass.async_block_till_done()` first, which waits for every tracked task
+        but the caller's own: a running script, another integration's task, or
+        another panel's reload waiting the same way. Two panels that asked
+        together, as both do when each has new entities on their first update,
+        each waited for the other, and neither reloaded.
+
+        **Home Assistant's task, not the entry's.** Unloading an entry waits for
+        the entry's own tasks, so it would wait for the reload doing the
+        unloading. A tracked task all the same, so startup and tests wait for it.
+
+        **Once per coordinator.** The reload replaces this coordinator, so a
+        second request, whether made before the reload starts or by a
+        coordinator something else has already shut down, would only rebuild
+        the entry the first one built.
+        """
+        if self._reload_scheduled or self._shut_down or self.hass.is_stopping:
+            return
+        self._reload_scheduled = True
+        self.hass.async_create_task(
+            self._async_reload_entry(),
+            f"{DOMAIN} reload {self.config_entry.entry_id}",
+            eager_start=False,
+        )
+
+    async def _async_reload_entry(self) -> None:
+        """Reload the entry, unless something else has shut this coordinator down meanwhile.
+
+        `async_reload` records a failed unload or setup on the entry itself and
+        raises only when it cannot try: the entry is gone (`UnknownEntry`), or
+        it is in a state that cannot be unloaded (`OperationNotAllowed`).
+        """
+        if self._shut_down:
+            return
+        try:
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+        except (UnknownEntry, OperationNotAllowed) as err:
+            _LOGGER.warning("Could not reload %s: %s", self.config_entry.title or "SPAN Panel", err)
+        finally:
+            # A reload that went through shut this coordinator down, and a new one
+            # serves the entry. One that did not, refused or with an unload that
+            # failed, leaves this one in service, free to ask again.
+            if not self._shut_down:
+                self._reload_scheduled = False
 
     def _mark_panel_online(self) -> None:
         """Mark the panel online and log a recovery transition once."""
@@ -350,9 +410,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         and a manual reload was needed.
 
         Scheduled rather than awaited: this is called from the client's own callback
-        fan-out, and reloading the entry tears down that client. `async_schedule_reload`
-        defers to the loop so the teardown does not run inside the object being torn
-        down.
+        fan-out, and reloading the entry tears down that client. `_async_schedule_reload`
+        starts the reload only after the callback has returned, so the teardown does not
+        run inside the object being torn down.
         """
         _LOGGER.warning(
             "SPAN panel changed its eBus schema generation: data-model-version %s -> %s. "
@@ -360,7 +420,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             previous or "absent",
             current or "absent",
         )
-        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+        self._async_schedule_reload()
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle a broker connection state edge from the MQTT client.
@@ -422,6 +482,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     async def async_shutdown(self) -> None:
         """Shut down the coordinator and release resources."""
+        self._shut_down = True
         if self._unregister_connection is not None:
             self._unregister_connection()
             self._unregister_connection = None
@@ -623,7 +684,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         which looks like a settability change and costs one spurious reload per
         rebuild. It is a library item (3.1.1), not one this reader can settle --
         a partial snapshot is indistinguishable here from a real change -- and
-        the reload debounce is what keeps the cost to one.
+        the one reload a coordinator starts (`_async_schedule_reload`) is what
+        keeps the cost to one when the redelivered field asks again.
         """
         current = self._read_settability(snapshot)
         if self._known_settability is None:
@@ -724,10 +786,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._clear_solar_migration_flag()
 
         if migrated_count > 0:
-            # Reload so platform re-registers entities with updated unique IDs
-            self.hass.async_create_task(
-                self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            )
+            # Reload so the platforms register the entities under their new unique
+            # IDs. Requested like every other reload, so it starts after this update
+            # and only once, also when clearing the flag above has already reloaded
+            # the entry through the options listener.
+            self.request_reload()
 
     def _remove_stale_solar_entities(self) -> None:
         """Remove v1 virtual solar entities that have no v2 PV equivalent."""
@@ -785,7 +848,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Handle reload request if one was made (e.g., name sync, capability change)
         if self._reload_requested:
             self._reload_requested = False
-            self.hass.async_create_task(self._async_reload_task())
+            self._async_schedule_reload()
 
     def _reconcile_package_ratings(self, snapshot: SpanPanelSnapshot) -> None:
         """Judge the stored package ratings against a snapshot, before anything reads it.
@@ -875,18 +938,3 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             raise
         else:
             return snapshot
-
-    async def _async_reload_task(self) -> None:
-        """Task to handle integration reload with proper error handling."""
-        try:
-            _LOGGER.info("Reloading SPAN Panel integration")
-            await self.hass.async_block_till_done()
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            _LOGGER.info("SPAN Panel integration reload completed successfully")
-
-        except ConfigEntryNotReady as err:
-            _LOGGER.warning("Config entry not ready during reload: %s", err)
-        except HomeAssistantError as err:
-            _LOGGER.error("Home Assistant error during reload: %s", err)
-        except Exception:
-            _LOGGER.exception("Unexpected error during reload")
