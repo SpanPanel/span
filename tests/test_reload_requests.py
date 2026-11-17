@@ -1,10 +1,11 @@
-"""The reload a coordinator asks for: started after the update, once, and waiting for nothing else.
+"""The rebuild a coordinator asks for: started after the update, once, and waiting for nothing else.
 
 A reload is how the integration rebuilds devices and entities when the panel
 changes underneath them, and every new circuit entity asks for one on its first
 update. The reload used to await `hass.async_block_till_done()` first, which
 waits for every tracked task but its own: two panels asking at once each waited
-for the other, and neither reloaded.
+for the other, and neither reloaded. The coordinator now asks `entry_reloads`,
+whose own tests cover what the scheduler does with every other source.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.entry_reloads import async_setup_began, async_setup_failed
 from custom_components.span_panel.id_builder import build_circuit_unique_id
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
@@ -74,10 +76,11 @@ async def _settle(hass: HomeAssistant) -> None:
 
 
 def _reload_that_replaces(coordinator: SpanPanelCoordinator) -> AsyncMock:
-    """Return an `async_reload` that does what a real one does to the coordinator: shut it down."""
+    """Return an `async_reload` that does what a real one does: shut the coordinator down, set the entry up."""
 
     async def _reload(_entry_id: str) -> bool:
         await coordinator.async_shutdown()
+        async_setup_began(coordinator.hass, coordinator.config_entry)
         return True
 
     return AsyncMock(side_effect=_reload)
@@ -163,24 +166,40 @@ async def test_a_coordinator_reloads_its_entry_once_however_often_it_asks(
     reload.assert_awaited_once_with("entry-a")
 
 
-@pytest.mark.parametrize(
-    "shut_down_before_the_reload_starts",
-    [False, True],
-    ids=["already-shut-down-when-asking", "shut-down-before-the-reload-starts"],
-)
-async def test_a_coordinator_something_else_has_shut_down_reloads_nothing(
-    hass: HomeAssistant, shut_down_before_the_reload_starts: bool
-) -> None:
+async def test_a_coordinator_already_shut_down_asks_for_nothing(hass: HomeAssistant) -> None:
     """Whatever shut the coordinator down, an options change or a reload from the UI, rebuilt the entry."""
     coordinator = _coordinator(hass)
 
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
-        if shut_down_before_the_reload_starts:
-            await _ask_for_a_reload(coordinator)
+        await coordinator.async_shutdown()
+        await _ask_for_a_reload(coordinator)
+        await _settle(hass)
+
+    reload.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "before_the_run_starts",
+    ["another-reload-set-the-entry-up", "its-setup-failed"],
+)
+async def test_a_rebuild_applied_or_withdrawn_before_its_run_starts_reloads_nothing(
+    hass: HomeAssistant, before_the_run_starts: str
+) -> None:
+    """A rebuild asks for a setup after it, and is moot once one began or the setup that asked failed.
+
+    Another reload, the user's from the UI say, sets the entry up and so builds
+    what the rebuild asked for. A setup that fails after its coordinator asked
+    leaves nothing of that coordinator to rebuild: the next setup starts afresh.
+    """
+    coordinator = _coordinator(hass)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
+        await _ask_for_a_reload(coordinator)
+        if before_the_run_starts == "another-reload-set-the-entry-up":
             await coordinator.async_shutdown()
+            async_setup_began(hass, coordinator.config_entry)
         else:
-            await coordinator.async_shutdown()
-            await _ask_for_a_reload(coordinator)
+            async_setup_failed(hass, coordinator.config_entry.entry_id)
         await _settle(hass)
 
     reload.assert_not_awaited()
@@ -209,7 +228,7 @@ async def test_a_reload_that_did_not_go_through_can_be_asked_for_again(
     already made.
     """
     coordinator = _coordinator(hass)
-    caplog.set_level(logging.WARNING, logger="custom_components.span_panel.coordinator")
+    caplog.set_level(logging.WARNING, logger="custom_components.span_panel.entry_reloads")
     reload = (
         AsyncMock(side_effect=outcome)
         if isinstance(outcome, Exception)
@@ -226,7 +245,7 @@ async def test_a_reload_that_did_not_go_through_can_be_asked_for_again(
     warnings = [
         record.getMessage()
         for record in caplog.records
-        if record.name == "custom_components.span_panel.coordinator"
+        if record.name == "custom_components.span_panel.entry_reloads"
         and record.levelno == logging.WARNING
     ]
     if logged:
@@ -259,12 +278,18 @@ PV_CIRCUIT_ID = "pv-1"
 
 
 def _pending_solar_migration(hass: HomeAssistant) -> tuple[SpanPanelCoordinator, str]:
-    """Return a coordinator whose entry still has a v1 solar entity to move onto its PV circuit."""
+    """Return a coordinator whose entry still has a v1 solar entity to move onto its PV circuit.
+
+    Its setup has begun, as a coordinator in service's has, and the entry has
+    its update listener, as a set-up entry's does.
+    """
     coordinator = _coordinator(hass)
     entry = coordinator.config_entry
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, "solar_migration_pending": True}
     )
+    async_setup_began(hass, entry)
+    entry.add_update_listener(update_listener)
     solar = er.async_get(hass).async_get_or_create(
         "sensor", DOMAIN, f"span_{SOLAR_SERIAL}_solar_current_power", config_entry=entry
     )
@@ -296,25 +321,25 @@ async def test_the_solar_migration_reloads_the_entry_once_its_update_is_done(
     assert "solar_migration_pending" not in coordinator.config_entry.data
 
 
-async def test_the_solar_migration_adds_no_reload_to_the_one_clearing_its_flag_started(
+async def test_clearing_the_solar_flag_asks_for_no_reload_when_nothing_moved(
     hass: HomeAssistant,
 ) -> None:
-    """Clearing the flag is an entry update, which the options listener answers with a reload.
+    """The flag is the coordinator's bookkeeping, and clearing it changes nothing setup built.
 
-    Once the listener is registered, on a migration after the first refresh,
-    that reload has already replaced the coordinator, and the migration's own
-    request is the second reload it used to start.
+    Clearing it is an entry update, which the listener used to answer with a
+    full reload, started inside the update that cleared it.
     """
     coordinator, _solar_entity_id = _pending_solar_migration(hass)
-    coordinator.config_entry.add_update_listener(update_listener)
+    no_pv = SpanPanelSnapshotFactory.create(serial_number=SOLAR_SERIAL, circuits={})
 
     with patch.object(
         hass.config_entries, "async_reload", _reload_that_replaces(coordinator)
     ) as reload:
-        await coordinator._run_post_update_tasks(_snapshot_with_a_pv_circuit())
+        await coordinator._run_post_update_tasks(no_pv)
         await _settle(hass)
 
-    reload.assert_awaited_once_with("entry-a")
+    reload.assert_not_awaited()
+    assert "solar_migration_pending" not in coordinator.config_entry.data
 
 
 # ---------------------------------------------------------------------------

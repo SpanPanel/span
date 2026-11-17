@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from .runtime import SpanPanelConfigEntry
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.config_entries import OperationNotAllowed, UnknownEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import entity_registry as er
@@ -29,6 +28,7 @@ from span_panel_api.exceptions import (
 
 from .const import DOMAIN
 from .energy_orientation import EnergyCounter, EnergyMeter
+from .entry_reloads import async_request_rebuild, async_update_entry_applied
 from .helpers import (
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
@@ -89,11 +89,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
         self._reload_requested = False
-        # Set once this coordinator has started its entry's reload, which shuts
-        # it down: one reload per coordinator, however many requests arrive.
-        # See `_async_schedule_reload`.
-        self._reload_scheduled = False
-        # Set by `async_shutdown`. A reload asked for by a coordinator already
+        # Set by `async_shutdown`. A rebuild asked for by a coordinator already
         # shut down is moot: whatever shut it down rebuilt or removed the entry.
         self._shut_down = False
         # Flag to track if panel is offline/unreachable
@@ -214,59 +210,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     @callback
     def _async_schedule_reload(self) -> None:
-        """Start this entry's reload on the next pass of the event loop, once per coordinator.
+        """Ask for this entry's rebuild, unless this coordinator is already shut down.
 
-        **Deferred, never started in place.** A request is made from inside an
-        update: the client's own push callback, or the poll. The reload shuts
-        this coordinator and its client down, so it must not begin until that
-        caller has returned. `hass.async_create_task` starts a task eagerly by
-        default, and an eager reload runs the whole unload before the call
-        returns, so the deferral is asked for explicitly.
+        `entry_reloads` decides when it runs, and runs one reload however many
+        parts of the integration ask: never inside the update that asked, which
+        the reload tears down; waiting for nothing but a reload of this entry
+        already under way; as Home Assistant's task rather than the entry's.
 
-        **Waits for nothing else.** An earlier version awaited
-        `hass.async_block_till_done()` first, which waits for every tracked task
-        but the caller's own: a running script, another integration's task, or
-        another panel's reload waiting the same way. Two panels that asked
-        together, as both do when each has new entities on their first update,
-        each waited for the other, and neither reloaded.
-
-        **Home Assistant's task, not the entry's.** Unloading an entry waits for
-        the entry's own tasks, so it would wait for the reload doing the
-        unloading. A tracked task all the same, so startup and tests wait for it.
-
-        **Once per coordinator.** The reload replaces this coordinator, so a
-        second request, whether made before the reload starts or by a
-        coordinator something else has already shut down, would only rebuild
-        the entry the first one built.
-        """
-        if self._reload_scheduled or self._shut_down or self.hass.is_stopping:
-            return
-        self._reload_scheduled = True
-        self.hass.async_create_task(
-            self._async_reload_entry(),
-            f"{DOMAIN} reload {self.config_entry.entry_id}",
-            eager_start=False,
-        )
-
-    async def _async_reload_entry(self) -> None:
-        """Reload the entry, unless something else has shut this coordinator down meanwhile.
-
-        `async_reload` records a failed unload or setup on the entry itself and
-        raises only when it cannot try: the entry is gone (`UnknownEntry`), or
-        it is in a state that cannot be unloaded (`OperationNotAllowed`).
+        A coordinator already shut down is being replaced or removed, and a
+        request from it after the new setup began would cost one more reload.
         """
         if self._shut_down:
             return
-        try:
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-        except (UnknownEntry, OperationNotAllowed) as err:
-            _LOGGER.warning("Could not reload %s: %s", self.config_entry.title or "SPAN Panel", err)
-        finally:
-            # A reload that went through shut this coordinator down, and a new one
-            # serves the entry. One that did not, refused or with an unload that
-            # failed, leaves this one in service, free to ask again.
-            if not self._shut_down:
-                self._reload_scheduled = False
+        async_request_rebuild(self.hass, self.config_entry.entry_id)
 
     def _mark_panel_online(self) -> None:
         """Mark the panel online and log a recovery transition once."""
@@ -409,10 +365,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         live upgrade showed exactly that — data flowed, entities did not appear,
         and a manual reload was needed.
 
-        Scheduled rather than awaited: this is called from the client's own callback
-        fan-out, and reloading the entry tears down that client. `_async_schedule_reload`
-        starts the reload only after the callback has returned, so the teardown does not
-        run inside the object being torn down.
+        Asked for rather than awaited: this is called from the client's own callback
+        fan-out, and reloading the entry tears down that client. The reload starts only
+        after the callback has returned (`_async_schedule_reload`), so the teardown does
+        not run inside the object being torn down.
         """
         _LOGGER.warning(
             "SPAN panel changed its eBus schema generation: data-model-version %s -> %s. "
@@ -684,8 +640,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         which looks like a settability change and costs one spurious reload per
         rebuild. It is a library item (3.1.1), not one this reader can settle --
         a partial snapshot is indistinguishable here from a real change -- and
-        the one reload a coordinator starts (`_async_schedule_reload`) is what
-        keeps the cost to one when the redelivered field asks again.
+        the one reload an entry gets however often it is asked for
+        (`entry_reloads`) is what keeps the cost to one when the redelivered
+        field asks again.
         """
         current = self._read_settability(snapshot)
         if self._known_settability is None:
@@ -787,9 +744,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         if migrated_count > 0:
             # Reload so the platforms register the entities under their new unique
-            # IDs. Requested like every other reload, so it starts after this update
-            # and only once, also when clearing the flag above has already reloaded
-            # the entry through the options listener.
+            # IDs. Requested like every other rebuild, so it starts after this update.
             self.request_reload()
 
     def _remove_stale_solar_entities(self) -> None:
@@ -810,10 +765,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 entity_registry.async_remove(entry.entity_id)
 
     def _clear_solar_migration_flag(self) -> None:
-        """Clear the solar_migration_pending flag from config entry data."""
+        """Clear the solar_migration_pending flag from config entry data.
+
+        The flag is this coordinator's bookkeeping, read by nothing setup builds,
+        so clearing it asks for no reload. The migration asks for its own when it
+        moved an entity.
+        """
         updated_data = dict(self.config_entry.data)
         updated_data.pop("solar_migration_pending", None)
-        self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
+        async_update_entry_applied(self.hass, self.config_entry, data=updated_data)
 
     # --- Post-update maintenance ---
 

@@ -254,6 +254,10 @@ async def test_the_fix_flow_re_pins_only_on_an_explicit_confirmation(
 
     with patch.object(hass.config_entries, "async_reload", new=AsyncMock()) as reload:
         done = await flow.async_step_confirm({})
+        # Asked for, and started only once the flow has finished and its issue
+        # is gone, so an issue the reload raises again stands.
+        reload.assert_not_awaited()
+        await hass.async_block_till_done()
 
     assert done["type"] == "create_entry"
     assert entry.data[CONF_PANEL_CA_PEM] == OTHER_PEM

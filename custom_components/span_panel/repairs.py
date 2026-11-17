@@ -38,6 +38,7 @@ from .const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
+from .entry_reloads import async_request_reload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,8 +87,11 @@ class PanelCAChangedRepairFlow(RepairsFlow):
                 ca_fingerprint(self._ca_pem),
             )
             # The issue is cleared by the fix flow completing; the reload is what
-            # puts the new anchor into a live transport.
-            await self.hass.config_entries.async_reload(entry.entry_id)
+            # puts the new anchor into a live transport. Asked for rather than
+            # awaited, so it starts after the flow has finished and the issue is
+            # gone: an issue that reload raises again then stands, where an awaited
+            # one was deleted straight after.
+            async_request_reload(self.hass, entry.entry_id)
             return self.async_create_entry(data={})
 
         host = str(entry.data.get(CONF_HOST, ""))

@@ -311,6 +311,7 @@ async def test_the_repair_still_offers_a_ca_the_panel_serves_a_leaf_for(
 
         with patch.object(hass.config_entries, "async_reload", new=AsyncMock()) as reload:
             done = await flow.async_step_confirm({})
+            await hass.async_block_till_done()
 
     assert done["type"] == "create_entry"
     assert entry.data[CONF_PANEL_CA_PEM] == panel.ca_pem

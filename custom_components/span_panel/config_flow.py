@@ -96,6 +96,7 @@ from .const import (
     EntityNamingPattern,
 )
 from .control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL, DEFAULT_CONTROL_MODE
+from .entry_reloads import async_request_reload
 from .firmware_schema import SchemaRead, async_read_schema
 from .flat_firmware_repairs import FLAT_FIRMWARE_TRANSLATION_KEY
 from .hardware_guard import registers_by_passphrase_only
@@ -420,7 +421,43 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # User-initiated flows pass raise_on_progress=False so they can
         # proceed when a zeroconf discovery flow is already running.
         await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
-        self._abort_if_unique_id_configured(updates=await self._async_host_update())
+        # Keyword arguments are evaluated in order, so the listener check runs
+        # after the host check's await, which an entry can finish setting up in.
+        self._abort_if_unique_id_configured(
+            updates=await self._async_host_update(),
+            reload_on_update=self._home_assistant_reloads_the_entry(),
+        )
+
+    def _update_reload_and_abort(
+        self, entry: config_entries.ConfigEntry, *, data_updates: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Update the entry, ask for its reload, and finish the flow.
+
+        In place of Home Assistant's `async_update_reload_and_abort`, which
+        schedules a reload of its own: a second one on a set-up entry, whose
+        listener asks too, and it logs that an integration with an update
+        listener should use it. This request shares one reload with the
+        listener's, and is the reload of an entry that is not set up. Asked for
+        after the write, and for an unchanged entry too, as Home Assistant's
+        default does.
+        """
+        result = self.async_update_and_abort(entry, data_updates=data_updates)
+        async_request_reload(self.hass, entry.entry_id)
+        return result
+
+    def _home_assistant_reloads_the_entry(self) -> bool:
+        """Return whether an abort that updates the entry should let Home Assistant reload it.
+
+        Only an entry with no update listener, which is one not set up, such as
+        one in setup retry. A set-up entry has the listener, which asks for its
+        own reload; Home Assistant's on top would be a second reload, and it logs
+        that an integration with an update listener should use it. Read as late
+        as possible, since the entry may gain its listener while the flow awaits.
+        """
+        if self.unique_id is None:
+            return True
+        entry = self.hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, self.unique_id)
+        return entry is None or not entry.update_listeners
 
     def _found_at(self, entry: config_entries.ConfigEntry) -> dict[str, Any]:
         """Return where this flow found the panel, as the entry-data keys that would move.
@@ -872,7 +909,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if self._https_port_known:
             updates[CONF_HTTPS_PORT] = self._https_port
         updates.update(await self._async_hassio_host_update(host, port, panel_serial))
-        self._abort_if_unique_id_configured(updates=updates)
+        self._abort_if_unique_id_configured(
+            updates=updates, reload_on_update=self._home_assistant_reloads_the_entry()
+        )
 
         schema = await self._async_read_schema(
             host, port=port, httpx_client=httpx_client, ssl_context=None
@@ -1745,7 +1784,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 updated_data[CONF_HTTPS_PORT] = self._https_port
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
-        self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
+        # Asked for after the write. A set-up entry's listener asks too, and the two
+        # share one reload; an entry in setup error has no listener, and this is its
+        # reload.
+        async_request_reload(self.hass, entry_id)
         return self.async_abort(reason="reauth_successful")
 
     def _log_replaced_anchor(self, previous_pem: object) -> None:
@@ -2037,7 +2079,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 _LOGGER.warning("Failed to delete old FQDN registration: %s", old_fqdn)
             data_updates[CONF_REGISTERED_FQDN] = ""
 
-        return self.async_update_reload_and_abort(
+        return self._update_reload_and_abort(
             reconfigure_entry,
             data_updates=data_updates,
         )
@@ -2080,7 +2122,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         }
         if self._reconfigure_https_port is not None:
             data_updates[CONF_HTTPS_PORT] = self._reconfigure_https_port
-        return self.async_update_reload_and_abort(
+        return self._update_reload_and_abort(
             reconfigure_entry,
             data_updates=data_updates,
         )
@@ -2121,7 +2163,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             data_updates: dict[str, Any] = {CONF_HOST: self.host or ""}
             if self._reconfigure_https_port is not None:
                 data_updates[CONF_HTTPS_PORT] = self._reconfigure_https_port
-            return self.async_update_reload_and_abort(
+            return self._update_reload_and_abort(
                 reconfigure_entry,
                 data_updates=data_updates,
             )
