@@ -21,12 +21,20 @@ from custom_components.span_panel.http_client import async_get_http_client
 async def test_the_library_gets_the_instance_home_assistant_hands_out(
     hass: HomeAssistant,
 ) -> None:
-    """Not a client of its own: one per `verify_ssl` setting, as Home Assistant keeps them."""
+    """Not a client of its own: one per `verify_ssl` setting, as Home Assistant keeps them.
+
+    Home Assistant's clients are held as `object`: typed, they are `httpx2`'s,
+    which a type checker cannot see as the library's class, the very gap the
+    bridge closes.
+    """
+    shared_verified: object = get_async_client(hass)
+    shared_unverified: object = get_async_client(hass, verify_ssl=False)
+
     verified = async_get_http_client(hass)
     unverified = async_get_http_client(hass, verify_ssl=False)
 
-    assert verified is get_async_client(hass)
-    assert unverified is get_async_client(hass, verify_ssl=False)
+    assert verified is shared_verified
+    assert unverified is shared_unverified
     assert verified is not unverified
 
 
