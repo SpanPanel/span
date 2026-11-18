@@ -68,6 +68,7 @@ from custom_components.span_panel.leaf_repairs import async_raise_leaf_name_mism
 from custom_components.span_panel.schema_repairs import async_sync_schema_issues
 from custom_components.span_panel.schema_validation import SchemaFindings, UnitMismatch
 
+from .conftest import recording_unlinked_issues
 from .factories import SpanPanelSnapshotFactory
 
 _PACKAGE: Final = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
@@ -306,8 +307,14 @@ def _issue_creations(source: str) -> list[str]:
     module, called or not, since `functools.partial(ir.async_create_issue, ...)`
     is a reference; and referring to the issue registry's own
     `async_get_or_create`, on `async_get(hass)` or on a name assigned from it.
-    Read statically, so `getattr` and a module reassigned to another name are
-    out of its sight.
+
+    Read statically, so what it cannot see includes `getattr`, the module
+    reassigned to another name, and a registry held anywhere but a plain or
+    annotated name: one bound by `:=`, kept on an attribute or in a dict, taken
+    as a parameter typed `ir.IssueRegistry`, or read from
+    `hass.data[ir.DATA_REGISTRY]`. The autouse `every_issue_linked` fixture in
+    `conftest` covers those, on every path the suite runs: every route ends in
+    `IssueRegistry.async_get_or_create`, which it watches.
     """
     tree = ast.parse(source)
     modules, getters, found = _issue_registry_names(tree)
@@ -423,6 +430,44 @@ def test_the_rule_finds_each_way_round_it(source: str) -> None:
     assert _issue_creations(source)
 
 
+@pytest.mark.unlinked_issues_allowed
+async def test_the_runtime_guard_records_an_unlinked_issue_and_where_it_was_raised(
+    hass: HomeAssistant,
+) -> None:
+    """The conftest guard catches what the AST rule cannot see, so it is shown each case too.
+
+    Marked so the autouse guard stands aside, and the same wrapper is applied
+    here by hand: an unlinked issue of this integration's is recorded with its
+    id and the line that raised it, and a linked one, or another integration's,
+    is not.
+    """
+    entry = _entry(hass, "entry-watched")
+    unlinked: list[str] = []
+
+    with patch.object(
+        ir.IssueRegistry,
+        "async_get_or_create",
+        recording_unlinked_issues(ir.IssueRegistry.async_get_or_create, unlinked),
+    ):
+        _raise_unlinked(
+            hass, EntryIssue.UNVALIDATED_HARDWARE.issue_id(entry.entry_id), persistent=False
+        )
+        async_raise_flat_firmware(hass, entry)
+        ir.async_create_issue(
+            hass,
+            "another_integration",
+            "unlinked",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="unlinked",
+        )
+
+    assert len(unlinked) == 1, unlinked
+    assert unlinked[0].startswith(
+        "unvalidated_hardware_entry-watched (raised at tests/test_entry_issues.py:"
+    )
+
+
 def test_the_rule_leaves_reads_deletes_and_other_registries_alone() -> None:
     """Reading or deleting an issue, and another registry's `async_get_or_create`, raise nothing."""
     source = (
@@ -465,6 +510,7 @@ async def test_removal_deletes_the_entry_s_linked_issues_and_their_dismissals(
         assert registry.async_get_issue(DOMAIN, issue_id) is None, issue_id
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_removal_sweeps_an_older_release_s_issues_and_leaves_another_entry_s(
     hass: HomeAssistant,
 ) -> None:

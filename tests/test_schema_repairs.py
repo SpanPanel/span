@@ -447,6 +447,7 @@ async def test_reconciliation_leaves_our_other_issues_alone(hass, entry) -> None
         hass,
         DOMAIN,
         f"something_else_{entry.entry_id}",
+        config_entry_id=entry.entry_id,
         is_fixable=False,
         severity=ir.IssueSeverity.WARNING,
         translation_key="something_else",
@@ -550,6 +551,7 @@ def _raise_unlinked(hass, issue_id: str, *, dismissed: bool = False) -> None:
         ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_a_pass_links_an_older_release_s_issue_that_still_applies(hass, entry) -> None:
     """The set is chosen by id, so an issue raised before issues were linked is in it.
 
@@ -570,6 +572,7 @@ async def test_a_pass_links_an_older_release_s_issue_that_still_applies(hass, en
     assert issue.dismissed_version == dismissed
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_a_pass_deletes_an_older_release_s_issue_that_resolved(hass, entry) -> None:
     """An unlinked issue whose finding has gone is deleted like a linked one."""
     _raise_unlinked(hass, _issue_id(entry), dismissed=True)
@@ -582,6 +585,7 @@ async def test_a_pass_deletes_an_older_release_s_issue_that_resolved(hass, entry
     assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH)) is None
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_a_pass_leaves_another_entry_s_unlinked_issues(hass, entry) -> None:
     """Scoped by this entry's id, not by the link, so no other entry's issues are in its set."""
     other = MockConfigEntry(domain=DOMAIN, data={}, unique_id="other")
@@ -612,6 +616,7 @@ def _raise_retired_upgrade_issue(hass, entry: MockConfigEntry) -> None:
     )
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_the_retired_upgrade_repair_is_cleared_from_an_upgraded_install(hass, entry) -> None:
     """It is on screen now, and its owner has no reason to restart to be rid of it."""
     _raise_retired_upgrade_issue(hass, entry)
@@ -622,6 +627,7 @@ async def test_the_retired_upgrade_repair_is_cleared_from_an_upgraded_install(ha
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_clearing_the_retired_upgrade_repair_leaves_another_panels_alone(
     hass, entry
 ) -> None:
@@ -659,6 +665,7 @@ def _raise_retired_new_entity_issue(hass, entry: MockConfigEntry, key: str) -> s
     return issue_id
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_the_retired_new_entity_repairs_are_cleared_from_an_upgraded_install(
     hass, entry
 ) -> None:
@@ -671,6 +678,7 @@ async def test_the_retired_new_entity_repairs_are_cleared_from_an_upgraded_insta
     assert [issue_id for issue_id in issue_ids if registry.async_get_issue(DOMAIN, issue_id)] == []
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_clearing_the_retired_new_entity_repairs_leaves_another_panels_alone(
     hass, entry
 ) -> None:

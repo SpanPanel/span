@@ -506,6 +506,7 @@ class TestFailingClosed:
         registry.async_get_or_create(
             DOMAIN,
             rest_tls_untrusted_issue_id(entry.entry_id),
+            config_entry_id=entry.entry_id,
             is_fixable=False,
             is_persistent=True,
             severity=ir.IssueSeverity.ERROR,
@@ -514,6 +515,7 @@ class TestFailingClosed:
         registry.async_get_or_create(
             DOMAIN,
             ca_unusable_issue_id(entry.entry_id),
+            config_entry_id=entry.entry_id,
             is_fixable=True,
             is_persistent=True,
             severity=ir.IssueSeverity.ERROR,
@@ -539,6 +541,7 @@ class TestFailingClosed:
 class TestRemovalLeavesNothingBehind:
     """The CA family goes with its entry, whether or not its issues are linked to it."""
 
+    @pytest.mark.unlinked_issues_allowed
     async def test_removing_the_entry_clears_its_ca_repairs(self, hass: HomeAssistant) -> None:
         """Raised unlinked, as a release before issues were linked raised them.
 

@@ -617,6 +617,7 @@ async def test_sync_schema_repairs_is_a_no_op_while_findings_are_unknown(
         hass,
         "span_panel",
         "unresolved_entry-unknown_circuit.instant_power_w",
+        config_entry_id=entry.entry_id,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,
