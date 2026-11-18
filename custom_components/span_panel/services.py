@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Coroutine, Mapping
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -11,6 +11,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.json import JsonObjectType, JsonValueType
 import httpx
@@ -354,8 +355,34 @@ def _threshold_panel_entry_id(
     return owner or requested
 
 
+def _async_register_monitoring_write(
+    hass: HomeAssistant,
+    service: str,
+    handler: Callable[[ServiceCall], Coroutine[None, None, None]],
+    schema: vol.Schema,
+) -> None:
+    """Register a service that changes current monitoring, under Home Assistant's admin-service rule.
+
+    These services change monitoring's settings, its thresholds, the ratings it
+    judges against and the notifications it sends. A call from a logged-in user
+    who is not an administrator is refused with Core's `Unauthorized` before
+    `handler` runs, so nothing changes. A call with no user -- an automation, or
+    a script an automation runs -- goes through, since only an administrator can
+    write either.
+
+    The rule holds in every control mode: who may operate the panel governs its
+    breakers, not what monitoring watches or whom it notifies. Reading monitoring
+    stays open to every user.
+    """
+    async_register_admin_service(hass, DOMAIN, service, handler, schema=schema)
+
+
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
-    """Register current monitoring services."""
+    """Register current monitoring services.
+
+    Every service here but `get_monitoring_status` changes monitoring, so each
+    is registered through `_async_register_monitoring_write`.
+    """
 
     def _get_runtime_data(
         config_entry_id: str | None = None,
@@ -480,29 +507,29 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         status["global_settings"] = global_settings
         return status
 
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "set_circuit_threshold",
         async_handle_set_circuit_threshold,
-        schema=_build_set_circuit_threshold_schema(),
+        _build_set_circuit_threshold_schema(),
     )
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "clear_circuit_threshold",
         async_handle_clear_circuit_threshold,
-        schema=_build_clear_circuit_threshold_schema(),
+        _build_clear_circuit_threshold_schema(),
     )
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "set_mains_threshold",
         async_handle_set_mains_threshold,
-        schema=_build_set_mains_threshold_schema(),
+        _build_set_mains_threshold_schema(),
     )
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "clear_mains_threshold",
         async_handle_clear_mains_threshold,
-        schema=_build_clear_mains_threshold_schema(),
+        _build_clear_mains_threshold_schema(),
     )
 
     async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
@@ -533,11 +560,11 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({vol.Optional("config_entry_id"): str}),
         supports_response=SupportsResponse.ONLY,
     )
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "set_global_monitoring",
         async_handle_set_global_monitoring,
-        schema=_build_set_global_monitoring_schema(),
+        _build_set_global_monitoring_schema(),
     )
 
     async def async_handle_test_notification(call: ServiceCall) -> None:
@@ -548,19 +575,23 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         settings = monitor.get_global_settings()
         dispatch_test_alert(hass, settings)
 
-    hass.services.async_register(
-        DOMAIN,
+    # A write too: it sends to every target the settings name, and starts
+    # monitoring on a panel where it is off.
+    _async_register_monitoring_write(
+        hass,
         "test_notification",
         async_handle_test_notification,
-        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
+        vol.Schema({vol.Optional("config_entry_id"): str}),
     )
 
 
 def _async_register_package_rating_services(hass: HomeAssistant) -> None:
     """Register the services that set and clear the package ratings copied from the SPAN app for a circuit.
 
-    Neither touches current monitoring: monitoring merely reads the rating the
-    entry gives, so both work whether monitoring is on or off.
+    Neither touches the monitor: monitoring merely reads the rating the entry
+    gives, so both work whether monitoring is on or off. Both still change the
+    rating monitoring judges against, so both are registered through
+    `_async_register_monitoring_write`.
     """
 
     def _get_runtime_data(call: ServiceCall, target: str) -> SpanPanelRuntimeData:
@@ -600,17 +631,17 @@ def _async_register_package_rating_services(hass: HomeAssistant) -> None:
         circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
         runtime_data.coordinator.package_rating_manager.clear_package_ratings(circuit_id, snapshot)
 
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "set_circuit_package_ratings",
         async_handle_set_circuit_package_ratings,
-        schema=_build_set_circuit_package_ratings_schema(),
+        _build_set_circuit_package_ratings_schema(),
     )
-    hass.services.async_register(
-        DOMAIN,
+    _async_register_monitoring_write(
+        hass,
         "clear_circuit_package_ratings",
         async_handle_clear_circuit_package_ratings,
-        schema=_build_clear_circuit_package_ratings_schema(),
+        _build_clear_circuit_package_ratings_schema(),
     )
 
 
@@ -1007,6 +1038,8 @@ async def _async_require_admin_caller(hass: HomeAssistant, call: ServiceCall) ->
 
     A contextless call is refused outright rather than being treated as
     trusted: an unattended automation has no business rotating credentials.
+    That is also why this is not `async_register_admin_service`, the rule
+    monitoring's writes follow, which lets a call with no user through.
     """
     user_id = call.context.user_id
     if user_id is None:

@@ -87,9 +87,9 @@ consistent behavior, proper UI rendering, and correct error handling.
 
 ### 1. Schema Validation with probatio
 
-Every service MUST have a `vol.Schema` passed to `hass.services.async_register`, where `vol` is `probatio`, Home Assistant's schema library
-(`import probatio as vol`). Use `vol.Required` for mandatory fields and `vol.Optional` for optional ones. Apply range/type validators (`vol.All`, `vol.Range`,
-`vol.Coerce`, `vol.In`) to constrain inputs at the schema level — do not defer validation to the handler.
+Every service MUST have a `vol.Schema` passed at registration, to `hass.services.async_register` or to the helper rule 8 names, where `vol` is `probatio`, Home
+Assistant's schema library (`import probatio as vol`). Use `vol.Required` for mandatory fields and `vol.Optional` for optional ones. Apply range/type validators
+(`vol.All`, `vol.Range`, `vol.Coerce`, `vol.In`) to constrain inputs at the schema level — do not defer validation to the handler.
 
 ### 2. services.yaml Field Definitions
 
@@ -111,6 +111,9 @@ Every service MUST have translations in `strings.json` under the `"services"` ke
 Service handlers MUST raise `ServiceValidationError` (not generic exceptions) for user-facing errors such as missing config entries or disabled features. Always
 include `translation_domain=DOMAIN` and a `translation_key` so HA can localize the error message.
 
+The refusal of a non-administrator under rule 8 is Core's `Unauthorized`, raised by Core's wrapper before the handler runs. It is Home Assistant's standard
+refusal for an admin service, which the REST API answers with a 401, so it is not replaced with a `ServiceValidationError`.
+
 ### 5. Response Declaration
 
 Services that return data MUST declare `supports_response=SupportsResponse.ONLY` (or `SupportsResponse.OPTIONAL` if the service can also be used as a fire-and-
@@ -127,3 +130,15 @@ is whatever the owning integration put there.
 
 Services are registered once per HA instance in `async_setup` (not per config entry). Handlers that need entry-specific data iterate
 `hass.config_entries.async_loaded_entries(DOMAIN)` to find the relevant entry.
+
+### 8. Administrator-only Monitoring Writes
+
+A service that changes current monitoring — its settings, a point's thresholds, the ratings it judges against, the notifications it sends — MUST be registered
+with `_async_register_monitoring_write` in `services.py`. That applies Home Assistant's admin-service rule (`async_register_admin_service`): a logged-in user
+who is not an administrator is refused, and a call with no user, from an automation, goes through. The rule holds in every control mode.
+
+Reads stay open to every user, and so do the favorites and graph-horizon writes. `rotate_credentials` keeps its own stricter check, which refuses a call with no
+user as well.
+
+`tests/test_service_admin_rule.py` names every registered service under one of these rules and fails on a service it does not name. Add a new service there,
+under the rule it follows, in the same change that registers it.

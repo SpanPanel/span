@@ -132,7 +132,8 @@ from the SPAN app.
 
 - **Services:** `span_panel.set_circuit_package_ratings` takes the ratings in the SPAN app's order, such as `[20, 30]`, and
   `span_panel.clear_circuit_package_ratings` removes them. Each rating is a whole number of amps, the first must be the panel's, and both together cannot exceed
-  the panel's service rating. A circuit in one or two breaker spaces that the panel publishes a rating for takes a copy.
+  the panel's service rating. A circuit in one or two breaker spaces that the panel publishes a rating for takes a copy. Both services take a Home Assistant
+  administrator or an automation, like the rest of current monitoring's settings.
 - **Alerts:** the `{breaker_rating_a}` alert placeholder keeps its name and carries the rating judged against, 50 A for the tandem above. The Breaker Rating
   sensor, the panel view's breaker labels and every `breaker_rating_a` the integration reports show the panel's rating, and energy counter checks keep using it.
 - **Attributes:** the panel topology, the monitoring status and the `span_panel_current_alert` event add `monitoring_rating_a`, the rating judged against,

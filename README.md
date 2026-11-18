@@ -704,6 +704,9 @@ you choose who may operate the panel again.
 | **Control lock auto-relock**               | Off, and no switch exists             | A switch that, while armed, refuses every control command. Anyone can arm it; only a logged-in administrator can disarm it. `0` holds the disarm until someone re-arms; any other value re-arms after that many minutes.                        | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
 | **Relay debounce**                         | 2 seconds; `0` turns the debounce off | A second command to the same circuit's relay inside the window. Refused rather than queued.                                                                                                                                                     | It is per circuit, so an automation cycling many circuits still gets through.                                              |
 
+**Current monitoring has its own rule, whichever option is chosen.** Changing its settings, thresholds or copied ratings, or sending a test notification, takes
+a Home Assistant administrator or an automation; a script a person runs carries that person's user. Any user can read monitoring's settings and status.
+
 **What none of this defends against.** These options constrain only callers arriving through Home Assistant. Anything already holding the broker credential — a
 second Home Assistant instance, a script you wrote, a malicious custom integration reading it out of this process's memory — publishes to the panel directly;
 see [Recommended deployment](#recommended-deployment), where network topology and a locked enclosure are the real boundary.
@@ -819,9 +822,9 @@ the integration shows one, such as "20A".
 **Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and only its first breaker's rating, so current monitoring compares
 the current of both breakers against one.
 
-**Fix:** for a tandem in one space, copy the second rating the SPAN app shows into the Monitoring tab's Rating column or the circuit's side panel. For a quad or
-tandem-quad across two spaces, the dashboard recommends turning monitoring off instead. See [Tandem and Multi-Load Breakers](tandems.md) for examples and
-details.
+**Fix:** for a tandem in one space, copy the second rating the SPAN app shows into the Monitoring tab's Rating column or the circuit's side panel, logged in as
+a Home Assistant administrator. For a quad or tandem-quad across two spaces, the dashboard recommends turning monitoring off instead, which takes an
+administrator too. See [Tandem and Multi-Load Breakers](tandems.md) for examples and details.
 
 ### Debug logging
 
