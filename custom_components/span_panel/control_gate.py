@@ -163,8 +163,13 @@ class ControlPolicy:
 
     @property
     def lock_enabled(self) -> bool:
-        """Whether the control-lock entity exists at all."""
-        return self.lock_timeout_minutes is not None
+        """Whether the control-lock entity exists at all.
+
+        It needs a lock timeout and control that is not disabled. Under
+        `disabled` it is a control entity like the rest: not created, its
+        registry entry kept, and back with its restored state once control is.
+        """
+        return self.lock_timeout_minutes is not None and self.mode is not ControlMode.DISABLED
 
     @classmethod
     def default(cls) -> ControlPolicy:

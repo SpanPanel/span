@@ -10,14 +10,21 @@ knows what the last run left behind is the entity.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 import contextlib
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.const import CONF_HOST, STATE_OFF, STATE_ON, Platform
+from homeassistant.const import (
+    ATTR_RESTORED,
+    CONF_HOST,
+    STATE_OFF,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    Platform,
+)
 from homeassistant.core import Context, HomeAssistant, State
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.util import dt as dt_util
 import pytest
@@ -36,12 +43,12 @@ from custom_components.span_panel.const import (
     CONF_HTTP_PORT,
     DOMAIN,
 )
-from custom_components.span_panel.control_gate import ControlLock
+from custom_components.span_panel.control_gate import ControlLock, ControlMode
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
     CURRENT_CONFIG_VERSION,
 )
-from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
+from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT, CONTROL_MODE
 from custom_components.span_panel.switch import SpanPanelControlLockSwitch
 
 from .common import async_fire_time_changed
@@ -53,8 +60,14 @@ EDITED_LOCK_ENTITY = "switch.panel_control_lock"
 SERIAL = "sp3-lock-001"
 
 
-def _entry(timeout: float) -> MockConfigEntry:
-    """Build a v2 entry with the control-lock feature configured to `timeout`."""
+def _entry(timeout: float, mode: ControlMode | None) -> MockConfigEntry:
+    """Build a v2 entry with the control-lock feature configured to `timeout`.
+
+    `mode` None leaves the control mode unset, as most entries have it.
+    """
+    options: dict[str, object] = {CONTROL_LOCK_TIMEOUT: timeout}
+    if mode is not None:
+        options[CONTROL_MODE] = mode.value
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -66,7 +79,7 @@ def _entry(timeout: float) -> MockConfigEntry:
             CONF_EBUS_BROKER_PORT: 8883,
             CONF_HTTP_PORT: 80,
         },
-        options={CONTROL_LOCK_TIMEOUT: timeout},
+        options=options,
         entry_id="entry-control-lock",
         title="SPAN Panel",
         unique_id=SERIAL,
@@ -76,7 +89,9 @@ def _entry(timeout: float) -> MockConfigEntry:
 
 
 @contextlib.asynccontextmanager
-async def _panel(hass: HomeAssistant, *, timeout: float) -> AsyncIterator[MockConfigEntry]:
+async def _panel(
+    hass: HomeAssistant, *, timeout: float, mode: ControlMode | None = None
+) -> AsyncIterator[MockConfigEntry]:
     """Set the entry up for real, with only the switch platform forwarded.
 
     The transport and the coordinator are stubs -- neither has anything to do
@@ -84,7 +99,7 @@ async def _panel(hass: HomeAssistant, *, timeout: float) -> AsyncIterator[MockCo
     registry and the unload path are all the real ones, because a reload is
     exactly those four things.
     """
-    entry = _entry(timeout)
+    entry = _entry(timeout, mode)
     entry.add_to_hass(hass)
 
     snapshot = SpanPanelSnapshotFactory.create(serial_number=SERIAL, circuits={})
@@ -426,3 +441,122 @@ async def test_the_lock_stays_operable_when_the_transport_dies(hass: HomeAssista
         assert state is not None
         assert state.state == STATE_ON
         assert _lock(entry).armed is True
+
+
+# ---------- while control is disabled ----------
+
+
+async def _set_mode(hass: HomeAssistant, entry: MockConfigEntry, mode: ControlMode) -> None:
+    """Change the control mode as an options save does, and let the reload it asks for run."""
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONTROL_MODE: mode.value}
+    )
+    await hass.async_block_till_done()
+    assert entry.runtime_data.control_policy.mode is mode
+
+
+def _registry_row(hass: HomeAssistant) -> er.RegistryEntry:
+    row = er.async_get(hass).async_get(LOCK_ENTITY)
+    assert row is not None
+    return row
+
+
+@pytest.mark.asyncio
+async def test_disabling_control_stops_creating_the_lock_switch_and_keeps_its_registry_entry(
+    hass: HomeAssistant,
+) -> None:
+    """The lock switch is a control entity like the others, so `disabled` treats it as one.
+
+    Not created, and not removed: its registry entry stays, with its entity id
+    and unique id, for when control comes back. The lock object the gate holds
+    is then disarmed, as for an entry with no lock, because the gate refuses
+    every command under `disabled` before it consults the lock.
+    """
+    async with _panel(hass, timeout=0, mode=ControlMode.ALL_USERS) as entry:
+        before = _registry_row(hass)
+
+        await _set_mode(hass, entry, ControlMode.DISABLED)
+
+        after = _registry_row(hass)
+        assert (after.id, after.entity_id, after.unique_id) == (
+            before.id,
+            before.entity_id,
+            before.unique_id,
+        )
+        assert after.unique_id == f"span_{SERIAL}_control_lock"
+        # What Core shows for a registry entry with no entity behind it, as it
+        # does for every other control under `disabled`.
+        state = hass.states.get(LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_UNAVAILABLE
+        assert state.attributes.get(ATTR_RESTORED) is True
+        assert _lock(entry).armed is False
+
+
+@pytest.mark.parametrize(
+    ("timeout", "leave_it", "state", "relock_in_seconds"),
+    [
+        pytest.param(0, _arm, STATE_ON, None, id="armed"),
+        pytest.param(0, _disarm, STATE_OFF, None, id="disarmed"),
+        pytest.param(30, _disarm, STATE_OFF, 1800, id="disarmed_with_a_relock_due"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_turning_control_back_on_brings_the_same_lock_switch_back_as_it_was(
+    hass: HomeAssistant,
+    timeout: float,
+    leave_it: Callable[[HomeAssistant], Awaitable[None]],
+    state: str,
+    relock_in_seconds: float | None,
+) -> None:
+    """The same registry entry, entity id, name and area, armed or disarmed as it was left, with any relock still due.
+
+    Home Assistant keeps the state of an entity that stopped being created, and
+    the switch restores from it exactly as it does across a reload.
+    """
+    async with _panel(hass, timeout=timeout, mode=ControlMode.ALL_USERS) as entry:
+        await leave_it(hass)
+        garage = ar.async_get(hass).async_create("Garage")
+        er.async_get(hass).async_update_entity(LOCK_ENTITY, name="Breaker lock", area_id=garage.id)
+        before = _registry_row(hass)
+
+        await _set_mode(hass, entry, ControlMode.DISABLED)
+        await _set_mode(hass, entry, ControlMode.ALL_USERS)
+
+        after = _registry_row(hass)
+        assert (after.id, after.entity_id, after.unique_id, after.name, after.area_id) == (
+            before.id,
+            before.entity_id,
+            before.unique_id,
+            "Breaker lock",
+            garage.id,
+        )
+        restored = hass.states.get(LOCK_ENTITY)
+        assert restored is not None
+        assert restored.state == state
+        assert restored.attributes.get(ATTR_RESTORED) is None
+        assert _lock(entry).armed is (state == STATE_ON)
+        assert _lock(entry).relock_in_seconds == (
+            None if relock_in_seconds is None else pytest.approx(relock_in_seconds, abs=5)
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_restart_while_control_is_disabled_keeps_the_lock_state_for_later(
+    hass: HomeAssistant,
+) -> None:
+    """A lock left disarmed before a restart with control off is still disarmed once control is back."""
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(LOCK_ENTITY, STATE_OFF), {}),),
+    )
+
+    async with _panel(hass, timeout=0, mode=ControlMode.DISABLED) as entry:
+        assert _lock(entry).armed is False
+
+        await _set_mode(hass, entry, ControlMode.ALL_USERS)
+
+        assert _lock(entry).armed is False
+        restored = hass.states.get(LOCK_ENTITY)
+        assert restored is not None
+        assert restored.state == STATE_OFF
