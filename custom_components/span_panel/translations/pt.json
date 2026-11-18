@@ -6,7 +6,10 @@
       "host_not_set": "Não foi definido nenhum endereço do painel; reinicie a configuração.",
       "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",
       "no_serial": "Não foi possível determinar o número de série do painel.",
+      "not_ipv4_address": "O painel foi descoberto num endereço que não é IPv4, e a descoberta só suporta endereços IPv4. Adicione o painel manualmente com o seu endereço IPv4 ou nome de anfitrião.",
+      "not_span_panel": "Nenhum painel SPAN com firmware v2 respondeu neste endereço. Verifique se o painel está ligado e acessível.",
       "panel_firmware_flat": "Este painel usa o firmware spanos2, que publica o antigo esquema eBus plano. Atualize o firmware do painel e depois tente novamente.",
+      "reauth_failed": "Esse SPAN Panel já não está configurado, pelo que não havia nada para reautenticar.",
       "reauth_successful": "Autenticação bem-sucedida.",
       "unique_id_mismatch": "O painel neste endereço tem um número de série diferente. Não é possível mudar para um painel diferente durante a reconfiguração.",
       "v1_not_supported": "O firmware v1 não é suportado. Atualize o firmware do seu painel para v2."
