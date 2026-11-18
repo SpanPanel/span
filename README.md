@@ -822,9 +822,9 @@ the integration shows one, such as "20A".
 **Cause:** a MAIN 32 publishes a multi-load breaker as one circuit, with one current reading and only its first breaker's rating, so current monitoring compares
 the current of both breakers against one.
 
-**Fix:** for a tandem in one space, copy the second rating the SPAN app shows into the Monitoring tab's Rating column or the circuit's side panel. For a quad or
-tandem-quad across two spaces, the dashboard recommends turning monitoring off instead. See [Tandem and Multi-Load Breakers](tandems.md) for examples and
-details.
+**Fix:** for a tandem in one space, copy the second rating the SPAN app shows into the Monitoring tab's Rating column or the circuit's side panel, logged in as
+a Home Assistant administrator. For a quad or tandem-quad across two spaces, the dashboard recommends turning monitoring off instead, which takes an
+administrator too. See [Tandem and Multi-Load Breakers](tandems.md) for examples and details.
 
 ### Debug logging
 
