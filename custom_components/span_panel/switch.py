@@ -67,17 +67,20 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     def __init__(
         self,
         coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
         circuit_id: str,
         device_name: str,
     ) -> None:
         """Initialize the values.
 
-        The circuit's name is not passed in: its device's name and the id base
-        are read from the circuit in the current snapshot, so a circuit renamed
-        on the panel reaches both on the next reload.
+        `snapshot` is the one this setup decided from (`setup_snapshot`), as it
+        is for every circuit entity, and the one the listener that keeps circuit
+        id bases current works a base out from. Its device's name, its id base
+        and the name a rename is watched against are read from the circuit
+        there, so a circuit renamed on the panel since reaches all three on the
+        reload its first update asks for. Its state is read from the
+        coordinator's current data, as every update delivers it.
         """
-        snapshot: SpanPanelSnapshot = coordinator.data
-
         circuit = snapshot.circuits.get(circuit_id)
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
@@ -174,10 +177,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
                 "Switch entity exists in registry, previous name set to '%s'",
                 circuit.name,
             )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up when entity is removed."""
-        await super().async_will_remove_from_hass()
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
@@ -413,6 +412,24 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
             self._lock.resume_disarm(await self._async_restored_relock_seconds())
         self._async_schedule_relock_write()
 
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        """Keep the lock and its countdown across an edit to this switch's id.
+
+        Defined so that Core changes this switch's id in place: this class
+        defines `async_added_to_hass`, and Core removes and adds again an entity
+        whose class defines an add hook unless that class or a subclass of it
+        defines this method (`SpanPanelEntity.async_entity_id_changed`).
+
+        Nothing is needed beyond the base class's. The armed state lives in
+        `ControlLock`, which is the entry's, so in place it is not read back
+        from the last run. The scheduled relock write calls back into this
+        switch, which writes under whatever id it has by then, so it falls due
+        at the deadline it always had. Core moves the restore-state tracking to
+        the new id, so the next run restores the lock from it.
+        """
+        super().async_entity_id_changed(old_entity_id)
+
     async def _async_restored_relock_seconds(self) -> float | None:
         """Return what is left of the previous run's auto-relock window.
 
@@ -596,7 +613,7 @@ async def async_setup_entry(
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_has_a_breaker_switch(circuit_data):
             continue
-        entities.append(SpanPanelCircuitsSwitch(coordinator, circuit_id, _device_name))
+        entities.append(SpanPanelCircuitsSwitch(coordinator, snapshot, circuit_id, _device_name))
 
     # Settable properties on devices this integration models nothing for.
     # Disabled and diagnostic like every adopted entity: the panel authorises the

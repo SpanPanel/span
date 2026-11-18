@@ -539,12 +539,12 @@ async def test_a_feed_circuits_controls_go_on_its_own_device(hass: HomeAssistant
     assert circuit_has_a_priority_select(circuit)
 
     await _add(hass, entry, "sensor", create_circuit_sensors(coordinator, snapshot, entry))
-    await _add(hass, entry, "switch", [SpanPanelCircuitsSwitch(coordinator, FEED, PANEL_NAME)])
+    await _add(hass, entry, "switch", [SpanPanelCircuitsSwitch(coordinator, coordinator.data, FEED, PANEL_NAME)])
     await _add(
         hass,
         entry,
         "select",
-        [SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, FEED, PANEL_NAME)],
+        [SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, FEED, PANEL_NAME)],
     )
 
     devices = dr.async_get(hass)

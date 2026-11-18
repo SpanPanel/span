@@ -86,7 +86,7 @@ async def test_switch_turn_on_operation(hass: HomeAssistant) -> None:
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
     await switch.async_turn_on()
 
@@ -104,7 +104,7 @@ async def test_switch_turn_off_operation(hass: HomeAssistant) -> None:
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
     await switch.async_turn_off()
 
@@ -133,7 +133,7 @@ async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone(
         side_effect=SpanPanelServerError("Circuit '1' declares its relay non-commandable")
     )
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
 
     with pytest.raises(HomeAssistantError) as raised:
@@ -165,7 +165,7 @@ async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions(
         side_effect=SpanPanelServerError("Circuit 'abc123' declares its relay non-commandable")
     )
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "abc123", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "abc123", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
 
     with pytest.raises(HomeAssistantError) as raised:
@@ -183,7 +183,7 @@ def test_switch_state_reflects_relay_state(hass: HomeAssistant) -> None:
     )
     coordinator_closed = _make_coordinator(hass, {"1": closed})
     assert (
-        SpanPanelCircuitsSwitch(coordinator_closed, "1", "SPAN Panel").is_on
+        SpanPanelCircuitsSwitch(coordinator_closed, coordinator_closed.data, "1", "SPAN Panel").is_on
         is True
     )
 
@@ -192,7 +192,7 @@ def test_switch_state_reflects_relay_state(hass: HomeAssistant) -> None:
     )
     coordinator_open = _make_coordinator(hass, {"1": opened})
     assert (
-        SpanPanelCircuitsSwitch(coordinator_open, "1", "SPAN Panel").is_on
+        SpanPanelCircuitsSwitch(coordinator_open, coordinator_open.data, "1", "SPAN Panel").is_on
         is False
     )
 
@@ -202,7 +202,7 @@ def test_switch_handles_missing_circuit(hass: HomeAssistant) -> None:
     coordinator = _make_coordinator(hass, {})
 
     with pytest.raises(ValueError, match="Circuit 1 not found"):
-        SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
 
 def test_switch_coordinator_update_handling(hass: HomeAssistant) -> None:
@@ -214,7 +214,7 @@ def test_switch_coordinator_update_handling(hass: HomeAssistant) -> None:
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.hass = hass
     switch.entity_id = "switch.span_panel_kitchen_outlets_breaker"
     switch.registry_entry = MagicMock()
@@ -239,7 +239,7 @@ def test_circuit_name_change_triggers_reload_request(hass: HomeAssistant) -> Non
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.hass = hass
     switch.entity_id = "switch.span_panel_kitchen_outlets_breaker"
     switch.registry_entry = MagicMock()
@@ -258,7 +258,7 @@ def test_switch_unavailable_when_panel_offline(hass: HomeAssistant) -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="1")
     coordinator = _make_coordinator(hass, {"1": circuit}, panel_offline=True)
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     assert switch.available is False
 
 
@@ -267,7 +267,7 @@ def test_switch_extra_state_attributes_include_tabs_and_voltage(hass: HomeAssist
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", tabs=[1])
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     assert switch.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
 
 
@@ -279,7 +279,7 @@ def test_switch_relay_state_target_shows_pending_state(hass: HomeAssistant) -> N
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     # Target differs from actual — switch should show target (CLOSED = on)
     assert switch.is_on is True
 
@@ -299,7 +299,7 @@ def test_switch_relay_state_target_none_uses_actual_state(hass: HomeAssistant) -
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     assert switch.is_on is False
 
 
@@ -385,7 +385,7 @@ def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "15", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "15", "SPAN Panel")
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
@@ -416,7 +416,7 @@ def test_switch_initial_install_in_circuit_numbers_mode_is_on_the_circuits_devic
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
@@ -448,7 +448,7 @@ def test_switch_initial_install_without_name_falls_back_to_the_tabs(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "3", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "3", "SPAN Panel")
 
     assert switch.name == "Breaker"
     assert switch.device_info is not None
@@ -473,7 +473,7 @@ def test_switch_first_update_requests_reload_without_user_override(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: init_registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
     switch.hass = hass
     switch.entity_id = "switch.kitchen_breaker"
@@ -508,7 +508,7 @@ def test_switch_a_user_named_switch_still_reloads_on_a_rename(hass: HomeAssistan
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: init_registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
     renamed = replace(circuit, name="Renamed Kitchen")
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": renamed})
@@ -548,7 +548,7 @@ def test_switch_update_is_on_clears_state_when_circuit_disappears(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
     switch._update_is_on()
@@ -570,7 +570,7 @@ def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
     switch.hass = MagicMock()
     on_task = object()
@@ -596,7 +596,7 @@ def test_switch_relay_state_target_exposed_in_attributes(hass: HomeAssistant) ->
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     attrs = switch.extra_state_attributes
     assert attrs is not None
     assert attrs["relay_state_target"] == "CLOSED"
@@ -612,7 +612,7 @@ def test_switch_relay_state_target_absent_when_none(hass: HomeAssistant) -> None
     )
     coordinator = _make_coordinator(hass, {"1": circuit})
 
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     attrs = switch.extra_state_attributes
     assert attrs is not None
     assert "relay_state_target" not in attrs
@@ -643,7 +643,7 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     assert switch.name == "Breaker"
     assert switch.suggested_object_id == "breaker"
@@ -658,7 +658,7 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch2 = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        switch2 = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     # The label, carried by original_name rather than the registry's `name`,
     # which would outrank the base; the tabs read the existing id back.
@@ -696,7 +696,7 @@ def test_switch_circuit_numbers_entity_id_120v_single_tab(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "5", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "5", "SPAN Panel")
 
     assert switch.name == "Breaker"
     assert switch.suggested_object_id == ""
@@ -729,7 +729,7 @@ def test_switch_circuit_numbers_releases_the_synced_registry_name(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     registry.async_update_entity.assert_called_once_with(
         "switch.span_panel_circuit_15_17_breaker", name=None
@@ -763,7 +763,7 @@ def test_switch_circuit_numbers_preserves_user_custom_name(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     registry.async_update_entity.assert_not_called()
 
@@ -793,7 +793,7 @@ def test_switch_coordinator_update_circuit_numbers_requests_reload(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     # Simulate a circuit name change from "Air Conditioner" to "Kitchen AC"
     renamed = replace(circuit, name="Kitchen AC")
@@ -846,7 +846,7 @@ def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "2", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "2", "SPAN Panel")
 
     # Simulate a circuit name change; user has set "My AC Unit" in the registry
     renamed = replace(circuit, name="Kitchen AC")
@@ -894,7 +894,7 @@ def test_switch_coordinator_update_friendly_mode_still_reloads(
             "custom_components.span_panel.switch.er.async_get",
             lambda _hass: registry,
         )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
 
     assert switch._previous_circuit_name == "Kitchen Outlets"
 

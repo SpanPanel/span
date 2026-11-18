@@ -869,7 +869,7 @@ async def test_a_refused_relay_leaves_the_switch_where_it_was(
         side_effect=ServiceValidationError("refused")
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
@@ -916,7 +916,7 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
@@ -970,7 +970,7 @@ async def test_a_handed_over_relay_command_still_shows_the_requested_state(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
 

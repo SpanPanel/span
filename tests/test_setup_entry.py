@@ -39,6 +39,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
+    _async_take_down_failed_setup,
     async_remove_config_entry_device,
     async_setup_entry,
 )
@@ -53,6 +54,7 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.flat_firmware_repairs import async_raise_flat_firmware
 from custom_components.span_panel.id_builder import build_pv_inverter_unique_id
@@ -446,6 +448,61 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
         await async_setup_entry(hass, entry)
 
     coordinator.async_shutdown.assert_awaited_once()
+
+
+async def test_a_failed_setup_shuts_the_coordinator_down_after_the_platforms_even_if_one_stays(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The teardown unloads the platforms, logs one that stays, and then shuts the coordinator down.
+
+    Home Assistant shuts the coordinator down too, among the entry's on-unload
+    callbacks, but only once the error has left setup. The teardown's own
+    shutdown comes first, after the platforms whatever became of them, so no
+    entity left by a platform that would not unload is driven by a
+    coordinator still refreshing.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    order: list[str] = []
+    coordinator = MagicMock()
+    coordinator.async_shutdown = AsyncMock(side_effect=lambda: order.append("shut down"))
+
+    async def unload_but_one(*_args: object) -> bool:
+        order.append("unloaded the platforms")
+        return False
+
+    with (
+        patch.object(hass.config_entries, "async_unload_platforms", unload_but_one),
+        caplog.at_level(logging.WARNING),
+    ):
+        await _async_take_down_failed_setup(hass, entry, coordinator, platforms_forwarded=True)
+
+    assert order == ["unloaded the platforms", "shut down"]
+    assert "not every platform it set up could be unloaded" in caplog.text
+
+
+async def test_a_failed_setup_stops_the_current_monitor_with_the_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """The monitor stops with the coordinator, on a failed setup as on an unload.
+
+    Its stop is part of the coordinator's shutdown, which the unload and the
+    failed setup's teardown share, so neither path can stop one without the
+    other.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+    coordinator = SpanPanelCoordinator(hass, client, entry)
+    monitor = MagicMock()
+    coordinator.current_monitor = monitor
+
+    await _async_take_down_failed_setup(hass, entry, coordinator, platforms_forwarded=False)
+
+    monitor.async_stop.assert_called_once_with()
+    client.close.assert_awaited_once_with()
 
 
 async def test_setup_syncs_schema_repairs_after_the_platforms(

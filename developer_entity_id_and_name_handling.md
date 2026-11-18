@@ -281,10 +281,12 @@ alone. Core's `type.__getattribute__` guard covers the `name` property only, so 
 source at construction, through `SpanPanelEntity._circuit_id_base_source`, which also records it with the entry for the listener (§5.3). Every other entity
 leaves it `None` and composes from its label as it always has.
 
-Core reads `suggested_object_id` only as it adds an entity. It adds one as the entry sets up, and on Home Assistant 2026.11 again after the entity's ID is
-edited: these classes define add and remove hooks without `async_entity_id_changed`, so Core removes the live entity and adds it once more
-(`_entity_class_requires_readd` in Core's `helpers/entity.py`, a path Core marks for removal in 2027.11). So the base Core writes at an add is the one the row's
-ID calls for at that moment, not the one the entity was built with. Under a rename in place Core writes no base, and the listener keeps it current (§5.3).
+Core reads `suggested_object_id` only as it adds an entity, which is as the entry sets up. So the base Core writes at an add is the one the row's ID calls for
+at that moment, not one fixed when the entity was built. An edit to a live entity's ID adds nothing. Home Assistant 2026.11 removes a custom integration's
+entity and adds it again wherever a class in its MRO defines an add or remove hook and neither that class nor a subclass defines `async_entity_id_changed`
+(`_entity_class_requires_readd` in Core's `helpers/entity.py`, a compatibility path Core says can be removed in 2027.11). Each class here that defines such a
+hook defines `async_entity_id_changed` beside it, so Core changes the ID in place, which `tests/test_entity_ids_change_in_place.py` holds for every entity
+class. In place Core writes no base, and the listener keeps it current (§5.3).
 
 `entity_id` is preset in one case only: a circuit entity being created in circuit-numbers mode (§4.7). Nothing else in this integration assigns
 `self.entity_id`, and nothing assigns `_attr_entity_id`.
@@ -370,9 +372,9 @@ There is one name path, in both modes:
      surviving trace of "phase 2": a freshly created entity's registry row is settled by that reload, which is also what spends a creation preset.
    - If the name **changed**, the entity requests a reload (`coordinator.request_reload()`).
 3. **Reload** (requested at the end of the update cycle in `coordinator.py`, started by `entry_reloads` once that update has returned, or once Home Assistant
-   has started): the entry is torn down and rebuilt. The integration names a circuit's device only through the device
-   info of the entities it adds, so a rebuild is the only way to refresh the name — that is why a rename costs a reload rather than a registry write. The
-   rebuild also recomputes the base against the device's new name and, per §3.3, rewrites the row's `object_id_base`.
+   has started): the entry is torn down and rebuilt. The integration names a circuit's device only through the device info of the entities it adds, so a rebuild
+   is the only way to refresh the name — that is why a rename costs a reload rather than a registry write. The rebuild also recomputes the base against the
+   device's new name and, per §3.3, rewrites the row's `object_id_base`.
 
 A name the user gave the circuit's _device_ in Home Assistant (`name_by_user`) outranks the panel's in every displayed name and composed ID. That is Core's
 rule, not a check made here: the reload still stores the panel's new name underneath it.
@@ -418,19 +420,19 @@ every circuit, rather than only those composed in that area, because which areas
 could drift.
 
 The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
-works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`. That keeps every entity current, enabled or disabled,
-whatever Core does with the edit. On Home Assistant 2026.11 Core also removes these entities and adds them again under the new ID, because they define add and
-remove hooks without `async_entity_id_changed`, a path Core marks for removal in 2027.11. That add writes the base the entity hands it, worked out then from the
-row (§4.4). Both work it out from the same row, so the row ends on the edited ID's base whichever of the two writes last. Where Core renames an entity in place,
-or does not add it, as for a disabled one, it writes no base and the listener's is the one that stands. Edited to `sensor.span_panel_refrigerator`, which Core
-composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was built offered the old ID back,
-`sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit, wherever Core's re-add wrote after the listener. Accepting a
-Recreate offer is such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is offered.
+works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, and nothing else does. Core changes a live entity's ID in
+place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the first
+entity, and Core stops it with the entry's on-unload callbacks once the entities are gone: an unload runs them after the platforms have removed every entity,
+and a setup that fails after the forward unloads its platforms before the error leaves it and Core runs them. Two cases leave live entities without the
+listener, and an ID edited on one of them keeps the base from before the edit until the next restart: a platform that does not unload as a failed setup is taken
+down, which is logged, and a setup cancelled part way, as when Home Assistant stops during it, which takes nothing down. Edited to
+`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was
+built offered the old ID back, `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is
+such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is offered.
 
 One change applies only after the next restart: a saved entity-ID format, for which Core announces no event. Everything else the base is worked out from either
 reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the entry's data, options, title or unique ID do, or is watched
-above. The panel
-device's own name is the one the entry was set up with; the user names it through `name_by_user`.
+above. The panel device's own name is the one the entry was set up with; the user names it through `name_by_user`.
 
 The rename therefore reaches:
 

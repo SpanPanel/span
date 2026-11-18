@@ -7,6 +7,7 @@ import logging
 from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -73,11 +74,13 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     def suggested_object_id(self) -> str | None:
         """Hand Core the base, worked out as it asks, or the stock answer when there is none.
 
-        Core asks only as it adds the entity, and it adds a live entity again
-        each time its id is edited. Worked out then, from the row as it stands
-        (`circuit_object_ids.circuit_object_id_base_now`), the base Core writes
-        is the one the edited id calls for, and not the one the entity was
-        built with, whenever Core's write falls against the listener's.
+        Core asks only as it adds the entity, which is as the entry sets up.
+        Worked out then, from the row as it stands
+        (`circuit_object_ids.circuit_object_id_base_now`), the base is the one
+        the id the entity already has calls for, not one fixed when the entity
+        was built. An edit to the id does not ask: Core changes the id in place
+        (`async_entity_id_changed`), and the listener that keeps circuit bases
+        current stores the base the edited id calls for.
         """
         if self._span_id_base_source is not None:
             return circuit_object_id_base_now(self.coordinator.hass, self._span_id_base_source)
@@ -202,6 +205,34 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         for field_path in self._declared_field_paths():
             self.coordinator.async_unregister_field_path_entity(field_path, self.entity_id)
         await super().async_will_remove_from_hass()
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        """Count this entity against its fields under the id Core has just given it.
+
+        Defining this is what has Core change the id of a live entity in place
+        when its id is edited. Home Assistant 2026.11 instead removes and adds
+        again an entity of a custom integration wherever a class in its MRO
+        defines an add or remove hook, as this one defines both, and neither
+        that class nor a subclass of it defines this method, a compatibility
+        path Core says can be removed in 2027.11, when its deprecation period
+        ends. In place, Core has already moved what it keeps for the entity,
+        the restore-state tracking among it, and nothing calls the two hooks
+        above.
+
+        So the field registrations they make are moved here, the one record of
+        this entity's that is keyed on its id, from which the schema Repairs
+        name the entities a field takes down. Everything else an entity here
+        keeps is keyed on its unique id or the panel's wire ids, or reads
+        `self.entity_id` when it is used. The circuit entities' id base is not
+        kept here at all: the listener that keeps it current
+        (`circuit_object_ids.async_keep_circuit_id_bases_current`) reads the
+        edited id in the same registry event.
+        """
+        super().async_entity_id_changed(old_entity_id)
+        for field_path in self._declared_field_paths():
+            self.coordinator.async_unregister_field_path_entity(field_path, old_entity_id)
+            self.coordinator.async_register_field_path_entity(field_path, self.entity_id)
 
     def _source_field_path(self) -> str | None:
         """Return the snapshot field this entity's value comes from, if any.

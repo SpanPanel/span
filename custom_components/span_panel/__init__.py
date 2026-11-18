@@ -612,6 +612,7 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_restore(hass, entry)
 
     coordinator: SpanPanelCoordinator | None = None
+    platforms_forwarded = False
 
     try:
         # --- v2 MQTT entries ---
@@ -965,13 +966,27 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         # told from one that was already registered.
         breaker_switches_before = async_registered_breaker_switches(hass, entry, snapshot)
 
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-        # A circuit entity's id base depends on its device's name, and renaming
-        # that device in Home Assistant builds no entity again. After the
-        # forward, where every circuit entity has recorded what its base is
-        # worked out from.
+        # A circuit entity's id base depends on its device's name and on its own
+        # id, and neither a rename of that device in Home Assistant nor an edit
+        # to the id builds an entity again: Core changes an edited id in place
+        # and writes no base. So the listener that keeps the bases current is in
+        # place before the forward adds the first entity. Core stops it with the
+        # on-unload callbacks: an unload runs them once the platforms have
+        # removed the entities, and where setup fails after the forward, the
+        # handler below removes the entities before the error leaves setup and
+        # Core runs them. A setup cancelled part way never reaches that handler,
+        # which catches `Exception` only, so it takes nothing down. The listener
+        # reads what each circuit entity records only as an event arrives, and
+        # an entity the forward has yet to build writes its own base as it is
+        # added.
         entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
+
+        # Set before the forward rather than after it: a forward that stops part
+        # way has set some platforms up, and unloading one this entry never set
+        # up costs a logged warning from Home Assistant and still counts as
+        # unloaded (`EntityComponent.async_unload_entry`).
+        platforms_forwarded = True
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # After the forward, so the names it lists as changed are the ones Home
         # Assistant composes for the entities as the platforms left them.
@@ -1014,9 +1029,48 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         async_clear_retired_upgrade_notice(hass, entry)
         await async_announce_new_entities(hass, entry)
     except Exception:
+        await _async_take_down_failed_setup(
+            hass, entry, coordinator, platforms_forwarded=platforms_forwarded
+        )
+        raise
+
+
+async def _async_take_down_failed_setup(
+    hass: HomeAssistant,
+    entry: SpanPanelConfigEntry,
+    coordinator: SpanPanelCoordinator | None,
+    *,
+    platforms_forwarded: bool,
+) -> None:
+    """Take down what a setup that is about to fail brought up, entities first.
+
+    Home Assistant takes down nothing of a failed setup but the entry's
+    on-unload callbacks: the entry is not loaded, so neither an unload nor a
+    reload calls `async_unload_entry` (`ConfigEntry.async_unload`). Platforms
+    this setup forwarded would stay loaded, their entities outliving the entry
+    with nothing keeping their circuit id bases current once those callbacks
+    stop the listener, and the next setup's forward would find each platform
+    already set up. So they are unloaded here, before the error leaves setup
+    and the callbacks run, as `async_unload_entry` unloads them before
+    anything else. A platform that does not unload is logged and left as it
+    is: Core runs the callbacks whatever happened here, so its entities stay
+    live without the listener until Home Assistant restarts.
+
+    The coordinator is shut down after them, whether or not every platform
+    unloaded, which stops its refreshes, dispatch and the current monitor and
+    closes the client.
+    """
+    try:
+        if platforms_forwarded and not await hass.config_entries.async_unload_platforms(
+            entry, PLATFORMS
+        ):
+            _LOGGER.warning(
+                "%s did not set up, and not every platform it set up could be unloaded",
+                entry.title or "SPAN Panel",
+            )
+    finally:
         if coordinator is not None:
             await coordinator.async_shutdown()
-        raise
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
@@ -1033,10 +1087,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 
     await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
 
+    # The coordinator's shutdown stops the current monitor too, and is the same
+    # one a failed setup's teardown runs.
     runtime_data = loaded_runtime_data(entry)
     if runtime_data is not None:
-        if runtime_data.coordinator.current_monitor is not None:
-            runtime_data.coordinator.current_monitor.async_stop()
         await runtime_data.coordinator.async_shutdown()
 
 

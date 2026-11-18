@@ -64,7 +64,47 @@ def test_select_init_missing_circuit() -> None:
     coordinator.config_entry.options = {}
 
     with pytest.raises(ValueError):
-        SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "Test Device")
+        SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "bad_id", "Test Device")
+
+
+def test_a_new_select_shows_the_priority_the_coordinator_holds_now(hass: HomeAssistant) -> None:
+    """The first selection is state, read where every later one is: the coordinator's data.
+
+    The select is built from setup's snapshot, which names its device, and the
+    coordinator's data may have moved on by then. The selection it shows comes
+    from that data, as the breaker switch's first position does, so a priority
+    changed during setup shows at once.
+    """
+    coordinator = _make_coordinator_with_circuit(hass, priority="NEVER")
+    decided = SpanPanelSnapshotFactory.create(
+        circuits={
+            "id": replace(coordinator.data.circuits["id"], priority="SOC_THRESHOLD")
+        },
+    )
+
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, decided, "id", "SPAN Panel"
+    )
+
+    assert select.current_option == CircuitPriority.NEVER.value
+    assert select.options == [
+        priority.value for priority in CircuitPriority if priority is not CircuitPriority.UNKNOWN
+    ]
+
+
+def test_a_select_whose_circuit_the_coordinator_lacks_starts_with_nothing_selected(
+    hass: HomeAssistant,
+) -> None:
+    """A circuit gone from the coordinator's data has no selection to show until it returns."""
+    coordinator = _make_coordinator_with_circuit(hass)
+    decided = coordinator.data
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
+
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, decided, "id", "SPAN Panel"
+    )
+
+    assert (select.options, select.current_option) == ([], None)
 
 
 @pytest.mark.asyncio
@@ -80,7 +120,7 @@ async def test_async_select_option_refusal_is_raised_at_the_caller(hass: HomeAss
     coordinator = _make_coordinator_with_circuit(hass)
     circuit = coordinator.data.circuits["id"]
 
-    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Test Device")
+    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "Test Device")
     select.coordinator = coordinator
     select.hass = MagicMock()
 
@@ -107,7 +147,7 @@ async def test_async_select_option_undelivered_is_raised_at_the_caller(hass: Hom
     coordinator = _make_coordinator_with_circuit(hass)
     circuit = coordinator.data.circuits["id"]
 
-    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Test Device")
+    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "Test Device")
     select.coordinator = coordinator
     select.hass = MagicMock()
 
@@ -142,7 +182,7 @@ async def test_async_select_option_success_refreshes_coordinator(hass: HomeAssis
         registry.async_get_entity_id.return_value = None
         mock_async_get.return_value = registry
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     coordinator.client = MagicMock()
@@ -176,7 +216,7 @@ def test_select_initial_install_in_circuit_numbers_mode_is_on_the_circuits_devic
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     assert select.name == "Circuit Priority"
@@ -202,7 +242,7 @@ def test_select_unnamed_friendly_mode_falls_back_to_the_tabs(hass: HomeAssistant
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     assert select.name == "Circuit Priority"
@@ -243,7 +283,7 @@ def test_select_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "pv-1", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "pv-1", "SPAN Panel"
         )
 
     assert select.name == "Circuit Priority"
@@ -257,7 +297,7 @@ def test_select_available_false_when_panel_offline(hass: HomeAssistant) -> None:
     coordinator = _make_coordinator_with_circuit(hass)
     coordinator.panel_offline = True
 
-    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel")
+    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel")
 
     assert select.available is False
 
@@ -273,7 +313,7 @@ def test_select_extra_state_attributes_include_tabs_and_voltage(hass: HomeAssist
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     assert select.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
@@ -291,7 +331,7 @@ def test_handle_coordinator_update_requests_reload_on_first_sync(hass: HomeAssis
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
         select.hass = MagicMock()
         select.async_write_ha_state = MagicMock()
@@ -316,7 +356,7 @@ def test_handle_coordinator_update_a_user_named_select_still_reloads(hass: HomeA
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     updated_circuit = replace(coordinator.data.circuits["id"], name="Renamed Kitchen")
@@ -351,7 +391,7 @@ def test_handle_coordinator_update_requests_reload_on_name_change(hass: HomeAssi
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     updated_circuit = replace(coordinator.data.circuits["id"], name="Renamed Kitchen")
@@ -385,7 +425,7 @@ def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot(
         mock_async_get.return_value = registry
 
         select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
         )
 
     # Simulate a partial snapshot missing this circuit
@@ -543,6 +583,7 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
         select = SpanPanelCircuitsSelect(
             coordinator,
             CIRCUIT_PRIORITY_DESCRIPTION,
+            coordinator.data,
             "2",
             "SPAN Panel",
         )
@@ -563,6 +604,7 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
         select2 = SpanPanelCircuitsSelect(
             coordinator,
             CIRCUIT_PRIORITY_DESCRIPTION,
+            coordinator.data,
             "2",
             "SPAN Panel",
         )
@@ -615,6 +657,7 @@ def test_select_circuit_numbers_entity_id_120v_single_tab(
         select = SpanPanelCircuitsSelect(
             coordinator,
             CIRCUIT_PRIORITY_DESCRIPTION,
+            coordinator.data,
             "5",
             "SPAN Panel",
         )
@@ -660,6 +703,7 @@ def test_select_coordinator_update_circuit_numbers_requests_reload(
         select = SpanPanelCircuitsSelect(
             coordinator,
             CIRCUIT_PRIORITY_DESCRIPTION,
+            coordinator.data,
             "2",
             "SPAN Panel",
         )

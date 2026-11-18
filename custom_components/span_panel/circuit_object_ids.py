@@ -89,15 +89,21 @@ registry's update event, before the change has returned, because Home
 Assistant asks whether to rename the device's entity ids straight after a
 rename. A reload would answer too late.
 
-An edit to an entity's id is the one of these Core may act on itself. On
-Home Assistant 2026.11 it removes these entities and adds them again, since
-they define add and remove hooks without `async_entity_id_changed`, a path
-Core marks for removal in 2027.11, and the add writes the base the entity
-hands it. The entity works that out as Core asks, from the row as it stands
-(`circuit_object_id_base_now`), and so does the listener, so the row ends on
-the edited id's base whichever of the two writes last. Where Core renames an
-entity in place, or adds no disabled one, it writes no base, and the
-listener keeps it current.
+An edit to an entity's id is the one of these Core acts on itself, and it
+writes no base for it. It changes a live entity's id in place, since each
+class here that defines an add or remove hook defines
+`async_entity_id_changed` beside it, as `SpanPanelEntity`,
+`SpanEnergySensorBase` and `SpanPanelControlLockSwitch` do, and a disabled
+entity has no live entity for it to change. So the listener is the one
+thing that reads an edited id again. Setup registers it before the
+platforms add the first entity, and Core stops it with the entry's
+on-unload callbacks once the entities are gone: after an unload has
+removed them, or after a setup that fails past the forward has unloaded
+its platforms. Two cases leave live entities without it, and an id edited
+on one of them keeps the base from before the edit until the next
+restart: a platform that does not unload as a failed setup is taken down,
+which is logged, and a setup cancelled part way, as when Home Assistant
+stops during it, which takes nothing down.
 
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out
@@ -412,15 +418,15 @@ def circuit_object_id_base_now(hass: HomeAssistant, source: CircuitIdBaseSource)
     """Return a circuit entity's base for the id its registry row has now, or a new entity's.
 
     The base for an entity with no row yet is the one a new entity gets.
-    `SpanPanelEntity.suggested_object_id` answers with this, and Core reads
-    that only as it adds the entity: when the entry sets up, and on Home
-    Assistant 2026.11 again after the entity's id is edited, since these
-    classes define add and remove hooks without `async_entity_id_changed`
-    and Core re-adds such entities, a path it marks for removal in 2027.11.
-    `async_refresh_circuit_id_bases` answers with it too, so the base Core's
-    add writes and the base the listener writes for the same edit are worked
-    out from the same row. Whichever of the two lands last, the row ends on
-    it, and where Core renames in place the listener's is the one written.
+    `SpanPanelEntity.suggested_object_id` answers with this, which Core reads
+    only as it adds the entity, as the entry sets up, and
+    `async_refresh_circuit_id_bases` answers with it whenever the listener
+    refreshes a base, an edit to the entity's id among those times. Both work
+    it out from the row as it stands and from the circuit as the snapshot the
+    setup decided from (`setup_snapshot`) has it: every circuit entity is
+    built from that snapshot, and the listener refreshes from it. So for the
+    same row the base an add writes and the one the listener writes are the
+    same answer.
     """
     existing_entity_id = er.async_get(hass).async_get_entity_id(
         source.recipe.domain, DOMAIN, source.recipe.unique_id

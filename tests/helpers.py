@@ -1,25 +1,34 @@
 """Helper functions for testing the Span Panel integration."""
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
+import contextlib
+from dataclasses import dataclass
 import datetime
 import inspect
+import logging
 from types import ModuleType
 from typing import Any, Final
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 from homeassistant.util.dt import utcnow
 import probatio as vol
 import pytest
-from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry, MockEntityPlatform
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel import package_ratings
+from custom_components.span_panel import SpanPanelRuntimeData, package_ratings
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.sensor_definitions import PANEL_ENERGY_SENSORS
+from custom_components.span_panel.sensor_panel import SpanPanelEnergySensor
 from custom_components.span_panel.util import circuit_device_info
+
+from .factories import SpanPanelSnapshotFactory, pv_binding_for
 
 type WebSocketHandler = Callable[[HomeAssistant, MagicMock, dict[str, Any]], Awaitable[None]]
 """A websocket command's own coroutine, as a test awaits it with a mock connection."""
@@ -34,6 +43,40 @@ def unwrap_websocket_command(command: Callable[..., object]) -> WebSocketHandler
     """
     handler: WebSocketHandler = inspect.unwrap(command, stop=inspect.iscoroutinefunction)
     return handler
+
+
+@dataclass(frozen=True, slots=True)
+class AddAndRemoveCalls:
+    """The calls one entity's own add and remove hooks received while they were watched."""
+
+    added: AsyncMock
+    removed: AsyncMock
+
+    @property
+    def count(self) -> tuple[int, int]:
+        """How many times each ran: `(async_added_to_hass, async_will_remove_from_hass)`."""
+        return self.added.await_count, self.removed.await_count
+
+
+@contextlib.contextmanager
+def watch_add_and_remove(entity: Entity) -> Iterator[AddAndRemoveCalls]:
+    """Count the runs of an entity's own add and remove hooks while the block runs.
+
+    Each hook still runs as written: the watch wraps the entity's bound method
+    on the instance, which is where Core looks it up both when it adds an
+    entity and when it removes one. So a block in which Core removes the entity
+    and adds it again, as it does on an entity-id edit for a class that has not
+    taken the in-place path, counts one of each.
+    """
+    calls = AddAndRemoveCalls(
+        added=AsyncMock(wraps=entity.async_added_to_hass),
+        removed=AsyncMock(wraps=entity.async_will_remove_from_hass),
+    )
+    with (
+        patch.object(entity, "async_added_to_hass", calls.added),
+        patch.object(entity, "async_will_remove_from_hass", calls.removed),
+    ):
+        yield calls
 
 
 def shown_values(schema: vol.Schema) -> dict[str, object]:
@@ -186,6 +229,83 @@ def register_panel_device(hass: HomeAssistant, entry: MockConfigEntry, serial: s
         device_info=DeviceInfo(identifiers={(DOMAIN, serial)}, name=PANEL_NAME),
     )
     return device.id
+
+
+def coordinator_stand_in(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, *, options: Mapping[str, object] | None = None
+) -> tuple[MagicMock, MockConfigEntry]:
+    """Return a coordinator stand-in carrying what a panel sensor reads, online, and its entry.
+
+    The entry is added to `hass` with `options`, which a sensor reads as it is
+    built, and with runtime data naming a registered panel device, so the
+    sensor's device has a parent to be filed under.
+    """
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.hass = hass
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.dip_offset = MagicMock(return_value=0.0)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: "192.0.2.10"},
+        options=dict(options or {}),
+        title=PANEL_NAME,
+        unique_id=snapshot.serial_number,
+    )
+    entry.add_to_hass(hass)
+    coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
+        curation=CurationOverlay.empty(),
+        pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
+    )
+    return coordinator, entry
+
+
+@dataclass(frozen=True, slots=True)
+class MainMeterConsumedEnergy:
+    """The main meter's Consumed Energy, live on a real sensor platform, and what feeds it."""
+
+    sensor: SpanPanelEnergySensor
+    coordinator: MagicMock
+    entry: MockConfigEntry
+
+    async def reads(self, hass: HomeAssistant, wh: float) -> None:
+        """Deliver a snapshot whose main meter reads `wh` to the sensor, as the coordinator does."""
+        self.coordinator.data = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=wh)
+        self.sensor._handle_coordinator_update()
+        await hass.async_block_till_done()
+
+
+async def add_main_meter_consumed_energy(
+    hass: HomeAssistant, wh: float, *, options: Mapping[str, object] | None = None
+) -> MainMeterConsumedEnergy:
+    """Add the main meter's Consumed Energy through a real platform, holding its first reading `wh`.
+
+    An energy sensor is added `unknown` and reads the panel on its first
+    coordinator update, which is a real change of state. That update is
+    delivered here, so a test counting writes counts only what follows it.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=wh)
+    coordinator, entry = coordinator_stand_in(hass, snapshot, options=options)
+    description = next(
+        desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
+    )
+    sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
+    platform = MockEntityPlatform(
+        hass, domain="sensor", platform_name=DOMAIN, logger=logging.getLogger(__name__)
+    )
+    platform.config_entry = entry
+    await platform.async_add_entities([sensor])
+    await hass.async_block_till_done()
+    assert sensor.hass is not None, "the platform did not add the sensor"
+    meter = MainMeterConsumedEnergy(sensor, coordinator, entry)
+    await meter.reads(hass, wh)
+    assert sensor.native_value == wh
+    return meter
 
 
 def register_circuit_device(

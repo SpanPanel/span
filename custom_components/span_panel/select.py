@@ -100,18 +100,22 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         self,
         coordinator: SpanPanelCoordinator,
         description: SpanPanelSelectEntityDescriptionWrapper,
+        snapshot: SpanPanelSnapshot,
         circuit_id: str,
         device_name: str,
     ) -> None:
         """Initialize the select.
 
-        The circuit's name is not passed in: its device's name and the id base
-        are read from the circuit in the current snapshot, so a circuit renamed
-        on the panel reaches both on the next reload.
+        `snapshot` is the one this setup decided from (`setup_snapshot`), as it
+        is for every circuit entity, and the one the listener that keeps circuit
+        id bases current works a base out from. Its device's name, its id base
+        and the name a rename is watched against are read from the circuit
+        there, so a circuit renamed on the panel since reaches all three on the
+        reload its first update asks for. Its options and selection are state,
+        read from the coordinator's current data (`_update_from_circuit`), as
+        the switch's relay state is.
         """
         super().__init__(coordinator)
-        snapshot: SpanPanelSnapshot = coordinator.data
-
         circuit = snapshot.circuits.get(circuit_id)
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
@@ -199,8 +203,12 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 entity_registry, existing_entity_id, circuit.name, (desc_name,)
             )
 
-        self._attr_options = description.options_fn(circuit)
-        self._attr_current_option = description.current_option_fn(circuit)
+        # The options and the selection are state, read from the coordinator's
+        # data as every update reads them and as the switch reads its relay. A
+        # circuit that data lacks starts with none of either until it returns.
+        self._attr_options = []
+        self._attr_current_option = None
+        self._update_from_circuit()
 
         # Store initial circuit name for change detection in auto-sync
         if not existing_entity_id:
@@ -217,10 +225,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         """Get the circuit for this entity, or None if temporarily missing."""
         snapshot: SpanPanelSnapshot = self.coordinator.data
         return snapshot.circuits.get(self.id)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up when entity is removed."""
-        await super().async_will_remove_from_hass()
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option.
@@ -328,17 +332,27 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 self._previous_circuit_name = current_circuit_name
                 self.coordinator.request_reload()
 
-        # Update options and current option based on coordinator data
-        circuit = self._get_circuit()
-        if circuit is None:
+        if not self._update_from_circuit():
             _LOGGER.debug(
                 "Circuit %s temporarily missing from snapshot, skipping select update",
                 self.id,
             )
             return
+        super()._handle_coordinator_update()
+
+    def _update_from_circuit(self) -> bool:
+        """Take the options and the selected one from the circuit in the coordinator's data.
+
+        The one place either is read, as the select is built and on every
+        update. False, with both left as they were, while that data lacks the
+        circuit.
+        """
+        circuit = self._get_circuit()
+        if circuit is None:
+            return False
         self._attr_options = self.description_wrapper.options_fn(circuit)
         self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
-        super()._handle_coordinator_update()
+        return True
 
     def _construct_select_unique_id(
         self,
@@ -391,6 +405,7 @@ async def async_setup_entry(
             SpanPanelCircuitsSelect(
                 coordinator,
                 CIRCUIT_PRIORITY_DESCRIPTION,
+                snapshot,
                 circuit_id,
                 device_name,
             )

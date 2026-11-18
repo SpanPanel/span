@@ -9,8 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 from span_panel_api import (
     AdoptedDevice,
     AdoptedProperty,
@@ -173,6 +174,62 @@ async def test_async_shutdown_unregisters_streaming_and_closes_client(
     client.stop_streaming.assert_awaited_once()
     client.close.assert_awaited_once()
     assert coordinator._unregister_streaming is None
+
+
+async def test_a_shut_down_coordinator_refreshes_neither_on_schedule_nor_on_request(
+    hass: HomeAssistant,
+) -> None:
+    """Shutdown cancels the base class's refresh schedule and its debouncer.
+
+    A listener schedules the fallback refresh, and an entity's request goes
+    through the debouncer; both are `DataUpdateCoordinator`'s, which its own
+    `async_shutdown` cancels. The override skipped that, so a coordinator whose
+    client was closed went on asking it for snapshots.
+    """
+    client = MagicMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+    client.get_snapshot = AsyncMock(return_value=SpanPanelSnapshotFactory.create())
+    coordinator = _create_coordinator(hass, client=client)
+    remove_listener = coordinator.async_add_listener(lambda: None)
+    interval = coordinator.update_interval
+    assert interval is not None
+
+    await coordinator.async_shutdown()
+    async_fire_time_changed(hass, dt_util.utcnow() + interval * 2)
+    await coordinator.async_request_refresh()
+    await hass.async_block_till_done()
+
+    client.get_snapshot.assert_not_awaited()
+    remove_listener()
+
+
+async def test_shutdown_does_its_work_once_however_often_it_is_asked(
+    hass: HomeAssistant,
+) -> None:
+    """The entry's unload and Home Assistant's on-unload callbacks both ask, and one does the work.
+
+    Home Assistant registers the coordinator's shutdown with the entry's
+    on-unload callbacks as the coordinator is built, and the unload, or a
+    failed setup's teardown, calls it before those run. The current monitor is
+    stopped with it.
+    """
+    client = MagicMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+    unregister = MagicMock()
+    coordinator = _create_coordinator(hass, client=client)
+    coordinator._unregister_streaming = unregister
+    monitor = MagicMock()
+    coordinator.current_monitor = monitor
+
+    await coordinator.async_shutdown()
+    await coordinator.async_shutdown()
+
+    unregister.assert_called_once_with()
+    client.stop_streaming.assert_awaited_once_with()
+    client.close.assert_awaited_once_with()
+    monitor.async_stop.assert_called_once_with()
 
 
 async def test_report_dip_and_fire_notification_clears_events(
