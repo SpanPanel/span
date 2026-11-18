@@ -100,9 +100,10 @@ class ControlAccessRefusal(StrEnum):
     """Why the control mode refuses a caller, judged by who the caller is.
 
     The values are wire values: `span_panel/panel_topology` reports them to the
-    card as `control_access.reason`. They are not the gate's translation keys,
-    which name the refusal a service caller is shown and are free to be worded
-    for that reader.
+    card as `control_access.reason`, beside the one Home Assistant's own
+    permissions give, which `control_access` adds. They are not the gate's
+    translation keys, which name the refusal a service caller is shown and are
+    free to be worded for that reader.
     """
 
     CONTROL_DISABLED = "control_disabled"

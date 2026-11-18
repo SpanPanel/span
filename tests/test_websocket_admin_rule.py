@@ -80,7 +80,7 @@ ABOUT_THE_ASKER: Final[Mapping[str, frozenset[str]]] = {
 }
 """The keys of an open command's answer that describe the user asking, and so differ by user.
 
-`control_access` is the control policy's answer for that user; see
+`control_access` says whether that user may operate the panel; see
 `test_topology_control_access.py`. Everything else an open command answers is
 the same for every user.
 """
