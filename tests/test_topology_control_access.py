@@ -19,6 +19,7 @@ from typing import Final
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY, GROUP_ID_USER
+from homeassistant.auth.models import Group
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError, Unauthorized
@@ -227,17 +228,22 @@ async def _gate_refusal(hass: HomeAssistant, entry: MockConfigEntry, user: MockU
 
 
 async def _core_refuses_control(hass: HomeAssistant, user: MockUser, entity_id: str) -> bool:
-    """Whether Core refuses `user` a `switch.turn_on` of `entity_id` for want of control permission.
+    """Whether Core refuses `user` control of `entity_id` for want of control permission.
 
-    The switch is only registered, never added, so a call Core lets through
-    reaches no entity and does nothing: what is asked is Core's permission
-    check, which comes first.
+    A relay switch is asked `switch.turn_on` and a priority select
+    `select.select_option`, the calls the card makes. The entity is only
+    registered, never added, so a call Core lets through reaches no entity and
+    does nothing: what is asked is Core's permission check, which comes first.
     """
+    domain = entity_id.split(".", 1)[0]
+    service, data = (
+        ("select_option", {"option": "OFF_GRID"}) if domain == "select" else ("turn_on", {})
+    )
     try:
         await hass.services.async_call(
-            "switch",
-            "turn_on",
-            {"entity_id": entity_id},
+            domain,
+            service,
+            {"entity_id": entity_id, **data},
             blocking=True,
             context=Context(user_id=user.id),
         )
@@ -316,25 +322,55 @@ async def test_the_topology_and_the_gate_give_the_asker_the_same_answer(
 async def test_the_topology_reports_read_only_exactly_where_core_refuses_control(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator, asker: tuple[str, MockUser]
 ) -> None:
-    """Core refuses the asker the panel's relay switch exactly where the topology says `read_only`.
+    """Core refuses the asker the panel's relay switch and priority select exactly where the topology says `read_only`.
 
     Under All users, where the mode refuses no one, so the permissions are the
     whole answer.
     """
     _, user = asker
     assert await async_setup_component(hass, "switch", {})
+    assert await async_setup_component(hass, "select", {})
     _, device_id, controls = await _load_panel(hass, ControlMode.ALL_USERS)
     topology = await _topology(hass, hass_ws_client, user, device_id)
     circuit = topology["circuits"]
     assert isinstance(circuit, dict)
-    switch = circuit[_CIRCUIT_ID]["entities"]["switch"]
-    assert switch in controls
+    entities = circuit[_CIRCUIT_ID]["entities"]
+    offered = [entities["switch"], entities["select"]]
+    assert offered == controls
 
     control_access_record = topology["control_access"]
     assert isinstance(control_access_record, dict)
-    assert (control_access_record["reason"] == "read_only") is await _core_refuses_control(
-        hass, user, switch
+    read_only = control_access_record["reason"] == "read_only"
+    assert [await _core_refuses_control(hass, user, entity_id) for entity_id in offered] == [
+        read_only,
+        read_only,
+    ]
+
+
+async def test_a_policy_that_allows_one_relay_may_operate_and_is_refused_the_rest(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A group whose policy allows control of the relay switch alone: the panel may be operated, the priority select may not.
+
+    The answer is one flag for the panel, so it is true for a user who can
+    control any of its controls, and Core refuses the others one at a time.
+    """
+    assert await async_setup_component(hass, "switch", {})
+    assert await async_setup_component(hass, "select", {})
+    _, device_id, controls = await _load_panel(hass, ControlMode.ALL_USERS)
+    relay, priority = controls
+    relay_only = Group(
+        name="Synthetic relay only", policy={"entities": {"entity_ids": {relay: True}}}
     )
+    user = MockUser(groups=[relay_only]).add_to_hass(hass)
+    assert not user.is_admin
+
+    assert await _control_access(hass, hass_ws_client, user, device_id) == {
+        "may_operate": True,
+        "reason": None,
+    }
+    assert await _core_refuses_control(hass, user, relay) is False
+    assert await _core_refuses_control(hass, user, priority) is True
 
 
 # ---------------------------------------------------------------------------
