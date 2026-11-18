@@ -9,8 +9,8 @@ The dashboard is enabled via the integration's configuration options:
 
 1. Go to `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`
 2. Check **Show Dashboard in Sidebar** to add a sidebar entry
-3. Optionally check **Admin Users Only** to restrict access to administrator accounts. It is shown while **Show Dashboard in Sidebar** is checked, and keeps its
-   value while the sidebar entry is off
+3. Optionally check **Admin Users Only** to restrict access to administrator accounts; it appears only while **Show Dashboard in Sidebar** is checked, and keeps
+   its value while the sidebar entry is off
 
 ![Configuration Options](images/config_flow.png)
 
