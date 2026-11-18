@@ -576,14 +576,25 @@ class TestCircuitEntityResolution:
 
 
 def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:
-    """Register the monitoring services on a mock hass and return the handlers by name."""
+    """Register the monitoring services on a mock hass and return the handlers by name.
+
+    The handlers themselves: the writes' administrator check is Core's wrapper,
+    which a mock hass cannot run, and `test_service_admin_rule` covers it.
+    """
     handlers: dict[str, Any] = {}
 
     def _register(_domain: str, service: str, handler: Any, **_kwargs: Any) -> None:
         handlers[service] = handler
 
+    def _register_admin(_hass: object, domain: str, service: str, handler: Any, **kwargs: Any) -> None:
+        _register(domain, service, handler, **kwargs)
+
     hass.services.async_register = MagicMock(side_effect=_register)
-    _async_register_monitoring_services(hass)
+    with patch(
+        "custom_components.span_panel.services.async_register_admin_service",
+        side_effect=_register_admin,
+    ):
+        _async_register_monitoring_services(hass)
     return handlers
 
 
