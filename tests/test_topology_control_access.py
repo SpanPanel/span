@@ -7,7 +7,8 @@ refuses an entity service call by before the gate is asked. The card disables
 the panel's controls for a user it says may not operate them, so what it says
 must not come apart from what either rule does: two tests here run the rule
 itself -- the gate, and a service call through Core -- beside the topology and
-hold them to one answer.
+hold them to one answer. A third runs the entry's own setup, so a setup that
+handed the topology one policy and the gate another would fail it.
 """
 
 from __future__ import annotations
@@ -41,12 +42,19 @@ from custom_components.span_panel.control_gate import (
 )
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.id_builder import build_select_unique_id, build_switch_unique_id
+from custom_components.span_panel.options import CONTROL_MODE
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.runtime import SpanPanelRuntimeData
 from custom_components.span_panel.websocket import async_register_commands
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
 from .helpers import register_panel_device
+from .switch_platform_setup import (
+    gated_controls,
+    set_control_mode,
+    switch_platform_setup,
+    v2_entry,
+)
 
 _SERIAL: Final = "sp3-synthetic-access-001"
 _CIRCUIT_ID: Final = "circuit-3"
@@ -327,6 +335,72 @@ async def test_the_topology_reports_read_only_exactly_where_core_refuses_control
     assert (control_access_record["reason"] == "read_only") is await _core_refuses_control(
         hass, user, switch
     )
+
+
+# ---------------------------------------------------------------------------
+# Through the entry's own setup
+# ---------------------------------------------------------------------------
+
+_SETUP_SERIAL: Final = "sp3-synthetic-access-002"
+
+
+async def _turn_on(hass: HomeAssistant, user: MockUser, entity_id: str) -> None:
+    """Turn `entity_id` on as `user`, through Home Assistant's service call."""
+    await hass.services.async_call(
+        "switch",
+        "turn_on",
+        {"entity_id": entity_id},
+        blocking=True,
+        context=Context(user_id=user.id),
+    )
+
+
+async def test_setup_gives_the_topology_the_policy_its_gate_enforces(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A non-admin is told what the gate then does to their relay command, before and after an options change.
+
+    Everything else here hands the topology and the gate one policy object by
+    construction, so it cannot see setup give them different ones -- which is
+    the bug the topology exists to prevent: the card offering a toggle the gate
+    refuses. This runs the entry's real setup, a real `switch.turn_on` on a relay
+    switch the real platform created, the real gate, and the reload an options
+    change causes.
+    """
+    group = await hass.auth.async_get_group(GROUP_ID_USER)
+    assert group is not None
+    user = MockUser(groups=[group]).add_to_hass(hass)
+    entry = v2_entry(
+        serial=_SETUP_SERIAL,
+        entry_id="entry-control-access",
+        options={CONTROL_MODE: ControlMode.ADMIN_ONLY.value},
+    )
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id=_CIRCUIT_ID, name="Synthetic Circuit", tabs=[3], is_user_controllable=True
+    )
+
+    async with switch_platform_setup(hass, entry, circuits={_CIRCUIT_ID: circuit}):
+        async_register_commands(hass)
+        device_id = entry.runtime_data.panel_device_id
+        topology = await _topology(hass, hass_ws_client, user, device_id)
+        circuits = topology["circuits"]
+        assert isinstance(circuits, dict)
+        relay = circuits[_CIRCUIT_ID]["entities"]["switch"]
+
+        assert topology["control_access"] == {"may_operate": False, "reason": "admin_only"}
+        with pytest.raises(ServiceValidationError) as refused:
+            await _turn_on(hass, user, relay)
+        assert refused.value.translation_key == "admin_only_control"
+        assert gated_controls(entry).published == []
+
+        await set_control_mode(hass, entry, ControlMode.ALL_USERS)
+
+        assert await _control_access(hass, hass_ws_client, user, device_id) == {
+            "may_operate": True,
+            "reason": None,
+        }
+        await _turn_on(hass, user, relay)
+        assert [command.node_id for command in gated_controls(entry).published] == [_CIRCUIT_ID]
 
 
 # ---------------------------------------------------------------------------
