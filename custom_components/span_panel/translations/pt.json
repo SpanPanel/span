@@ -1,7 +1,7 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
+      "already_configured": "Este SPAN Panel já está configurado.",
       "cannot_connect": "Falha ao ligar ao Painel Span",
       "host_not_set": "Não foi definido nenhum endereço do painel; reinicie a configuração.",
       "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",

@@ -1,7 +1,7 @@
 {
   "config": {
     "abort": {
-      "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
+      "already_configured": "この SPAN Panel はすでに設定されています。",
       "cannot_connect": "スパンパネルへの接続に失敗しました",
       "host_not_set": "パネルのアドレスが設定されていません。セットアップをやり直してください。",
       "no_host": "アドオンからホストアドレスが提供されませんでした。",

@@ -1,7 +1,7 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
+      "already_configured": "Este SPAN Panel ya está configurado.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "host_not_set": "No se ha definido la dirección del panel; reinicie la configuración.",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",

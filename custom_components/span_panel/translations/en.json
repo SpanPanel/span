@@ -1,7 +1,7 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Span Panel already configured. Only a single configuration is possible.",
+      "already_configured": "This SPAN Panel is already configured.",
       "cannot_connect": "Failed to connect to Span Panel",
       "no_host": "No host address was provided by the add-on.",
       "no_serial": "Could not determine the panel serial number.",
