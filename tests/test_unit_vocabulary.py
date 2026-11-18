@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from homeassistant.const import (
-    PERCENTAGE,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfRatio,
     UnitOfTime,
 )
 
@@ -22,7 +22,7 @@ _KNOWN: set[str] = {
     # `UnitOfTime.MINUTES` — the first non-electrical quantity a SPAN panel
     # publishes, and the reason a time vocabulary belongs here at all.
     *(u.value for u in UnitOfTime),
-    PERCENTAGE,
+    UnitOfRatio.PERCENTAGE.value,
 }
 
 _MIN_SAMPLED_UNITS = 5

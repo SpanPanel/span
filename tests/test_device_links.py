@@ -259,9 +259,9 @@ async def test_a_sub_device_really_lands_under_the_panel(hass: HomeAssistant) ->
     registry = dr.async_get(hass)
 
     panel_device_id = await ensure_device_registered(hass, entry, snapshot, "SPAN Panel")
-    bess = registry.async_get_or_create(
+    bess = registry.async_get_or_create_from_info(
         config_entry_id=entry.entry_id,
-        **bess_device_info(
+        device_info=bess_device_info(
             "sp3-link-e2e",
             SpanBatterySnapshotFactory.create(),
             "SPAN Panel",

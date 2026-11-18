@@ -6,7 +6,7 @@ declares, and every expectation comes from the same capture.
 
 from __future__ import annotations
 
-from homeassistant.const import STATE_ON, STATE_UNKNOWN
+from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT, STATE_ON, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
@@ -60,6 +60,9 @@ async def test_a_battery_device_exists_exactly_where_one_is_declared(
     assert len(levels) == 1
     state = hass.states.get(levels[0].entity_id)
     assert state is not None
+    # Spelled out rather than taken from Home Assistant's constant: the string a
+    # history graph and the energy dashboard read is what has to stay the same.
+    assert state.attributes[ATTR_UNIT_OF_MEASUREMENT] == "%"
     if replayed.battery.soe_percentage is None:
         assert state.state == STATE_UNKNOWN
     else:

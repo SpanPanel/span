@@ -1,15 +1,16 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
+      "already_configured": "Este SPAN Panel ya está configurado.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "host_not_set": "No se ha definido la dirección del panel; reinicie la configuración.",
-      "no_devices_found": "No se hallaron aparatos en la red",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",
       "no_serial": "No se pudo determinar el número de serie del panel.",
+      "not_ipv4_address": "El panel se descubrió en una dirección que no es IPv4, y el descubrimiento solo admite direcciones IPv4. Agregue el panel manualmente con su dirección IPv4 o su nombre de host.",
+      "not_span_panel": "Ningún panel SPAN con firmware v2 respondió en esta dirección. Compruebe que el panel esté encendido y accesible.",
       "panel_firmware_flat": "Este panel usa el firmware spanos2, que publica el antiguo esquema eBus plano. Actualice el firmware del panel y luego vuelva a intentarlo.",
+      "reauth_failed": "Ese SPAN Panel ya no está configurado, así que no había nada que volver a autenticar.",
       "reauth_successful": "Autenticación exitosa.",
-      "reconfigure_successful": "Host actualizado exitosamente.",
       "unique_id_mismatch": "El panel en esta dirección tiene un número de serie diferente. No puede cambiar a un panel diferente durante la reconfiguración.",
       "v1_not_supported": "El firmware v1 no es compatible. Actualice el firmware de su panel a v2."
     },

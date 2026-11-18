@@ -358,7 +358,7 @@ async def test_a_successful_setup_clears_a_notice_left_from_a_previous_run(
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     assert _issue(hass, entry) is None
 
@@ -386,7 +386,7 @@ async def test_unloading_the_entry_takes_the_subscription_with_it(
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
 
     unregister.assert_not_called()
     await entry._async_process_on_unload(hass)

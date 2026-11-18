@@ -19,7 +19,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import SelectSelector
@@ -714,9 +714,8 @@ async def test_migration_updates_older_entry_to_current_version(
     )
     entry.add_to_hass(hass)
 
-    result = await async_migrate_entry(hass, entry)
+    await async_migrate_entry(hass, entry)
 
-    assert result is True
     assert entry.version == CURRENT_CONFIG_VERSION
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     # v2→v3 migration adds api_version field
@@ -745,8 +744,7 @@ async def test_simulation_entry_migrates_normally(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    result = await async_migrate_entry(hass, entry)
-    assert result is True
+    await async_migrate_entry(hass, entry)
     assert entry.version == CURRENT_CONFIG_VERSION
 
 
@@ -775,7 +773,7 @@ async def test_v6_migration_drops_the_stored_passphrase(hass: HomeAssistant) -> 
     )
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.version == CURRENT_CONFIG_VERSION
     assert CONF_HOP_PASSPHRASE not in entry.data
@@ -812,7 +810,7 @@ async def test_home_assistant_actually_runs_the_v7_migration(hass: HomeAssistant
 
     with patch(
         "custom_components.span_panel.async_setup_entry",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
@@ -846,7 +844,7 @@ async def test_v7_1_migration_keeps_control_without_a_logged_in_user(
     entry = _v7_1_entry({})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
@@ -859,7 +857,7 @@ async def test_v7_1_migration_keeps_an_explicit_off(hass: HomeAssistant) -> None
     entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: False})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
@@ -874,7 +872,7 @@ async def test_v7_1_migration_reads_an_unreadable_value_as_it_was_read(
     entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: "no"})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
 
@@ -896,7 +894,7 @@ async def test_migration_leaves_an_entry_from_a_newer_minor_version_alone(
     )
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION + 1
     assert ALLOW_CONTEXTLESS_CONTROL not in entry.options
@@ -915,7 +913,7 @@ async def test_home_assistant_actually_runs_the_v7_2_migration(hass: HomeAssista
 
     with patch(
         "custom_components.span_panel.async_setup_entry",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
@@ -992,7 +990,7 @@ async def test_v7_3_migration_removes_the_unmapped_tab_sensors_and_nothing_else(
 
     with patch(
         "custom_components.span_panel.async_setup_entry",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
@@ -1024,7 +1022,7 @@ async def test_v7_3_migration_on_an_entry_that_never_set_the_option(
     )
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     # Only the 7.4 step's pin is added; the 7.3 step itself had nothing to take.
@@ -1060,7 +1058,7 @@ async def test_v7_4_migration_keeps_control_open_to_every_user(
     entry = _v7_3_entry({})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
@@ -1074,7 +1072,7 @@ async def test_v7_4_migration_keeps_a_chosen_mode(hass: HomeAssistant, mode: Con
     entry = _v7_3_entry({CONTROL_MODE: mode.value})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.options[CONTROL_MODE] == mode.value
 
@@ -1088,7 +1086,7 @@ async def test_v7_4_migration_reads_an_unreadable_mode_as_it_was_read(
     entry = _v7_3_entry({CONTROL_MODE: stored})
     entry.add_to_hass(hass)
 
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
 
     assert entry.options[CONTROL_MODE] == ControlMode.ALL_USERS.value
 
@@ -1101,7 +1099,7 @@ async def test_home_assistant_actually_runs_the_v7_4_migration(hass: HomeAssista
 
     with patch(
         "custom_components.span_panel.async_setup_entry",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
@@ -1146,7 +1144,7 @@ async def test_v7_4_migrates_to_8_0_unchanged(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.span_panel.async_setup_entry",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
 
@@ -1163,15 +1161,15 @@ async def test_an_8_0_entry_is_refused_by_a_7_x_release(hass: HomeAssistant) -> 
     `VERSION` and stops at a higher one before it calls the integration. So the
     7.x release is modelled by putting both the flow and the constants it is
     built from back to 7.4, with the migration itself left real. That migration
-    answers True for any entry at or past its own version, so nothing but core's
+    leaves any entry at or past its own version as it is, so nothing but core's
     check stands between a downgrade and a setup on converted data.
     """
     entry = _v7_4_entry()
     entry.add_to_hass(hass)
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
     assert (entry.version, entry.minor_version) == (8, 0)
 
-    setup_entry = AsyncMock(return_value=True)
+    setup_entry = AsyncMock(return_value=None)
     with (
         patch("custom_components.span_panel.migrations.CURRENT_CONFIG_VERSION", 7),
         patch("custom_components.span_panel.migrations.CURRENT_CONFIG_MINOR_VERSION", 4),
@@ -3094,7 +3092,7 @@ async def test_zeroconf_sets_up_a_second_panel_that_then_reads_as_configured(
             return_value=auth,
         ),
         # The entry is created, not run: what is under test is what it records.
-        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)),
+        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=None)),
     ):
         discovered = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -3261,6 +3259,8 @@ async def test_reconfigure_success(hass: HomeAssistant) -> None:
 
         assert result2["type"] == FlowResultType.ABORT
         assert result2["reason"] == "reconfigure_successful"
+        # Home Assistant's own string, which is why the integration carries none.
+        assert result2.get("translation_domain") == HOMEASSISTANT_DOMAIN
 
     assert entry.data[CONF_HOST] == new_host
     # Other data should be preserved
@@ -4283,7 +4283,7 @@ async def test_fqdn_entry_creation_sets_registered_fqdn_and_unique_title(
         ),
         patch(
             "custom_components.span_panel.async_setup_entry",
-            new=AsyncMock(return_value=True),
+            new=AsyncMock(return_value=None),
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -4880,7 +4880,7 @@ async def _through_to_the_entry(hass: HomeAssistant, result: ConfigFlowResult) -
             return_value=MOCK_V2_AUTH,
         ),
         # The entry's own setup is not what these tests are about.
-        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)),
+        patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=None)),
     ):
         if result.get("step_id") == "confirm_discovery":
             result = await flow.async_configure(result["flow_id"], {})
@@ -5265,7 +5265,7 @@ async def test_the_naming_choice_at_first_setup_builds_the_ids_of_new_circuit_en
     form = await _first_setup_naming_form(hass)
     # The entry is created and its platforms are run below, without the
     # panel connection a whole setup opens.
-    with patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=True)):
+    with patch("custom_components.span_panel.async_setup_entry", AsyncMock(return_value=None)):
         created = await hass.config_entries.flow.async_configure(
             form["flow_id"], {ENTITY_NAMING_PATTERN: choice}
         )

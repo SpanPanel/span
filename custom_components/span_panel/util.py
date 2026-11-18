@@ -172,9 +172,11 @@ def snapshot_to_device_info(
     **The fallbacks are the point, not a courtesy.** A panel that omits one of
     the three must keep the card it has rather than losing a row. `hw_version`
     has no such string to fall back to and so is simply absent where the panel
-    publishes none -- `DeviceInfo` omits a `None` field, which is the difference
-    between "this panel does not report a revision" and "this panel reports a
-    blank one".
+    publishes none. It is passed as None rather than left unset: `DeviceInfo`
+    keeps a None, leaving out only a field never set, and the registry writes
+    it, so a revision the panel stops reporting is cleared rather than left
+    standing. That None is the difference between "this panel does not report
+    a revision" and "this panel reports a blank one".
     """
     configuration_url = f"http://{host}" if host else None
 

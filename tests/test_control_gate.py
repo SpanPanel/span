@@ -224,7 +224,7 @@ async def test_a_migrated_entry_still_allows_a_contextless_command(
     """An upgrade must not start refusing the automations an install already runs."""
     entry = MockConfigEntry(domain=DOMAIN, title="Span Panel", version=7, minor_version=1)
     entry.add_to_hass(hass)
-    assert await async_migrate_entry(hass, entry) is True
+    await async_migrate_entry(hass, entry)
     gate = _gate_for_entry(hass, entry)
 
     token = async_bind_caller(Context(parent_id="automation-context"), "switch.x")
@@ -757,7 +757,7 @@ def _lock_switch(hass: HomeAssistant, lock: ControlLock, timeout: float | None):
         lock_timeout_minutes=timeout,
         relay_debounce_seconds=0.0,
     )
-    entity = SpanPanelControlLockSwitch(coordinator, lock, policy, "SPAN Panel")
+    entity = SpanPanelControlLockSwitch(coordinator, lock, policy)
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     return entity

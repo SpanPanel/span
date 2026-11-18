@@ -28,7 +28,7 @@ _UNMAPPED_TAB_SENSORS_OPTION = "enable_unmapped_circuit_sensors"
 _CONTROL_MODE_VALUES = frozenset(mode.value for mode in ControlMode)
 
 
-async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> None:
     """Migrate config entry through successive versions.
 
     Supports upgrades from v1.3.1+ (config version 2) through to the
@@ -43,7 +43,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         CURRENT_CONFIG_VERSION,
         CURRENT_CONFIG_MINOR_VERSION,
     ):
-        return True
+        return
 
     _LOGGER.debug(
         "Migrating config entry %s from version %s.%s to %s.%s",
@@ -239,8 +239,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
             minor_version=0,
         )
         _LOGGER.debug("Migrated config entry %s to version 8.0", config_entry.entry_id)
-
-    return True
 
 
 def _remove_unmapped_tab_sensors(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> None:

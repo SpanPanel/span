@@ -337,7 +337,7 @@ async def _set_up(
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
     ):
-        assert await async_setup_entry(hass, entry) is True
+        await async_setup_entry(hass, entry)
     await hass.async_block_till_done()
     return client, coordinators[0]
 

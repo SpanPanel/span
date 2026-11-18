@@ -404,7 +404,7 @@ def async_register_adopted_devices(
     reason is a device that has no entities to fall out of. A vendor device that
     publishes only an `info` node -- advertising what it is before it publishes
     any reading -- resolves entirely to the device card by the node rule, so it
-    creates no entity, so nothing ever calls `async_get_or_create` for it. It used
+    creates no entity, so nothing ever registers its device on the way. It used
     to produce *nothing at all*: no device, no entity, and no notice. Which is the
     silence adoption exists to end, reached by a different route.
 
@@ -422,9 +422,9 @@ def async_register_adopted_devices(
         identifier = resolve_identifier(
             registry, snapshot.serial_number, device, config_entry_id=entry_id
         )
-        registry.async_get_or_create(
+        registry.async_get_or_create_from_info(
             config_entry_id=entry_id,
-            **adopted_device_info(identifier, device, panel_device_id=panel_device_id),
+            device_info=adopted_device_info(identifier, device, panel_device_id=panel_device_id),
         )
         _LOGGER.debug("Registered adopted device %s as %s", device.device_type, identifier)
 

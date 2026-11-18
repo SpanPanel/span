@@ -521,7 +521,7 @@ async def _async_rest_tls_verdict(
     )
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Set up Span Panel from a config entry.
 
     This setup applies every reload asked for before it began, so it records
@@ -539,13 +539,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
     async_setup_began(hass, entry)
     entry.async_on_unload(entry.add_update_listener(update_listener))
     try:
-        return await _async_setup_entry(hass, entry)
+        await _async_setup_entry(hass, entry)
     except BaseException:
         async_setup_failed(hass, entry.entry_id)
         raise
 
 
-async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
+async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Set up Span Panel from a config entry; see `async_setup_entry`."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
@@ -985,31 +985,27 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         if coordinator is not None:
             await coordinator.async_shutdown()
         raise
-    else:
-        return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Unload a config entry.
 
     Unload the platforms first; only tear the coordinator down if that
-    succeeded. If a platform raises during unload, HA retries with the
-    coordinator still alive — shutting it down first would leave
-    entities pointing at a closed MQTT client.
+    succeeded. A platform that fails to unload raises out of here, and Home
+    Assistant leaves the entry in `failed_unload`, with whatever entities that
+    platform did not remove still in place until it restarts. The coordinator
+    stays up under them: shutting it down first would leave them pointing at a
+    closed MQTT client.
     """
     _LOGGER.debug("Unloading SPAN Panel integration")
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if not unload_ok:
-        return False
+    await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
 
     runtime_data = loaded_runtime_data(entry)
     if runtime_data is not None:
         if runtime_data.coordinator.current_monitor is not None:
             runtime_data.coordinator.current_monitor.async_stop()
         await runtime_data.coordinator.async_shutdown()
-
-    return True
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
@@ -1134,6 +1130,8 @@ async def ensure_device_registered(
             device_registry.async_update_device(existing_device.id, name=device_name)
         return existing_device.id
 
-    device_info = snapshot_to_device_info(snapshot, device_name, host=host)
-    created = device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    created = device_registry.async_get_or_create_from_info(
+        config_entry_id=entry.entry_id,
+        device_info=snapshot_to_device_info(snapshot, device_name, host=host),
+    )
     return created.id

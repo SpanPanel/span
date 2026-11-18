@@ -88,6 +88,8 @@ async def _panel(hass: HomeAssistant, *, timeout: float) -> AsyncIterator[MockCo
     client.connect = AsyncMock()
     client.close = AsyncMock()
     coordinator = MagicMock()
+    # As the real coordinator is: the panel's device info is built from it.
+    coordinator.config_entry = entry
     coordinator.data = snapshot
     coordinator.transport_dead = False
     coordinator.current_monitor = None

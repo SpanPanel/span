@@ -576,7 +576,7 @@ for all of them.
 
 `async_register_adopted_devices` registers each adopted device explicitly, before the platforms are forwarded, rather than letting it fall out of entity
 creation. The reason is a device that has no entities to fall out of: a vendor device publishing only an `info` node resolves entirely to the device card by the
-node rule, creates no entity, and so had nothing to call `async_get_or_create` for it. It produced _nothing at all_ — no device, no entity, no notification.
+node rule, creates no entity, and so had nothing to register its device on the way. It produced _nothing at all_ — no device, no entity, no notification.
 
 Running it before the platforms also makes the identity freeze single-valued: `resolve_identifier` runs once, at registration, so every entity created
 afterwards resolves against a device that already exists and cannot disagree.
