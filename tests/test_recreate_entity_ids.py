@@ -257,7 +257,7 @@ class _SwitchInstall(_Install[SpanPanelCircuitsSwitch]):
         self, coordinator: MagicMock, snapshot: SpanPanelSnapshot
     ) -> SpanPanelCircuitsSwitch:
         """Build the breaker switch."""
-        return SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, "SPAN Panel")
+        return SpanPanelCircuitsSwitch(coordinator, coordinator.data, CIRCUIT_ID, "SPAN Panel")
 
 
 class _SelectInstall(_Install[SpanPanelCircuitsSelect]):
@@ -271,7 +271,7 @@ class _SelectInstall(_Install[SpanPanelCircuitsSelect]):
     ) -> SpanPanelCircuitsSelect:
         """Build the circuit-priority select."""
         return SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, CIRCUIT_ID, "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, CIRCUIT_ID, "SPAN Panel"
         )
 
 

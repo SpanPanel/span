@@ -417,8 +417,11 @@ def circuit_object_id_base_now(hass: HomeAssistant, source: CircuitIdBaseSource)
     only as it adds the entity, as the entry sets up, and
     `async_refresh_circuit_id_bases` answers with it whenever the listener
     refreshes a base, an edit to the entity's id among those times. Both work
-    it out from the row as it stands, so the base an add writes and the one
-    the listener writes are the same answer.
+    it out from the row as it stands and from the circuit as the snapshot the
+    setup decided from (`setup_snapshot`) has it: every circuit entity is
+    built from that snapshot, and the listener refreshes from it. So for the
+    same row the base an add writes and the one the listener writes are the
+    same answer.
     """
     existing_entity_id = er.async_get(hass).async_get_entity_id(
         source.recipe.domain, DOMAIN, source.recipe.unique_id

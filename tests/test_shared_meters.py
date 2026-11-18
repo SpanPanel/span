@@ -124,7 +124,7 @@ def _coordinator(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> MagicMock:
 def test_each_members_power_sensor_and_switch_carry_its_peers(hass: HomeAssistant) -> None:
     coordinator = _coordinator(hass, SNAPSHOT)
     sensor = SpanCircuitPowerSensor(coordinator, POWER, SNAPSHOT, "circuit-57")
-    switch = SpanPanelCircuitsSwitch(coordinator, "circuit-57", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "circuit-57", "SPAN Panel")
 
     for attributes in (sensor.extra_state_attributes, switch.extra_state_attributes):
         assert attributes is not None

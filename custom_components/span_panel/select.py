@@ -100,18 +100,22 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         self,
         coordinator: SpanPanelCoordinator,
         description: SpanPanelSelectEntityDescriptionWrapper,
+        snapshot: SpanPanelSnapshot,
         circuit_id: str,
         device_name: str,
     ) -> None:
         """Initialize the select.
 
-        The circuit's name is not passed in: its device's name and the id base
-        are read from the circuit in the current snapshot, so a circuit renamed
-        on the panel reaches both on the next reload.
+        `snapshot` is the one this setup decided from (`setup_snapshot`), as it
+        is for every circuit entity, and the one the listener that keeps circuit
+        id bases current works a base out from. Its device's name, its id base
+        and the name a rename is watched against are read from the circuit
+        there, so a circuit renamed on the panel since reaches all three on the
+        reload its first update asks for. Its options and selection start from
+        the same circuit and follow the coordinator's data from the first
+        update on.
         """
         super().__init__(coordinator)
-        snapshot: SpanPanelSnapshot = coordinator.data
-
         circuit = snapshot.circuits.get(circuit_id)
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
@@ -387,6 +391,7 @@ async def async_setup_entry(
             SpanPanelCircuitsSelect(
                 coordinator,
                 CIRCUIT_PRIORITY_DESCRIPTION,
+                snapshot,
                 circuit_id,
                 device_name,
             )

@@ -439,7 +439,7 @@ async def test_a_held_hardware_reading_and_a_control_go_with_the_transport(
     door = SpanPanelBinarySensor(
         coordinator, next(desc for desc in BINARY_SENSORS if desc.key == SYSTEM_DOOR_STATE)
     )
-    relay = SpanPanelCircuitsSwitch(coordinator, "c1", "SPAN Panel")
+    relay = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "c1", "SPAN Panel")
     assert door.available is True
     assert relay.available is True
 

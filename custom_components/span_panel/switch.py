@@ -67,17 +67,20 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     def __init__(
         self,
         coordinator: SpanPanelCoordinator,
+        snapshot: SpanPanelSnapshot,
         circuit_id: str,
         device_name: str,
     ) -> None:
         """Initialize the values.
 
-        The circuit's name is not passed in: its device's name and the id base
-        are read from the circuit in the current snapshot, so a circuit renamed
-        on the panel reaches both on the next reload.
+        `snapshot` is the one this setup decided from (`setup_snapshot`), as it
+        is for every circuit entity, and the one the listener that keeps circuit
+        id bases current works a base out from. Its device's name, its id base
+        and the name a rename is watched against are read from the circuit
+        there, so a circuit renamed on the panel since reaches all three on the
+        reload its first update asks for. Its state is read from the
+        coordinator's current data, as every update delivers it.
         """
-        snapshot: SpanPanelSnapshot = coordinator.data
-
         circuit = snapshot.circuits.get(circuit_id)
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
@@ -610,7 +613,7 @@ async def async_setup_entry(
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_has_a_breaker_switch(circuit_data):
             continue
-        entities.append(SpanPanelCircuitsSwitch(coordinator, circuit_id, _device_name))
+        entities.append(SpanPanelCircuitsSwitch(coordinator, snapshot, circuit_id, _device_name))
 
     # Settable properties on devices this integration models nothing for.
     # Disabled and diagnostic like every adopted entity: the panel authorises the
