@@ -68,7 +68,7 @@ def async_raise_unvalidated_hardware(
     async_create_entry_issue(
         hass,
         entry,
-        unvalidated_hardware_issue_id(entry.entry_id),
+        EntryIssue.UNVALIDATED_HARDWARE,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.ERROR,

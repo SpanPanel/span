@@ -52,8 +52,9 @@ def _defect_issue_pattern(entry_id: str) -> str:
     Scoped to the entry because panels share the domain: a healthy panel's
     pass would otherwise delete a degraded panel's issues on every cycle. Home
     Assistant matches the pattern from the start of each id, and the entry's
-    part of each prefix is closed with a separator, so one entry's pattern
-    matches no other entry's issues.
+    part of each prefix is closed with an underscore. That keeps one entry's
+    pattern off every other entry's issues only because no entry id Home
+    Assistant creates holds an underscore (see `EntryIssueFamily`).
     """
     alternatives = "|".join(re.escape(defect.entry_prefix(entry_id)) for defect in _DEFECTS)
     return f"(?:{alternatives})"
@@ -135,7 +136,7 @@ def async_sync_schema_issues(
             async_create_entry_issue(
                 hass,
                 entry,
-                EntryIssueFamily.UNRESOLVED_FIELD.issue_id(entry.entry_id, field_path),
+                EntryIssueFamily.UNRESOLVED_FIELD.for_key(field_path),
                 is_fixable=False,
                 # Derived from live state, so it is re-asserted at every startup.
                 # A non-persistent issue reloads as a tombstone carrying only the
@@ -156,7 +157,7 @@ def async_sync_schema_issues(
             async_create_entry_issue(
                 hass,
                 entry,
-                EntryIssueFamily.UNIT_MISMATCH.issue_id(entry.entry_id, mismatch.field_path),
+                EntryIssueFamily.UNIT_MISMATCH.for_key(mismatch.field_path),
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,

@@ -11,8 +11,10 @@ while its entry is disabled.
   field path or a switch. Each member builds its own ids, so the modules that
   raise an issue and the sweep below read one set of prefixes. A released id
   never changes, because a dismissal is stored under it.
-- **Raised only through `async_create_entry_issue`,** which links the issue to
-  its entry. Home Assistant writes the link it is given each time an issue is
+- **Raised only through `async_create_entry_issue`,** which takes the kind
+  rather than an id, builds the id from the entry it is given, and links the
+  issue to that entry. So every id carries its entry's, and no issue is raised
+  unlinked: Home Assistant writes the link it is given each time an issue is
   raised again, so a single call without it would unlink the issue.
 - **Swept at removal for what an older release raised.** Issues from before
   they were linked stand unlinked until they are raised again, and Home
@@ -22,6 +24,7 @@ while its entry is disabled.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 from homeassistant.config_entries import ConfigEntry
@@ -63,7 +66,13 @@ class EntryIssueFamily(StrEnum):
     """A kind of issue an entry raises one of per key, by the prefix of its ids.
 
     Each id is the prefix, the entry's id, an underscore and the key. The
-    underscore closes the entry's part, so no entry's ids start another's.
+    underscore closes the entry's part, and that keeps one entry's ids from
+    starting another's only because no entry id Home Assistant creates holds an
+    underscore: it is a ULID, or 32 hexadecimal digits for an entry an older
+    Home Assistant created. Were an entry's id `panel_2`, each of its ids would
+    also start with entry `panel`'s prefix, and since keys such as field paths
+    and unique ids hold underscores of their own, nothing after the prefix
+    could tell the two entries apart.
     """
 
     UNRESOLVED_FIELD = "unresolved_"
@@ -85,12 +94,33 @@ class EntryIssueFamily(StrEnum):
         """Return the id of this kind's issue for one entry and one key."""
         return f"{self.entry_prefix(entry_id)}{key}"
 
+    def for_key(self, key: str) -> KeyedEntryIssue:
+        """Return this kind's issue for one key, to raise for an entry."""
+        return KeyedEntryIssue(self, key)
+
+
+@dataclass(frozen=True, slots=True)
+class KeyedEntryIssue:
+    """One issue of a family, for one key, before it has an entry.
+
+    What `async_create_entry_issue` takes for a family, so the entry's id
+    reaches the issue's id from the entry the issue is linked to and from
+    nowhere else.
+    """
+
+    family: EntryIssueFamily
+    key: str
+
+    def issue_id(self, entry_id: str) -> str:
+        """Return the id of this issue for one entry."""
+        return self.family.issue_id(entry_id, self.key)
+
 
 @callback
 def async_create_entry_issue(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    issue_id: str,
+    issue: EntryIssue | KeyedEntryIssue,
     *,
     is_fixable: bool,
     is_persistent: bool,
@@ -101,13 +131,16 @@ def async_create_entry_issue(
 ) -> None:
     """Raise an issue of this integration's, or raise it again, linked to its entry.
 
+    `issue` is the kind, or a family's issue for one key
+    (`EntryIssueFamily.for_key`); its id is built here from the entry's.
+
     Home Assistant refuses to link an issue to an entry it does not know, so a
     caller that can outlive its entry asks `entry_removed` first.
     """
     ir.async_create_issue(
         hass,
         DOMAIN,
-        issue_id,
+        issue.issue_id(entry.entry_id),
         config_entry_id=entry.entry_id,
         data=data,
         is_fixable=is_fixable,

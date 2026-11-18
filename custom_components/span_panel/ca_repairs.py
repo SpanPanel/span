@@ -82,7 +82,7 @@ def async_raise_ca_changed(
     async_create_entry_issue(
         hass,
         entry,
-        ca_changed_issue_id(entry.entry_id),
+        EntryIssue.CA_CHANGED,
         is_fixable=True,
         is_persistent=True,
         severity=ir.IssueSeverity.ERROR,
@@ -131,7 +131,7 @@ def async_raise_ca_unusable(hass: HomeAssistant, entry: ConfigEntry, reason: str
     async_create_entry_issue(
         hass,
         entry,
-        ca_unusable_issue_id(entry.entry_id),
+        EntryIssue.CA_UNUSABLE,
         is_fixable=True,
         is_persistent=True,
         severity=ir.IssueSeverity.ERROR,
@@ -193,7 +193,7 @@ def async_raise_rest_tls_untrusted(
     async_create_entry_issue(
         hass,
         entry,
-        rest_tls_untrusted_issue_id(entry.entry_id),
+        EntryIssue.REST_TLS_UNTRUSTED,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.ERROR,

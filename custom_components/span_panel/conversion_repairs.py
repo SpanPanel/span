@@ -233,7 +233,7 @@ def async_raise_conversion_notice(
     async_create_entry_issue(
         hass,
         entry,
-        issue_id,
+        EntryIssue.CIRCUIT_DEVICES_CONVERTED,
         is_fixable=False,
         is_persistent=True,
         severity=ir.IssueSeverity.WARNING,
@@ -334,12 +334,13 @@ def async_raise_breaker_switch_area_notice(
     row = er.async_get(hass).async_get(switch_entity_id)
     name = er.async_get_full_entity_name(hass, row) if row is not None else ""
     identified = f"`{switch_entity_id}`"
-    issue_id = breaker_switch_area_issue_id(entry.entry_id, switch_unique_id)
-    ir.async_delete_issue(hass, DOMAIN, issue_id)
+    ir.async_delete_issue(
+        hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, switch_unique_id)
+    )
     async_create_entry_issue(
         hass,
         entry,
-        issue_id,
+        EntryIssueFamily.BREAKER_SWITCH_IN_AREA.for_key(switch_unique_id),
         is_fixable=False,
         is_persistent=True,
         severity=ir.IssueSeverity.WARNING,

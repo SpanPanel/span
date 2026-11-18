@@ -13,6 +13,7 @@ from collections.abc import Callable
 import itertools
 import logging
 from pathlib import Path
+import re
 from typing import Final
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,6 +22,8 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.setup import async_setup_component
+from homeassistant.util.ulid import ulid_now
+from homeassistant.util.uuid import random_uuid_hex
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.typing import WebSocketGenerator
@@ -165,6 +168,27 @@ def test_no_kind_s_ids_start_with_another_kind_s_prefix() -> None:
     prefixes: list[EntryIssue | EntryIssueFamily] = [*EntryIssue, *EntryIssueFamily]
     for one, other in itertools.permutations(prefixes, 2):
         assert not other.value.startswith(one.value), (one, other)
+
+
+def test_no_entry_id_home_assistant_creates_holds_an_underscore() -> None:
+    """A family's ids close the entry's part with an underscore, which an entry id never holds.
+
+    Home Assistant creates a ULID, and created 32 hexadecimal digits before.
+    """
+    assert re.fullmatch(r"[0-9A-HJKMNP-TV-Z]{26}", ulid_now())
+    assert re.fullmatch(r"[0-9a-f]{32}", random_uuid_hex())
+    assert "_" not in MockConfigEntry(domain=DOMAIN).entry_id
+
+
+def test_an_entry_id_holding_an_underscore_would_share_another_entry_s_family_ids() -> None:
+    """What the rule above protects: every family id of `panel_2` starts with `panel`'s prefix.
+
+    The removal sweep and the schema reconcile of entry `panel` would then take
+    entry `panel_2`'s issues too. A kind of one issue per entry is matched
+    whole, so only the families depend on it.
+    """
+    for family in EntryIssueFamily:
+        assert family.issue_id("panel_2", "key").startswith(family.entry_prefix("panel"))
 
 
 # ---------- raising ----------

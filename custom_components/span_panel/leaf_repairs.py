@@ -76,7 +76,6 @@ def async_raise_leaf_name_mismatch(
     re-arms the signal on the next successful connect, so a restart that resolves
     nothing raises it again and a restart after the panel came back does not.
     """
-    issue_id = leaf_name_mismatch_issue_id(entry.entry_id)
     if mismatch.leaf_names:
         leaf_names = ", ".join(mismatch.leaf_names)
         _LOGGER.warning(
@@ -90,7 +89,7 @@ def async_raise_leaf_name_mismatch(
         async_create_entry_issue(
             hass,
             entry,
-            issue_id,
+            EntryIssue.LEAF_NAME_MISMATCH,
             is_fixable=False,
             is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
@@ -113,7 +112,7 @@ def async_raise_leaf_name_mismatch(
     async_create_entry_issue(
         hass,
         entry,
-        issue_id,
+        EntryIssue.LEAF_NAME_MISMATCH,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,

@@ -59,7 +59,7 @@ def async_raise_flat_firmware(hass: HomeAssistant, entry: ConfigEntry) -> None:
     async_create_entry_issue(
         hass,
         entry,
-        flat_firmware_issue_id(entry.entry_id),
+        EntryIssue.FLAT_FIRMWARE,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.ERROR,

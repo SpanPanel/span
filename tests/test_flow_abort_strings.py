@@ -42,6 +42,7 @@ import pytest
 
 from custom_components.span_panel import repairs
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.entry_issues import EntryIssue
 
 _PACKAGE: Final = "custom_components.span_panel"
 _COMPONENT: Final = Path(__file__).resolve().parent.parent / "custom_components" / "span_panel"
@@ -253,9 +254,8 @@ def _fixable_issues() -> list[tuple[str, str]]:
 
     Every issue is raised through `entry_issues.async_create_entry_issue`, which
     a test in `test_entry_issues` holds the integration to, so those calls are
-    the ones read. The id is built by the function the raising module builds
-    it with, for a made-up entry, so it reaches `async_create_fix_flow` as a
-    real one would.
+    the ones read. Each passes its kind, which builds the id, here for a
+    made-up entry, so it reaches `async_create_fix_flow` as a real one would.
     """
     issues: list[tuple[str, str]] = []
     for source in _SOURCES:
@@ -272,17 +272,25 @@ def _fixable_issues() -> list[tuple[str, str]]:
             assert isinstance(key, ast.Constant) and isinstance(key.value, str), (
                 f"{source.where(call)} raises a fixable issue with a key this test cannot read"
             )
-            id_expr = call.args[2] if len(call.args) > 2 else keywords.get("issue_id")
-            assert (
-                isinstance(id_expr, ast.Call)
-                and isinstance(id_expr.func, ast.Name)
-                and len(id_expr.args) == 1
-            ), f"{source.where(call)} builds its issue id in a way this test cannot repeat"
-            build = getattr(source.module(), id_expr.func.id)
-            issue_id = build(_PROBE_ENTRY_ID)
-            assert isinstance(issue_id, str)
-            issues.append((key.value, issue_id))
+            kind_expr = call.args[2] if len(call.args) > 2 else keywords.get("issue")
+            kind = None if kind_expr is None else _resolved(source.module(), kind_expr)
+            # A family's issue carries a key known only when it is raised, so
+            # only a kind of one issue per entry can be built here.
+            assert isinstance(kind, EntryIssue), (
+                f"{source.where(call)} raises a fixable issue of a kind this test cannot build"
+            )
+            issues.append((key.value, kind.issue_id(_PROBE_ENTRY_ID)))
     return issues
+
+
+def _resolved(module: ModuleType, node: ast.expr) -> object:
+    """The object a name or a chain of attributes names in `module`, or None for anything else."""
+    if isinstance(node, ast.Name):
+        return getattr(module, node.id, None)
+    if isinstance(node, ast.Attribute):
+        owner = _resolved(module, node.value)
+        return None if owner is None else getattr(owner, node.attr, None)
+    return None
 
 
 async def _issues_by_fix_flow(hass: HomeAssistant) -> dict[str, set[str]]:
