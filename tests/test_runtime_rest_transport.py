@@ -563,7 +563,7 @@ class TestRemovalLeavesNothingBehind:
                 translation_key="panel_ca_changed",
             )
 
-        await hass.config_entries.async_remove(entry.entry_id)
+        assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
         for issue_id in (
             ca_changed_issue_id(entry.entry_id),

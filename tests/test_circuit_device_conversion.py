@@ -2048,7 +2048,9 @@ async def test_the_notice_is_cleared_on_removal(hass: HomeAssistant) -> None:
     async with _set_up(install):
         assert install.notice() is not None
 
-    assert await hass.config_entries.async_remove(install.entry.entry_id)
+    assert await hass.config_entries.async_remove(install.entry.entry_id) == {
+        "require_restart": False
+    }
     await hass.async_block_till_done()
 
     assert install.notice() is None
@@ -2067,7 +2069,7 @@ async def test_removing_one_panel_leaves_another_s_notice(hass: HomeAssistant) -
             hass, entry, ConversionReport((ConvertedEntity(row.entity_id, "Old"),), (), (), ())
         )
 
-    assert await hass.config_entries.async_remove(first.entry_id)
+    assert await hass.config_entries.async_remove(first.entry_id) == {"require_restart": False}
     await hass.async_block_till_done()
 
     issues = ir.async_get(hass)

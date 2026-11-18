@@ -694,7 +694,9 @@ async def test_removing_the_entry_clears_its_notices(hass: HomeAssistant) -> Non
         await panel.save_options(CONTROLS_ON)
         assert len(panel.notices()) == 2
 
-    assert await hass.config_entries.async_remove(panel.entry.entry_id)
+    assert await hass.config_entries.async_remove(panel.entry.entry_id) == {
+        "require_restart": False
+    }
     await hass.async_block_till_done()
 
     assert panel.notices() == {}
@@ -708,7 +710,7 @@ async def test_removing_one_panel_leaves_another_s_notices(hass: HomeAssistant) 
         for circuit_id in ("1", "2"):
             _raise_for(hass, entry, f"span_{serial}_relay_{circuit_id}")
 
-    assert await hass.config_entries.async_remove(first.entry_id)
+    assert await hass.config_entries.async_remove(first.entry_id) == {"require_restart": False}
     await hass.async_block_till_done()
 
     assert _notices(hass, first.entry_id) == {}

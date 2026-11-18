@@ -1119,7 +1119,7 @@ async def test_removing_the_entry_clears_the_repair(hass: HomeAssistant, panel_s
     assert issue is not None
     assert issue.config_entry_id == entry.entry_id
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert _unvalidated_hardware_issue(hass) is None
 
@@ -1508,7 +1508,7 @@ async def test_removing_a_refused_entry_clears_the_flat_firmware_repair(
     assert await _boot(hass, entry, _panel_with_model("MAIN_32")) is False
     assert _flat_firmware_issue(hass) is not None
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert _flat_firmware_issue(hass) is None
 

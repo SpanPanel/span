@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from unittest.mock import DEFAULT, MagicMock, patch
 
 from homeassistant.helpers import issue_registry as ir
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.span_panel import schema_repairs
 from custom_components.span_panel.const import DOMAIN, EVENT_SCHEMA_ISSUE
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.schema_repairs import (
@@ -427,7 +429,7 @@ async def test_removing_one_panel_leaves_another_s_issues(hass) -> None:
     async_sync_schema_issues(hass, removed, findings, _AFFECTED)
     async_sync_schema_issues(hass, kept, findings, _AFFECTED)
 
-    await hass.config_entries.async_remove(removed.entry_id)
+    assert await hass.config_entries.async_remove(removed.entry_id) == {"require_restart": False}
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(removed)) is None
@@ -465,7 +467,7 @@ async def test_removing_the_entry_deletes_its_issues(hass, entry) -> None:
     assert issue is not None
     assert issue.config_entry_id == entry.entry_id
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
 
@@ -497,6 +499,39 @@ async def test_a_pass_keeps_a_dismissed_issue_that_still_applies_and_deletes_a_r
     assert still_applies is not None
     assert still_applies.dismissed_version == dismissed
     assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two")) is None
+
+
+async def test_a_pass_that_raises_part_way_deletes_nothing(hass, entry) -> None:
+    """The refresh is cancelled by the exception, so an issue the pass never reached stays.
+
+    Finished instead, it would delete every issue the pass had not yet raised
+    again, the user's dismissals with them, for a failure that says nothing
+    about the panel.
+    """
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"], "c.three": ["sensor.three"]}
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one", "c.three"}), (), frozenset()), affected
+    )
+    # The first create goes through to the real one; the second raises.
+    second_create_fails = MagicMock(
+        wraps=schema_repairs.async_create_entry_issue,
+        side_effect=[DEFAULT, RuntimeError("the second create fails")],
+    )
+
+    with (
+        patch.object(schema_repairs, "async_create_entry_issue", second_create_fails),
+        pytest.raises(RuntimeError, match="the second create fails"),
+    ):
+        async_sync_schema_issues(
+            hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
+        )
+
+    assert second_create_fails.call_count == 2
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one")) is not None
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two")) is None
+    # Resolved in this pass, and left as it was because the pass did not finish.
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "c.three")) is not None
 
 
 def _raise_unlinked(hass, issue_id: str, *, dismissed: bool = False) -> None:

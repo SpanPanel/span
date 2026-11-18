@@ -248,16 +248,96 @@ async def test_every_kind_raised_is_linked_to_its_entry(hass: HomeAssistant) -> 
     assert raised == {*EntryIssue, *EntryIssueFamily} - _RETIRED
 
 
-def _creates_an_issue(call: ast.Call) -> bool:
-    """Whether a call is one of Home Assistant's own ways to raise an issue."""
-    func = call.func
-    if isinstance(func, ast.Attribute):
-        name = func.attr
-    elif isinstance(func, ast.Name):
-        name = func.id
-    else:
-        return False
-    return name in {"async_create_issue", "create_issue"}
+_ISSUE_REGISTRY: Final = "homeassistant.helpers.issue_registry"
+_CORE_CREATES: Final = frozenset({"async_create_issue", "create_issue"})
+_REGISTRY_CREATE: Final = "async_get_or_create"
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """Return a name or a chain of attributes as dotted text, or None for anything else."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute) and (base := _dotted(node.value)) is not None:
+        return f"{base}.{node.attr}"
+    return None
+
+
+def _issue_registry_names(tree: ast.Module) -> tuple[set[str], set[str], list[str]]:
+    """Return the module's spellings of the issue registry module and of its `async_get`.
+
+    Also returns the imports that bring in one of Core's create functions
+    under any name, which are a way round the rule by themselves.
+    """
+    modules = {_ISSUE_REGISTRY}
+    getters: set[str] = set()
+    imported: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(
+                alias.asname
+                for alias in node.names
+                if alias.name == _ISSUE_REGISTRY and alias.asname
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == "homeassistant":
+            modules.update(
+                f"{alias.asname or alias.name}.issue_registry"
+                for alias in node.names
+                if alias.name == "helpers"
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == "homeassistant.helpers":
+            modules.update(
+                alias.asname or alias.name for alias in node.names if alias.name == "issue_registry"
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == _ISSUE_REGISTRY:
+            for alias in node.names:
+                if alias.name in _CORE_CREATES or alias.name == "*":
+                    imported.append(f"line {node.lineno}: imports {alias.name}")
+                elif alias.name == "async_get":
+                    getters.add(alias.asname or alias.name)
+    getters.update(f"{module}.async_get" for module in modules)
+    return modules, getters, imported
+
+
+def _issue_creations(source: str) -> list[str]:
+    """Return each place a module can raise an issue without `async_create_entry_issue`.
+
+    Three ways round it, each under any name: importing one of Core's create
+    functions from the issue registry module; referring to one of them on that
+    module, called or not, since `functools.partial(ir.async_create_issue, ...)`
+    is a reference; and referring to the issue registry's own
+    `async_get_or_create`, on `async_get(hass)` or on a name assigned from it.
+    Read statically, so `getattr` and a module reassigned to another name are
+    out of its sight.
+    """
+    tree = ast.parse(source)
+    modules, getters, found = _issue_registry_names(tree)
+
+    def is_registry(node: ast.expr) -> bool:
+        return isinstance(node, ast.Call) and _dotted(node.func) in getters
+
+    registries: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and is_registry(node.value):
+            registries.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and node.value is not None
+            and is_registry(node.value)
+            and isinstance(node.target, ast.Name)
+        ):
+            registries.add(node.target.id)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+        if node.attr in _CORE_CREATES and _dotted(node.value) in modules:
+            found.append(f"line {node.lineno}: refers to {_dotted(node)}")
+        elif node.attr == _REGISTRY_CREATE and (
+            is_registry(node.value)
+            or (isinstance(node.value, ast.Name) and node.value.id in registries)
+        ):
+            found.append(f"line {node.lineno}: refers to the issue registry's {node.attr}")
+    return found
 
 
 def test_only_entry_issues_raises_an_issue_with_home_assistant() -> None:
@@ -266,13 +346,94 @@ def test_only_entry_issues_raises_an_issue_with_home_assistant() -> None:
     Raised again anywhere without the link, an issue would come unlinked, since
     Home Assistant writes the link it is given each time.
     """
-    callers = set()
-    for path in sorted(_PACKAGE.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        if any(isinstance(node, ast.Call) and _creates_an_issue(node) for node in ast.walk(tree)):
-            callers.add(path.relative_to(_PACKAGE).as_posix())
+    found = {
+        path.relative_to(_PACKAGE).as_posix(): creations
+        for path in sorted(_PACKAGE.rglob("*.py"))
+        if (creations := _issue_creations(path.read_text(encoding="utf-8")))
+    }
 
-    assert callers == {"entry_issues.py"}
+    assert set(found) == {"entry_issues.py"}, found
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            "from homeassistant.helpers import issue_registry as ir\n"
+            "ir.async_create_issue(hass, 'span_panel', 'x')\n",
+            id="called",
+        ),
+        pytest.param(
+            "from functools import partial\n"
+            "from homeassistant.helpers import issue_registry as ir\n"
+            "raise_it = partial(ir.async_create_issue, hass, 'span_panel')\n",
+            id="referred to without a call",
+        ),
+        pytest.param(
+            "from homeassistant.helpers.issue_registry import async_create_issue as raise_it\n"
+            "raise_it(hass, 'span_panel', 'x')\n",
+            id="imported under another name",
+        ),
+        pytest.param(
+            "from homeassistant.helpers.issue_registry import create_issue\n",
+            id="thread-safe variant imported",
+        ),
+        pytest.param("from homeassistant.helpers.issue_registry import *\n", id="star import"),
+        pytest.param(
+            "import homeassistant.helpers.issue_registry as issues\n"
+            "issues.create_issue(hass, 'span_panel', 'x')\n",
+            id="module imported under another name",
+        ),
+        pytest.param(
+            "import homeassistant.helpers.issue_registry\n"
+            "homeassistant.helpers.issue_registry.async_create_issue(hass, 'span_panel', 'x')\n",
+            id="module spelled out",
+        ),
+        pytest.param(
+            "from homeassistant import helpers\n"
+            "helpers.issue_registry.async_create_issue(hass, 'span_panel', 'x')\n",
+            id="through the helpers package",
+        ),
+        pytest.param(
+            "from homeassistant.helpers import issue_registry\n"
+            "issue_registry.async_get(hass).async_get_or_create('span_panel', 'x')\n",
+            id="registry method on async_get",
+        ),
+        pytest.param(
+            "from homeassistant.helpers import issue_registry as ir\n"
+            "registry = ir.async_get(hass)\n"
+            "registry.async_get_or_create('span_panel', 'x')\n",
+            id="registry method on an assigned name",
+        ),
+        pytest.param(
+            "from homeassistant.helpers import issue_registry as ir\n"
+            "registry: ir.IssueRegistry = ir.async_get(hass)\n"
+            "registry.async_get_or_create('span_panel', 'x')\n",
+            id="registry method on an annotated name",
+        ),
+        pytest.param(
+            "from homeassistant.helpers.issue_registry import async_get as issues\n"
+            "issues(hass).async_get_or_create('span_panel', 'x')\n",
+            id="registry getter imported under another name",
+        ),
+    ],
+)
+def test_the_rule_finds_each_way_round_it(source: str) -> None:
+    """The guard above is only as good as what it can see, so each bypass is shown to it."""
+    assert _issue_creations(source)
+
+
+def test_the_rule_leaves_reads_deletes_and_other_registries_alone() -> None:
+    """Reading or deleting an issue, and another registry's `async_get_or_create`, raise nothing."""
+    source = (
+        "from homeassistant.helpers import entity_registry as er, issue_registry as ir\n"
+        "er.async_get(hass).async_get_or_create('sensor', 'span_panel', 'uid')\n"
+        "registry = ir.async_get(hass)\n"
+        "registry.async_get_issue('span_panel', 'x')\n"
+        "ir.async_delete_issue(hass, 'span_panel', 'x')\n"
+    )
+
+    assert _issue_creations(source) == []
 
 
 # ---------- removal ----------
@@ -298,7 +459,7 @@ async def test_removal_deletes_the_entry_s_linked_issues_and_their_dismissals(
         persistence.add(issue.is_persistent)
     assert persistence == {True, False}
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     for issue_id in issue_ids:
         assert registry.async_get_issue(DOMAIN, issue_id) is None, issue_id
@@ -321,7 +482,7 @@ async def test_removal_sweeps_an_older_release_s_issues_and_leaves_another_entry
             if index % 3 == 0:
                 ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
 
-    await hass.config_entries.async_remove(removed.entry_id)
+    assert await hass.config_entries.async_remove(removed.entry_id) == {"require_restart": False}
 
     registry = ir.async_get(hass)
     assert [
@@ -419,7 +580,7 @@ async def test_the_client_s_callbacks_raise_nothing_once_the_entry_is_removed(
     on_mismatch = client.register_leaf_mismatch_callback.call_args.args[0]
     on_fatal = client.register_fatal_error_callback.call_args.args[0]
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
     caplog.clear()
     with caplog.at_level(logging.WARNING, logger="custom_components.span_panel"):
         on_mismatch(_MOVED)
@@ -441,7 +602,7 @@ async def test_a_coordinator_that_outlives_its_entry_raises_no_schema_repair(
     # Setup's reconcile point, with nothing validated yet.
     coordinator.async_sync_schema_repairs()
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
     client.field_metadata = {
         "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
     }
