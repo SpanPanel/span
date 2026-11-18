@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from homeassistant.auth.permissions.const import POLICY_CONTROL
 
-from .control_gate import ControlAccessRefusal, ControlPolicy
+from .control_gate import ControlModeRefusal, ControlPolicy
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -35,13 +35,17 @@ if TYPE_CHECKING:
 class PermissionRefusal(StrEnum):
     """Why the user's own Home Assistant permissions keep them from operating the panel.
 
-    A wire value beside `ControlAccessRefusal`'s, in the same
+    A wire value beside `ControlModeRefusal`'s, in the same
     `control_access.reason` field. Separate because Core decides it, not the
     control mode, and the gate never refuses for it.
     """
 
     READ_ONLY = "read_only"
     """The user may control none of the panel's circuit controls, as a Read Only user may control nothing."""
+
+
+type ControlAccessReason = ControlModeRefusal | PermissionRefusal
+"""Every reason `control_access` can give: the control mode's, then Core's permissions'."""
 
 
 class ControlAccessRecord(TypedDict):
@@ -55,7 +59,7 @@ class ControlAccessRecord(TypedDict):
     """
 
     may_operate: bool
-    reason: ControlAccessRefusal | PermissionRefusal | None
+    reason: ControlAccessReason | None
 
 
 def control_access(
@@ -77,9 +81,7 @@ def control_access(
     offers no circuit control there is nothing to disable and nothing for Core
     to refuse, so the permissions are not reported.
     """
-    reason: ControlAccessRefusal | PermissionRefusal | None = policy.refusal_for(
-        is_admin=user.is_admin
-    )
+    reason: ControlAccessReason | None = policy.refusal_for(is_admin=user.is_admin)
     if reason is None:
         reason = _permission_refusal(user, circuit_controls)
     return ControlAccessRecord(may_operate=reason is None, reason=reason)

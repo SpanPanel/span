@@ -22,10 +22,10 @@ from span_panel_api import ControlCommand, PublishOutcome, PublishState
 from custom_components.span_panel.const import DOMAIN, EVENT_CONTROL_COMMAND
 from custom_components.span_panel.control_gate import (
     CONTROL_CALLER,
-    ControlAccessRefusal,
     ControlGate,
     ControlLock,
     ControlMode,
+    ControlModeRefusal,
     ControlPolicy,
     async_bind_caller,
     outcome_is_failure,
@@ -690,11 +690,11 @@ def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
     [
         (ControlMode.ALL_USERS, None),
         (ControlMode.ADMIN_ONLY, None),
-        (ControlMode.DISABLED, ControlAccessRefusal.CONTROL_DISABLED),
+        (ControlMode.DISABLED, ControlModeRefusal.CONTROL_DISABLED),
     ],
 )
 def test_the_mode_judges_a_caller_with_no_user_only_by_refusing_everyone(
-    mode: ControlMode, refusal: ControlAccessRefusal | None
+    mode: ControlMode, refusal: ControlModeRefusal | None
 ) -> None:
     """`admin_only` has no user to judge; whether such a command goes through is `allow_contextless`'s question."""
     policy = replace(ControlPolicy.default(), mode=mode)

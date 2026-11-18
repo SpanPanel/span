@@ -96,7 +96,7 @@ this constant only ever decides for an entry created since.
 """
 
 
-class ControlAccessRefusal(StrEnum):
+class ControlModeRefusal(StrEnum):
     """Why the control mode refuses a caller, judged by who the caller is.
 
     The values are wire values: `span_panel/panel_topology` reports them to the
@@ -188,7 +188,7 @@ class ControlPolicy:
         """
         return self.lock_timeout_minutes is not None and self.mode is not ControlMode.DISABLED
 
-    def refusal_for(self, *, is_admin: bool | None) -> ControlAccessRefusal | None:
+    def refusal_for(self, *, is_admin: bool | None) -> ControlModeRefusal | None:
         """Why the control mode refuses this caller, or None where it does not.
 
         The one statement of who the mode lets operate the panel. The gate
@@ -207,9 +207,9 @@ class ControlPolicy:
         circuit's last command; the gate asks both itself.
         """
         if self.mode is ControlMode.DISABLED:
-            return ControlAccessRefusal.CONTROL_DISABLED
+            return ControlModeRefusal.CONTROL_DISABLED
         if self.mode is ControlMode.ADMIN_ONLY and is_admin is False:
-            return ControlAccessRefusal.ADMIN_ONLY
+            return ControlModeRefusal.ADMIN_ONLY
         return None
 
     @classmethod
@@ -438,7 +438,7 @@ class ControlGate:
         # this integration grows later, a code path that forgets the helper --
         # would otherwise be published by an entry whose owner switched control
         # off. That is the promise this module opens with.
-        if refusal is ControlAccessRefusal.CONTROL_DISABLED:
+        if refusal is ControlModeRefusal.CONTROL_DISABLED:
             self._refuse(
                 "control_disabled",
                 "Control of this SPAN panel is switched off in its options. "
@@ -459,7 +459,7 @@ class ControlGate:
                 parent_id=context.parent_id if context is not None else None,
             )
 
-        if refusal is ControlAccessRefusal.ADMIN_ONLY:
+        if refusal is ControlModeRefusal.ADMIN_ONLY:
             self._refuse(
                 "admin_only_control",
                 "Only a Home Assistant administrator may operate this SPAN panel.",

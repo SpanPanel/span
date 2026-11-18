@@ -32,10 +32,10 @@ from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_access import PermissionRefusal, control_access
 from custom_components.span_panel.control_gate import (
     CONTROL_CALLER,
-    ControlAccessRefusal,
     ControlGate,
     ControlLock,
     ControlMode,
+    ControlModeRefusal,
     ControlPolicy,
     async_bind_caller,
 )
@@ -375,6 +375,4 @@ def test_an_administrator_is_never_read_only(mode: ControlMode) -> None:
     reason = control_access(policy, user, [_SWITCH, _SELECT])["reason"]
 
     assert reason is not PermissionRefusal.READ_ONLY
-    assert reason is (
-        ControlAccessRefusal.CONTROL_DISABLED if mode is ControlMode.DISABLED else None
-    )
+    assert reason is (ControlModeRefusal.CONTROL_DISABLED if mode is ControlMode.DISABLED else None)
