@@ -194,7 +194,9 @@ class ControlPolicy:
         The one statement of who the mode lets operate the panel. The gate
         enforces it on every command, and `span_panel/panel_topology` reports it
         for whoever is viewing the card, so the controls the card offers and the
-        commands the gate lets through cannot come to disagree.
+        commands the gate lets through are decided by one rule rather than two
+        copies of it. `test_topology_control_access.py` runs both, the gate
+        through a real setup too, and holds them to the same answer.
 
         `is_admin` is None for a caller with no logged-in user. `disabled`
         refuses that caller as it refuses everyone. `admin_only` does not judge
@@ -428,8 +430,9 @@ class ControlGate:
         user_id = context.user_id if context is not None else None
 
         # Judged once, by the rule the topology reports to the card, and acted
-        # on below in this method's own order: `disabled` before everything,
-        # `admin_only` last.
+        # on below in this method's own order: `disabled` before everything
+        # else, `admin_only` after the lock and contextless checks and before
+        # the relay debounce.
         refusal = self._policy.refusal_for(is_admin=await self._caller_is_admin(user_id))
 
         # First, because it is the entry-wide answer and the most useful thing

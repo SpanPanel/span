@@ -8,11 +8,12 @@ and restates neither:
   every command. It comes first, because it is the integration's own answer
   and holds for every control the entry has.
 - **The user's Home Assistant permissions.** Core refuses an entity service
-  call from a user who is not an administrator, with `Unauthorized`, for each
-  entity that `user.permissions.check_entity(entity_id, POLICY_CONTROL)` does
-  not allow, and administrators are not checked at all (`helpers/service.py`).
-  That happens before any entity, and so before the gate, is asked, which is
-  why the gate never answers it and this module has to.
+  call from a user who is not an administrator, raising `Unauthorized` at the
+  first entity it names that `user.permissions.check_entity(entity_id,
+  POLICY_CONTROL)` does not allow, and administrators are not checked at all
+  (`helpers/service.py`). That happens before any entity, and so before the
+  gate, is asked, which is why the gate never answers it and this module has
+  to.
 
 `control_access` asks the mode, then the permissions, and reports the first
 refusal.
