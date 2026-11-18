@@ -17,7 +17,8 @@ provides all of these relationships explicitly, keyed by circuit UUID, so the ca
 Any logged-in user may call it, administrator or not, so the sidebar dashboard and the card work for whoever is viewing them. It carries the panel's layout,
 what the panel publishes about each circuit and device, the ratings current monitoring judges each circuit against, and the registry IDs that tie them together;
 no host, credential or certificate is in it. Whether a switch or select it names can be operated is decided when it is used, by
-[Who may operate the panel](README.md#restricting-who-can-operate-the-panel).
+[Who may operate the panel](README.md#restricting-who-can-operate-the-panel). `control_access` reports that option's answer for the user asking, so a card can
+disable the controls that user would be refused.
 
 ### Request
 
@@ -49,6 +50,10 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "config_entry_id": "e5f6a7b8c9d0",
   "device_name": "SPAN Panel",
   "monitoring_rating_offered": true,
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "circuits": {
     "a1b2c3d4e5f6": {
       "device_id": "c7d8e9f0a1b2",
@@ -209,9 +214,23 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                        |
 | `device_name`               | string      | HA device display name                                                                                                                                      |
 | `monitoring_rating_offered` | bool        | Whether `set_circuit_package_ratings` takes ratings on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
+| `control_access`            | object      | Whether the user asking may operate the panel, and if not, why (see below)                                                                                  |
 | `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                          |
 | `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared     |
 | `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                      |
+
+#### Control Access Object
+
+| Field         | Type        | Description                                                                                                                                                                     |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `may_operate` | bool        | Whether **Who may operate the panel** lets the user asking operate the panel's controls                                                                                         |
+| `reason`      | string/null | Why not: `control_disabled` where the option is `Nobody`, `admin_only` where it is `Administrators only` and the user is not an administrator; null where `may_operate` is true |
+
+The answer is for the user the WebSocket connection is authenticated as, so two users asking about the same panel can be told different things. It comes from
+the rule the integration refuses a control command by, so a card that disables its relay and priority controls where `may_operate` is false offers no control
+that rule would refuse. It says nothing about the control lock, which can be armed or disarmed while a page is open and which its switch reports, nor about the
+relay debounce. **Allow control without a logged-in user** never applies, because a WebSocket connection always has a logged-in user. Changing **Who may operate
+the panel** reloads the entry, and the topology then answers by the new setting.
 
 #### Circuit Object
 
@@ -387,8 +406,8 @@ snapshot removes one or changes its `package_ratings_state`. A consumer showing 
 | `circuit_ids`     | array[string] | The circuits whose package ratings, or what they are judged as, changed |
 
 Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator: Home Assistant lets any other user subscribe only to the events
-on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the next
-time it fetches the topology.
+on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the
+next time it fetches the topology.
 
 ## `span_panel/adopted/list`
 
