@@ -110,11 +110,12 @@ def loaded_runtime_data(entry: ConfigEntry) -> SpanPanelRuntimeData | None:
     `async_remove_config_entry_device`.
 
     Both halves of the check are real. `ConfigEntry.runtime_data` is a bare
-    annotation that core deletes on unload (`config_entries.py:1044-1045`), so
-    the attribute is genuinely absent on an entry that has not finished setting
-    up -- hence `getattr` with a default rather than an attribute read. And what
-    is there is whatever the owning integration put there, so `isinstance` is
-    what says it is ours; a test double may put anything at all in it.
+    annotation that core deletes once an unload succeeds, in
+    `ConfigEntry.async_unload`, so the attribute is genuinely absent on an entry
+    that has not finished setting up -- hence `getattr` with a default rather
+    than an attribute read. And what is there is whatever the owning
+    integration put there, so `isinstance` is what says it is ours; a test
+    double may put anything at all in it.
 
     One helper, one answer. It lives here rather than in `services` because
     `services` is not a leaf and half the callers are not services: this module
