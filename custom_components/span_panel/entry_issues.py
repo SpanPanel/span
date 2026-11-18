@@ -53,8 +53,8 @@ class EntryIssue(StrEnum):
     An upgrade that took nothing away is not a defect, and the Repairs list
     stamped it with a severity and offered to ignore it, which told the user
     their panel was broken; `notices` carries it as a notification instead.
-    Named here so the ones older releases raised are still cleared, at setup
-    and by the sweep.
+    Only untagged builds ever raised it, never a release. Named here so an
+    install that ran one still has it cleared, at setup and by the sweep.
     """
 
     def issue_id(self, entry_id: str) -> str:
@@ -82,8 +82,9 @@ class EntryIssueFamily(StrEnum):
     """The new-entity Repair, which nothing raises any more.
 
     An addition is not a repair, and `additions` announces it as a notification
-    instead. Older releases raised it persistent, so without being named here
-    the ones standing on an upgraded install would never be cleared.
+    instead. Only untagged builds ever raised it, never a release, and they
+    raised it persistent, so without being named here the ones standing on an
+    install that ran one would never be cleared.
     """
 
     def entry_prefix(self, entry_id: str) -> str:

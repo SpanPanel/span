@@ -5,8 +5,8 @@ A schema finding is re-derived from live state on every pass and deleted the
 moment it stops being true; this one describes an event that already happened on
 a transport that has stopped for good, and there is nothing left running to
 re-derive it from. It is raised once, persists across restarts, and is cleared
-only by the user accepting the new fingerprint or by a setup that connects
-cleanly again.
+only by the user accepting the new fingerprint, by a setup that connects
+cleanly again, or by Home Assistant when the entry it is linked to is removed.
 
 It is also the only Repair here that is fixable, and the fix is the point. A
 rotated CA and an intercepted connection are indistinguishable from inside the

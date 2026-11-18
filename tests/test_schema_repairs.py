@@ -595,8 +595,8 @@ async def test_a_pass_leaves_another_entry_s_unlinked_issues(hass, entry) -> Non
 
 # --- The retired firmware-upgrade Repair ----------------------------------
 #
-# Installs from older versions may still hold one. Nothing raises it any more,
-# and setup clears it.
+# Only untagged builds raised one, never a release, so an install that ran one
+# may still hold it. Nothing raises it any more, and setup clears it.
 
 _RETIRED_UPGRADE_ISSUE = "panel_upgraded_to_ebus_v1"
 
@@ -640,8 +640,9 @@ async def test_clearing_the_retired_upgrade_repair_leaves_another_panels_alone(
 
 # --- The retired new-entity Repair ----------------------------------------
 #
-# Older releases raised one per addition, persistent, so an upgraded install may
-# still hold several. Nothing raises it any more, and setup clears them.
+# Only untagged builds raised them, never a release: one per addition, and
+# persistent, so an install that ran one may still hold several. Nothing raises
+# them any more, and setup clears them.
 
 
 def _raise_retired_new_entity_issue(hass, entry: MockConfigEntry, key: str) -> str:

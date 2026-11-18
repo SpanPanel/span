@@ -9,8 +9,9 @@ A third condition, a produced field nothing reads, is a sanctioned addition and
 stays in the debug log.
 
 Setup also clears two retired Repairs here, the new-entity notice and the
-firmware-upgrade notice, which older releases raised and nothing raises now;
-`additions` and `notices` announce those events as notifications instead.
+firmware-upgrade notice, which only untagged builds raised, never a release,
+and nothing raises now; `additions` and `notices` announce those events as
+notifications instead.
 
 Every Repair here claims something the user owns is broken, so a finding whose
 field path no enabled entity reads is not raised at all. Disabled-by-default

@@ -75,7 +75,7 @@ _PACKAGE: Final = Path(__file__).resolve().parent.parent / "custom_components" /
 _RETIRED: Final[frozenset[EntryIssue | EntryIssueFamily]] = frozenset(
     {EntryIssue.RETIRED_EBUS_UPGRADE, EntryIssueFamily.RETIRED_NEW_ENTITIES}
 )
-"""The kinds nothing raises any more, named only so older releases' issues are still cleared."""
+"""The kinds nothing raises any more, named only so what untagged builds raised is still cleared."""
 
 _MOVED: Final = LeafNameMismatch(host="192.168.1.100", leaf_names=("span-panel.local",))
 _NAMELESS: Final = LeafNameMismatch(host="192.168.1.100", leaf_names=())
