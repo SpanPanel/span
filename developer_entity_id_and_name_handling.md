@@ -372,9 +372,9 @@ There is one name path, in both modes:
      surviving trace of "phase 2": a freshly created entity's registry row is settled by that reload, which is also what spends a creation preset.
    - If the name **changed**, the entity requests a reload (`coordinator.request_reload()`).
 3. **Reload** (requested at the end of the update cycle in `coordinator.py`, started by `entry_reloads` once that update has returned, or once Home Assistant
-   has started): the entry is torn down and rebuilt. The integration names a circuit's device only through the device
-   info of the entities it adds, so a rebuild is the only way to refresh the name — that is why a rename costs a reload rather than a registry write. The
-   rebuild also recomputes the base against the device's new name and, per §3.3, rewrites the row's `object_id_base`.
+   has started): the entry is torn down and rebuilt. The integration names a circuit's device only through the device info of the entities it adds, so a rebuild
+   is the only way to refresh the name — that is why a rename costs a reload rather than a registry write. The rebuild also recomputes the base against the
+   device's new name and, per §3.3, rewrites the row's `object_id_base`.
 
 A name the user gave the circuit's _device_ in Home Assistant (`name_by_user`) outranks the panel's in every displayed name and composed ID. That is Core's
 rule, not a check made here: the reload still stores the panel's new name underneath it.
@@ -424,17 +424,15 @@ works the entity's base out again when the row's `entity_id` changes, as it does
 place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the first
 entity, and Core stops it with the entry's on-unload callbacks once the entities are gone: an unload runs them after the platforms have removed every entity,
 and a setup that fails after the forward unloads its platforms before the error leaves it and Core runs them. Two cases leave live entities without the
-listener, and an ID edited on one of them keeps the base from before the edit until the next restart: a platform that does not unload as a failed setup is
-taken down, which is logged, and a setup cancelled part way, as when Home Assistant stops during it, which takes nothing down. Edited to
-`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity
-was built offered the old ID back,
-`sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is such an edit too, and reading the
-accepted ID again gives the base it was composed from, so nothing more is offered.
+listener, and an ID edited on one of them keeps the base from before the edit until the next restart: a platform that does not unload as a failed setup is taken
+down, which is logged, and a setup cancelled part way, as when Home Assistant stops during it, which takes nothing down. Edited to
+`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity was
+built offered the old ID back, `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is
+such an edit too, and reading the accepted ID again gives the base it was composed from, so nothing more is offered.
 
 One change applies only after the next restart: a saved entity-ID format, for which Core announces no event. Everything else the base is worked out from either
 reloads the entry when it changes, as the circuit's name in the SPAN app and any change to the entry's data, options, title or unique ID do, or is watched
-above. The panel
-device's own name is the one the entry was set up with; the user names it through `name_by_user`.
+above. The panel device's own name is the one the entry was set up with; the user names it through `name_by_user`.
 
 The rename therefore reaches:
 
