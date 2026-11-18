@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -253,7 +254,14 @@ async def test_ensure_device_registered_creates_missing_device(
         unique_id="sp3-create-001",
     )
     entry.add_to_hass(hass)
-    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-create-001")
+    # Every field the device info carries is published, so a field lost on the
+    # way to the registry reads None there and cannot match a None here.
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(serial_number="sp3-create-001"),
+        vendor_name="Example Vendor",
+        model="MAIN_32",
+        hardware_version="2.0",
+    )
     device_registry = dr.async_get(hass)
 
     await ensure_device_registered(hass, entry, snapshot, "SPAN Panel")
@@ -263,6 +271,7 @@ async def test_ensure_device_registered_creates_missing_device(
     )
     assert created is not None
     info = snapshot_to_device_info(snapshot, "SPAN Panel", host="192.168.1.21")
+    assert None not in info.as_dict().values()
     assert {
         "identifiers": created.identifiers,
         "manufacturer": created.manufacturer,
