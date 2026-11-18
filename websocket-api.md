@@ -280,7 +280,9 @@ up without a battery, for example, has no `battery_power` or `battery_level`. Ea
 | `read_only`        | The user's Home Assistant permissions let them control none of the relay switches and priority selects named in `circuits`, as for a read-only user |
 
 The answer is for the user the WebSocket connection is authenticated as, so two users asking about the same panel can be told different things. The first two
-come from the rule the integration refuses a control command by. `read_only` comes from Home Assistant, which refuses a user without control permission before
+come from the rule the integration refuses a control command by, and hold for every control it sends the panel: circuit relays and priorities, the GFE override,
+EVSE charge limits and locks, and adopted controls. `read_only` is judged over the relay switches and priority selects alone, so for any other control
+`may_operate` true does not say the user's permissions allow it. `read_only` comes from Home Assistant, which refuses a user without control permission before
 the integration is asked; it is never reported for an administrator, whose permissions Home Assistant does not check, nor for a panel whose circuits name no
 relay switch or priority select. A user who may control some of those controls but not others may operate the panel, and is refused the others one at a time.
 

@@ -808,7 +808,7 @@ def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
         (ControlMode.DISABLED, ControlModeRefusal.CONTROL_DISABLED),
     ],
 )
-def test_the_mode_judges_a_caller_with_no_user_only_by_refusing_everyone(
+def test_a_caller_with_no_user_is_refused_only_when_control_is_disabled(
     mode: ControlMode, refusal: ControlModeRefusal | None
 ) -> None:
     """`admin_only` has no user to judge; whether such a command goes through is `allow_contextless`'s question."""
