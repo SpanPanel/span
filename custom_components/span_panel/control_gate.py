@@ -96,6 +96,22 @@ this constant only ever decides for an entry created since.
 """
 
 
+class ControlAccessRefusal(StrEnum):
+    """Why the control mode refuses a caller, judged by who the caller is.
+
+    The values are wire values: `span_panel/panel_topology` reports them to the
+    card as `control_access.reason`. They are not the gate's translation keys,
+    which name the refusal a service caller is shown and are free to be worded
+    for that reader.
+    """
+
+    CONTROL_DISABLED = "control_disabled"
+    """The mode is `disabled`, so no one may operate the panel."""
+
+    ADMIN_ONLY = "admin_only"
+    """The mode is `admin_only` and the caller is not an administrator."""
+
+
 @dataclass(frozen=True, slots=True)
 class ControlCaller:
     """Who issued the command currently being published, if anyone.
@@ -170,6 +186,30 @@ class ControlPolicy:
         registry entry kept, and back with its restored state once control is.
         """
         return self.lock_timeout_minutes is not None and self.mode is not ControlMode.DISABLED
+
+    def refusal_for(self, *, is_admin: bool | None) -> ControlAccessRefusal | None:
+        """Why the control mode refuses this caller, or None where it does not.
+
+        The one statement of who the mode lets operate the panel. The gate
+        enforces it on every command, and `span_panel/panel_topology` reports it
+        for whoever is viewing the card, so the controls the card offers and the
+        commands the gate lets through cannot come to disagree.
+
+        `is_admin` is None for a caller with no logged-in user. `disabled`
+        refuses that caller as it refuses everyone. `admin_only` does not judge
+        it, there being no user to judge: whether a command with no user is let
+        through is `allow_contextless`'s question, which the gate asks on its
+        own.
+
+        Nothing here is about the moment. Whether the control lock is armed
+        changes while a page is open, and the relay debounce is about one
+        circuit's last command; the gate asks both itself.
+        """
+        if self.mode is ControlMode.DISABLED:
+            return ControlAccessRefusal.CONTROL_DISABLED
+        if self.mode is ControlMode.ADMIN_ONLY and is_admin is False:
+            return ControlAccessRefusal.ADMIN_ONLY
+        return None
 
     @classmethod
     def default(cls) -> ControlPolicy:
@@ -386,13 +426,18 @@ class ControlGate:
         context = caller.context if caller is not None else None
         user_id = context.user_id if context is not None else None
 
+        # Judged once, by the rule the topology reports to the card, and acted
+        # on below in this method's own order: `disabled` before everything,
+        # `admin_only` last.
+        refusal = self._policy.refusal_for(is_admin=await self._caller_is_admin(user_id))
+
         # First, because it is the entry-wide answer and the most useful thing
         # to be told. Not creating the entities is what a user sees, but it is
         # not a choke point: a command arriving by any other route -- a service
         # this integration grows later, a code path that forgets the helper --
         # would otherwise be published by an entry whose owner switched control
         # off. That is the promise this module opens with.
-        if self._policy.mode is ControlMode.DISABLED:
+        if refusal is ControlAccessRefusal.CONTROL_DISABLED:
             self._refuse(
                 "control_disabled",
                 "Control of this SPAN panel is switched off in its options. "
@@ -413,13 +458,11 @@ class ControlGate:
                 parent_id=context.parent_id if context is not None else None,
             )
 
-        if self._policy.mode is ControlMode.ADMIN_ONLY and user_id is not None:
-            user = await self._hass.auth.async_get_user(user_id)
-            if user is None or not user.is_admin:
-                self._refuse(
-                    "admin_only_control",
-                    "Only a Home Assistant administrator may operate this SPAN panel.",
-                )
+        if refusal is ControlAccessRefusal.ADMIN_ONLY:
+            self._refuse(
+                "admin_only_control",
+                "Only a Home Assistant administrator may operate this SPAN panel.",
+            )
 
         if command.property_id == RELAY_PROPERTY:
             self._refuse_a_debounced_relay(command)
@@ -460,6 +503,17 @@ class ControlGate:
         )
 
     # -- internals ----------------------------------------------------------
+
+    async def _caller_is_admin(self, user_id: str | None) -> bool | None:
+        """Whether the caller is an administrator, or None when there is no logged-in user.
+
+        A user id that no longer resolves -- a user deleted since the call was
+        made -- is not an administrator.
+        """
+        if user_id is None:
+            return None
+        user = await self._hass.auth.async_get_user(user_id)
+        return user is not None and user.is_admin
 
     def _refuse_a_debounced_relay(self, command: ControlCommand) -> None:
         """Refuse a relay command that follows too closely on the last one.

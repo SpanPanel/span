@@ -8,6 +8,7 @@ assuming otherwise would leave the gate untested while looking covered.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,6 +22,7 @@ from span_panel_api import ControlCommand, PublishOutcome, PublishState
 from custom_components.span_panel.const import DOMAIN, EVENT_CONTROL_COMMAND
 from custom_components.span_panel.control_gate import (
     CONTROL_CALLER,
+    ControlAccessRefusal,
     ControlGate,
     ControlLock,
     ControlMode,
@@ -681,6 +683,23 @@ def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
     assert policy.allow_contextless is False
     assert policy.lock_enabled is False
     assert policy.relay_debounce_seconds == 2.0
+
+
+@pytest.mark.parametrize(
+    ("mode", "refusal"),
+    [
+        (ControlMode.ALL_USERS, None),
+        (ControlMode.ADMIN_ONLY, None),
+        (ControlMode.DISABLED, ControlAccessRefusal.CONTROL_DISABLED),
+    ],
+)
+def test_the_mode_judges_a_caller_with_no_user_only_by_refusing_everyone(
+    mode: ControlMode, refusal: ControlAccessRefusal | None
+) -> None:
+    """`admin_only` has no user to judge; whether such a command goes through is `allow_contextless`'s question."""
+    policy = replace(ControlPolicy.default(), mode=mode)
+
+    assert policy.refusal_for(is_admin=None) is refusal
 
 
 def test_an_unrecognised_mode_falls_back_to_the_permissive_one() -> None:
