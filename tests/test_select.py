@@ -67,6 +67,46 @@ def test_select_init_missing_circuit() -> None:
         SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "bad_id", "Test Device")
 
 
+def test_a_new_select_shows_the_priority_the_coordinator_holds_now(hass: HomeAssistant) -> None:
+    """The first selection is state, read where every later one is: the coordinator's data.
+
+    The select is built from setup's snapshot, which names its device, and the
+    coordinator's data may have moved on by then. The selection it shows comes
+    from that data, as the breaker switch's first position does, so a priority
+    changed during setup shows at once.
+    """
+    coordinator = _make_coordinator_with_circuit(hass, priority="NEVER")
+    decided = SpanPanelSnapshotFactory.create(
+        circuits={
+            "id": replace(coordinator.data.circuits["id"], priority="SOC_THRESHOLD")
+        },
+    )
+
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, decided, "id", "SPAN Panel"
+    )
+
+    assert select.current_option == CircuitPriority.NEVER.value
+    assert select.options == [
+        priority.value for priority in CircuitPriority if priority is not CircuitPriority.UNKNOWN
+    ]
+
+
+def test_a_select_whose_circuit_the_coordinator_lacks_starts_with_nothing_selected(
+    hass: HomeAssistant,
+) -> None:
+    """A circuit gone from the coordinator's data has no selection to show until it returns."""
+    coordinator = _make_coordinator_with_circuit(hass)
+    decided = coordinator.data
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
+
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, decided, "id", "SPAN Panel"
+    )
+
+    assert (select.options, select.current_option) == ([], None)
+
+
 @pytest.mark.asyncio
 async def test_async_select_option_refusal_is_raised_at_the_caller(hass: HomeAssistant) -> None:
     """A refused priority reaches the person who chose it, carrying the reason.
