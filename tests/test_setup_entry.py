@@ -450,6 +450,37 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
     coordinator.async_shutdown.assert_awaited_once()
 
 
+async def test_a_failed_setup_shuts_the_coordinator_down_after_the_platforms_even_if_one_stays(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The teardown unloads the platforms, logs one that stays, and then shuts the coordinator down.
+
+    Home Assistant shuts the coordinator down too, among the entry's on-unload
+    callbacks, but only once the error has left setup. The teardown's own
+    shutdown comes first, after the platforms whatever became of them, so no
+    entity left by a platform that would not unload is driven by a
+    coordinator still refreshing.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    order: list[str] = []
+    coordinator = MagicMock()
+    coordinator.async_shutdown = AsyncMock(side_effect=lambda: order.append("shut down"))
+
+    async def unload_but_one(*_args: object) -> bool:
+        order.append("unloaded the platforms")
+        return False
+
+    with (
+        patch.object(hass.config_entries, "async_unload_platforms", unload_but_one),
+        caplog.at_level(logging.WARNING),
+    ):
+        await _async_take_down_failed_setup(hass, entry, coordinator, platforms_forwarded=True)
+
+    assert order == ["unloaded the platforms", "shut down"]
+    assert "not every platform it set up could be unloaded" in caplog.text
+
+
 async def test_a_failed_setup_stops_the_current_monitor_with_the_coordinator(
     hass: HomeAssistant,
 ) -> None:
