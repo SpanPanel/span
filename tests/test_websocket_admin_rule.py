@@ -189,19 +189,33 @@ def test_the_classifications_do_not_overlap() -> None:
     assert not set(ADMINISTRATOR_ONLY) & set(OPEN_TO_EVERY_USER)
 
 
+def _registered_commands(hass: HomeAssistant) -> set[str]:
+    """Return the type of every WebSocket command registered on `hass`, whoever registered it."""
+    handlers = hass.data.get(websocket_api.DOMAIN, {})
+    assert isinstance(handlers, dict)
+    commands: set[str] = set()
+    for command in handlers:
+        assert isinstance(command, str)
+        commands.add(command)
+    return commands
+
+
 async def test_every_registered_command_is_classified(hass: HomeAssistant) -> None:
-    """Each command the integration registers is named in exactly one classification."""
+    """Each command the integration registers is named in exactly one classification.
+
+    Every command its registration adds is compared, whatever its namespace, so
+    one registered under a mistyped prefix is caught rather than filtered out.
+    Whatever was registered before -- by Core, if the fixture registers
+    anything -- is set aside, and none of it may be one of the classified
+    commands, or the comparison would miss that command.
+    """
+    classified = set(ADMINISTRATOR_ONLY) | set(OPEN_TO_EVERY_USER)
+    before = _registered_commands(hass)
+    assert before.isdisjoint(classified)
+
     async_register_commands(hass)
 
-    handlers = hass.data[websocket_api.DOMAIN]
-    assert isinstance(handlers, dict)
-    registered = {
-        command
-        for command in handlers
-        if isinstance(command, str) and command.startswith(f"{DOMAIN}/")
-    }
-
-    assert registered == set(ADMINISTRATOR_ONLY) | set(OPEN_TO_EVERY_USER)
+    assert _registered_commands(hass) - before == classified
 
 
 # ---------------------------------------------------------------------------
