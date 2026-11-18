@@ -10,11 +10,13 @@ from types import ModuleType
 from typing import Any, Final
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant import data_entry_flow
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.field_visibility import get_hidden_fields
 from homeassistant.util.dt import utcnow
 import probatio as vol
 import pytest
@@ -79,14 +81,32 @@ def watch_add_and_remove(entity: Entity) -> Iterator[AddAndRemoveCalls]:
         yield calls
 
 
-def shown_values(schema: vol.Schema) -> dict[str, object]:
-    """Return the values a form shows: what saving it unchanged submits."""
-    shown: dict[str, object] = {}
+def suggested_values(schema: vol.Schema) -> dict[str, object]:
+    """Return every value a form suggests, including those of the fields it hides."""
+    suggested: dict[str, object] = {}
     for key in schema.schema:
         description = key.description
         if isinstance(description, Mapping) and "suggested_value" in description:
-            shown[str(key)] = description["suggested_value"]
-    return shown
+            suggested[str(key)] = description["suggested_value"]
+    return suggested
+
+
+def shown_values(schema: vol.Schema) -> dict[str, object]:
+    """Return the values a form shows: what saving it unchanged submits.
+
+    A field whose `visible` condition does not hold for those values is not
+    shown, and the frontend leaves it out of what it submits, so it is left out
+    here too. Core's own resolution decides which, as it does on submit.
+    """
+    suggested = suggested_values(schema)
+    conditions = {
+        str(key): key.visible
+        for key in schema.schema
+        if isinstance(key, data_entry_flow.Optional | data_entry_flow.Required)
+        and key.visible is not None
+    }
+    hidden = get_hidden_fields(conditions, suggested)
+    return {name: value for name, value in suggested.items() if name not in hidden}
 
 
 PANEL_SETTINGS_STORAGE_KEY: Final = "span_panel_settings"
@@ -101,6 +121,13 @@ def seed_panel_settings(hass_storage: dict[str, Any], settings: Mapping[str, boo
         "key": PANEL_SETTINGS_STORAGE_KEY,
         "data": dict(settings),
     }
+
+
+def stored_panel_settings(hass_storage: dict[str, Any]) -> dict[str, object]:
+    """Return the domain-level panel settings as last written to storage."""
+    stored = hass_storage[PANEL_SETTINGS_STORAGE_KEY]["data"]
+    assert isinstance(stored, dict)
+    return stored
 
 
 def count_panel_describes_breakers(
