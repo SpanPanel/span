@@ -387,7 +387,7 @@ snapshot removes one or changes its `package_ratings_state`. A consumer showing 
 | `circuit_ids`     | array[string] | The circuits whose package ratings, or what they are judged as, changed |
 
 Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator: Home Assistant lets any other user subscribe only to the events
-on its own allowlist, and no integration's event is on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the next
+on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the next
 time it fetches the topology.
 
 ## `span_panel/adopted/list`
