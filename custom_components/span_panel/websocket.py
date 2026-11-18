@@ -95,7 +95,6 @@ def async_register_commands(hass: HomeAssistant) -> None:
         vol.Required("device_id"): str,
     }
 )
-@websocket_api.require_admin
 @websocket_api.async_response
 async def handle_panel_topology(
     hass: HomeAssistant,
@@ -104,7 +103,16 @@ async def handle_panel_topology(
 ) -> None:
     """Return the full panel topology with entity mappings.
 
-    Admin users must pass the HA device registry ID for the **main SPAN panel**
+    **Any logged-in user may ask, administrator or not.** The sidebar dashboard
+    and the card read it for whoever is viewing them, and a user who is not an
+    administrator sees the dashboard whenever its Admin Users Only option is
+    off. What it carries is the panel's layout, what the panel publishes about
+    each circuit and device, the ratings current monitoring judges each circuit
+    against, and the registry IDs that tie them together; no host, credential
+    or certificate is in it. Whether a control it names may be operated is
+    decided by the control policy when the control is used, not here.
+
+    The caller passes the HA device registry ID for the **main SPAN panel**
     device only (not a sub-device or a circuit's device). Returns panel
     metadata, circuits with tabs/entity mappings and the registry ID of each
     circuit's own device, and sub-devices -- every kind

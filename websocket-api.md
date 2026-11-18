@@ -14,6 +14,11 @@ calls, then infer which entities belong to the same circuit by parsing naming co
 between installs, each circuit's entities live on a device of the circuit's own, and EVSE feed circuit sensors live on the EVSE sub-device. The topology command
 provides all of these relationships explicitly, keyed by circuit UUID, so the card reads a single structured response instead of guessing.
 
+Any logged-in user may call it, administrator or not, so the sidebar dashboard and the card work for whoever is viewing them. It carries the panel's layout,
+what the panel publishes about each circuit and device, the ratings current monitoring judges each circuit against, and the registry IDs that tie them together;
+no host, credential or certificate is in it. Whether a switch or select it names can be operated is decided when it is used, by
+[Who may operate the panel](README.md#restricting-who-can-operate-the-panel).
+
 ### Request
 
 ```json
@@ -381,8 +386,9 @@ snapshot removes one or changes its `package_ratings_state`. A consumer showing 
 | `config_entry_id` | string        | The panel's config entry; ignore events for other panels                |
 | `circuit_ids`     | array[string] | The circuits whose package ratings, or what they are judged as, changed |
 
-Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator, as `span_panel/panel_topology` does, so any user who can read a
-monitoring rating can hear it change.
+Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator: Home Assistant lets any other user subscribe only to the events
+on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the next
+time it fetches the topology.
 
 ## `span_panel/adopted/list`
 
@@ -395,7 +401,7 @@ off a unit mislabels as often as it helps. The owner of the vendor device is not
 integration refuses to infer. Each row therefore carries not only what the wire declares but the choices Core's own maps admit for that declaration, computed
 server-side so a card never offers an option that would be refused on save.
 
-Admin only, like every command here.
+Admin only: Home Assistant refuses anyone else with `unauthorized` before the device is resolved.
 
 ### Request
 
@@ -496,7 +502,7 @@ result is returned. The reload is not incidental. An entity description is fixed
 entity being built again — and being built _with_ it, since a state class that first appears after states have been recorded is a statistics reset rather than a
 metadata change.
 
-Admin only, like every command here.
+Admin only: Home Assistant refuses anyone else with `unauthorized` before the device is resolved.
 
 ### Request
 

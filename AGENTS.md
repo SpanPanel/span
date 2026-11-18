@@ -142,3 +142,9 @@ user as well.
 
 `tests/test_service_admin_rule.py` names every registered service under one of these rules and fails on a service it does not name. Add a new service there,
 under the rule it follows, in the same change that registers it.
+
+## WebSocket Command Access
+
+`span_panel/panel_topology` answers every logged-in user, and the adopted commands take `@websocket_api.require_admin`. `tests/test_websocket_admin_rule.py`
+names every registered command under one of these rules and fails on a command it does not name. Add a new command there, under the rule it follows, in the same
+change that registers it.

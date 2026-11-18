@@ -713,9 +713,8 @@ see [Recommended deployment](#recommended-deployment), where network topology an
 
 **Choosing `Nobody` is reversible.** The control entities stop being created and read as unavailable, but their registry entries, names, areas and
 customizations are kept, so turning the option back on restores exactly the entities you had. The control lock comes back armed or disarmed as you left it, with
-any auto-relock still due at the same moment, and armed if Home Assistant no longer holds its last state. For an administrator, the shipped SPAN Panel card and
-dashboard offer no breaker switch or priority while `Nobody` is chosen. A non-administrator's card finds its entities without the panel's topology, so it shows
-those switches dimmed and inert, as other dashboards show them unavailable.
+any auto-relock still due at the same moment, and armed if Home Assistant no longer holds its last state. The shipped SPAN Panel card and dashboard offer no
+breaker switch or priority while `Nobody` is chosen, and other dashboards show those entities unavailable.
 
 ### The record of what was commanded
 
@@ -792,7 +791,7 @@ it.
 
 The integration provides a `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits with their
 breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, MID, EVSE, PV) with their entities, and for each solar device the inverter it
-describes and the circuit reading that is its power.
+describes and the circuit reading that is its power. Any logged-in user can call it.
 
 See [WebSocket API Reference](websocket-api.md) for the full schema, response format, and usage examples.
 

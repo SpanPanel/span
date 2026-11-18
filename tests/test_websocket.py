@@ -7,7 +7,12 @@ from dataclasses import replace
 from typing import Final
 from unittest.mock import MagicMock
 
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
+from pytest_homeassistant.common import MockConfigEntry
+from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, websocket
 from custom_components.span_panel.const import DOMAIN
@@ -23,10 +28,6 @@ from custom_components.span_panel.websocket import (
     async_register_commands,
     handle_panel_topology,
 )
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
-from span_panel_api import FieldMetadata, SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -41,9 +42,6 @@ from .helpers import (
     register_panel_device,
     unwrap_websocket_command,
 )
-
-from pytest_homeassistant.common import MockConfigEntry, MockUser
-from pytest_homeassistant.typing import WebSocketGenerator
 
 _handle_panel_topology_inner = unwrap_websocket_command(handle_panel_topology)
 
@@ -401,26 +399,6 @@ class TestBuildCircuitEntityMap:
 
 class TestHandlePanelTopology:
     """Tests for the panel_topology WebSocket command handler."""
-
-    @pytest.mark.asyncio
-    async def test_requires_admin(
-        self,
-        hass: HomeAssistant,
-        hass_ws_client: WebSocketGenerator,
-        hass_admin_user: MockUser,
-    ) -> None:
-        """Reject non-admin users before resolving topology data."""
-        hass_admin_user.groups = []
-        async_register_commands(hass)
-        websocket_client = await hass_ws_client(hass)
-
-        await websocket_client.send_json_auto_id(
-            {"type": "span_panel/panel_topology", "device_id": "any-device-id"}
-        )
-
-        msg = await websocket_client.receive_json()
-        assert not msg["success"]
-        assert msg["error"]["code"] == "unauthorized"
 
     @pytest.mark.asyncio
     async def test_device_not_found(self, hass: HomeAssistant):
