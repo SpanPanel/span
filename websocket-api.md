@@ -17,8 +17,8 @@ provides all of these relationships explicitly, keyed by circuit UUID, so the ca
 Any logged-in user may call it, administrator or not, so the sidebar dashboard and the card work for whoever is viewing them. It carries the panel's layout,
 what the panel publishes about each circuit and device, the ratings current monitoring judges each circuit against, and the registry IDs that tie them together;
 no host, credential or certificate is in it. Whether a switch or select it names can be operated is decided when it is used, by
-[Who may operate the panel](README.md#restricting-who-can-operate-the-panel). `control_access` reports that option's answer for the user asking, so a card can
-disable the controls that user would be refused.
+[Who may operate the panel](README.md#restricting-who-can-operate-the-panel) and by the user's own Home Assistant permissions. `control_access` reports their
+answer for the user asking, so a card can disable the controls that user would be refused.
 
 ### Request
 
@@ -45,6 +45,8 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "serial": "sim-main32-0001",
   "firmware": "spanos3/r202639/03",
   "panel_size": 32,
+  "first_position": 1,
+  "last_position": 32,
   "device_id": "abc123def456",
   "panel_device_id": "abc123def456",
   "config_entry_id": "e5f6a7b8c9d0",
@@ -209,6 +211,8 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `serial`                    | string      | Panel serial number                                                                                                                                         |
 | `firmware`                  | string      | Panel firmware version                                                                                                                                      |
 | `panel_size`                | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                         |
+| `first_position`            | int or null | The panel's first breaker position (see below)                                                                                                              |
+| `last_position`             | int or null | The panel's last breaker position (see below)                                                                                                               |
 | `device_id`                 | string      | HA device registry ID (echoed from request)                                                                                                                 |
 | `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                   |
 | `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                        |
@@ -219,18 +223,34 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared     |
 | `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                      |
 
+`first_position` and `last_position` say which breaker positions the panel has, occupied or not: the reported model's range where the integration knows the
+model, otherwise the lowest and highest occupied spaces, and null where neither is known. `circuits` lists only the circuits that are there, so a position in
+the range with no circuit is an empty space.
+
 #### Control Access Object
 
-| Field         | Type        | Description                                                                                                                                                                     |
-| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `may_operate` | bool        | Whether **Who may operate the panel** lets the user asking operate the panel's controls                                                                                         |
-| `reason`      | string/null | Why not: `control_disabled` where the option is `Nobody`, `admin_only` where it is `Administrators only` and the user is not an administrator; null where `may_operate` is true |
+| Field         | Type        | Description                                                                                            |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `may_operate` | bool        | Whether the user asking may operate the panel's relay and priority controls                            |
+| `reason`      | string/null | Why not: `control_disabled`, `admin_only` or `read_only` (see below); null where `may_operate` is true |
 
-The answer is for the user the WebSocket connection is authenticated as, so two users asking about the same panel can be told different things. It comes from
-the rule the integration refuses a control command by, so a card that disables its relay and priority controls where `may_operate` is false offers no control
-that rule would refuse. It says nothing about the control lock, which can be armed or disarmed while a page is open and which its switch reports, nor about the
-relay debounce. **Allow control without a logged-in user** never applies, because a WebSocket connection always has a logged-in user. Changing **Who may operate
-the panel** reloads the entry, and the topology then answers by the new setting.
+`reason` is the first of these that applies:
+
+| Reason             | Meaning                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `control_disabled` | **Who may operate the panel** is `Nobody`, so no one may                                                                                            |
+| `admin_only`       | **Who may operate the panel** is `Administrators only` and the user is not an administrator                                                         |
+| `read_only`        | The user's Home Assistant permissions let them control none of the relay switches and priority selects named in `circuits`, as for a read-only user |
+
+The answer is for the user the WebSocket connection is authenticated as, so two users asking about the same panel can be told different things. The first two
+come from the rule the integration refuses a control command by. `read_only` comes from Home Assistant, which refuses a user without control permission before
+the integration is asked; it is never reported for an administrator, whose permissions Home Assistant does not check, nor for a panel whose circuits name no
+relay switch or priority select. A user who may control some of those controls but not others may operate the panel, and is refused the others one at a time.
+
+A card that disables its relay and priority controls where `may_operate` is false therefore offers them only to a user who may operate at least one of them. The
+answer says nothing about the control lock, which can be armed or disarmed while a page is open and which its switch reports, nor about the relay debounce.
+**Allow control without a logged-in user** never applies, because a WebSocket connection always has a logged-in user. Changing **Who may operate the panel**
+reloads the entry, and the topology then answers by the new setting.
 
 #### Circuit Object
 
