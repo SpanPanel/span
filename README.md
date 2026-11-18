@@ -694,7 +694,8 @@ Troubleshooting.
 ### Restricting who can operate the panel
 
 Four options in **Settings → Devices & Services → Span Panel → Configure**. Each is enforced where commands are published rather than only at the entity, so a
-refusal holds however the command arrived.
+refusal holds however the command arrived. While **Who may operate the panel** is `Nobody`, the form hides the other three, and each keeps its value for when
+you choose who may operate the panel again.
 
 | Option                                     | Default                               | What it refuses                                                                                                                                                                                                                                 | What it does not do                                                                                                        |
 | ------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
