@@ -13,7 +13,7 @@ import probatio as vol
 from span_panel_api import shared_meter_groups
 
 from .const import DOMAIN
-from .control_gate import ControlMode
+from .control_gate import ControlAccessRefusal, ControlMode, ControlPolicy
 from .current_monitor import MonitoredCircuit, monitored_circuits
 from .energy_orientation import circuit_is_generation
 from .entity_resolver import entity_id_in_entry
@@ -38,6 +38,7 @@ from .websocket_adopted import handle_adopted_curate, handle_adopted_list
 from .websocket_panel import resolve_panel_device
 
 if TYPE_CHECKING:
+    from homeassistant.auth.models import User
     from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 # Mapping from unique_id suffixes to semantic role names for circuit sensors.
@@ -110,7 +111,9 @@ async def handle_panel_topology(
     each circuit and device, the ratings current monitoring judges each circuit
     against, and the registry IDs that tie them together; no host, credential
     or certificate is in it. Whether a control it names may be operated is
-    decided by the control policy when the control is used, not here.
+    decided by the control policy when the control is used, not here; what
+    `control_access` carries is that policy's answer for the user asking, so
+    the card can offer no control the gate would refuse them.
 
     The caller passes the HA device registry ID for the **main SPAN panel**
     device only (not a sub-device or a circuit's device). Returns panel
@@ -325,6 +328,10 @@ async def handle_panel_topology(
             # circuit's `package_ratings_form` says whether it takes a copy, and in
             # which form.
             "monitoring_rating_offered": not describes_breakers,
+            # Whether the user asking may operate the panel, by the policy the
+            # gate holds. It is the same object: setup hands one policy to the
+            # gate and to the runtime data, and an options change reloads both.
+            "control_access": _control_access_record(runtime_data.control_policy, connection.user),
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,
@@ -357,6 +364,26 @@ def _meter_group_record(point: MonitoredCircuit) -> MeterGroupRecord:
         monitoring_rating_a=point.rating_a,
         monitoring_rating_user_set=point.rating_user_set,
     )
+
+
+class ControlAccessRecord(TypedDict):
+    """Whether the user asking may operate the panel, and if not, why.
+
+    `reason` is `ControlPolicy.refusal_for`'s answer for that user, the answer
+    the gate refuses a command by, and `may_operate` is true exactly where it is
+    null. Neither says whether the control lock is armed, which changes while
+    the card is open and which the card reads from the lock's own switch. A
+    WebSocket connection always has a logged-in user, so whether control
+    without one is allowed never comes into it.
+    """
+
+    may_operate: bool
+    reason: ControlAccessRefusal | None
+
+
+def _control_access_record(policy: ControlPolicy, user: User) -> ControlAccessRecord:
+    refusal = policy.refusal_for(is_admin=user.is_admin)
+    return ControlAccessRecord(may_operate=refusal is None, reason=refusal)
 
 
 def _group_of(groups: Mapping[str, tuple[str, ...]]) -> dict[str, str]:

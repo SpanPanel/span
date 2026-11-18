@@ -105,6 +105,10 @@
     }
   },
   "config_entry_id": "entry-r202639-a",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "device_id": "xg-3940-9ooto",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",

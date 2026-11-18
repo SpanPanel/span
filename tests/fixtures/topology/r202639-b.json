@@ -609,6 +609,10 @@
     }
   },
   "config_entry_id": "entry-r202639-b",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "device_id": "xg-1155-18fkf",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",

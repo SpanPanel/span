@@ -75,6 +75,16 @@ OPEN_TO_EVERY_USER: Final[Mapping[str, CommandFields]] = {
 }
 """The commands every logged-in user may send."""
 
+ABOUT_THE_ASKER: Final[Mapping[str, frozenset[str]]] = {
+    "span_panel/panel_topology": frozenset({"control_access"}),
+}
+"""The keys of an open command's answer that describe the user asking, and so differ by user.
+
+`control_access` is the control policy's answer for that user; see
+`test_topology_control_access.py`. Everything else an open command answers is
+the same for every user.
+"""
+
 
 async def _non_admin(hass: HomeAssistant, group_id: str) -> MockUser:
     """Add a logged-in user in `group_id`, one of the groups a user who is not an administrator is in."""
@@ -106,6 +116,11 @@ async def _send(
     await client.send_json_auto_id({"type": command, **fields})
     reply: dict[str, object] = await client.receive_json()
     return reply
+
+
+def _apart_from(result: Mapping[str, object], keys: frozenset[str]) -> dict[str, object]:
+    """Return a command's answer without `keys`."""
+    return {key: value for key, value in result.items() if key not in keys}
 
 
 def _error_code(reply: Mapping[str, object]) -> object:
@@ -189,6 +204,11 @@ def test_the_classifications_do_not_overlap() -> None:
     assert not set(ADMINISTRATOR_ONLY) & set(OPEN_TO_EVERY_USER)
 
 
+def test_only_an_open_command_answers_about_the_asker() -> None:
+    """A key set aside as describing the asker belongs to a command every user may send."""
+    assert set(ABOUT_THE_ASKER) <= set(OPEN_TO_EVERY_USER)
+
+
 def _registered_commands(hass: HomeAssistant) -> set[str]:
     """Return the type of every WebSocket command registered on `hass`, whoever registered it."""
     handlers = hass.data.get(websocket_api.DOMAIN, {})
@@ -254,7 +274,12 @@ async def test_an_open_command_answers_a_non_admin_as_it_answers_an_administrato
     command: str,
     fields: CommandFields,
 ) -> None:
-    """The answer does not depend on who asks: a non-admin gets exactly what an administrator gets."""
+    """A non-admin gets exactly what an administrator gets, apart from what the answer says about the asker.
+
+    The keys that describe the asker are set aside only once both answers are
+    seen to carry them, so naming one that the command does not answer fails
+    here rather than excusing nothing.
+    """
     as_admin = await _send(await hass_ws_client(hass), command, fields(panel_device_id))
     as_non_admin = await _send(
         await _client_for(hass, hass_ws_client, non_admin_user), command, fields(panel_device_id)
@@ -262,7 +287,14 @@ async def test_an_open_command_answers_a_non_admin_as_it_answers_an_administrato
 
     assert as_admin["success"] is True
     assert as_non_admin["success"] is True
-    assert as_non_admin["result"] == as_admin["result"]
+    admin_result, non_admin_result = as_admin["result"], as_non_admin["result"]
+    assert isinstance(admin_result, dict)
+    assert isinstance(non_admin_result, dict)
+    about_the_asker = ABOUT_THE_ASKER.get(command, frozenset())
+    assert about_the_asker <= set(admin_result) & set(non_admin_result)
+    assert _apart_from(non_admin_result, about_the_asker) == _apart_from(
+        admin_result, about_the_asker
+    )
 
 
 async def test_a_non_admin_reads_the_panels_topology(

@@ -181,6 +181,10 @@
     }
   },
   "config_entry_id": "entry-r202639-c",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "device_id": "xg-7814-15i6h",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",
