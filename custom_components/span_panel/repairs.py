@@ -22,7 +22,6 @@ from span_panel_api.exceptions import (
     SpanPanelValidationError,
 )
 
-from .ca_repairs import CA_CHANGED_ISSUE_PREFIX, CA_UNUSABLE_ISSUE_PREFIX
 from .config_flow_validation import (
     LeafVerdict,
     as_port,
@@ -38,6 +37,7 @@ from .const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
+from .entry_issues import EntryIssue
 from .entry_reloads import async_request_reload
 
 _LOGGER = logging.getLogger(__name__)
@@ -173,15 +173,15 @@ async def async_create_fix_flow(
     data: dict[str, str | int | float | None] | None,
 ) -> RepairsFlow:
     """Return the flow that fixes `issue_id`."""
-    if issue_id.startswith(CA_CHANGED_ISSUE_PREFIX):
-        entry_id = issue_id.removeprefix(CA_CHANGED_ISSUE_PREFIX)
+    if issue_id.startswith(EntryIssue.CA_CHANGED):
+        entry_id = issue_id.removeprefix(EntryIssue.CA_CHANGED)
         return PanelCAChangedRepairFlow(entry_id)
-    if issue_id.startswith(CA_UNUSABLE_ISSUE_PREFIX):
+    if issue_id.startswith(EntryIssue.CA_UNUSABLE):
         # The same flow on purpose: an unreadable stored anchor and a rotated CA
         # end in the same place — fetch what the panel advertises, check it
         # signs the panel's own certificate, and pin it only on a person's
         # explicit acceptance of the fingerprint. Only the story the issue tells
         # differs, and that lives in its own translation.
-        entry_id = issue_id.removeprefix(CA_UNUSABLE_ISSUE_PREFIX)
+        entry_id = issue_id.removeprefix(EntryIssue.CA_UNUSABLE)
         return PanelCAChangedRepairFlow(entry_id)
     raise ValueError(f"{DOMAIN} raised no fixable issue with id {issue_id}")

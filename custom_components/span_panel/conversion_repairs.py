@@ -17,8 +17,8 @@ changed area, and which circuits kept their entities' areas as they were.
 - **Severity `WARNING`.** Everything keeps working, and names the user sees
   have changed.
 - **One per config entry,** its id carrying the entry's, so two panels each
-  report their own circuits. Cleared when the entry is removed, because Home
-  Assistant deletes no issue with its entry.
+  report their own circuits. Linked to the entry, so Home Assistant deletes it
+  with the entry.
 - **Raised only when there is something to list.** A run with nothing to
   list, as most setups after the first are, leaves an earlier notice exactly as
   it stands, dismissed or not.
@@ -78,7 +78,7 @@ switch is where a new one has always been.
   conversion notice is. What to do about a breaker in a room is the user's
   choice: give the switch an area of its own, clear the device's, or leave it.
 - **One per switch,** its id carrying the entry's and the switch's unique id.
-  Cleared with the conversion notice when the entry is removed.
+  Linked to the entry, as the conversion notice is.
 - **Raised afresh each time.** A switch the panel withdraws and offers again
   joins the area again, and a notice raised over one the user dismissed would
   stay dismissed, so the earlier one is deleted first.
@@ -101,12 +101,9 @@ from span_panel_api import SpanPanelSnapshot
 from .circuit_device_conversion import ConversionReport
 from .const import DOMAIN
 from .entity_resolver import entity_id_in_entry
+from .entry_issues import EntryIssue, EntryIssueFamily, async_create_entry_issue
 from .id_builder import build_switch_unique_id
 from .runtime import SpanPanelConfigEntry, loaded_runtime_data
-
-CONVERSION_NOTICE_ISSUE_PREFIX: Final = "circuit_devices_converted_"
-
-BREAKER_SWITCH_AREA_ISSUE_PREFIX: Final = "breaker_switch_in_area_"
 
 _TRANSLATION_KEY: Final = "circuit_devices_converted"
 
@@ -127,20 +124,12 @@ kept under in the issue's data.
 
 def conversion_notice_issue_id(entry_id: str) -> str:
     """Issue id for one entry's conversion notice."""
-    return f"{CONVERSION_NOTICE_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.CIRCUIT_DEVICES_CONVERTED.issue_id(entry_id)
 
 
 def breaker_switch_area_issue_id(entry_id: str, switch_unique_id: str) -> str:
     """Issue id for the notice about one of an entry's breaker switches."""
-    return f"{_breaker_switch_area_issue_prefix(entry_id)}{switch_unique_id}"
-
-
-def _breaker_switch_area_issue_prefix(entry_id: str) -> str:
-    """Return what the id of every breaker switch notice of one entry starts with.
-
-    Closed with a separator, so no entry's prefix is the start of another's.
-    """
-    return f"{BREAKER_SWITCH_AREA_ISSUE_PREFIX}{entry_id}_"
+    return EntryIssueFamily.BREAKER_SWITCH_IN_AREA.issue_id(entry_id, switch_unique_id)
 
 
 def _area_name(areas: ar.AreaRegistry, area_id: str) -> str:
@@ -241,10 +230,10 @@ def async_raise_conversion_notice(
     }
 
     ir.async_delete_issue(hass, DOMAIN, issue_id)
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
-        issue_id,
+        entry,
+        EntryIssue.CIRCUIT_DEVICES_CONVERTED,
         is_fixable=False,
         is_persistent=True,
         severity=ir.IssueSeverity.WARNING,
@@ -345,12 +334,13 @@ def async_raise_breaker_switch_area_notice(
     row = er.async_get(hass).async_get(switch_entity_id)
     name = er.async_get_full_entity_name(hass, row) if row is not None else ""
     identified = f"`{switch_entity_id}`"
-    issue_id = breaker_switch_area_issue_id(entry.entry_id, switch_unique_id)
-    ir.async_delete_issue(hass, DOMAIN, issue_id)
-    ir.async_create_issue(
+    ir.async_delete_issue(
+        hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, switch_unique_id)
+    )
+    async_create_entry_issue(
         hass,
-        DOMAIN,
-        issue_id,
+        entry,
+        EntryIssueFamily.BREAKER_SWITCH_IN_AREA.for_key(switch_unique_id),
         is_fixable=False,
         is_persistent=True,
         severity=ir.IssueSeverity.WARNING,
@@ -361,16 +351,3 @@ def async_raise_breaker_switch_area_notice(
         },
         data={"entry_id": entry.entry_id},
     )
-
-
-@callback
-def async_clear_conversion_notice(hass: HomeAssistant, entry_id: str) -> None:
-    """Drop an entry's conversion notice and its breaker switch notices, on removal of the entry."""
-    ir.async_delete_issue(hass, DOMAIN, conversion_notice_issue_id(entry_id))
-    prefix = _breaker_switch_area_issue_prefix(entry_id)
-    for issue_id in [
-        issue_id
-        for domain, issue_id in ir.async_get(hass).issues
-        if domain == DOMAIN and issue_id.startswith(prefix)
-    ]:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)

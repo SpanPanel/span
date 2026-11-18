@@ -40,7 +40,6 @@ from span_panel_api.exceptions import (
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
     async_remove_config_entry_device,
-    async_remove_entry,
     async_setup_entry,
 )
 from custom_components.span_panel.config_flow_validation import PanelRestTransport
@@ -1110,14 +1109,17 @@ async def test_unknown_is_read_whatever_its_spelling(
 
 
 async def test_removing_the_entry_clears_the_repair(hass: HomeAssistant, panel_status: AsyncMock) -> None:
-    """Nothing else could clear it once the entry is gone."""
+    """The Repair is linked to its entry, so Home Assistant deletes it with the entry."""
     entry = _create_v2_entry()
     entry.add_to_hass(hass)
     panel_status.return_value = _status("9.9")
     with pytest.raises(ConfigEntryError):
         await _set_up(hass, entry, _panel_with_model("OTHER_MODEL"))
+    issue = _unvalidated_hardware_issue(hass)
+    assert issue is not None
+    assert issue.config_entry_id == entry.entry_id
 
-    await async_remove_entry(hass, entry)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert _unvalidated_hardware_issue(hass) is None
 
@@ -1499,14 +1501,14 @@ async def test_the_schema_is_read_before_the_client_is_built_over_the_entrys_res
 async def test_removing_a_refused_entry_clears_the_flat_firmware_repair(
     hass: HomeAssistant, panel_schema: AsyncMock
 ) -> None:
-    """Not persistent, yet it would outlive the entry until a restart: nothing else clears it."""
+    """The Repair is linked to its entry, so Home Assistant deletes it with the entry."""
     entry = _installed_entry()
     entry.add_to_hass(hass)
     panel_schema.return_value = FLAT_PANEL_SCHEMA
     assert await _boot(hass, entry, _panel_with_model("MAIN_32")) is False
     assert _flat_firmware_issue(hass) is not None
 
-    await hass.config_entries.async_remove(entry.entry_id)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert _flat_firmware_issue(hass) is None
 

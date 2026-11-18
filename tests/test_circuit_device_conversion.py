@@ -65,10 +65,7 @@ from custom_components.span_panel.const import (
     USE_DEVICE_PREFIX,
 )
 from custom_components.span_panel.control_gate import ControlMode
-from custom_components.span_panel.conversion_repairs import (
-    async_clear_conversion_notice,
-    async_raise_conversion_notice,
-)
+from custom_components.span_panel.conversion_repairs import async_raise_conversion_notice
 from custom_components.span_panel.extension import is_extension_unique_id
 from custom_components.span_panel.helpers import (
     circuit_has_a_breaker_switch,
@@ -2044,21 +2041,23 @@ def test_a_report_with_an_entity_in_it_is_not_empty() -> None:
 
 
 async def test_the_notice_is_cleared_on_removal(hass: HomeAssistant) -> None:
-    """Home Assistant deletes no issue with its entry, so removing the panel clears the notice."""
+    """The notice is linked to its entry, so Home Assistant deletes it with the panel."""
     install = _install(hass, _tree())
     install.update(KITCHEN, POWER, area_id=_area(hass, "Garage"))
 
     async with _set_up(install):
         assert install.notice() is not None
 
-    assert await hass.config_entries.async_remove(install.entry.entry_id)
+    assert await hass.config_entries.async_remove(install.entry.entry_id) == {
+        "require_restart": False
+    }
     await hass.async_block_till_done()
 
     assert install.notice() is None
 
 
-async def test_clearing_one_panel_s_notice_leaves_another_s(hass: HomeAssistant) -> None:
-    """The notice's ID carries its entry's, so one panel's removal cannot take another's."""
+async def test_removing_one_panel_leaves_another_s_notice(hass: HomeAssistant) -> None:
+    """Each notice is linked to its own entry, so one panel's removal cannot take another's."""
     first = add_panel_entry(hass, "entry-first", "sp3-242424-001")
     second = add_panel_entry(hass, "entry-second", "sp3-242424-002")
     registry = er.async_get(hass)
@@ -2070,7 +2069,8 @@ async def test_clearing_one_panel_s_notice_leaves_another_s(hass: HomeAssistant)
             hass, entry, ConversionReport((ConvertedEntity(row.entity_id, "Old"),), (), (), ())
         )
 
-    async_clear_conversion_notice(hass, first.entry_id)
+    assert await hass.config_entries.async_remove(first.entry_id) == {"require_restart": False}
+    await hass.async_block_till_done()
 
     issues = ir.async_get(hass)
     assert issues.async_get_issue(DOMAIN, "circuit_devices_converted_entry-first") is None

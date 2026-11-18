@@ -5,8 +5,8 @@ A schema finding is re-derived from live state on every pass and deleted the
 moment it stops being true; this one describes an event that already happened on
 a transport that has stopped for good, and there is nothing left running to
 re-derive it from. It is raised once, persists across restarts, and is cleared
-only by the user accepting the new fingerprint or by a setup that connects
-cleanly again.
+only by the user accepting the new fingerprint, by a setup that connects
+cleanly again, or by Home Assistant when the entry it is linked to is removed.
 
 It is also the only Repair here that is fixable, and the fix is the point. A
 rotated CA and an intercepted connection are indistinguishable from inside the
@@ -25,28 +25,25 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
+from .entry_issues import EntryIssue, async_create_entry_issue
 from .leaf_repairs import async_clear_leaf_name_mismatch
 
 _LOGGER = logging.getLogger(__name__)
 
-CA_CHANGED_ISSUE_PREFIX = "panel_ca_changed_"
-CA_UNUSABLE_ISSUE_PREFIX = "panel_ca_unusable_"
-REST_TLS_UNTRUSTED_ISSUE_PREFIX = "panel_rest_tls_untrusted_"
-
 
 def ca_changed_issue_id(entry_id: str) -> str:
     """Issue id for one entry's CA change."""
-    return f"{CA_CHANGED_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.CA_CHANGED.issue_id(entry_id)
 
 
 def ca_unusable_issue_id(entry_id: str) -> str:
     """Issue id for one entry's unreadable stored CA."""
-    return f"{CA_UNUSABLE_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.CA_UNUSABLE.issue_id(entry_id)
 
 
 def rest_tls_untrusted_issue_id(entry_id: str) -> str:
     """Issue id for one entry's REST TLS port serving something the pin rejects."""
-    return f"{REST_TLS_UNTRUSTED_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.REST_TLS_UNTRUSTED.issue_id(entry_id)
 
 
 @callback
@@ -82,10 +79,10 @@ def async_raise_ca_changed(
         observed_fingerprint,
         expected_fingerprint,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
-        ca_changed_issue_id(entry.entry_id),
+        entry,
+        EntryIssue.CA_CHANGED,
         is_fixable=True,
         is_persistent=True,
         severity=ir.IssueSeverity.ERROR,
@@ -131,10 +128,10 @@ def async_raise_ca_unusable(hass: HomeAssistant, entry: ConfigEntry, reason: str
         entry.title,
         reason,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
-        ca_unusable_issue_id(entry.entry_id),
+        entry,
+        EntryIssue.CA_UNUSABLE,
         is_fixable=True,
         is_persistent=True,
         severity=ir.IssueSeverity.ERROR,
@@ -193,10 +190,10 @@ def async_raise_rest_tls_untrusted(
         entry.title,
         fingerprint,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
-        rest_tls_untrusted_issue_id(entry.entry_id),
+        entry,
+        EntryIssue.REST_TLS_UNTRUSTED,
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.ERROR,

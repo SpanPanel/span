@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -83,7 +84,6 @@ from .const import (
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
 from .conversion_repairs import (
-    async_clear_conversion_notice,
     async_raise_breaker_switch_area_notices,
     async_raise_conversion_notice,
     async_registered_breaker_switches,
@@ -91,6 +91,7 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
+from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
     async_entry_changed,
     async_forget_reloads,
@@ -152,7 +153,6 @@ from .runtime import (
 from .schema_repairs import (
     async_clear_retired_new_entity_notices,
     async_clear_retired_upgrade_notice,
-    async_clear_schema_issues,
 )
 from .services import (  # noqa: F401
     _async_register_credential_services,
@@ -521,6 +521,45 @@ async def _async_rest_tls_verdict(
     )
 
 
+def _leaf_name_mismatch_reporter(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry
+) -> Callable[[LeafNameMismatch], None]:
+    """Return the client callback that raises the name-mismatch Repair.
+
+    The callback raises nothing once the entry has been removed: the client
+    can outlive it (`entry_removed`).
+    """
+
+    @callback
+    def _on_leaf_name_mismatch(mismatch: LeafNameMismatch) -> None:
+        if entry_removed(hass, entry):
+            return
+        async_raise_leaf_name_mismatch(hass, entry, mismatch)
+
+    return _on_leaf_name_mismatch
+
+
+def _fatal_transport_error_reporter(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry
+) -> Callable[[SpanPanelError], None]:
+    """Return the client callback that raises the CA-changed Repair for a transport that stopped.
+
+    The callback raises nothing once the entry has been removed: the client
+    can outlive it (`entry_removed`).
+    """
+
+    @callback
+    def _on_fatal_transport_error(error: SpanPanelError) -> None:
+        if entry_removed(hass, entry):
+            return
+        if isinstance(error, SpanPanelCAChangedError):
+            async_raise_ca_changed(
+                hass, entry, error.expected_fingerprint, error.observed_fingerprint
+            )
+
+    return _on_fatal_transport_error
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Set up Span Panel from a config entry.
 
@@ -695,11 +734,9 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # the retry builds a new client -- so every attempt would fire the
             # signal into a client with no subscriber and the user would keep
             # getting the log line and nothing else.
-            @callback
-            def _on_leaf_name_mismatch(mismatch: LeafNameMismatch) -> None:
-                async_raise_leaf_name_mismatch(hass, entry, mismatch)
-
-            entry.async_on_unload(client.register_leaf_mismatch_callback(_on_leaf_name_mismatch))
+            entry.async_on_unload(
+                client.register_leaf_mismatch_callback(_leaf_name_mismatch_reporter(hass, entry))
+            )
 
             try:
                 # Its flat refusal is a `ConfigEntryNotReady`, which none of the
@@ -811,14 +848,9 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # fire-and-forget, so a CA that changes mid-session cannot surface as
             # an exception on anybody's call stack. The library gives it a
             # channel of its own precisely so a consumer can act on it.
-            @callback
-            def _on_fatal_transport_error(error: SpanPanelError) -> None:
-                if isinstance(error, SpanPanelCAChangedError):
-                    async_raise_ca_changed(
-                        hass, entry, error.expected_fingerprint, error.observed_fingerprint
-                    )
-
-            entry.async_on_unload(client.register_fatal_error_callback(_on_fatal_transport_error))
+            entry.async_on_unload(
+                client.register_fatal_error_callback(_fatal_transport_error_reporter(hass, entry))
+            )
 
             # One interceptor, installed before the coordinator starts streaming
             # so no control command can reach the panel ungated — including one
@@ -1011,12 +1043,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Clean up what this entry left outside its own runtime data.
 
-    Core deletes neither issues nor their dismissals when a config entry is
-    removed, so a panel taken out of the system would otherwise leave its schema
-    notices behind forever. Scoped to this entry: another panel's issues share the
-    domain and must survive.
+    Its Repairs are Home Assistant's to delete. Each is linked to the entry, and
+    once this returns Home Assistant deletes every issue linked to it,
+    dismissals included. The ones this deletes are those an older release
+    raised before issues were linked, which Home Assistant never deletes; see
+    `async_clear_unlinked_issues`. Only this entry's: another panel's issues
+    share the domain and must survive.
 
-    The announcement record goes with them, and for a sharper reason: it outliving
+    The announcement record goes too, and for a sharper reason: it outliving
     the entry would mean re-adding the same panel announces none of the entities
     it recreates, because every one of them is already recorded as announced.
 
@@ -1031,17 +1065,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     removed entry would otherwise try it and warn.
     """
     async_forget_reloads(hass, entry.entry_id)
-    async_clear_schema_issues(hass, entry)
-    # The CA family too, for the same reason — and the two persistent ones most
-    # of all, since nothing else can ever clear an issue whose entry is gone:
-    # the fixable flow aborts with `entry_gone`, and the rest have no flow.
-    async_clear_ca_changed(hass, entry)
-    async_clear_ca_unusable(hass, entry)
-    async_clear_rest_tls_untrusted(hass, entry)
-    async_clear_leaf_name_mismatch(hass, entry)
-    async_clear_unvalidated_hardware(hass, entry)
-    async_clear_flat_firmware(hass, entry)
-    async_clear_conversion_notice(hass, entry.entry_id)
+    async_clear_unlinked_issues(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)

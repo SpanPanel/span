@@ -28,6 +28,7 @@ from span_panel_api.exceptions import (
 
 from .const import DOMAIN
 from .energy_orientation import EnergyCounter, EnergyMeter
+from .entry_issues import entry_removed
 from .entry_reloads import async_request_rebuild, async_update_entry_data_applied
 from .helpers import (
     circuit_has_a_breaker_switch,
@@ -541,8 +542,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         Findings of None means "not yet known", never "healthy" — reconciling
         against that would delete every issue and every dismissal with it.
+
+        Nothing is reconciled for an entry that has been removed: a coordinator
+        whose unload failed keeps running after it, and there is no entry left
+        to raise an issue for.
         """
-        if self._findings is None:
+        if self._findings is None or entry_removed(self.hass, self.config_entry):
             return
         async_sync_schema_issues(
             self.hass, self.config_entry, self._findings, self.entity_ids_by_field_path

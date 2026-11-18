@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+from unittest.mock import DEFAULT, MagicMock, patch
 
 from homeassistant.helpers import issue_registry as ir
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.span_panel import schema_repairs
 from custom_components.span_panel.const import DOMAIN, EVENT_SCHEMA_ISSUE
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.schema_repairs import (
+    async_clear_retired_new_entity_notices,
     async_clear_retired_upgrade_notice,
-    async_clear_schema_issues,
     async_sync_schema_issues,
 )
 from custom_components.span_panel.schema_validation import SchemaFindings, UnitMismatch
@@ -416,8 +418,8 @@ async def test_a_healthy_pass_fires_no_event(hass, entry) -> None:
     assert events == []
 
 
-async def test_clearing_removes_only_this_entry(hass) -> None:
-    """`async_remove_entry` must not take a second panel's issues with it."""
+async def test_removing_one_panel_leaves_another_s_issues(hass) -> None:
+    """Removing an entry must not take a second panel's issues with it."""
     removed = MockConfigEntry(domain=DOMAIN, data={}, unique_id="removed")
     removed.add_to_hass(hass)
     kept = MockConfigEntry(domain=DOMAIN, data={}, unique_id="kept")
@@ -427,7 +429,7 @@ async def test_clearing_removes_only_this_entry(hass) -> None:
     async_sync_schema_issues(hass, removed, findings, _AFFECTED)
     async_sync_schema_issues(hass, kept, findings, _AFFECTED)
 
-    async_clear_schema_issues(hass, removed)
+    assert await hass.config_entries.async_remove(removed.entry_id) == {"require_restart": False}
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(removed)) is None
@@ -445,6 +447,7 @@ async def test_reconciliation_leaves_our_other_issues_alone(hass, entry) -> None
         hass,
         DOMAIN,
         f"something_else_{entry.entry_id}",
+        config_entry_id=entry.entry_id,
         is_fixable=False,
         severity=ir.IssueSeverity.WARNING,
         translation_key="something_else",
@@ -455,25 +458,149 @@ async def test_reconciliation_leaves_our_other_issues_alone(hass, entry) -> None
     assert ir.async_get(hass).async_get_issue(DOMAIN, f"something_else_{entry.entry_id}")
 
 
-async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:
-    """Core does not delete our issues when the entry is removed."""
-    from custom_components.span_panel import async_remove_entry
-
+async def test_removing_the_entry_deletes_its_issues(hass, entry) -> None:
+    """Each issue is linked to its entry, so Home Assistant deletes it with the entry."""
     async_sync_schema_issues(
         hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), _AFFECTED
     )
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, _issue_id(entry))
+    issue = registry.async_get_issue(DOMAIN, _issue_id(entry))
+    assert issue is not None
+    assert issue.config_entry_id == entry.entry_id
 
-    await async_remove_entry(hass, entry)
+    assert await hass.config_entries.async_remove(entry.entry_id) == {"require_restart": False}
 
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
 
 
+# --- One refresh per pass ---------------------------------------------------
+#
+# Each pass is a refresh of this entry's defect issues: what it raises again is
+# kept as it stands, dismissal included, and what it does not is deleted when it
+# finishes.
+
+
+async def test_a_pass_keeps_a_dismissed_issue_that_still_applies_and_deletes_a_resolved_one(
+    hass, entry
+) -> None:
+    """Both outcomes of one refresh, in the same pass."""
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"]}
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
+    )
+    ir.async_ignore_issue(hass, DOMAIN, _issue_id(entry, "a.one"), True)
+    registry = ir.async_get(hass)
+    dismissed = registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one")).dismissed_version
+
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), affected
+    )
+
+    still_applies = registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one"))
+    assert still_applies is not None
+    assert still_applies.dismissed_version == dismissed
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two")) is None
+
+
+async def test_a_pass_that_raises_part_way_deletes_nothing(hass, entry) -> None:
+    """The refresh is cancelled by the exception, so an issue the pass never reached stays.
+
+    Finished instead, it would delete every issue the pass had not yet raised
+    again, the user's dismissals with them, for a failure that says nothing
+    about the panel.
+    """
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"], "c.three": ["sensor.three"]}
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one", "c.three"}), (), frozenset()), affected
+    )
+    # The first create goes through to the real one; the second raises.
+    second_create_fails = MagicMock(
+        wraps=schema_repairs.async_create_entry_issue,
+        side_effect=[DEFAULT, RuntimeError("the second create fails")],
+    )
+
+    with (
+        patch.object(schema_repairs, "async_create_entry_issue", second_create_fails),
+        pytest.raises(RuntimeError, match="the second create fails"),
+    ):
+        async_sync_schema_issues(
+            hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
+        )
+
+    assert second_create_fails.call_count == 2
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "a.one")) is not None
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two")) is None
+    # Resolved in this pass, and left as it was because the pass did not finish.
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "c.three")) is not None
+
+
+def _raise_unlinked(hass, issue_id: str, *, dismissed: bool = False) -> None:
+    """Raise an issue as a release that did not link issues to their entry raised it."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="schema_field_unresolved",
+        translation_placeholders={"field_path": "x", "count": "1", "examples": "sensor.x"},
+    )
+    if dismissed:
+        ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
+
+
+@pytest.mark.unlinked_issues_allowed
+async def test_a_pass_links_an_older_release_s_issue_that_still_applies(hass, entry) -> None:
+    """The set is chosen by id, so an issue raised before issues were linked is in it.
+
+    Raised again, it is linked and keeps the dismissal its user gave it.
+    """
+    _raise_unlinked(hass, _issue_id(entry), dismissed=True)
+    registry = ir.async_get(hass)
+    dismissed = registry.async_get_issue(DOMAIN, _issue_id(entry)).dismissed_version
+    assert dismissed is not None
+
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), _AFFECTED
+    )
+
+    issue = registry.async_get_issue(DOMAIN, _issue_id(entry))
+    assert issue is not None
+    assert issue.config_entry_id == entry.entry_id
+    assert issue.dismissed_version == dismissed
+
+
+@pytest.mark.unlinked_issues_allowed
+async def test_a_pass_deletes_an_older_release_s_issue_that_resolved(hass, entry) -> None:
+    """An unlinked issue whose finding has gone is deleted like a linked one."""
+    _raise_unlinked(hass, _issue_id(entry), dismissed=True)
+    _raise_unlinked(hass, _unit_issue_id(entry, _UNIT_PATH))
+
+    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), {})
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
+    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH)) is None
+
+
+@pytest.mark.unlinked_issues_allowed
+async def test_a_pass_leaves_another_entry_s_unlinked_issues(hass, entry) -> None:
+    """Scoped by this entry's id, not by the link, so no other entry's issues are in its set."""
+    other = MockConfigEntry(domain=DOMAIN, data={}, unique_id="other")
+    other.add_to_hass(hass)
+    _raise_unlinked(hass, _issue_id(other))
+
+    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), {})
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, _issue_id(other))
+
+
 # --- The retired firmware-upgrade Repair ----------------------------------
 #
-# Installs from older versions may still hold one. Nothing raises it any more,
-# and setup clears it.
+# Only untagged builds raised one, never a release, so an install that ran one
+# may still hold it. Nothing raises it any more, and setup clears it.
 
 _RETIRED_UPGRADE_ISSUE = "panel_upgraded_to_ebus_v1"
 
@@ -489,6 +616,7 @@ def _raise_retired_upgrade_issue(hass, entry: MockConfigEntry) -> None:
     )
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_the_retired_upgrade_repair_is_cleared_from_an_upgraded_install(hass, entry) -> None:
     """It is on screen now, and its owner has no reason to restart to be rid of it."""
     _raise_retired_upgrade_issue(hass, entry)
@@ -499,6 +627,7 @@ async def test_the_retired_upgrade_repair_is_cleared_from_an_upgraded_install(ha
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+@pytest.mark.unlinked_issues_allowed
 async def test_clearing_the_retired_upgrade_repair_leaves_another_panels_alone(
     hass, entry
 ) -> None:
@@ -513,6 +642,55 @@ async def test_clearing_the_retired_upgrade_repair_leaves_another_panels_alone(
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"{_RETIRED_UPGRADE_ISSUE}_{entry.entry_id}") is None
     assert registry.async_get_issue(DOMAIN, f"{_RETIRED_UPGRADE_ISSUE}_{other.entry_id}")
+
+
+# --- The retired new-entity Repair ----------------------------------------
+#
+# Only untagged builds raised them, never a release: one per addition, and
+# persistent, so an install that ran one may still hold several. Nothing raises
+# them any more, and setup clears them.
+
+
+def _raise_retired_new_entity_issue(hass, entry: MockConfigEntry, key: str) -> str:
+    issue_id = f"new_entities_{entry.entry_id}_{key}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="new_entities",
+    )
+    return issue_id
+
+
+@pytest.mark.unlinked_issues_allowed
+async def test_the_retired_new_entity_repairs_are_cleared_from_an_upgraded_install(
+    hass, entry
+) -> None:
+    """Persistent, so nothing but this takes them out of the Repairs list."""
+    issue_ids = [_raise_retired_new_entity_issue(hass, entry, key) for key in ("one", "two")]
+
+    async_clear_retired_new_entity_notices(hass, entry)
+
+    registry = ir.async_get(hass)
+    assert [issue_id for issue_id in issue_ids if registry.async_get_issue(DOMAIN, issue_id)] == []
+
+
+@pytest.mark.unlinked_issues_allowed
+async def test_clearing_the_retired_new_entity_repairs_leaves_another_panels_alone(
+    hass, entry
+) -> None:
+    """Two panels share the domain, and one being cleared is not both."""
+    other = MockConfigEntry(domain=DOMAIN, data={}, unique_id="abc456")
+    other.add_to_hass(hass)
+    _raise_retired_new_entity_issue(hass, entry, "one")
+    kept = _raise_retired_new_entity_issue(hass, other, "one")
+
+    async_clear_retired_new_entity_notices(hass, entry)
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, kept)
 
 
 # --- The affected-entity map, built from real entities ---------------------
