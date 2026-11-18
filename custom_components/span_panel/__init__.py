@@ -974,14 +974,17 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         # on-unload callbacks: an unload runs them once the platforms have
         # removed the entities, and where setup fails after the forward, the
         # handler below removes the entities before the error leaves setup and
-        # Core runs them. It reads what each circuit entity records only as an
-        # event arrives, and an entity the forward has yet to build writes its
-        # own base as it is added.
+        # Core runs them. A setup cancelled part way never reaches that handler,
+        # which catches `Exception` only, so it takes nothing down. The listener
+        # reads what each circuit entity records only as an event arrives, and
+        # an entity the forward has yet to build writes its own base as it is
+        # added.
         entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
 
         # Set before the forward rather than after it: a forward that stops part
-        # way has set some platforms up, and Home Assistant ignores an unload of
-        # one that never was.
+        # way has set some platforms up, and unloading one this entry never set
+        # up costs a logged warning from Home Assistant and still counts as
+        # unloaded (`EntityComponent.async_unload_entry`).
         platforms_forwarded = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
