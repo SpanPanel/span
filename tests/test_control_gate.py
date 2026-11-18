@@ -757,7 +757,7 @@ def _lock_switch(hass: HomeAssistant, lock: ControlLock, timeout: float | None):
         lock_timeout_minutes=timeout,
         relay_debounce_seconds=0.0,
     )
-    entity = SpanPanelControlLockSwitch(coordinator, lock, policy, "SPAN Panel")
+    entity = SpanPanelControlLockSwitch(coordinator, lock, policy)
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     return entity

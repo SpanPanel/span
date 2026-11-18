@@ -39,7 +39,6 @@ from .helpers import (
 )
 from .naming import release_registry_name_written_by_older_release
 from .runtime import SpanPanelConfigEntry
-from .util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -379,7 +378,6 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
         coordinator: SpanPanelCoordinator,
         lock: ControlLock,
         policy: ControlPolicy,
-        device_name: str,
     ) -> None:
         """Bind the entity to this entry's single lock object."""
         super().__init__(coordinator)
@@ -387,7 +385,11 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
         self._lock = lock
         self._policy = policy
         self._relock_timer: CALLBACK_TYPE | None = None
-        self._attr_device_info = snapshot_to_device_info(snapshot, device_name)
+        # The panel's device, described by the one builder every panel entity
+        # uses. Home Assistant writes whichever description it registers last
+        # over the device, field by field, so one that left out the host here
+        # cleared the panel's Visit link whenever this switch came last.
+        self._attr_device_info = self._build_device_info(coordinator, snapshot)
         self._attr_unique_id = f"span_{snapshot.serial_number}_control_lock"
 
     async def async_added_to_hass(self) -> None:
@@ -566,7 +568,6 @@ async def async_setup_entry(
                 coordinator,
                 config_entry.runtime_data.control_lock,
                 policy,
-                _device_name,
             )
         )
 
