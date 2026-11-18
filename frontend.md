@@ -58,6 +58,9 @@ The Monitoring tab provides current-based alerting for individual circuits. It d
 circuit's breaker rating, then delivers notifications through configurable channels. On a MAIN 32, a tandem's second rating can be copied from the SPAN app so
 that monitoring judges both breakers together; see [Tandem and Multi-Load Breakers](tandems.md).
 
+Any Home Assistant user can read monitoring's settings and status. Changing them, or sending a test notification, takes an administrator or an automation,
+whatever [Who may operate the panel](README.md#restricting-who-can-operate-the-panel) is set to; a script a person runs carries that person's user.
+
 ### Global Settings
 
 - **Continuous (%)** — Sustained utilization threshold as a percentage of breaker rating. When a circuit draws more than this percentage continuously for the
