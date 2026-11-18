@@ -694,11 +694,12 @@ Troubleshooting.
 ### Restricting who can operate the panel
 
 Four options in **Settings → Devices & Services → Span Panel → Configure**. Each is enforced where commands are published rather than only at the entity, so a
-refusal holds however the command arrived.
+refusal holds however the command arrived. While **Who may operate the panel** is `Nobody`, the form hides the other three, and each keeps its value for when
+you choose who may operate the panel again.
 
 | Option                                     | Default                               | What it refuses                                                                                                                                                                                                                                 | What it does not do                                                                                                        |
 | ------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Who may operate the panel**              | Administrators only                   | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and locks, and adopted controls from non-admin users. `Nobody` also stops those entities being created.                                         | Neither touches sensors. Neither reaches an automation, which runs with no user at all — pair it with the next option.     |
+| **Who may operate the panel**              | Administrators only                   | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and locks, and adopted controls from non-admin users. `Nobody` also stops those entities and the control lock's switch being created.           | Neither touches sensors. Neither reaches an automation, which runs with no user at all — pair it with the next option.     |
 | **Allow control without a logged-in user** | Off                                   | While off, refuses every command with no user attached: all automations, and any script or integration an automation calls. A script a person runs keeps that person's user and is unaffected. Turn it on if your automations operate circuits. | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
 | **Control lock auto-relock**               | Off, and no switch exists             | A switch that, while armed, refuses every control command. Anyone can arm it; only a logged-in administrator can disarm it. `0` holds the disarm until someone re-arms; any other value re-arms after that many minutes.                        | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
 | **Relay debounce**                         | 2 seconds; `0` turns the debounce off | A second command to the same circuit's relay inside the window. Refused rather than queued.                                                                                                                                                     | It is per circuit, so an automation cycling many circuits still gets through.                                              |
@@ -708,9 +709,10 @@ second Home Assistant instance, a script you wrote, a malicious custom integrati
 see [Recommended deployment](#recommended-deployment), where network topology and a locked enclosure are the real boundary.
 
 **Choosing `Nobody` is reversible.** The control entities stop being created and read as unavailable, but their registry entries, names, areas and
-customizations are kept, so turning the option back on restores exactly the entities you had. For an administrator, the shipped SPAN Panel card and dashboard
-offer no breaker switch or priority while `Nobody` is chosen. A non-administrator's card finds its entities without the panel's topology, so it shows those
-switches dimmed and inert, as other dashboards show them unavailable.
+customizations are kept, so turning the option back on restores exactly the entities you had. The control lock comes back armed or disarmed as you left it, with
+any auto-relock still due at the same moment, and armed if Home Assistant no longer holds its last state. For an administrator, the shipped SPAN Panel card and
+dashboard offer no breaker switch or priority while `Nobody` is chosen. A non-administrator's card finds its entities without the panel's topology, so it shows
+those switches dimmed and inert, as other dashboards show them unavailable.
 
 ### The record of what was commanded
 

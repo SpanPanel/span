@@ -574,6 +574,16 @@ async def async_setup_entry(
     policy = config_entry.runtime_data.control_policy
     snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
+    # Under `disabled` no control entity is created, the control lock's
+    # included, and their registry entries are kept. Choosing Nobody is the
+    # user's decision about every control, reversed by the user, and the README
+    # promises it deletes nothing. A control the panel withdraws is the panel's
+    # decision about one circuit, and is removed below. Either way Core restores
+    # a returning control's entity id, name and area, so keeping these entries
+    # is a promise, not a safeguard.
+    if policy.mode is ControlMode.DISABLED:
+        return
+
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)
 
@@ -587,17 +597,6 @@ async def async_setup_entry(
                 policy,
             )
         )
-
-    # Under `disabled` the control entities are not created and their registry
-    # entries are kept. Choosing Nobody is the user's decision about every
-    # control, reversed by the user, and the README promises it deletes nothing.
-    # A control the panel withdraws is the panel's decision about one circuit,
-    # and is removed below. Either way Core restores a returning control's
-    # entity id, name and area, so keeping these entries is a promise, not a
-    # safeguard.
-    if policy.mode is ControlMode.DISABLED:
-        async_add_entities(entities)
-        return
 
     remove_withdrawn_controls(
         er.async_get(hass),

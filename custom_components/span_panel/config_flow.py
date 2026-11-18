@@ -2201,7 +2201,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             )
 
             if not errors:
-                # Save panel settings to domain-level storage
+                # Save panel settings to domain-level storage, merged into the
+                # stored ones so a setting the form hid keeps its value.
                 current_ps = await async_load_panel_settings(self.hass)
                 current_ps.update(panel_settings)
                 await async_save_panel_settings(self.hass, current_ps)

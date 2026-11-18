@@ -857,11 +857,13 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # so no control command can reach the panel ungated — including one
             # issued during the first refresh.
             control_policy = ControlPolicy.from_options(entry.options)
-            # Armed for as long as the feature is on, from the moment the
-            # interceptor has a lock to consult rather than from the moment the
-            # switch is added — the first refresh and the whole platform
-            # forward happen in between. `SpanPanelControlLockSwitch` reopens it
-            # if that is what the previous run left behind.
+            # Armed whenever the lock switch exists (`lock_enabled`), from the
+            # moment the interceptor has a lock to consult rather than from the
+            # moment the switch is added — the first refresh and the whole
+            # platform forward happen in between. `SpanPanelControlLockSwitch`
+            # reopens it if that is what the previous run left behind. Under
+            # `disabled` there is no switch, and the gate refuses every command
+            # before it consults the lock.
             control_lock = ControlLock(armed=control_policy.lock_enabled)
             client.set_control_interceptor(ControlGate(hass, entry, control_policy, control_lock))
             entry.async_on_unload(lambda: client.set_control_interceptor(None))

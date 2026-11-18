@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant import data_entry_flow
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.field_visibility import ConditionOperator, FieldCondition
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -39,10 +41,47 @@ from .options import (
     SNAPSHOT_UPDATE_INTERVAL,
 )
 
+# Each condition hides a field only when the form submits the value that turns
+# its feature off. Core decides visibility from the submitted values, never from
+# the stored options, so a client that leaves the controlling field out gets its
+# dependent fields treated as shown, and saves what it sends for them as it
+# always could. A hidden field is left out of the submission, and the stored
+# value survives because saving merges into what is already stored.
+#
+# That an omitted field hides nothing holds only because no marker here
+# declares a `default=`. Core fills schema defaults into the submission before
+# it evaluates the conditions, so a default on `CONTROL_MODE` or
+# `PANEL_SHOW_SIDEBAR` would decide for a client that left it out. The form
+# shows the stored values as suggested values instead.
+
+_SIDEBAR_PANEL_SHOWN: FieldCondition = {
+    "field": PANEL_SHOW_SIDEBAR,
+    "operator": ConditionOperator.NOT_EQ,
+    "value": False,
+}
+"""Shows a field while the sidebar panel is on.
+
+The admin-only choice is read only when the panel is registered, and the panel
+is registered only while it is on.
+"""
+
+_CONTROL_ENABLED: FieldCondition = {
+    "field": CONTROL_MODE,
+    "operator": ConditionOperator.NOT_EQ,
+    "value": ControlMode.DISABLED.value,
+}
+"""Shows a field while control is on.
+
+With control disabled the gate refuses every command before it consults
+anything else, so neither contextless control nor the relay debounce decides
+anything, and no control-lock switch is created for the lock timeout to
+configure.
+"""
+
 GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
     {
         vol.Optional(PANEL_SHOW_SIDEBAR): bool,
-        vol.Optional(PANEL_ADMIN_ONLY): bool,
+        data_entry_flow.Optional(PANEL_ADMIN_ONLY, visible=_SIDEBAR_PANEL_SHOWN): bool,
         vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
             vol.Coerce(float), vol.Range(min=0, max=15)
         ),
@@ -60,12 +99,16 @@ GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
                 mode=SelectSelectorMode.DROPDOWN,
             )
         ),
-        vol.Optional(ALLOW_CONTEXTLESS_CONTROL): bool,
+        data_entry_flow.Optional(ALLOW_CONTEXTLESS_CONTROL, visible=_CONTROL_ENABLED): bool,
         # Minutes. `0` means the lock stays armed until somebody disarms it; a
         # negative value turns the feature off, which is how "no lock entity"
         # is expressed without a second option.
-        vol.Optional(CONTROL_LOCK_TIMEOUT): vol.All(vol.Coerce(float), vol.Range(min=-1, max=1440)),
-        vol.Optional(RELAY_DEBOUNCE_SECONDS): vol.All(vol.Coerce(float), vol.Range(min=0, max=60)),
+        data_entry_flow.Optional(CONTROL_LOCK_TIMEOUT, visible=_CONTROL_ENABLED): vol.All(
+            vol.Coerce(float), vol.Range(min=-1, max=1440)
+        ),
+        data_entry_flow.Optional(RELAY_DEBOUNCE_SECONDS, visible=_CONTROL_ENABLED): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=60)
+        ),
     }
 )
 
@@ -147,7 +190,8 @@ def process_general_options_input(
         if not k.startswith("_separator") and k not in _PANEL_SETTING_KEYS
     }
 
-    # Merge with existing options to preserve unchanged values
+    # Merge with existing options, so a field the form left out keeps its stored
+    # value. That includes a field its visibility condition hid.
     merged_options = dict(config_entry.options)
     merged_options.update(filtered_input)
     filtered_input = merged_options

@@ -696,13 +696,29 @@ def test_a_negative_lock_timeout_turns_the_feature_off() -> None:
     assert ControlPolicy.from_options({"control_lock_timeout": 0}).lock_enabled is True
 
 
+def test_disabled_control_has_no_lock_whatever_its_timeout() -> None:
+    """The lock switch is a control entity, so `disabled` does not create it either."""
+    for timeout in (-1, 0, 30):
+        policy = ControlPolicy.from_options(
+            {"control_lock_timeout": timeout, "control_mode": ControlMode.DISABLED.value}
+        )
+        assert policy.lock_enabled is False
+
+
+@pytest.mark.parametrize(
+    "lock_timeout_minutes",
+    [pytest.param(None, id="no_lock"), pytest.param(0.0, id="lock_configured")],
+)
 @pytest.mark.asyncio
-async def test_a_disabled_entry_creates_no_control_entities(hass: HomeAssistant) -> None:
-    """The half of `disabled` this test actually proves: nothing is created.
+async def test_a_disabled_entry_creates_no_control_entities(
+    hass: HomeAssistant, lock_timeout_minutes: float | None
+) -> None:
+    """The half of `disabled` this test actually proves: nothing is created, the control lock included.
 
     That the registry entries *survive* is the other half, and it is asserted
     separately below rather than in this docstring — a claim made here and
-    checked nowhere reads as coverage to anyone auditing by name.
+    checked nowhere reads as coverage to anyone auditing by name. For the lock
+    switch, `test_control_lock_state.py` asserts it through a real reload.
     """
     from custom_components.span_panel.switch import async_setup_entry
 
@@ -726,9 +742,10 @@ async def test_a_disabled_entry_creates_no_control_entities(hass: HomeAssistant)
         control_policy=ControlPolicy(
             mode=ControlMode.DISABLED,
             allow_contextless=True,
-            lock_timeout_minutes=None,
+            lock_timeout_minutes=lock_timeout_minutes,
             relay_debounce_seconds=2.0,
         ),
+        control_lock=ControlLock(armed=False),
     )
 
     added: list[object] = []
