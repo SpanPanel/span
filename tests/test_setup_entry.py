@@ -39,6 +39,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
+    _async_take_down_failed_setup,
     async_remove_config_entry_device,
     async_setup_entry,
 )
@@ -53,6 +54,7 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.flat_firmware_repairs import async_raise_flat_firmware
 from custom_components.span_panel.id_builder import build_pv_inverter_unique_id
@@ -446,6 +448,30 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
         await async_setup_entry(hass, entry)
 
     coordinator.async_shutdown.assert_awaited_once()
+
+
+async def test_a_failed_setup_stops_the_current_monitor_with_the_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """The monitor stops with the coordinator, on a failed setup as on an unload.
+
+    Its stop is part of the coordinator's shutdown, which the unload and the
+    failed setup's teardown share, so neither path can stop one without the
+    other.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+    coordinator = SpanPanelCoordinator(hass, client, entry)
+    monitor = MagicMock()
+    coordinator.current_monitor = monitor
+
+    await _async_take_down_failed_setup(hass, entry, coordinator, platforms_forwarded=False)
+
+    monitor.async_stop.assert_called_once_with()
+    client.close.assert_awaited_once_with()
 
 
 async def test_setup_syncs_schema_repairs_after_the_platforms(

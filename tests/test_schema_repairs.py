@@ -800,15 +800,14 @@ async def _add_to_platform(hass, config_entry, entities, platform_domain: str) -
 
 
 async def _stop_scheduling(coordinator) -> None:
-    """Cancel the coordinator's refresh timer and debouncer.
+    """Cancel the coordinator's refresh timer and debouncer, and release its client.
 
-    `SpanPanelCoordinator.async_shutdown` releases the client but does not chain
-    to the base implementation; in production the timer is unscheduled when the
-    last entity listener goes away, which these tests deliberately do not do.
+    These tests add entities to a platform and never take them away, so the
+    timer is not unscheduled by the last listener leaving, as it is in
+    production. `SpanPanelCoordinator.async_shutdown` chains to the base
+    class's, which cancels both.
     """
-    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
-    await DataUpdateCoordinator.async_shutdown(coordinator)
+    await coordinator.async_shutdown()
 
 
 async def test_affected_entities_span_all_three_unique_id_styles(hass) -> None:

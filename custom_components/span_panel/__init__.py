@@ -1053,8 +1053,9 @@ async def _async_take_down_failed_setup(
     is: Core runs the callbacks whatever happened here, so its entities stay
     live without the listener until Home Assistant restarts.
 
-    The coordinator is shut down after them, which stops dispatch and closes
-    the client, whether or not every platform unloaded.
+    The coordinator is shut down after them, whether or not every platform
+    unloaded, which stops its refreshes, dispatch and the current monitor and
+    closes the client.
     """
     try:
         if platforms_forwarded and not await hass.config_entries.async_unload_platforms(
@@ -1083,10 +1084,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 
     await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
 
+    # The coordinator's shutdown stops the current monitor too, and is the same
+    # one a failed setup's teardown runs.
     runtime_data = loaded_runtime_data(entry)
     if runtime_data is not None:
-        if runtime_data.coordinator.current_monitor is not None:
-            runtime_data.coordinator.current_monitor.async_stop()
         await runtime_data.coordinator.async_shutdown()
 
 

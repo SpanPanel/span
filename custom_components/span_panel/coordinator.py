@@ -438,8 +438,29 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         await self._run_post_update_tasks(snapshot)
 
     async def async_shutdown(self) -> None:
-        """Shut down the coordinator and release resources."""
+        """Shut the coordinator down and release what it holds, once however often it is asked.
+
+        It is asked more than once on every path that ends an entry. Home
+        Assistant registers it with the entry's on-unload callbacks as the
+        coordinator is built (`DataUpdateCoordinator.__init__`), and the
+        entry's unload and a failed setup's teardown call it before those
+        callbacks run. The first call does the work and every later one
+        returns.
+
+        The base class's own shutdown is part of the work: it cancels the
+        scheduled refresh and shuts the refresh debouncer down, so nothing
+        refreshes a coordinator whose client is closed. So is the current
+        monitor's, so that whatever takes the coordinator down takes the monitor
+        with it.
+        """
+        if self._shut_down:
+            return
         self._shut_down = True
+        await super().async_shutdown()
+
+        if self.current_monitor is not None:
+            self.current_monitor.async_stop()
+
         if self._unregister_connection is not None:
             self._unregister_connection()
             self._unregister_connection = None

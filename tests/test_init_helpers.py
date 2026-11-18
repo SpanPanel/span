@@ -304,7 +304,12 @@ def _loaded_entry(hass: HomeAssistant) -> tuple[MockConfigEntry, MagicMock]:
 async def test_async_unload_entry_shuts_down_runtime_data(
     hass: HomeAssistant,
 ) -> None:
-    """Unload stops the current monitor and the coordinator once the platforms have unloaded."""
+    """Unload shuts the coordinator down once the platforms have unloaded.
+
+    The coordinator's shutdown stops the current monitor with it, which
+    `test_shutdown_does_its_work_once_however_often_it_is_asked` holds; the
+    unload asks for nothing else.
+    """
     entry, coordinator = _loaded_entry(hass)
 
     with patch.object(
@@ -313,7 +318,7 @@ async def test_async_unload_entry_shuts_down_runtime_data(
         await async_unload_entry(hass, entry)
 
     mock_unload.assert_awaited_once()
-    coordinator.current_monitor.async_stop.assert_called_once_with()
+    coordinator.current_monitor.async_stop.assert_not_called()
     coordinator.async_shutdown.assert_awaited_once()
 
 
