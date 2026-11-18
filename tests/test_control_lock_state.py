@@ -18,7 +18,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.const import CONF_HOST, STATE_OFF, STATE_ON, Platform
 from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.util import dt as dt_util
 import pytest
@@ -43,6 +42,7 @@ from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_VERSION,
 )
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
+from custom_components.span_panel.switch import SpanPanelControlLockSwitch
 
 from .common import async_fire_time_changed
 from .factories import SpanPanelSnapshotFactory
@@ -128,10 +128,12 @@ def _lock(entry: MockConfigEntry) -> ControlLock:
     return lock
 
 
-def _lock_switch(hass: HomeAssistant) -> Entity:
+def _lock_switch(hass: HomeAssistant) -> SpanPanelControlLockSwitch:
     """Return the live switch entity that arms and disarms the lock."""
     (platform,) = async_get_platforms(hass, DOMAIN)
-    return platform.entities[LOCK_ENTITY]
+    switch = platform.entities[LOCK_ENTITY]
+    assert isinstance(switch, SpanPanelControlLockSwitch)
+    return switch
 
 
 async def _reload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -232,6 +234,7 @@ async def test_an_id_edit_leaves_the_lock_open_and_its_relock_due(hass: HomeAssi
     async with _panel(hass, timeout=1) as entry:
         await _disarm(hass)
         due = _lock(entry).relock_in_seconds
+        assert due is not None
         assert due == pytest.approx(60, abs=5)
 
         with watch_add_and_remove(_lock_switch(hass)) as calls:
