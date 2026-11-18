@@ -51,6 +51,17 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "panel_device_id": "abc123def456",
   "config_entry_id": "e5f6a7b8c9d0",
   "device_name": "SPAN Panel",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "site_power": "sensor.span_panel_site_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "panel_status": "binary_sensor.span_panel_panel_status"
+  },
   "monitoring_rating_offered": true,
   "control_access": {
     "may_operate": true,
@@ -217,6 +228,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                   |
 | `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                        |
 | `device_name`               | string      | HA device display name                                                                                                                                      |
+| `panel_entities`            | object      | Role-keyed map of the entity IDs of the panel's own readings and its status (see below)                                                                     |
 | `monitoring_rating_offered` | bool        | Whether `set_circuit_package_ratings` takes ratings on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
 | `control_access`            | object      | Whether the user asking may operate the panel, and if not, why (see below)                                                                                  |
 | `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                          |
@@ -226,6 +238,31 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 `first_position` and `last_position` say which breaker positions the panel has, occupied or not: the reported model's range where the integration knows the
 model, otherwise the lowest and highest occupied spaces, and null where neither is known. `circuits` lists only the circuits that are there, so a position in
 the range with no circuit is an empty space.
+
+#### Panel Entity Roles
+
+| Role                    | Domain        | Entity                |
+| ----------------------- | ------------- | --------------------- |
+| `current_power`         | sensor        | Current Power         |
+| `site_power`            | sensor        | Site Power            |
+| `grid_power`            | sensor        | Grid Power            |
+| `feedthrough_power`     | sensor        | Feed Through Power    |
+| `pv_power`              | sensor        | PV Power              |
+| `battery_power`         | sensor        | Battery Power         |
+| `battery_level`         | sensor        | Battery Level         |
+| `dsm_state`             | sensor        | DSM Grid State        |
+| `main_breaker_rating`   | sensor        | Main Breaker Rating   |
+| `upstream_l1_current`   | sensor        | Upstream L1 Current   |
+| `upstream_l2_current`   | sensor        | Upstream L2 Current   |
+| `downstream_l1_current` | sensor        | Downstream L1 Current |
+| `downstream_l2_current` | sensor        | Downstream L2 Current |
+| `l1_voltage`            | sensor        | L1 Voltage            |
+| `l2_voltage`            | sensor        | L2 Voltage            |
+| `panel_status`          | binary_sensor | Panel Status          |
+
+A role is present while its entity is registered for this panel, enabled or not, and omitted otherwise: a panel without a battery has no `battery_power` or
+`battery_level`. Each value is the entity's current ID, so a renamed entity is still found. `panel_status` stays available while the panel is offline, so a
+consumer can watch it for whether the panel is online.
 
 #### Control Access Object
 
