@@ -715,8 +715,8 @@ see [Recommended deployment](#recommended-deployment), where network topology an
 customizations are kept, so turning the option back on restores exactly the entities you had. The control lock comes back armed or disarmed as you left it, with
 any auto-relock still due at the same moment, and armed if Home Assistant no longer holds its last state. The shipped SPAN Panel card and dashboard offer no
 breaker switch or priority while `Nobody` is chosen, and other dashboards show those entities unavailable. For a user who may not operate the panel — anyone but
-an administrator while `Administrators only` is chosen, or an account whose Home Assistant permissions do not allow control — the card and dashboard show the
-relay and priority controls disabled.
+an administrator while `Administrators only` is chosen, or an account whose Home Assistant permissions allow control of none of its relay and priority controls
+— the card and dashboard show those controls disabled.
 
 ### The record of what was commanded
 

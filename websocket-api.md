@@ -237,7 +237,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 
 `first_position` and `last_position` say which breaker positions the panel has, occupied or not: the reported model's range where the integration knows the
 model, otherwise the lowest and highest occupied spaces, and null where neither is known. `circuits` lists only the circuits that are there, so a position in
-the range with no circuit is an empty space.
+the range that no circuit's `tabs` include is an empty space.
 
 #### Panel Entity Roles
 
@@ -260,9 +260,9 @@ the range with no circuit is an empty space.
 | `l2_voltage`            | sensor        | L2 Voltage            |
 | `panel_status`          | binary_sensor | Panel Status          |
 
-A role is present while its entity is registered for this panel, enabled or not, and omitted otherwise: a panel without a battery has no `battery_power` or
-`battery_level`. Each value is the entity's current ID, so a renamed entity is still found. `panel_status` stays available while the panel is offline, so a
-consumer can watch it for whether the panel is online.
+The roles are read from the entity registry: a role is present while its entity is registered for this panel, enabled or not, and omitted otherwise. A panel set
+up without a battery, for example, has no `battery_power` or `battery_level`. Each value is the entity's current ID, so a renamed entity is still found.
+`panel_status` stays available while the panel is offline, so a consumer can watch it for whether the panel is online.
 
 #### Control Access Object
 
