@@ -118,6 +118,8 @@ async def test_the_frontend_is_told_when_each_field_is_shown(
         CONTROL_LOCK_TIMEOUT: _SHOWN_WHILE_CONTROL_IS_ON,
         RELAY_DEBOUNCE_SECONDS: _SHOWN_WHILE_CONTROL_IS_ON,
     }
+    # `==` above would also accept a 0 for the False; the JSON has to carry a boolean.
+    assert fields[PANEL_ADMIN_ONLY]["visible"]["value"] is False
     assert fields[PANEL_SHOW_SIDEBAR]["description"] == {"suggested_value": True}
     assert fields[PANEL_ADMIN_ONLY]["description"] == {"suggested_value": False}
     assert fields[CONTROL_MODE]["description"] == {"suggested_value": ControlMode.ALL_USERS.value}
@@ -198,6 +200,41 @@ async def test_saving_a_disabled_entry_unchanged_keeps_its_control_settings(
     assert suggested[ALLOW_CONTEXTLESS_CONTROL] is True
     assert suggested[CONTROL_LOCK_TIMEOUT] == 10.0
     assert suggested[RELAY_DEBOUNCE_SECONDS] == 5.0
+
+
+async def test_turning_control_on_saves_the_settings_it_shows_in_the_same_save(
+    hass: HomeAssistant,
+) -> None:
+    """Choosing a control mode shows the control settings at once, so one save can set them all.
+
+    The form opened with control disabled leaves the three out. The frontend
+    shows them as soon as the mode changes, and Core resolves visibility from
+    the submitted mode, so what the user then sets for them is saved with it.
+    """
+    entry = _entry(
+        hass,
+        {
+            CONTROL_MODE: ControlMode.DISABLED.value,
+            ALLOW_CONTEXTLESS_CONTROL: False,
+            CONTROL_LOCK_TIMEOUT: -1.0,
+            RELAY_DEBOUNCE_SECONDS: 2.0,
+        },
+    )
+    flow_id, submitted = await _open(hass, entry)
+    assert CONTROL_LOCK_TIMEOUT not in submitted
+    submitted |= {
+        CONTROL_MODE: ControlMode.ADMIN_ONLY.value,
+        ALLOW_CONTEXTLESS_CONTROL: True,
+        CONTROL_LOCK_TIMEOUT: 15.0,
+        RELAY_DEBOUNCE_SECONDS: 4.0,
+    }
+
+    await _save(hass, flow_id, submitted)
+
+    assert entry.options[CONTROL_MODE] == ControlMode.ADMIN_ONLY.value
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+    assert entry.options[CONTROL_LOCK_TIMEOUT] == 15.0
+    assert entry.options[RELAY_DEBOUNCE_SECONDS] == 4.0
 
 
 @pytest.mark.parametrize(

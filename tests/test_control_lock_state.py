@@ -542,6 +542,35 @@ async def test_turning_control_back_on_brings_the_same_lock_switch_back_as_it_wa
 
 
 @pytest.mark.asyncio
+async def test_turning_control_on_with_a_lock_timeout_in_one_save_creates_the_lock_armed(
+    hass: HomeAssistant,
+) -> None:
+    """The form shows the lock timeout as soon as a control mode is chosen, so both arrive together.
+
+    One options change, as one save makes it, and one reload: the lock switch
+    the entry never had is created, armed as the feature promises.
+    """
+    async with _panel(hass, timeout=-1, mode=ControlMode.DISABLED) as entry:
+        assert er.async_get(hass).async_get(LOCK_ENTITY) is None
+
+        hass.config_entries.async_update_entry(
+            entry,
+            options={
+                **entry.options,
+                CONTROL_MODE: ControlMode.ADMIN_ONLY.value,
+                CONTROL_LOCK_TIMEOUT: 0.0,
+            },
+        )
+        await hass.async_block_till_done()
+
+        assert entry.runtime_data.control_policy.lock_enabled is True
+        assert _lock(entry).armed is True
+        state = hass.states.get(LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_ON
+
+
+@pytest.mark.asyncio
 async def test_a_restart_while_control_is_disabled_keeps_the_lock_state_for_later(
     hass: HomeAssistant,
 ) -> None:
