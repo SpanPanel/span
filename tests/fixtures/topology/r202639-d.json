@@ -254,6 +254,10 @@
     }
   },
   "config_entry_id": "entry-r202639-d",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "device_id": "xg-1334-066e8",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",

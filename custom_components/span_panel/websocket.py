@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, Final, TypedDict
 
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
@@ -13,6 +13,7 @@ import probatio as vol
 from span_panel_api import shared_meter_groups
 
 from .const import DOMAIN
+from .control_access import control_access
 from .control_gate import ControlMode
 from .current_monitor import MonitoredCircuit, monitored_circuits
 from .energy_orientation import circuit_is_generation
@@ -110,7 +111,10 @@ async def handle_panel_topology(
     each circuit and device, the ratings current monitoring judges each circuit
     against, and the registry IDs that tie them together; no host, credential
     or certificate is in it. Whether a control it names may be operated is
-    decided by the control policy when the control is used, not here.
+    decided by the control policy and by Home Assistant's permissions when the
+    control is used, not here; `control_access` carries their answer for the
+    user asking, so the card can disable the controls that user would be
+    refused. See `control_access`.
 
     The caller passes the HA device registry ID for the **main SPAN panel**
     device only (not a sub-device or a circuit's device). Returns panel
@@ -191,6 +195,9 @@ async def handle_panel_topology(
 
     # Build circuits section.
     circuits: dict[str, dict[str, Any]] = {}
+    # Every relay switch and priority select offered below, which
+    # `control_access` checks the user's permissions against.
+    circuit_controls: list[str] = []
     for circuit_id, circuit in snapshot.circuits.items():
         if circuit_id not in circuit_ids:
             continue
@@ -200,6 +207,10 @@ async def handle_panel_topology(
         own_device = circuit_device(
             device_registry, snapshot.serial_number, circuit_id, config_entry_id=config_entry_id
         )
+        offered = _offered_roles(
+            entity_map.get(circuit_id, {}), circuit, runtime_data.control_policy.mode
+        )
+        circuit_controls.extend(offered[role] for role in _CONTROL_ROLES if role in offered)
         circuits[circuit_id] = {
             # The circuit's own device, a child of the panel's, by its registry
             # id; null where the circuit has none. A consumer reads the name and
@@ -257,9 +268,7 @@ async def handle_panel_topology(
             # circuit, because a consumer rendering from this record has no
             # other way to tell a pinned priority from an absent one.
             "is_never_backup": None if circuit.measures_outside_panel else circuit.is_never_backup,
-            "entities": _offered_roles(
-                entity_map.get(circuit_id, {}), circuit, runtime_data.control_policy.mode
-            ),
+            "entities": offered,
         }
 
     # Build sub-devices section from devices linked via via_device_id.
@@ -325,6 +334,14 @@ async def handle_panel_topology(
             # circuit's `package_ratings_form` says whether it takes a copy, and in
             # which form.
             "monitoring_rating_offered": not describes_breakers,
+            # Whether the user asking may operate the panel: by the policy the
+            # gate holds, then by their own permissions over the controls offered
+            # above. The policy is the gate's own object: setup hands one policy
+            # to the gate and to the runtime data, and an options change reloads
+            # both.
+            "control_access": control_access(
+                runtime_data.control_policy, connection.user, circuit_controls
+            ),
             "circuits": circuits,
             # Each shared meter by the key its members carry in `shared_meter_group`.
             "shared_meter_groups": meter_groups,
@@ -411,6 +428,10 @@ def _solar_block(
                 site_power_entity_id,
             )
     return None
+
+
+_CONTROL_ROLES: Final = ("switch", "select")
+"""The roles that name a circuit control: its relay switch and its priority select."""
 
 
 def _offered_roles(

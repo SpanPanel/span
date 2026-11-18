@@ -17,7 +17,8 @@ provides all of these relationships explicitly, keyed by circuit UUID, so the ca
 Any logged-in user may call it, administrator or not, so the sidebar dashboard and the card work for whoever is viewing them. It carries the panel's layout,
 what the panel publishes about each circuit and device, the ratings current monitoring judges each circuit against, and the registry IDs that tie them together;
 no host, credential or certificate is in it. Whether a switch or select it names can be operated is decided when it is used, by
-[Who may operate the panel](README.md#restricting-who-can-operate-the-panel).
+[Who may operate the panel](README.md#restricting-who-can-operate-the-panel) and by the user's own Home Assistant permissions. `control_access` reports their
+answer for the user asking, so a card can disable the controls that user would be refused.
 
 ### Request
 
@@ -44,11 +45,28 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
   "serial": "sim-main32-0001",
   "firmware": "spanos3/r202639/03",
   "panel_size": 32,
+  "first_position": 1,
+  "last_position": 32,
   "device_id": "abc123def456",
   "panel_device_id": "abc123def456",
   "config_entry_id": "e5f6a7b8c9d0",
   "device_name": "SPAN Panel",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "site_power": "sensor.span_panel_site_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "panel_status": "binary_sensor.span_panel_panel_status"
+  },
   "monitoring_rating_offered": true,
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "circuits": {
     "a1b2c3d4e5f6": {
       "device_id": "c7d8e9f0a1b2",
@@ -204,14 +222,74 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `serial`                    | string      | Panel serial number                                                                                                                                         |
 | `firmware`                  | string      | Panel firmware version                                                                                                                                      |
 | `panel_size`                | int or null | Total breaker spaces (e.g., 32, 40)                                                                                                                         |
+| `first_position`            | int or null | The panel's first breaker position (see below)                                                                                                              |
+| `last_position`             | int or null | The panel's last breaker position (see below)                                                                                                               |
 | `device_id`                 | string      | HA device registry ID (echoed from request)                                                                                                                 |
 | `panel_device_id`           | string      | The panel's current HA device registry ID                                                                                                                   |
 | `config_entry_id`           | string      | The config entry that owns the panel                                                                                                                        |
 | `device_name`               | string      | HA device display name                                                                                                                                      |
+| `panel_entities`            | object      | Role-keyed map of the entity IDs of the panel's own readings and its status (see below)                                                                     |
 | `monitoring_rating_offered` | bool        | Whether `set_circuit_package_ratings` takes ratings on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
+| `control_access`            | object      | Whether the user asking may operate the panel, and if not, why (see below)                                                                                  |
 | `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                          |
 | `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared     |
 | `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                      |
+
+`first_position` and `last_position` say which breaker positions the panel has, occupied or not: the reported model's range where the integration knows the
+model, otherwise the lowest and highest occupied spaces, and null where neither is known. `circuits` lists only the circuits that are there, so a position in
+the range that no circuit's `tabs` include is an empty space.
+
+#### Panel Entity Roles
+
+| Role                    | Domain        | Entity                |
+| ----------------------- | ------------- | --------------------- |
+| `current_power`         | sensor        | Current Power         |
+| `site_power`            | sensor        | Site Power            |
+| `grid_power`            | sensor        | Grid Power            |
+| `feedthrough_power`     | sensor        | Feed Through Power    |
+| `pv_power`              | sensor        | PV Power              |
+| `battery_power`         | sensor        | Battery Power         |
+| `battery_level`         | sensor        | Battery Level         |
+| `dsm_state`             | sensor        | DSM Grid State        |
+| `main_breaker_rating`   | sensor        | Main Breaker Rating   |
+| `upstream_l1_current`   | sensor        | Upstream L1 Current   |
+| `upstream_l2_current`   | sensor        | Upstream L2 Current   |
+| `downstream_l1_current` | sensor        | Downstream L1 Current |
+| `downstream_l2_current` | sensor        | Downstream L2 Current |
+| `l1_voltage`            | sensor        | L1 Voltage            |
+| `l2_voltage`            | sensor        | L2 Voltage            |
+| `panel_status`          | binary_sensor | Panel Status          |
+
+The roles are read from the entity registry: a role is present while its entity is registered for this panel, enabled or not, and omitted otherwise. A panel set
+up without a battery, for example, has no `battery_power` or `battery_level`. Each value is the entity's current ID, so a renamed entity is still found.
+`panel_status` stays available while the panel is offline, so a consumer can watch it for whether the panel is online.
+
+#### Control Access Object
+
+| Field         | Type        | Description                                                                                            |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `may_operate` | bool        | Whether the user asking may operate the panel's relay and priority controls                            |
+| `reason`      | string/null | Why not: `control_disabled`, `admin_only` or `read_only` (see below); null where `may_operate` is true |
+
+`reason` is the first of these that applies:
+
+| Reason             | Meaning                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `control_disabled` | **Who may operate the panel** is `Nobody`, so no one may                                                                                            |
+| `admin_only`       | **Who may operate the panel** is `Administrators only` and the user is not an administrator                                                         |
+| `read_only`        | The user's Home Assistant permissions let them control none of the relay switches and priority selects named in `circuits`, as for a read-only user |
+
+The answer is for the user the WebSocket connection is authenticated as, so two users asking about the same panel can be told different things. The first two
+come from the rule the integration refuses a control command by, and hold for every control it sends the panel: circuit relays and priorities, the GFE override,
+EVSE charge limits and locks, and adopted controls. `read_only` is judged over the relay switches and priority selects alone, so for any other control
+`may_operate` true does not say the user's permissions allow it. `read_only` comes from Home Assistant, which refuses a user without control permission before
+the integration is asked; it is never reported for an administrator, whose permissions Home Assistant does not check, nor for a panel whose circuits name no
+relay switch or priority select. A user who may control some of those controls but not others may operate the panel, and is refused the others one at a time.
+
+A card that disables its relay and priority controls where `may_operate` is false therefore offers them only to a user who may operate at least one of them. The
+answer says nothing about the control lock, which can be armed or disarmed while a page is open and which its switch reports, nor about the relay debounce.
+**Allow control without a logged-in user** never applies, because a WebSocket connection always has a logged-in user. Changing **Who may operate the panel**
+reloads the entry, and the topology then answers by the new setting.
 
 #### Circuit Object
 
@@ -387,8 +465,8 @@ snapshot removes one or changes its `package_ratings_state`. A consumer showing 
 | `circuit_ids`     | array[string] | The circuits whose package ratings, or what they are judged as, changed |
 
 Subscribing to this event over the WebSocket API (`subscribe_events`) requires an administrator: Home Assistant lets any other user subscribe only to the events
-on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the next
-time it fetches the topology.
+on its own allowlist, and this integration's event is not on it. Any other user reads the same ratings from `span_panel/panel_topology`, and sees a change the
+next time it fetches the topology.
 
 ## `span_panel/adopted/list`
 

@@ -11,6 +11,7 @@ least once, so they are held here:
   downgrade is refused across, and states the oldest Home Assistant the release
   installs on, which `hacs.json` enforces;
 - `AGENTS.md` names the schema library a service is validated with;
+- `websocket-api.md` lists each reason the topology's `control_access` can give;
 - the card the integration bundles links to a section of the tandem guide
   (`tandems.md`) by the anchor GitHub gives that section's heading.
 """
@@ -22,12 +23,14 @@ import importlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+from typing import get_args
 from urllib.parse import urlsplit
 
 import pytest
 
 import custom_components.span_panel as span_panel
 from custom_components.span_panel.const import ENTITY_NAMING_PATTERN
+from custom_components.span_panel.control_access import ControlAccessReason
 
 REPO = Path(__file__).resolve().parent.parent
 PACKAGE = Path(span_panel.__file__).resolve().parent
@@ -37,6 +40,7 @@ README = REPO / "README.md"
 AGENTS = REPO / "AGENTS.md"
 HACS = REPO / "hacs.json"
 TANDEM_GUIDE = REPO / "tandems.md"
+WEBSOCKET_API = REPO / "websocket-api.md"
 BUNDLED_PANEL = PACKAGE / "frontend" / "dist" / "span-panel.js"
 
 CITED_MODULES = (
@@ -304,6 +308,36 @@ def test_agents_names_the_schema_library_services_import() -> None:
     requirements = _section(_read(AGENTS), "## Service Registration Requirements")
 
     assert f"`{libraries[0]}`" in requirements
+
+
+def _documented_control_access_reasons() -> list[str]:
+    """Return the reasons the WebSocket API's reason table lists, in its order."""
+    section = _section(_read(WEBSOCKET_API), "#### Control Access Object")
+    lines = section.splitlines()
+    header = next(index for index, line in enumerate(lines) if line.startswith("| Reason "))
+    reasons: list[str] = []
+    for line in lines[header + 2 :]:
+        if not line.startswith("|"):
+            break
+        cell = line.split("|")[1].strip()
+        assert cell.startswith("`") and cell.endswith("`"), line
+        reasons.append(cell.strip("`"))
+    return reasons
+
+
+def test_the_websocket_api_lists_each_reason_control_access_can_give() -> None:
+    """The reason table names every value `ControlAccessReason` holds, and nothing else.
+
+    The reason is one field fed by two enums, one per rule. Their values must
+    not overlap, or the card could not tell which rule refused, and the table is
+    what the card is written against.
+    """
+    members = [member.value for enum in get_args(ControlAccessReason.__value__) for member in enum]
+    documented = _documented_control_access_reasons()
+    assert documented, "the reason table lists nothing, so this test reads nothing"
+
+    assert len(members) == len(set(members)), members
+    assert sorted(documented) == sorted(members)
 
 
 TANDEM_GUIDE_URL = "https://github.com/SpanPanel/span/blob/main/tandems.md#main-32"

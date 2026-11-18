@@ -589,6 +589,10 @@
     }
   },
   "config_entry_id": "entry-main32_r202639",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
   "device_id": "nt-9874-s7rxt",
   "device_name": "Span Panel",
   "firmware": "spanos3/r202639/03",

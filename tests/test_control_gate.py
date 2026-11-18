@@ -8,7 +8,10 @@ assuming otherwise would leave the gate untested while looking covered.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import timedelta
+from typing import Final
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import Context, Event, HomeAssistant
@@ -24,6 +27,7 @@ from custom_components.span_panel.control_gate import (
     ControlGate,
     ControlLock,
     ControlMode,
+    ControlModeRefusal,
     ControlPolicy,
     async_bind_caller,
     outcome_is_failure,
@@ -544,6 +548,119 @@ async def test_a_disabled_entry_refuses_an_administrator_too(hass: HomeAssistant
     assert err.value.translation_key == "control_disabled"
 
 
+# ---------- the order the gate refuses in ----------
+
+_NO_USER: Final = "no user"
+_ADMIN: Final = "administrator"
+_NON_ADMIN: Final = "non-admin"
+
+_CONTROL_DISABLED: Final = "control_disabled"
+_LOCKED: Final = "control_locked"
+_CONTEXTLESS: Final = "contextless_control_refused"
+_ADMIN_ONLY: Final = "admin_only_control"
+
+_ALL, _ADMINS, _NOBODY = ControlMode.ALL_USERS, ControlMode.ADMIN_ONLY, ControlMode.DISABLED
+_ARMED, _OPEN = True, False
+_CONTEXTLESS_ALLOWED, _CONTEXTLESS_REFUSED = True, False
+
+GATE_ORDER: Final[Mapping[tuple[ControlMode, bool, bool, str], str | None]] = {
+    # `disabled` comes first, so it is the answer whatever else holds.
+    (_NOBODY, _ARMED, _CONTEXTLESS_ALLOWED, _NO_USER): _CONTROL_DISABLED,
+    (_NOBODY, _ARMED, _CONTEXTLESS_ALLOWED, _ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _ARMED, _CONTEXTLESS_ALLOWED, _NON_ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _ARMED, _CONTEXTLESS_REFUSED, _NO_USER): _CONTROL_DISABLED,
+    (_NOBODY, _ARMED, _CONTEXTLESS_REFUSED, _ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _ARMED, _CONTEXTLESS_REFUSED, _NON_ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_ALLOWED, _NO_USER): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_ALLOWED, _ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_ALLOWED, _NON_ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_REFUSED, _NO_USER): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_REFUSED, _ADMIN): _CONTROL_DISABLED,
+    (_NOBODY, _OPEN, _CONTEXTLESS_REFUSED, _NON_ADMIN): _CONTROL_DISABLED,
+    # Then the lock, which refuses everyone while armed, administrators too.
+    (_ALL, _ARMED, _CONTEXTLESS_ALLOWED, _NO_USER): _LOCKED,
+    (_ALL, _ARMED, _CONTEXTLESS_ALLOWED, _ADMIN): _LOCKED,
+    (_ALL, _ARMED, _CONTEXTLESS_ALLOWED, _NON_ADMIN): _LOCKED,
+    (_ALL, _ARMED, _CONTEXTLESS_REFUSED, _NO_USER): _LOCKED,
+    (_ALL, _ARMED, _CONTEXTLESS_REFUSED, _ADMIN): _LOCKED,
+    (_ALL, _ARMED, _CONTEXTLESS_REFUSED, _NON_ADMIN): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_ALLOWED, _NO_USER): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_ALLOWED, _ADMIN): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_ALLOWED, _NON_ADMIN): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_REFUSED, _NO_USER): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_REFUSED, _ADMIN): _LOCKED,
+    (_ADMINS, _ARMED, _CONTEXTLESS_REFUSED, _NON_ADMIN): _LOCKED,
+    # Then a command with no user, where the option refuses one.
+    (_ALL, _OPEN, _CONTEXTLESS_ALLOWED, _NO_USER): None,
+    (_ALL, _OPEN, _CONTEXTLESS_ALLOWED, _ADMIN): None,
+    (_ALL, _OPEN, _CONTEXTLESS_ALLOWED, _NON_ADMIN): None,
+    (_ALL, _OPEN, _CONTEXTLESS_REFUSED, _NO_USER): _CONTEXTLESS,
+    (_ALL, _OPEN, _CONTEXTLESS_REFUSED, _ADMIN): None,
+    (_ALL, _OPEN, _CONTEXTLESS_REFUSED, _NON_ADMIN): None,
+    # Then `admin_only`, which judges only a caller who has a user.
+    (_ADMINS, _OPEN, _CONTEXTLESS_ALLOWED, _NO_USER): None,
+    (_ADMINS, _OPEN, _CONTEXTLESS_ALLOWED, _ADMIN): None,
+    (_ADMINS, _OPEN, _CONTEXTLESS_ALLOWED, _NON_ADMIN): _ADMIN_ONLY,
+    (_ADMINS, _OPEN, _CONTEXTLESS_REFUSED, _NO_USER): _CONTEXTLESS,
+    (_ADMINS, _OPEN, _CONTEXTLESS_REFUSED, _ADMIN): None,
+    (_ADMINS, _OPEN, _CONTEXTLESS_REFUSED, _NON_ADMIN): _ADMIN_ONLY,
+}
+"""What the gate answers a priority command, by mode, lock, contextless option and caller.
+
+The translation key it refuses with, or None where it lets the command
+through. A priority command, so the relay debounce never comes into it.
+Written out rather than derived, so it states the order the gate checks in --
+`disabled`, the lock, contextless control, `admin_only` -- and moving one
+check past another changes a row.
+"""
+
+
+def _order_id(case: tuple[ControlMode, bool, bool, str]) -> str:
+    mode, armed, allow_contextless, caller = case
+    lock = "armed" if armed else "open"
+    contextless = "contextless allowed" if allow_contextless else "contextless refused"
+    return f"{mode}-{lock}-{contextless}-{caller}"
+
+
+def test_the_order_table_covers_every_case() -> None:
+    """Every mode, lock state, contextless option and kind of caller has a row."""
+    assert set(GATE_ORDER) == {
+        (mode, armed, allow_contextless, caller)
+        for mode in ControlMode
+        for armed in (_ARMED, _OPEN)
+        for allow_contextless in (_CONTEXTLESS_ALLOWED, _CONTEXTLESS_REFUSED)
+        for caller in (_NO_USER, _ADMIN, _NON_ADMIN)
+    }
+
+
+@pytest.mark.parametrize("case", list(GATE_ORDER), ids=[_order_id(case) for case in GATE_ORDER])
+@pytest.mark.asyncio
+async def test_the_gate_refuses_in_its_order(
+    hass: HomeAssistant, case: tuple[ControlMode, bool, bool, str]
+) -> None:
+    """The first check that applies is the refusal, whichever others would also apply."""
+    mode, armed, allow_contextless, caller = case
+    gate = _gate(
+        hass, mode=mode, allow_contextless=allow_contextless, lock=ControlLock(armed=armed)
+    )
+    context = (
+        Context()
+        if caller == _NO_USER
+        else Context(user_id=MockUser(is_owner=caller == _ADMIN).add_to_hass(hass).id)
+    )
+
+    refused: str | None = None
+    token = async_bind_caller(context, "select.span_panel_kitchen_priority")
+    try:
+        await gate.before_publish(PRIORITY)
+    except ServiceValidationError as err:
+        refused = err.translation_key
+    finally:
+        CONTROL_CALLER.reset(token)
+
+    assert refused == GATE_ORDER[case]
+
+
 # ---------- the audit ----------
 
 
@@ -681,6 +798,23 @@ def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
     assert policy.allow_contextless is False
     assert policy.lock_enabled is False
     assert policy.relay_debounce_seconds == 2.0
+
+
+@pytest.mark.parametrize(
+    ("mode", "refusal"),
+    [
+        (ControlMode.ALL_USERS, None),
+        (ControlMode.ADMIN_ONLY, None),
+        (ControlMode.DISABLED, ControlModeRefusal.CONTROL_DISABLED),
+    ],
+)
+def test_a_caller_with_no_user_is_refused_only_when_control_is_disabled(
+    mode: ControlMode, refusal: ControlModeRefusal | None
+) -> None:
+    """`admin_only` has no user to judge; whether such a command goes through is `allow_contextless`'s question."""
+    policy = replace(ControlPolicy.default(), mode=mode)
+
+    assert policy.refusal_for(is_admin=None) is refusal
 
 
 def test_an_unrecognised_mode_falls_back_to_the_permissive_one() -> None:
