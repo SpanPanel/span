@@ -422,9 +422,12 @@ could drift.
 The base reproduces the ID the entity has, so an entity ID the user edits by hand reloads nothing either and changes what the base is read from. The listener
 works the entity's base out again when the row's `entity_id` changes, as it does for its `area_id`, and nothing else does. Core changes a live entity's ID in
 place and writes no base (§4.4), and a disabled entity has no live entity for Core to change. So setup registers the listener before the platforms add the first
-entity, and it is stopped only after the last is removed: an unload removes the entities first, and a setup that fails after the forward unloads its platforms
-before it fails. No edit falls outside it. Edited to `sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is
-offered nothing. A base kept from when the entity was built offered the old ID back,
+entity, and Core stops it with the entry's on-unload callbacks once the entities are gone: an unload runs them after the platforms have removed every entity,
+and a setup that fails after the forward unloads its platforms before the error leaves it and Core runs them. Two cases leave live entities without the
+listener, and an ID edited on one of them keeps the base from before the edit until the next restart: a platform that does not unload as a failed setup is
+taken down, which is logged, and a setup cancelled part way, as when Home Assistant stops during it, which takes nothing down. Edited to
+`sensor.span_panel_refrigerator`, which Core composes from the device with nothing after it, the entity is offered nothing. A base kept from when the entity
+was built offered the old ID back,
 `sensor.span_panel_refrigerator_power`, until the next restart, which reverted the user's edit. Accepting a Recreate offer is such an edit too, and reading the
 accepted ID again gives the base it was composed from, so nothing more is offered.
 

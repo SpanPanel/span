@@ -970,11 +970,13 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         # id, and neither a rename of that device in Home Assistant nor an edit
         # to the id builds an entity again: Core changes an edited id in place
         # and writes no base. So the listener that keeps the bases current is in
-        # place before the forward adds the first entity, and it is stopped only
-        # after the last is removed, by the unload or, where setup fails after
-        # the forward, by the handler below. It reads what each circuit entity
-        # records only as an event arrives, and an entity the forward has yet to
-        # build writes its own base as it is added.
+        # place before the forward adds the first entity. Core stops it with the
+        # on-unload callbacks: an unload runs them once the platforms have
+        # removed the entities, and where setup fails after the forward, the
+        # handler below removes the entities before the error leaves setup and
+        # Core runs them. It reads what each circuit entity records only as an
+        # event arrives, and an entity the forward has yet to build writes its
+        # own base as it is added.
         entry.async_on_unload(async_keep_circuit_id_bases_current(hass, entry))
 
         # Set before the forward rather than after it: a forward that stops part
@@ -1047,7 +1049,9 @@ async def _async_take_down_failed_setup(
     stop the listener, and the next setup's forward would find each platform
     already set up. So they are unloaded here, before the error leaves setup
     and the callbacks run, as `async_unload_entry` unloads them before
-    anything else.
+    anything else. A platform that does not unload is logged and left as it
+    is: Core runs the callbacks whatever happened here, so its entities stay
+    live without the listener until Home Assistant restarts.
 
     The coordinator is shut down after them, which stops dispatch and closes
     the client, whether or not every platform unloaded.

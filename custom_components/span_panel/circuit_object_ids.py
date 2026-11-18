@@ -96,9 +96,14 @@ class here that defines an add or remove hook defines
 `SpanEnergySensorBase` and `SpanPanelControlLockSwitch` do, and a disabled
 entity has no live entity for it to change. So the listener is the one
 thing that reads an edited id again. Setup registers it before the
-platforms add the first entity, and it is stopped only after the last is
-removed, by an unload or by a setup that fails after the forward, which
-unloads its platforms first. No edit falls outside it.
+platforms add the first entity, and Core stops it with the entry's
+on-unload callbacks once the entities are gone: after an unload has
+removed them, or after a setup that fails past the forward has unloaded
+its platforms. Two cases leave live entities without it, and an id edited
+on one of them keeps the base from before the edit until the next
+restart: a platform that does not unload as a failed setup is taken down,
+which is logged, and a setup cancelled part way, as when Home Assistant
+stops during it, which takes nothing down.
 
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out
