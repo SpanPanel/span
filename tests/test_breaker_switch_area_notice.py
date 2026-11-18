@@ -60,10 +60,7 @@ from custom_components.span_panel.const import (
     USE_DEVICE_PREFIX,
 )
 from custom_components.span_panel.control_gate import ControlMode
-from custom_components.span_panel.conversion_repairs import (
-    async_clear_conversion_notice,
-    async_raise_breaker_switch_area_notice,
-)
+from custom_components.span_panel.conversion_repairs import async_raise_breaker_switch_area_notice
 from custom_components.span_panel.helpers import circuit_has_a_breaker_switch
 from custom_components.span_panel.id_builder import (
     build_circuit_device_identifier,
@@ -687,7 +684,7 @@ async def test_a_notice_names_a_switch_with_no_name_by_its_entity_id(hass: HomeA
 
 
 async def test_removing_the_entry_clears_its_notices(hass: HomeAssistant) -> None:
-    """Home Assistant deletes no issue with its entry, so removing the panel clears them."""
+    """Each notice is linked to its entry, so Home Assistant deletes them with the panel."""
     panel = _panel(hass, CONTROLS_OFF)
     kitchen = _area(hass, "Kitchen")
 
@@ -703,15 +700,16 @@ async def test_removing_the_entry_clears_its_notices(hass: HomeAssistant) -> Non
     assert panel.notices() == {}
 
 
-async def test_clearing_one_panel_s_notices_leaves_another_s(hass: HomeAssistant) -> None:
-    """A notice's ID carries its entry's, so one panel's removal cannot take another's."""
+async def test_removing_one_panel_leaves_another_s_notices(hass: HomeAssistant) -> None:
+    """Each notice is linked to its own entry, so one panel's removal cannot take another's."""
     first = add_panel_entry(hass, "entry-first", "sp3-242424-001")
     second = add_panel_entry(hass, "entry-second", "sp3-242424-002")
     for entry, serial in ((first, "sp3-242424-001"), (second, "sp3-242424-002")):
         for circuit_id in ("1", "2"):
             _raise_for(hass, entry, f"span_{serial}_relay_{circuit_id}")
 
-    async_clear_conversion_notice(hass, first.entry_id)
+    assert await hass.config_entries.async_remove(first.entry_id)
+    await hass.async_block_till_done()
 
     assert _notices(hass, first.entry_id) == {}
     assert len(_notices(hass, second.entry_id)) == 2

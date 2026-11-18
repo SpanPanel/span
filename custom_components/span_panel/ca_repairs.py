@@ -25,28 +25,25 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
+from .entry_issues import EntryIssue, async_create_entry_issue
 from .leaf_repairs import async_clear_leaf_name_mismatch
 
 _LOGGER = logging.getLogger(__name__)
 
-CA_CHANGED_ISSUE_PREFIX = "panel_ca_changed_"
-CA_UNUSABLE_ISSUE_PREFIX = "panel_ca_unusable_"
-REST_TLS_UNTRUSTED_ISSUE_PREFIX = "panel_rest_tls_untrusted_"
-
 
 def ca_changed_issue_id(entry_id: str) -> str:
     """Issue id for one entry's CA change."""
-    return f"{CA_CHANGED_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.CA_CHANGED.issue_id(entry_id)
 
 
 def ca_unusable_issue_id(entry_id: str) -> str:
     """Issue id for one entry's unreadable stored CA."""
-    return f"{CA_UNUSABLE_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.CA_UNUSABLE.issue_id(entry_id)
 
 
 def rest_tls_untrusted_issue_id(entry_id: str) -> str:
     """Issue id for one entry's REST TLS port serving something the pin rejects."""
-    return f"{REST_TLS_UNTRUSTED_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.REST_TLS_UNTRUSTED.issue_id(entry_id)
 
 
 @callback
@@ -82,9 +79,9 @@ def async_raise_ca_changed(
         observed_fingerprint,
         expected_fingerprint,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
+        entry,
         ca_changed_issue_id(entry.entry_id),
         is_fixable=True,
         is_persistent=True,
@@ -131,9 +128,9 @@ def async_raise_ca_unusable(hass: HomeAssistant, entry: ConfigEntry, reason: str
         entry.title,
         reason,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
+        entry,
         ca_unusable_issue_id(entry.entry_id),
         is_fixable=True,
         is_persistent=True,
@@ -193,9 +190,9 @@ def async_raise_rest_tls_untrusted(
         entry.title,
         fingerprint,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
+        entry,
         rest_tls_untrusted_issue_id(entry.entry_id),
         is_fixable=False,
         is_persistent=False,

@@ -27,8 +27,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
-
-UNVALIDATED_HARDWARE_ISSUE_PREFIX = "unvalidated_hardware_"
+from .entry_issues import EntryIssue, async_create_entry_issue
 
 _MODEL_TRANSLATION_KEY = "unvalidated_hardware"
 _NO_MODEL_TRANSLATION_KEY = "unvalidated_hardware_no_model"
@@ -58,7 +57,7 @@ class RefusedHardware:
 
 def unvalidated_hardware_issue_id(entry_id: str) -> str:
     """Issue id for one entry's refused hardware."""
-    return f"{UNVALIDATED_HARDWARE_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.UNVALIDATED_HARDWARE.issue_id(entry_id)
 
 
 @callback
@@ -66,9 +65,9 @@ def async_raise_unvalidated_hardware(
     hass: HomeAssistant, entry: ConfigEntry, refused: RefusedHardware
 ) -> None:
     """Raise the Repair, naming the hardware version and model the panel reported."""
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
+        entry,
         unvalidated_hardware_issue_id(entry.entry_id),
         is_fixable=False,
         is_persistent=False,
@@ -81,5 +80,9 @@ def async_raise_unvalidated_hardware(
 
 @callback
 def async_clear_unvalidated_hardware(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Drop the Repair, on a setup that proceeds and on removal of the entry."""
+    """Drop the Repair, on a setup that proceeds.
+
+    Removing the entry needs nothing of this: the Repair is linked to the
+    entry, and Home Assistant deletes it with the entry.
+    """
     ir.async_delete_issue(hass, DOMAIN, unvalidated_hardware_issue_id(entry.entry_id))

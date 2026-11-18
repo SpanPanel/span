@@ -35,7 +35,7 @@ from span_panel_api.exceptions import (
     SpanPanelValidationError,
 )
 
-from custom_components.span_panel import async_remove_entry, async_setup_entry
+from custom_components.span_panel import async_setup_entry
 from custom_components.span_panel.ca_repairs import (
     ca_changed_issue_id,
     ca_unusable_issue_id,
@@ -537,10 +537,15 @@ class TestFailingClosed:
 
 
 class TestRemovalLeavesNothingBehind:
-    """Core deletes no issues when an entry is removed; the CA family goes here."""
+    """The CA family goes with its entry, whether or not its issues are linked to it."""
 
     async def test_removing_the_entry_clears_its_ca_repairs(self, hass: HomeAssistant) -> None:
-        """Persistent issues especially: nothing else can clear one whose entry is gone."""
+        """Raised unlinked, as a release before issues were linked raised them.
+
+        Home Assistant never deletes an unlinked issue, so removal sweeps them;
+        the persistent ones most of all, which nothing else can clear once the
+        entry is gone.
+        """
         entry = _entry(hass, **{CONF_PANEL_CA_PEM: PEM})
         registry = ir.async_get(hass)
         for issue_id, fixable in (
@@ -558,11 +563,7 @@ class TestRemovalLeavesNothingBehind:
                 translation_key="panel_ca_changed",
             )
 
-        with (
-            patch("custom_components.span_panel.async_forget_announcements", AsyncMock()),
-            patch("custom_components.span_panel.async_forget", AsyncMock()),
-        ):
-            await async_remove_entry(hass, entry)
+        await hass.config_entries.async_remove(entry.entry_id)
 
         for issue_id in (
             ca_changed_issue_id(entry.entry_id),

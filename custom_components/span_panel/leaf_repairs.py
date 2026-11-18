@@ -45,10 +45,9 @@ from homeassistant.helpers import issue_registry as ir
 from span_panel_api import LeafNameMismatch
 
 from .const import DOMAIN
+from .entry_issues import EntryIssue, async_create_entry_issue
 
 _LOGGER = logging.getLogger(__name__)
-
-LEAF_NAME_MISMATCH_ISSUE_PREFIX = "panel_leaf_name_mismatch_"
 
 _NAMED_TRANSLATION_KEY = "panel_leaf_name_mismatch"
 _UNNAMED_TRANSLATION_KEY = "panel_leaf_name_mismatch_no_names"
@@ -56,7 +55,7 @@ _UNNAMED_TRANSLATION_KEY = "panel_leaf_name_mismatch_no_names"
 
 def leaf_name_mismatch_issue_id(entry_id: str) -> str:
     """Issue id for one entry's name mismatch."""
-    return f"{LEAF_NAME_MISMATCH_ISSUE_PREFIX}{entry_id}"
+    return EntryIssue.LEAF_NAME_MISMATCH.issue_id(entry_id)
 
 
 @callback
@@ -88,9 +87,9 @@ def async_raise_leaf_name_mismatch(
             mismatch.host,
             leaf_names,
         )
-        ir.async_create_issue(
+        async_create_entry_issue(
             hass,
-            DOMAIN,
+            entry,
             issue_id,
             is_fixable=False,
             is_persistent=False,
@@ -111,9 +110,9 @@ def async_raise_leaf_name_mismatch(
         entry.title,
         mismatch.host,
     )
-    ir.async_create_issue(
+    async_create_entry_issue(
         hass,
-        DOMAIN,
+        entry,
         issue_id,
         is_fixable=False,
         is_persistent=False,

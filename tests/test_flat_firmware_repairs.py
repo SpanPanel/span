@@ -21,8 +21,8 @@ import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.entry_issues import EntryIssue
 from custom_components.span_panel.flat_firmware_repairs import (
-    FLAT_FIRMWARE_ISSUE_PREFIX,
     async_clear_flat_firmware,
     async_raise_flat_firmware,
     flat_firmware_issue_id,
@@ -122,7 +122,7 @@ def _issue(hass: HomeAssistant, entry: MockConfigEntry) -> ir.IssueEntry | None:
 
 def test_the_issue_id_is_the_prefix_and_the_entry_id() -> None:
     """One Repair per entry, so a second panel on current firmware is not caught up in it."""
-    assert FLAT_FIRMWARE_ISSUE_PREFIX == "flat_firmware_"
+    assert EntryIssue.FLAT_FIRMWARE == "flat_firmware_"
     assert flat_firmware_issue_id("entry-flat") == "flat_firmware_entry-flat"
 
 

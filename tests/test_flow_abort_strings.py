@@ -251,15 +251,18 @@ _ABORTS, _UNPLACED = _scan()
 def _fixable_issues() -> list[tuple[str, str]]:
     """Every issue the integration raises as fixable: its translation key, and an id for it.
 
-    The id is built by the function the raising module builds it with, for a
-    made-up entry, so it reaches `async_create_fix_flow` as a real one would.
+    Every issue is raised through `entry_issues.async_create_entry_issue`, which
+    a test in `test_entry_issues` holds the integration to, so those calls are
+    the ones read. The id is built by the function the raising module builds
+    it with, for a made-up entry, so it reaches `async_create_fix_flow` as a
+    real one would.
     """
     issues: list[tuple[str, str]] = []
     for source in _SOURCES:
         for _, call in _calls(source.tree):
             func = call.func
             name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-            if name != "async_create_issue":
+            if name != "async_create_entry_issue":
                 continue
             keywords = _keywords(call)
             fixable = keywords.get("is_fixable")
