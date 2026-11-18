@@ -27,9 +27,9 @@ import importlib
 import json
 import logging
 from typing import Final
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, restore_state
@@ -216,8 +216,12 @@ def _every_kind_tree() -> RetainedTree:
     return tree
 
 
-async def _install(hass: HomeAssistant, tree: RetainedTree) -> MockConfigEntry:
-    """Set the tree up the way a fresh installation is set up, with every control and the lock."""
+def _add_entry(hass: HomeAssistant, tree: RetainedTree) -> tuple[MockConfigEntry, ReplayClient]:
+    """Add the entry a fresh installation of the tree has, and the client it reads the tree through.
+
+    Every control is offered and the control lock is on, so every control
+    entity the tree declares is built.
+    """
     adapter = replay(tree)
     serial = adapter.build_snapshot().serial_number
     entry = MockConfigEntry(
@@ -239,9 +243,21 @@ async def _install(hass: HomeAssistant, tree: RetainedTree) -> MockConfigEntry:
         minor_version=CURRENT_CONFIG_MINOR_VERSION,
     )
     entry.add_to_hass(hass)
-    with patch("custom_components.span_panel.SpanMqttClient", return_value=ReplayClient(adapter)):
-        assert await hass.config_entries.async_setup(entry.entry_id) is True
+    return entry, ReplayClient(adapter)
+
+
+async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, client: ReplayClient) -> bool:
+    """Set the entry up through Home Assistant over the replayed client, and say whether it loaded."""
+    with patch("custom_components.span_panel.SpanMqttClient", return_value=client):
+        loaded = await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+    return loaded
+
+
+async def _install(hass: HomeAssistant, tree: RetainedTree) -> MockConfigEntry:
+    """Set the tree up the way a fresh installation is set up, with every control and the lock."""
+    entry, client = _add_entry(hass, tree)
+    assert await _set_up(hass, entry, client) is True
     return entry
 
 
@@ -587,3 +603,48 @@ async def test_an_id_edited_as_the_entry_sets_up_is_given_the_base_it_calls_for(
     row = registry.async_get(entity_id)
     assert row is not None
     assert (row.object_id_base, registry.async_regenerate_entity_id(row)) == ("", entity_id)
+
+
+async def test_a_setup_that_fails_after_the_forward_leaves_no_entity_behind(
+    hass: HomeAssistant,
+) -> None:
+    """A setup that fails unloads the platforms it forwarded, so nothing it added outlives it.
+
+    Home Assistant takes down nothing of a setup that fails but the entry's
+    on-unload callbacks, which stop the listener that keeps circuit id bases
+    current; the entry is not loaded, so neither an unload nor a reload calls
+    `async_unload_entry`. Here setup fails at its last step, once every
+    platform has added its entities. Left loaded, those entities would outlive
+    their entry: an edit to one's id would be applied in place with no
+    listener to read the edited id again, and the next setup would find their
+    platforms already set up and add none of its own.
+    """
+    entry, client = _add_entry(hass, schema_one_tree())
+
+    with patch(
+        "custom_components.span_panel.async_announce_new_entities",
+        AsyncMock(side_effect=RuntimeError("a failure after the forward")),
+    ):
+        assert await _set_up(hass, entry, client) is False
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert async_get_platforms(hass, DOMAIN) == []
+
+    with patch("custom_components.span_panel.SpanMqttClient", return_value=client):
+        assert await hass.config_entries.async_reload(entry.entry_id) is True
+        await hass.async_block_till_done()
+
+    runtime_data = loaded_runtime_data(entry)
+    assert runtime_data is not None
+    platforms = async_get_platforms(hass, DOMAIN)
+    assert sorted(entity_platform.domain for entity_platform in platforms) == sorted(
+        platform.value for platform in PLATFORMS
+    )
+    live = [entity for entity_platform in platforms for entity in entity_platform.entities.values()]
+    assert live
+    assert [
+        entity.entity_id
+        for entity in live
+        if not isinstance(entity, SpanPanelEntity)
+        or entity.coordinator is not runtime_data.coordinator
+    ] == []

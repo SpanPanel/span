@@ -94,9 +94,11 @@ writes no base for it. It changes a live entity's id in place, since each
 class here that defines an add or remove hook defines
 `async_entity_id_changed` beside it, as `SpanPanelEntity`,
 `SpanEnergySensorBase` and `SpanPanelControlLockSwitch` do, and a disabled
-entity has no live entity for it to change. So the listener is the
-one thing that reads an edited id again, and setup registers it before the
-platforms add the first entity, which leaves no edit outside it.
+entity has no live entity for it to change. So the listener is the one
+thing that reads an edited id again. Setup registers it before the
+platforms add the first entity, and it is stopped only after the last is
+removed, by an unload or by a setup that fails after the forward, which
+unloads its platforms first. No edit falls outside it.
 
 One change applies only after the next restart: a saved entity-id format,
 for which Core announces no event. Everything else the base is worked out
