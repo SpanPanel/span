@@ -47,6 +47,12 @@ from .options import (
 # dependent fields treated as shown, and saves what it sends for them as it
 # always could. A hidden field is left out of the submission, and the stored
 # value survives because saving merges into what is already stored.
+#
+# That an omitted field hides nothing holds only because no marker here
+# declares a `default=`. Core fills schema defaults into the submission before
+# it evaluates the conditions, so a default on `CONTROL_MODE` or
+# `PANEL_SHOW_SIDEBAR` would decide for a client that left it out. The form
+# shows the stored values as suggested values instead.
 
 _SIDEBAR_PANEL_SHOWN: FieldCondition = {
     "field": PANEL_SHOW_SIDEBAR,
