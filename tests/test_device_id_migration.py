@@ -594,16 +594,18 @@ async def test_a_migrated_install_is_looked_at_again_and_nothing_is_written(
 
 
 @pytest.mark.parametrize("vendor", [False, True], ids=["captures", "with-a-vendor-extension"])
-async def test_a_setup_that_stopped_after_the_registry_leaves_nothing_to_announce(
+async def test_a_setup_that_stopped_after_the_registry_is_finished_by_the_next(
     panels: Callable[..., Panel], vendor: bool
 ) -> None:
-    """A store that cannot be re-keyed stops the first setup after the update; the next announces nothing.
+    """A store that cannot be re-keyed stops the first setup after the update; the next finishes the job.
 
     The registry was re-keyed before the store failed, so the next setup moves
     no entity, and finds no extension row under an old scope. The record of
     what was announced still names the old ids, and is brought to the registry
-    as it stands. Fails when the record follows only what the same setup
-    moved, or only the rows it finds under old ids.
+    as it stands, so nothing is announced; the breaker switch's notice, not
+    yet moved, follows its switch. Fails when the record or the notices follow
+    only what the same setup moved, or the record only the rows it finds under
+    old ids.
     """
     before_tree, after_tree = capture(BEFORE).tree(), capture(AFTER).tree()
     if vendor:
@@ -611,6 +613,14 @@ async def test_a_setup_that_stopped_after_the_registry_leaves_nothing_to_announc
         after_tree = with_vendor_readings(after_tree, new_id_e(RANGE))
     panel = panels(before_tree)
     await panel.set_up(before_tree)
+    original_switch = build_switch_unique_id(panel.serial, HVAC)
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", original_switch),
+        switch_unique_id=original_switch,
+        area_name="Garage",
+    )
     await panel.unload()
     panel.tree = after_tree
 
@@ -629,6 +639,14 @@ async def test_a_setup_that_stopped_after_the_registry_leaves_nothing_to_announc
     await panel.restart_on(after_tree)
 
     assert not is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+    issues = ir.async_get(panel.hass)
+    moved = build_switch_unique_id(panel.serial, new_id_e(HVAC))
+    assert issues.async_get_issue(
+        DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, moved)
+    ), "the notice followed its switch at the setup that finished the job"
+    assert not issues.async_get_issue(
+        DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, original_switch)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1740,6 +1758,61 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
         )
         is None
     ), "the newer bath switch gave way, and its notice with it"
+
+
+async def test_a_switchs_notice_moves_only_with_its_switch(panels: Callable[..., Panel]) -> None:
+    """The user deleted HVAC's dead breaker switch while an earlier release ran across the update.
+
+    An install from before circuit devices, as in the test above, whose HVAC
+    switch had an area notice. The earlier release registered a second switch
+    under the new id, on a circuit device of its own, with a notice of its
+    own; the original, reading nothing, was deleted. With no original to take
+    its place the newer switch is kept, and so is its notice: the deleted
+    switch's notice is not moved onto it, and stays where it was. Fails when
+    a notice moves whether or not its switch did.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    original_switch = build_switch_unique_id(panel.serial, HVAC)
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", original_switch),
+        switch_unique_id=original_switch,
+        area_name="Garage",
+    )
+    original = panel.entity_id("switch", original_switch)
+    await panel.unload()
+    as_before_circuit_devices(panel)
+    with patch("custom_components.span_panel.async_migrate_device_ids"):
+        await panel.set_up(capture(AFTER).tree())
+    er.async_get(panel.hass).async_remove(original)
+    newer_switch = build_switch_unique_id(panel.serial, new_id_e(HVAC))
+    newer = panel.entity_id("switch", newer_switch)
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=newer,
+        switch_unique_id=newer_switch,
+        area_name="Kitchen",
+    )
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    assert panel.entity_id("switch", newer_switch) == newer
+    issues = ir.async_get(panel.hass)
+    kept = issues.async_get_issue(
+        DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch)
+    )
+    assert kept is not None and kept.translation_placeholders is not None
+    assert kept.translation_placeholders["area"] == "Kitchen"
+    assert newer in kept.translation_placeholders["switch"]
+    assert (
+        issues.async_get_issue(
+            DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, original_switch)
+        )
+        is not None
+    )
 
 
 # ---------------------------------------------------------------------------

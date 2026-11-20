@@ -139,25 +139,28 @@ def async_rekey_circuit_ids(
     """Move each breaker switch notice from its switch's old unique id to its new one.
 
     A notice's id carries the switch's unique id, which the device-id migration
-    re-keys. The same notice is raised again under the new id -- its severity,
-    persistence, text and data copied -- ignored again if the user had ignored
-    it, and the old one deleted. Its `created` becomes now, and an ignored
-    one's `dismissed_version` the running Home Assistant version.
+    re-keys. A notice follows its switch: where the switch now carries the new
+    unique id, re-keyed from the old one, the same notice is raised again
+    under the new id -- its severity, persistence, text and data copied --
+    ignored again if the user had ignored it, and the old one deleted. Its
+    `created` becomes now, and an ignored one's `dismissed_version` the
+    running Home Assistant version. Read from the registry as it stands, so a
+    setup that stopped before this step leaves the next to finish it.
 
-    A notice already under the new id gives way, as the registries' newer rows
-    do: it was raised by an older release about the second switch it
-    registered after the panel changed its ids. The migration deletes it as it
-    removes that switch (`async_forget_breaker_switch`), whether or not an
-    original notice follows here; the delete below covers the same notice
-    should it be left. `serial` is the panel's, as `build_switch_unique_id`
+    A notice an older release raised under the new id, about the second
+    switch it registered after the panel changed its ids, is gone by now: the
+    migration deletes it with that switch (`async_forget_breaker_switch`). A
+    notice whose switch was not carried over -- one the user deleted while it
+    read nothing -- stays as it was, and so does the notice of the switch now
+    under the new id. `serial` is the panel's, as `build_switch_unique_id`
     takes it. Returns how many notices moved.
     """
     registry = ir.async_get(hass)
+    entity_registry = er.async_get(hass)
     moved = 0
     for old_id, new_id in mapping.items():
-        old_issue_id = breaker_switch_area_issue_id(
-            entry.entry_id, build_switch_unique_id(serial, old_id)
-        )
+        old_switch = build_switch_unique_id(serial, old_id)
+        old_issue_id = breaker_switch_area_issue_id(entry.entry_id, old_switch)
         issue = registry.async_get_issue(DOMAIN, old_issue_id)
         if (
             issue is None
@@ -169,9 +172,10 @@ def async_rekey_circuit_ids(
             # again needs: a notice is persistent, so it always has it.
             continue
         new_switch = build_switch_unique_id(serial, new_id)
-        ir.async_delete_issue(
-            hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, new_switch)
-        )
+        switch = entity_id_in_entry(entity_registry, entry.entry_id, "switch", new_switch)
+        row = entity_registry.async_get(switch) if switch is not None else None
+        if row is None or row.previous_unique_id != old_switch:
+            continue
         async_create_entry_issue(
             hass,
             entry,
