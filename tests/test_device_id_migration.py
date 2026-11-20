@@ -581,8 +581,11 @@ async def test_a_service_naming_a_circuits_old_id_reaches_it(
 ) -> None:
     """An automation that names `circuit-5` after the update sets `...-1-16-5`, with a WARNING.
 
-    Fails when the resolver's raw-id branch or the graph-horizon handlers stop
-    asking `current_circuit_id`.
+    The WARNING says what to send instead: the circuit's entity, to a service
+    that takes one, and the new id to a graph-horizon service, which takes an
+    id only. Fails when the resolver's raw-id branch or the graph-horizon
+    handlers stop asking `current_circuit_id`, or either is given the other's
+    advice.
     """
     panel, _, _ = await install_and_update(panels, hass_storage)
     caplog.clear()
@@ -606,6 +609,13 @@ async def test_a_service_naming_a_circuits_old_id_reaches_it(
         "span_panel.set_circuit_threshold",
         "span_panel.set_circuit_graph_horizon",
     ]
+    threshold, horizon = warnings
+    assert threshold.endswith(
+        "Name the circuit's entity instead, which keeps working across a change of device id"
+    ), threshold
+    assert horizon.endswith(
+        f"Name it {new_id_e(RANGE)} instead: this action takes a circuit id, not an entity"
+    ), horizon
 
 
 # ---------------------------------------------------------------------------
@@ -726,21 +736,54 @@ class TestMigrationPending:
 class TestCurrentCircuitId:
     """What a service call's raw id means now."""
 
-    def test_an_old_id_answers_its_new_one(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Applied to the circuit under its new id, and logged with both ids."""
-        assert current_circuit_id(panel_of("p-1-16-5"), "circuit-5", service="s") == "p-1-16-5"
-        assert "circuit-5" in caplog.text and "p-1-16-5" in caplog.text
+    @pytest.mark.parametrize(
+        ("takes_entity", "advice"),
+        [
+            (
+                True,
+                "Name the circuit's entity instead, which keeps working across a change of device id",
+            ),
+            (False, "Name it p-1-16-5 instead: this action takes a circuit id, not an entity"),
+        ],
+        ids=["a-service-that-takes-entities", "a-service-that-takes-ids-only"],
+    )
+    def test_an_old_id_answers_its_new_one(
+        self, caplog: pytest.LogCaptureFixture, takes_entity: bool, advice: str
+    ) -> None:
+        """Applied to the circuit under its new id, and logged with both ids and what to send instead.
+
+        Only a service that takes the circuit's entity is told to name it; one
+        that takes ids only would store the entity as an id no circuit has.
+        Fails when every service is given the same advice.
+        """
+        live = panel_of("p-1-16-5")
+        assert (
+            current_circuit_id(live, "circuit-5", service="s", takes_entity=takes_entity)
+            == "p-1-16-5"
+        )
+        (record,) = caplog.records
+        line = record.getMessage()
+        assert "circuit-5" in line and "p-1-16-5" in line
+        assert line.endswith(advice), line
+        assert ("entity instead" in line) is takes_entity
 
     def test_a_live_id_and_an_unknown_one_answer_themselves(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Only an old id the snapshot pairs is rewritten, and nothing else is logged."""
         live = panel_of("p-1-16-5")
-        assert current_circuit_id(live, "p-1-16-5", service="s") == "p-1-16-5"
-        assert current_circuit_id(live, "circuit-6", service="s") == "circuit-6"
-        assert current_circuit_id(live, "sensor.kitchen_power", service="s") == (
-            "sensor.kitchen_power"
-        )
+        for takes_entity in (True, False):
+            assert (
+                current_circuit_id(live, "p-1-16-5", service="s", takes_entity=takes_entity)
+                == "p-1-16-5"
+            )
+            assert (
+                current_circuit_id(live, "circuit-6", service="s", takes_entity=takes_entity)
+                == "circuit-6"
+            )
+            assert current_circuit_id(
+                live, "sensor.kitchen_power", service="s", takes_entity=takes_entity
+            ) == ("sensor.kitchen_power")
         assert not caplog.records
 
 

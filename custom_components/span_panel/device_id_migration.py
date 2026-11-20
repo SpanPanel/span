@@ -221,12 +221,19 @@ class DeviceIdGuard:
         return self._pending
 
 
-def current_circuit_id(snapshot: SpanPanelSnapshot, circuit_id: str, *, service: str) -> str:
+def current_circuit_id(
+    snapshot: SpanPanelSnapshot, circuit_id: str, *, service: str, takes_entity: bool
+) -> str:
     """Return the id the panel calls a circuit now, for an id a service call named it by.
 
     An old id the snapshot pairs with a new one answers the new one, with one
     WARNING naming `service` and both ids, so the automation that sent it can be
     corrected. Anything else, a live id included, answers itself.
+
+    The WARNING says what to send instead. A service that also takes the
+    circuit's entity (`takes_entity`) is told to name the entity, which keeps
+    working across a change of device id; one that takes only an id is told
+    the new id, since an entity there would be stored as an id no circuit has.
     """
     if circuit_id in snapshot.circuits:
         return circuit_id
@@ -235,10 +242,14 @@ def current_circuit_id(snapshot: SpanPanelSnapshot, circuit_id: str, *, service:
         return circuit_id
     _LOGGER.warning(
         "%s named circuit %s by the device id it had before a panel firmware update; applied "
-        "to %s, its id now. Name the circuit's entity instead, which keeps working across a "
-        "change of device id",
+        "to %s, its id now. %s",
         service,
         circuit_id,
         current,
+        (
+            "Name the circuit's entity instead, which keeps working across a change of device id"
+            if takes_entity
+            else f"Name it {current} instead: this action takes a circuit id, not an entity"
+        ),
     )
     return current

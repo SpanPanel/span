@@ -74,7 +74,7 @@ def resolve_circuit_id(
         circuit_id = match_circuit_id(entry.unique_id, {*snapshot.circuits, *also})
         if circuit_id is not None:
             return circuit_id
-    return current_circuit_id(snapshot, entity_or_id, service=service)
+    return current_circuit_id(snapshot, entity_or_id, service=service, takes_entity=True)
 
 
 def resolve_evse_display_suffix(

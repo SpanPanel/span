@@ -678,8 +678,14 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         return _get_horizon_panel(call)[0]
 
     def _horizon_circuit_id(call: ServiceCall, snapshot: SpanPanelSnapshot) -> str:
-        """Return the circuit a horizon call names: verbatim, or under its new id for an old one."""
-        return current_circuit_id(snapshot, call.data["circuit_id"], service=_service_name(call))
+        """Return the circuit a horizon call names: verbatim, or under its new id for an old one.
+
+        These actions take a circuit id and nothing else, so an old one is
+        corrected to the new id, never to the circuit's entity.
+        """
+        return current_circuit_id(
+            snapshot, call.data["circuit_id"], service=_service_name(call), takes_entity=False
+        )
 
     async def async_handle_set_graph_time_horizon(call: ServiceCall) -> None:
         manager = _get_horizon_manager(call)
