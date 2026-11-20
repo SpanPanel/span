@@ -527,12 +527,16 @@ async def test_an_install_keeps_everything_across_the_update(
 
 
 async def test_a_second_setup_on_the_new_ids_changes_nothing(
-    panels: Callable[..., Panel], hass_storage: dict[str, object]
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The migration is idempotent: a later setup leaves registries and stores as they are.
+    """The migration is idempotent: a later setup leaves registries and stores as they are, and says nothing.
 
-    Fails when the migration acts on anything but an old id the entry still holds.
+    Fails when the migration acts on anything but an old id the entry still
+    holds, or counts as moved what it found already moved.
     """
+    caplog.set_level(logging.INFO)
     panel, _, _ = await install_and_update(panels, hass_storage)
     flush_delayed_saves(panel.hass)
     await panel.hass.async_block_till_done()
@@ -551,6 +555,7 @@ async def test_a_second_setup_on_the_new_ids_changes_nothing(
     }
     issues_before = dict(ir.async_get(panel.hass).issues)
     stores_before = stores(hass_storage, panel.entry.entry_id)
+    caplog.clear()
 
     with patch(
         "custom_components.span_panel.device_id_rekey.pair_device_ids",
@@ -561,6 +566,7 @@ async def test_a_second_setup_on_the_new_ids_changes_nothing(
     await panel.hass.async_block_till_done()
 
     assert pairing.call_count == 1
+    assert not [record.getMessage() for record in caplog.records if record.name == MIGRATION_LOGGER]
     assert dict(er.async_get(panel.hass).entities) == registry_before
     assert {
         device.id: device
