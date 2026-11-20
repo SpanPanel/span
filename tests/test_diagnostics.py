@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 import json
 from types import SimpleNamespace
@@ -555,7 +556,14 @@ def _reference_entry(
 
     Given `tree`, the client exports the library's real masked tree for it, so a
     test of what reaches the dump is a test of what the library masks.
+
+    Everything diagnostics reads from the coordinator is a real value, the
+    package ratings included, so no mock's repr reaches the dump: its id is a
+    run of digits that can contain any value a privacy test looks for
+    (`_dumped`).
     """
+    entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
+    entry.add_to_hass(hass)
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = panel_offline
@@ -563,8 +571,7 @@ def _reference_entry(
     coordinator.last_update_success = True
     coordinator.schema_findings = None
     coordinator.client.masked_tree.return_value = None if tree is None else _export(tree)
-    entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id=snapshot.serial_number)
-    entry.add_to_hass(hass)
+    coordinator.package_rating_manager = PackageRatingManager(hass, entry)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
@@ -573,6 +580,17 @@ def _reference_entry(
         setup_snapshot=snapshot,
     )
     return entry
+
+
+def _dumped(result: Mapping[str, object]) -> str:
+    """Return the dump as the text a user posts, which a privacy test searches for a value.
+
+    It must hold no mock: a mock's repr carries its id, a run of digits, so a
+    search for a postal code or any other digits could match it by chance.
+    """
+    text = json.dumps(result, default=str)
+    assert "Mock" not in text, "a mock reached the dump; give `_reference_entry` a real value"
+    return text
 
 
 async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> None:
@@ -589,7 +607,7 @@ async def test_diagnostics_redact_the_wifi_network_name(hass: HomeAssistant) -> 
     )
 
     assert result["panel"]["wifi_ssid"] == REDACTED
-    assert snapshot.wifi_ssid not in json.dumps(result, default=str)
+    assert snapshot.wifi_ssid not in _dumped(result)
 
 
 async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
@@ -608,7 +626,7 @@ async def test_diagnostics_hold_no_postal_code(hass: HomeAssistant) -> None:
     entry = _reference_entry(hass, snapshot, schema_one_tree())
     result = await async_get_config_entry_diagnostics(hass, entry)
 
-    assert postal_code.value not in json.dumps(result, default=str)
+    assert postal_code.value not in _dumped(result)
 
     er.async_get(hass).async_get_or_create(
         "sensor",

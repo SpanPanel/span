@@ -4,26 +4,62 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.3] - 11/2026
 
-**Read [Upgrading to Circuit Devices](circuit-devices-upgrade.md) before you upgrade.** 2.3.0 moves each circuit's entities to a device of its own and requires
-Home Assistant 2026.11.
+**Install 2.3.3 before your panel updates to firmware r202645**, which gives the panel's circuits new device IDs: 2.3.3 carries every circuit entity, device,
+setting and favorite across to them, and each entity keeps its entity ID and history.
 
-- **The upgrade is designed to be non-destructive:** each entity keeps its entity ID, unique ID and history, and a name you set is kept, less a leading circuit
-  name that would show twice. Going back means restoring a backup (or a copy of config/.storage) taken before the upgrade.
+### Added
 
-- **A repair lists every displayed name and area the move to circuit devices changed**, and another says when a breaker switch the panel adds later joins its
-  circuit's area, where an area-wide turn-off would reach it. Repairs are normal and not a sign of fault but take action if recommended.
+- **The card picker suggests the SPAN Panel card, set up for the right panel, when you pick any of that panel's entities**, those of its circuits, battery,
+  chargers and solar devices included.
 
-- **Home Assistant 2026.11 or later is now required**, because each circuit now has its own device under the panel, and Home Assistant shows the resulting names
-  correctly only from 2026.11.
+- **The dashboard editor offers a SPAN Panel section under Community sections**, which holds the panel's card at the section's full width.
+
+### Changed
+
+- **Only a Home Assistant administrator or an automation can now change a panel's monitoring**, whichever control mode is chosen, while any user can still see
+  its settings and status.
+
+- **The options form now hides settings that have no effect under the current choices**, such as the control settings while no one may operate the panel, and
+  keeps their values for when they show again.
+
+- **Choosing Nobody for "Who may operate the panel" now also stops the control lock's switch being created**, and choosing who may operate the panel again
+  brings the same switch back, armed or disarmed as it was left.
+
+- **A SPAN repair is now removed when you delete its panel's entry, and hidden while that entry is disabled.**
+
+- **For a user who is not an administrator, the Monitoring tab and each circuit's Monitoring section show monitoring read-only**, with every setting still in
+  view and a note saying only an administrator can change it.
+
+- **The side panel's switches are drawn in the colors of Home Assistant's own switches**, and in a theme's switch colors where it sets them.
+
+- **An automation or script that names a circuit by the device ID it had before firmware r202645 still reaches that circuit**, and the log says what to name it
+  by instead.
 
 ### Fixed
 
+- **A panel whose setup fails after adding its entities no longer leaves them frozen, and reloading it brings them back.**
+
+- **Adding a panel that is already set up now says it is already configured, rather than that only one panel can be configured.**
+
+- **Reauthenticating a panel whose entry was removed during the reauthentication now ends with a message rather than a bare text key.**
+
+- **The card editor and the sidebar dashboard list each panel once**, where a panel that a helper was linked to before Home Assistant 2026.8 appeared a second
+  time and that second entry did not load.
+
+- **For a user who is not an administrator, the card shows each battery, charger and solar device once**, where one that a helper was linked to before Home
+  Assistant 2026.8 could appear a second time.
+
+- **For a user who may not operate a panel, its breaker switches, priority selects and Enable Switches are shown disabled with the reason**, where a breaker
+  switch they changed was refused and went on showing the change.
+
 - **With two panels, the reload each one needs no longer hangs.** A panel reloads once its new entities first update, on a fresh install or after an upgrade
-  that adds some, and two panels' reloads waited for each other, so neither ran. A reload also no longer waits for unrelated work, such as a script in a long
-  delay, and a panel that asks for one more than once reloads once.
+  that adds some, and two panels' reloads waited for each other, so neither ran. A reload also no longer waits for unrelated work.
 
 - **A panel reloads once, not twice, after reauthentication, reconfiguration or re-pinning its certificate authority.** Reconfiguring no longer logs Home
   Assistant's warning that the integration "has an update listener and should use it for scheduling a reload".
+
+- **A reload no longer starts in the middle of the panel's own update**, and a change that nothing in the integration reads, such as the system option for
+  new entities, or a rediscovery that changes nothing, no longer reloads the panel.
 
 - **A change made while a panel is setting up is applied.** An options save that landed during setup was stored but not used until the next restart, and a
   reconfigure completed while the panel was retrying waited for Home Assistant's next retry, up to ten minutes later. Both now reload the panel straight away.
@@ -31,9 +67,7 @@ Home Assistant 2026.11.
 - **Rotating credentials no longer asks to reauthenticate a panel whose password is fine**, which could happen when the panel was already reloading as the
   rotation began. A certificate-authority repair raised again by the reload after a re-pin now stays raised instead of disappearing.
 
-- **A reload no longer starts in the middle of the panel's own update**, and a change that nothing in the integration reads, such as the system option for
-  new entities, or a rediscovery that changes nothing, no longer reloads the panel. A reload a panel asks for while Home Assistant is starting, as it does for
-  new entities after an upgrade, now runs once Home Assistant has started.
+- **A monitoring alert for a circuit the panel has not named now names it by its breaker positions**, rather than by its internal device ID.
 
 ## [2.3.2] - 11/2026
 
