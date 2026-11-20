@@ -1,0 +1,634 @@
+{
+  "circuits": {
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-1": {
+      "always_on": true,
+      "breaker_rating_a": 15.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-1",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_living_room_primary_bedroom_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_living_room_primary_bedroom_lights_consumed_energy",
+        "current": "sensor.span_panel_living_room_primary_bedroom_lights_current",
+        "net_energy": "sensor.span_panel_living_room_primary_bedroom_lights_net_energy",
+        "power": "sensor.span_panel_living_room_primary_bedroom_lights_power",
+        "produced_energy": "sensor.span_panel_living_room_primary_bedroom_lights_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Living room, Primary bedroom / Lights",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9
+      ],
+      "voltage": 120.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-10": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-10",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_outlet_breaker_rating",
+        "consumed_energy": "sensor.span_panel_outlet_consumed_energy",
+        "current": "sensor.span_panel_outlet_current",
+        "net_energy": "sensor.span_panel_outlet_net_energy",
+        "power": "sensor.span_panel_outlet_power",
+        "produced_energy": "sensor.span_panel_outlet_produced_energy",
+        "select": "select.span_panel_outlet_circuit_priority",
+        "switch": "switch.span_panel_outlet_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "outlet",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        18,
+        20
+      ],
+      "voltage": 240.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11": {
+      "always_on": false,
+      "breaker_rating_a": 40.0,
+      "device_id": null,
+      "device_type": "evse",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ev_charger_span_drive_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ev_charger_span_drive_consumed_energy",
+        "current": "sensor.span_panel_ev_charger_span_drive_current",
+        "net_energy": "sensor.span_panel_ev_charger_span_drive_net_energy",
+        "power": "sensor.span_panel_ev_charger_span_drive_power",
+        "produced_energy": "sensor.span_panel_ev_charger_span_drive_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 40.0,
+      "monitoring_rating_user_set": false,
+      "name": "SPAN Drive",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22,
+        24
+      ],
+      "voltage": 240.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-2": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-2",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_consumed_energy",
+        "current": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_current",
+        "net_energy": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_net_energy",
+        "power": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_power",
+        "produced_energy": "sensor.span_panel_bedroom_primary_bedroom_primary_bathro_produced_energy",
+        "select": "select.span_panel_bedroom_primary_bedroom_primary_bathro_circuit_priority",
+        "switch": "switch.span_panel_bedroom_primary_bedroom_primary_bathro_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Bedroom, Primary bedroom, Primary bathro",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        11
+      ],
+      "voltage": 120.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-3": {
+      "always_on": true,
+      "breaker_rating_a": 25.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-3",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_furnace_breaker_rating",
+        "consumed_energy": "sensor.span_panel_furnace_consumed_energy",
+        "current": "sensor.span_panel_furnace_current",
+        "net_energy": "sensor.span_panel_furnace_net_energy",
+        "power": "sensor.span_panel_furnace_power",
+        "produced_energy": "sensor.span_panel_furnace_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 25.0,
+      "monitoring_rating_user_set": false,
+      "name": "Furnace",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10,
+        12
+      ],
+      "voltage": 240.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-4": {
+      "always_on": false,
+      "breaker_rating_a": 25.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-4",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_air_handler_breaker_rating",
+        "consumed_energy": "sensor.span_panel_air_handler_consumed_energy",
+        "current": "sensor.span_panel_air_handler_current",
+        "net_energy": "sensor.span_panel_air_handler_net_energy",
+        "power": "sensor.span_panel_air_handler_power",
+        "produced_energy": "sensor.span_panel_air_handler_produced_energy",
+        "switch": "switch.span_panel_air_handler_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": true,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 25.0,
+      "monitoring_rating_user_set": false,
+      "name": "Air handler",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14,
+        16
+      ],
+      "voltage": 240.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-5": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-5",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bathroom_lights_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bathroom_lights_outlets_consumed_energy",
+        "current": "sensor.span_panel_bathroom_lights_outlets_current",
+        "net_energy": "sensor.span_panel_bathroom_lights_outlets_net_energy",
+        "power": "sensor.span_panel_bathroom_lights_outlets_power",
+        "produced_energy": "sensor.span_panel_bathroom_lights_outlets_produced_energy",
+        "select": "select.span_panel_bathroom_lights_outlets_circuit_priority",
+        "switch": "switch.span_panel_bathroom_lights_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Bathroom / Lights & Outlets",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13
+      ],
+      "voltage": 120.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-6": {
+      "always_on": false,
+      "breaker_rating_a": 25.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-6",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_hvac_breaker_rating",
+        "consumed_energy": "sensor.span_panel_hvac_consumed_energy",
+        "current": "sensor.span_panel_hvac_current",
+        "net_energy": "sensor.span_panel_hvac_net_energy",
+        "power": "sensor.span_panel_hvac_power",
+        "produced_energy": "sensor.span_panel_hvac_produced_energy",
+        "select": "select.span_panel_hvac_circuit_priority",
+        "switch": "switch.span_panel_hvac_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 25.0,
+      "monitoring_rating_user_set": false,
+      "name": "HVAC",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        15
+      ],
+      "voltage": 120.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-7": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-7",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ventilation_fan_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ventilation_fan_consumed_energy",
+        "current": "sensor.span_panel_ventilation_fan_current",
+        "net_energy": "sensor.span_panel_ventilation_fan_net_energy",
+        "power": "sensor.span_panel_ventilation_fan_power",
+        "produced_energy": "sensor.span_panel_ventilation_fan_produced_energy",
+        "select": "select.span_panel_ventilation_fan_circuit_priority",
+        "switch": "switch.span_panel_ventilation_fan_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Ventilation fan",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17,
+        19
+      ],
+      "voltage": 240.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-8": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-8",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_dining_room_lights_breaker_rating",
+        "consumed_energy": "sensor.span_panel_dining_room_lights_consumed_energy",
+        "current": "sensor.span_panel_dining_room_lights_current",
+        "net_energy": "sensor.span_panel_dining_room_lights_net_energy",
+        "power": "sensor.span_panel_dining_room_lights_power",
+        "produced_energy": "sensor.span_panel_dining_room_lights_produced_energy",
+        "select": "select.span_panel_dining_room_lights_circuit_priority",
+        "switch": "switch.span_panel_dining_room_lights_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Dining room / Lights",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        21
+      ],
+      "voltage": 120.0
+    },
+    "xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-9": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "xg-4932-86brs_circuit_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-9",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_mini_split_ac_hp_breaker_rating",
+        "consumed_energy": "sensor.span_panel_mini_split_ac_hp_consumed_energy",
+        "current": "sensor.span_panel_mini_split_ac_hp_current",
+        "net_energy": "sensor.span_panel_mini_split_ac_hp_net_energy",
+        "power": "sensor.span_panel_mini_split_ac_hp_power",
+        "produced_energy": "sensor.span_panel_mini_split_ac_hp_produced_energy",
+        "select": "select.span_panel_mini_split_ac_hp_circuit_priority",
+        "switch": "switch.span_panel_mini_split_ac_hp_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Mini-split AC/HP",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        23
+      ],
+      "voltage": 120.0
+    }
+  },
+  "config_entry_id": "entry-r202645-g",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
+  "device_id": "xg-4932-86brs",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202645/02",
+  "first_position": 9,
+  "last_position": 24,
+  "monitoring_rating_offered": false,
+  "panel_device_id": "xg-4932-86brs",
+  "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "current_power": "sensor.span_panel_current_power",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 16,
+  "serial": "xg-4932-86brs",
+  "shared_meter_groups": {},
+  "sub_devices": {
+    "xg-4932-86brs_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_xg-4932-86brs_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_xg-4932-86brs_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_xg-4932-86brs_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_xg-4932-86brs_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_xg-4932-86brs_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_xg-4932-86brs_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_xg-4932-86brs_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_xg-4932-86brs_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-4932-86brs_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_xg-4932-86brs_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_xg-4932-86brs_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_xg-4932-86brs_bess_vendor"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Powerwall 3",
+      "name": "Span Panel Battery",
+      "serial_number": "tg083827807xtx",
+      "sw_version": null,
+      "type": "bess"
+    },
+    "xg-4932-86brs_evse_dt-8991-y1u48": {
+      "entities": {
+        "binary_sensor.span_panel_ev_charger_span_drive_charging": {
+          "domain": "binary_sensor",
+          "original_name": "Charging",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_charging"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_ev_connected": {
+          "domain": "binary_sensor",
+          "original_name": "EV Connected",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_ev_connected"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_evse_panel_link": {
+          "domain": "binary_sensor",
+          "original_name": "EVSE Panel Link",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_panel_link"
+        },
+        "lock.span_panel_ev_charger_span_drive_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_lock"
+        },
+        "number.span_panel_ev_charger_span_drive_evse_charge_current_limit": {
+          "domain": "number",
+          "original_name": "EVSE Charge Current Limit",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_charge_current_limit"
+        },
+        "sensor.span_panel_ev_charger_span_drive_breaker_rating": {
+          "domain": "sensor",
+          "original_name": "Breaker Rating",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_breaker_rating"
+        },
+        "sensor.span_panel_ev_charger_span_drive_charger_status": {
+          "domain": "sensor",
+          "original_name": "Charger Status",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_status"
+        },
+        "sensor.span_panel_ev_charger_span_drive_consumed_energy": {
+          "domain": "sensor",
+          "original_name": "Consumed Energy",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_energy_consumed"
+        },
+        "sensor.span_panel_ev_charger_span_drive_current": {
+          "domain": "sensor",
+          "original_name": "Current",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_current"
+        },
+        "sensor.span_panel_ev_charger_span_drive_lock_state": {
+          "domain": "sensor",
+          "original_name": "Lock State",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_lock_state"
+        },
+        "sensor.span_panel_ev_charger_span_drive_net_energy": {
+          "domain": "sensor",
+          "original_name": "Net Energy",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_energy_net"
+        },
+        "sensor.span_panel_ev_charger_span_drive_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-4932-86brs_evse_dt-8991-y1u48_evse_part_number"
+        },
+        "sensor.span_panel_ev_charger_span_drive_power": {
+          "domain": "sensor",
+          "original_name": "Power",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_power"
+        },
+        "sensor.span_panel_ev_charger_span_drive_produced_energy": {
+          "domain": "sensor",
+          "original_name": "Produced Energy",
+          "unique_id": "span_xg-4932-86brs_xg-4932-86brs-b0ec9cea4cb9cdbb-1-16-11_energy_produced"
+        }
+      },
+      "manufacturer": "SPAN",
+      "model": "SPAN Drive",
+      "name": "Span Panel EV Charger (SPAN Drive)",
+      "serial_number": "dt-8991-y1u48",
+      "sw_version": "001.001.006.76f735f.ecf24fe3.0c03f042.A",
+      "type": "evse"
+    },
+    "xg-4932-86brs_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_xg-4932-86brs_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "tg638755243wpt-hre",
+      "sw_version": null,
+      "type": "mid"
+    },
+    "xg-4932-86brs_pv": {
+      "entities": {
+        "sensor.span_panel_solar_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_xg-4932-86brs_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_pv_power": {
+          "domain": "sensor",
+          "original_name": "PV Power",
+          "unique_id": "span_xg-4932-86brs_pv_power"
+        },
+        "sensor.span_panel_solar_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_xg-4932-86brs_pv_product"
+        },
+        "sensor.span_panel_solar_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_xg-4932-86brs_pv_vendor"
+        }
+      },
+      "manufacturer": "Unknown",
+      "model": "Solar Inverter",
+      "name": "Span Panel Solar",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": null,
+        "model": null,
+        "power_entity_id": null,
+        "role": "site",
+        "site_power_entity_id": "sensor.span_panel_solar_pv_power",
+        "vendor": null
+      },
+      "sw_version": null,
+      "type": "pv"
+    }
+  }
+}

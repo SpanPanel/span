@@ -34,6 +34,7 @@ what was announced, so the notice returns only when what it says changes.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 import json
@@ -337,6 +338,32 @@ def async_raise_on_change(
         notices.announced[notice_id] = fingerprint
     async_raise(hass, entry, notice_id, title=title, message=message)
     return True
+
+
+@callback
+def async_rekey_fingerprint(
+    hass: HomeAssistant, entry: ConfigEntry, notice_id: str, rekey: Callable[[str], str]
+) -> int:
+    """Rewrite what a notice was last raised with, where what it describes is now named differently.
+
+    For a fingerprint whose facts are keyed by an id the panel has since
+    changed, so that `async_raise_on_change` finds the same facts under their
+    new names and raises nothing: the device-id migration re-keys the overflow
+    notice's this way. `rekey` is the caller's, which owns the fingerprint's
+    grammar. Applied to the live view `async_restore` built, and persisted with
+    it; the standing message is left as it was raised. Returns 1 when the
+    fingerprint changed, 0 otherwise.
+    """
+    notices = hass.data.get(_DATA, {}).get(entry.entry_id)
+    fingerprint = notices.announced.get(notice_id) if notices is not None else None
+    if notices is None or fingerprint is None:
+        return 0
+    rekeyed = rekey(fingerprint)
+    if rekeyed == fingerprint:
+        return 0
+    notices.announced[notice_id] = rekeyed
+    _persist(notices)
+    return 1
 
 
 @callback

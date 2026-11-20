@@ -37,7 +37,7 @@ from custom_components.span_panel.schema_validation import (
 from custom_components.span_panel.sensor_definitions import sensor_descriptions_by_field_path
 
 from .captures_replay import replay
-from .test_expected_entities import REPLAYS, Replay, _ids
+from .test_expected_entities import MIGRATED_STEM, REPLAYS, Replay, _ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +63,14 @@ _RECORDED: Final[Mapping[str, _Recorded]] = {
     "main32_r202639-no-battery": _EVERY_FIELD_RESOLVED,
     "main32_r202639-battery-unvalued": _EVERY_FIELD_RESOLVED,
     "main32_r202639-unpublished-readings": _EVERY_FIELD_RESOLVED,
+    "main32_r202639-upstream-pv": _EVERY_FIELD_RESOLVED,
+    "r202645-a": _EVERY_FIELD_RESOLVED,
+    "r202645-c": _EVERY_FIELD_RESOLVED,
+    "r202645-e": _EVERY_FIELD_RESOLVED,
+    "r202645-g": _EVERY_FIELD_RESOLVED,
+    "main32_r202645": _EVERY_FIELD_RESOLVED,
+    "main32_r202645-cascade": _EVERY_FIELD_RESOLVED,
+    MIGRATED_STEM: _EVERY_FIELD_RESOLVED,
 }
 """What each replay's validation found, by the stem its expected-entity fixture is filed under."""
 
@@ -84,7 +92,9 @@ on a panel that is otherwise healthy.
 
 
 def _metadata(item: Replay) -> dict[str, FieldMetadata]:
-    return replay(item.tree()).build_field_metadata()
+    """Return the metadata of the tree the replay's install ends on: after its update, where it has one."""
+    tree = item.tree if item.updated_to is None else item.updated_to
+    return replay(tree()).build_field_metadata()
 
 
 def _evaluated(metadata: dict[str, FieldMetadata]) -> SchemaFindings:

@@ -142,7 +142,7 @@ class TestGeneralOptionsPreservesNamingFlags:
                 ),
                 patch.object(flow, "async_create_entry") as mock_create_entry,
                 patch("custom_components.span_panel.async_load_panel_settings", return_value={}),
-                patch("custom_components.span_panel.async_save_panel_settings"),
+                patch("custom_components.span_panel.async_update_panel_settings"),
                 patch("custom_components.span_panel.async_apply_panel_registration"),
             ):
                 await flow.async_step_general_options(user_input)
@@ -184,7 +184,7 @@ class TestGeneralOptionsPreservesNamingFlags:
                 ),
                 patch.object(flow, "async_create_entry") as mock_create_entry,
                 patch("custom_components.span_panel.async_load_panel_settings", return_value={}),
-                patch("custom_components.span_panel.async_save_panel_settings"),
+                patch("custom_components.span_panel.async_update_panel_settings"),
                 patch("custom_components.span_panel.async_apply_panel_registration"),
             ):
                 await flow.async_step_general_options(user_input)
@@ -225,7 +225,7 @@ class TestGeneralOptionsPreservesNamingFlags:
                 ),
                 patch.object(flow, "async_create_entry") as mock_create_entry,
                 patch("custom_components.span_panel.async_load_panel_settings", return_value={}),
-                patch("custom_components.span_panel.async_save_panel_settings"),
+                patch("custom_components.span_panel.async_update_panel_settings"),
                 patch("custom_components.span_panel.async_apply_panel_registration"),
             ):
                 await flow.async_step_general_options(user_input)

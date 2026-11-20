@@ -224,6 +224,9 @@ def match_circuit_id(unique_id: str, circuit_ids: Collection[str]) -> str | None
 
     Skipping the prefix means a serial can never be read as a circuit id. Ids
     without the prefix are searched whole.
+
+    The device-id migration does not match ids it re-keys: it builds every old
+    one with `circuit_entity_unique_ids`, from the circuit's old id.
     """
     if not circuit_ids:
         return None
@@ -364,6 +367,29 @@ def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str
     Returns: "span_{serial}_evse_{evse_id}_{description_key}"
     """
     return f"span_{serial}_evse_{evse_id}_{description_key}"
+
+
+def circuit_entity_unique_ids(serial: str, circuit_id: str) -> dict[tuple[str, str], str]:
+    """Return every unique id built for one circuit's own entities, by domain and key.
+
+    The circuit's sensors over every key of `CIRCUIT_SUFFIX_MAPPING`, whether or
+    not a sensor is still built from it, then its breaker switch and its
+    priority select: the builders the platforms create with, so a row any
+    release registered for the circuit is among these. The mapping is closed
+    (`tests/test_suffix_mappings_are_closed.py`), so the set is too. A charger's
+    feed circuit's sensors, on the charger's device, are the same sensors.
+
+    For the device-id migration, which asks for a circuit's old id and its new
+    one and pairs the two answers key by key. No unique id is ever parsed to
+    find the circuit it names.
+    """
+    unique_ids = {
+        ("sensor", description_key): build_circuit_unique_id(serial, circuit_id, description_key)
+        for description_key in CIRCUIT_SUFFIX_MAPPING
+    }
+    unique_ids["switch", "relay"] = build_switch_unique_id(serial, circuit_id)
+    unique_ids["select", "priority"] = build_select_unique_id(serial, circuit_id)
+    return unique_ids
 
 
 def build_pv_inverter_unique_id(serial: str, inverter_key: str, description_key: str) -> str:

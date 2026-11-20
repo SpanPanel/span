@@ -247,9 +247,12 @@ def _record(fields: dict[str, str], prefix: str, obj: _SubSnapshot, suffix: str 
 def _snapshot_fields(snapshot: SpanPanelSnapshot) -> dict[str, str]:
     """Flatten a snapshot to ``{field path: value}``.
 
-    The per-instance collections are keyed by circuit and EVSE id so two
-    circuits cannot mask each other's change; `_bare` strips the key again for
-    the reader lookup, which is per field and not per instance.
+    The per-instance collections are keyed by circuit, EVSE and inverter id so
+    two instances cannot mask each other's change; `_bare` strips the key again
+    for the reader lookup, which is per field and not per instance. Each
+    inverter of `pv_inverters` is recorded as well as the panel-level `pv`:
+    with more than one, `pv` holds the inverters together, and what one of them
+    publishes reaches only its own card.
 
     Values are held as `repr` rather than compared by equality so the diff is a
     plain set operation over strings, whatever a field happens to hold.
@@ -264,6 +267,8 @@ def _snapshot_fields(snapshot: SpanPanelSnapshot) -> dict[str, str]:
         _record(fields, "evse", evse, f"@{evse_key}")
     _record(fields, "battery", snapshot.battery)
     _record(fields, "pv", snapshot.pv)
+    for inverter_key, inverter in snapshot.pv_inverters.items():
+        _record(fields, "pv", inverter, f"@{inverter_key}")
     if snapshot.mid is not None:
         _record(fields, "mid", snapshot.mid)
     if snapshot.pcs is not None:

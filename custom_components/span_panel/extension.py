@@ -33,6 +33,7 @@ wire rather than by a feature.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
 import re
@@ -42,7 +43,7 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo, DeviceRegistry
 from homeassistant.helpers.entity_registry import EntityRegistry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPanelSnapshot
@@ -64,7 +65,7 @@ from .curation import (
     sensor_description,
 )
 from .entity import SpanPanelEntity
-from .notices import async_raise_on_change, read_translations
+from .notices import async_raise_on_change, async_rekey_fingerprint, read_translations
 from .util import (
     ADOPTED_IDENTIFIER_TOKEN,
     BOOLEAN_DATATYPE,
@@ -73,6 +74,7 @@ from .util import (
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
     declares_a_number,
+    pv_inverter_device_identifier,
 )
 
 if TYPE_CHECKING:
@@ -254,7 +256,36 @@ def extension_unique_id(
             property_id,
         )
         return None
-    return f"span_{serial}_{ADOPTED_IDENTIFIER_TOKEN}_{scope}/{node_id}/{property_id}"
+    return f"{extension_unique_id_prefix(serial, scope)}{node_id}/{property_id}"
+
+
+def extension_unique_id_prefix(serial: str, scope: str) -> str:
+    """Return what every extension unique id under one scope starts with: `span_{serial}_adopted_{scope}/`.
+
+    The prefix `extension_unique_id` builds every id from, so a reader that
+    finds a scope's ids by it -- the device-id migration, re-keying a circuit's
+    extensions -- finds exactly the ids that builder made.
+    """
+    return f"span_{serial}_{ADOPTED_IDENTIFIER_TOKEN}_{scope}/"
+
+
+def rekeyed_scopes(mapping: Mapping[str, str]) -> dict[str, str]:
+    """Return the scope each re-keyed circuit id's extensions move to, old scope to new.
+
+    A circuit's own extensions are scoped by its id, and so are an inverter's
+    on a panel with several where a circuit feeds it: that inverter's key is
+    the feeding circuit's id. Built with `extension_scope`, so the segments are
+    the ones `extension_unique_id` and `extension_curation_key` build, for the
+    old id and for the new.
+    """
+    scopes: dict[str, str] = {}
+    for old_id, new_id in mapping.items():
+        for kind in ("circuit", "pv"):
+            old_scope = extension_scope(ExtensionSubject(kind=kind, instance_key=old_id))
+            new_scope = extension_scope(ExtensionSubject(kind=kind, instance_key=new_id))
+            if old_scope is not None and new_scope is not None:
+                scopes[old_scope] = new_scope
+    return scopes
 
 
 def is_extension_unique_id(unique_id: str) -> bool:
@@ -302,7 +333,7 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
     if subject.kind == "mid":
         return f"{panel_identifier}_{SUB_DEVICE_MID}"
     if subject.kind == "pv" and subject.instance_key is not None:
-        return f"{panel_identifier}_{SUB_DEVICE_PV}_{subject.instance_key}"
+        return pv_inverter_device_identifier(panel_identifier, subject.instance_key)
     if subject.kind == "pv":
         return f"{panel_identifier}_{SUB_DEVICE_PV}"
     if subject.kind == "evse" and subject.instance_key is not None:
@@ -848,6 +879,61 @@ def _partition(
 
 _OVERFLOW_NOTICE: Final = "extension_overflow"
 
+_DECLINED_ENTRY: Final = re.compile(r"(?P<key>.+) \((?P<count>[0-9]+)\)")
+"""One device of the rendered overflow, `{subject key} ({count})`, as `_render_declined` writes it."""
+
+_REKEYED_KINDS: Final = frozenset({"circuit", "pv"})
+"""The subject kinds whose instance key can be a circuit's id: a circuit, and an inverter a circuit feeds."""
+
+
+def _render_declined(declined: Mapping[str, int]) -> str:
+    """Render the overflow as the notice's fingerprint and its device list: `{key} ({count})`, by key."""
+    return ", ".join(f"{key} ({count})" for key, count in sorted(declined.items()))
+
+
+def rekey_overflow_fingerprint(fingerprint: str, mapping: Mapping[str, str]) -> str:
+    """Return the overflow fingerprint with every circuit id `mapping` names replaced by its new one.
+
+    Reads back the grammar `_render_declined` writes, `{kind}:{key} ({count})`
+    joined by `, `, and renders it again the same way, so the result is what
+    `async_notice_declined_extensions` computes for the same overflow under the
+    new ids and the notice is not raised again. A fingerprint naming no id
+    `mapping` holds, or one this module did not write, is returned as it is,
+    so the record is rewritten only when something in it moved.
+    """
+    declined: dict[str, int] = {}
+    moved = False
+    for entry in fingerprint.split(", "):
+        match = _DECLINED_ENTRY.fullmatch(entry)
+        if match is None:
+            return fingerprint
+        kind, separator, instance_key = match["key"].partition(":")
+        current = mapping.get(instance_key) if separator and kind in _REKEYED_KINDS else None
+        moved = moved or current is not None
+        key = match["key"] if current is None else f"{kind}:{current}"
+        declined[key] = int(match["count"])
+    return _render_declined(declined) if moved else fingerprint
+
+
+@callback
+def async_rekey_overflow_notice(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Re-key the overflow notice's record for circuits whose device ids changed.
+
+    Applied to the live view the notices module restored at setup, before
+    `async_notice_declined_extensions` compares against it. The standing
+    message, which names the ids it was raised with, is left as it was. Returns
+    1 when the record changed, 0 otherwise.
+    """
+    return async_rekey_fingerprint(
+        hass,
+        entry,
+        _OVERFLOW_NOTICE,
+        lambda fingerprint: rekey_overflow_fingerprint(fingerprint, mapping),
+    )
+
+
 _OVERFLOW_FALLBACK: Final[dict[str, str]] = {
     "title": "SPAN Panel: some vendor readings were not added",
     "body": (
@@ -904,7 +990,7 @@ async def async_notice_declined_extensions(
     )
     if not declined:
         return
-    rendered = ", ".join(f"{key} ({count})" for key, count in sorted(declined.items()))
+    rendered = _render_declined(declined)
     text = await hass.async_add_executor_job(
         read_translations, hass.config.language, _OVERFLOW_NOTICE
     )

@@ -16,7 +16,7 @@ from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.json import JsonObjectType, JsonValueType
 import httpx
 import probatio as vol
-from span_panel_api import PassphraseRotation, rotate_passphrase
+from span_panel_api import PassphraseRotation, SpanPanelSnapshot, rotate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -36,6 +36,7 @@ from .const import (
     VALID_GRAPH_HORIZONS,
 )
 from .current_monitor import CurrentMonitor
+from .device_id_migration import current_circuit_id
 from .entity_resolver import resolve_circuit_id
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
@@ -303,6 +304,11 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
     )
 
 
+def _service_name(call: ServiceCall) -> str:
+    """Return the service a call was made to, as an automation names it: `span_panel.set_circuit_threshold`."""
+    return f"{call.domain}.{call.service}"
+
+
 def _raise_if_entitys_panel_not_loaded(
     hass: HomeAssistant, target: str, panel_entry_id: str | None
 ) -> None:
@@ -454,7 +460,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         data.pop("config_entry_id", None)
         monitor, runtime_data = _get_monitored(call, entity_id)
         circuit_id = monitor.resolve_entity_to_circuit_id(
-            entity_id, runtime_data.coordinator.data.circuits.keys()
+            entity_id, runtime_data.coordinator.data, service=_service_name(call)
         )
         monitor.set_circuit_override(circuit_id, data)
 
@@ -462,7 +468,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         entity_id = call.data["circuit_id"]
         monitor, runtime_data = _get_monitored(call, entity_id)
         circuit_id = monitor.resolve_entity_to_circuit_id(
-            entity_id, runtime_data.coordinator.data.circuits.keys()
+            entity_id, runtime_data.coordinator.data, service=_service_name(call)
         )
         monitor.clear_circuit_override(circuit_id)
 
@@ -619,7 +625,7 @@ def _async_register_package_rating_services(hass: HomeAssistant) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
-        circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
+        circuit_id = resolve_circuit_id(hass, target, snapshot, service=_service_name(call))
         runtime_data.coordinator.package_rating_manager.set_package_ratings(
             circuit_id, snapshot, call.data["package_ratings_a"]
         )
@@ -628,7 +634,7 @@ def _async_register_package_rating_services(hass: HomeAssistant) -> None:
         target = call.data["circuit_id"]
         runtime_data = _get_runtime_data(call, target)
         snapshot = runtime_data.coordinator.data
-        circuit_id = resolve_circuit_id(hass, target, snapshot.circuits.keys())
+        circuit_id = resolve_circuit_id(hass, target, snapshot, service=_service_name(call))
         runtime_data.coordinator.package_rating_manager.clear_package_ratings(circuit_id, snapshot)
 
     _async_register_monitoring_write(
@@ -648,10 +654,10 @@ def _async_register_package_rating_services(hass: HomeAssistant) -> None:
 def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
     """Register graph time horizon services."""
 
-    def _get_horizon_manager(
+    def _get_horizon_panel(
         call: ServiceCall,
-    ) -> GraphHorizonManager:
-        """Find the GraphHorizonManager for the given entry."""
+    ) -> tuple[GraphHorizonManager, SpanPanelSnapshot]:
+        """Find the GraphHorizonManager for the given entry, with its panel's live snapshot."""
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             runtime_data = loaded_runtime_data(entry)
@@ -660,11 +666,25 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
             if entry_id is None or entry.entry_id == entry_id:
                 mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
-                    return mgr
+                    return mgr, runtime_data.coordinator.data
         raise ServiceValidationError(
             "No SPAN panel with graph horizon manager found.",
             translation_domain=DOMAIN,
             translation_key="graph_horizon_not_available",
+        )
+
+    def _get_horizon_manager(call: ServiceCall) -> GraphHorizonManager:
+        """Find the GraphHorizonManager for the given entry."""
+        return _get_horizon_panel(call)[0]
+
+    def _horizon_circuit_id(call: ServiceCall, snapshot: SpanPanelSnapshot) -> str:
+        """Return the circuit a horizon call names: verbatim, or under its new id for an old one.
+
+        These actions take a circuit id and nothing else, so an old one is
+        corrected to the new id, never to the circuit's entity.
+        """
+        return current_circuit_id(
+            snapshot, call.data["circuit_id"], service=_service_name(call), takes_entity=False
         )
 
     async def async_handle_set_graph_time_horizon(call: ServiceCall) -> None:
@@ -673,14 +693,14 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         manager.set_global_horizon(horizon)
 
     async def async_handle_set_circuit_graph_horizon(call: ServiceCall) -> None:
-        manager = _get_horizon_manager(call)
-        circuit_id = call.data["circuit_id"]
+        manager, snapshot = _get_horizon_panel(call)
+        circuit_id = _horizon_circuit_id(call, snapshot)
         horizon = call.data["horizon"]
         manager.set_circuit_horizon(circuit_id, horizon)
 
     async def async_handle_clear_circuit_graph_horizon(call: ServiceCall) -> None:
-        manager = _get_horizon_manager(call)
-        circuit_id = call.data["circuit_id"]
+        manager, snapshot = _get_horizon_panel(call)
+        circuit_id = _horizon_circuit_id(call, snapshot)
         manager.clear_circuit_horizon(circuit_id)
 
     async def async_handle_set_subdevice_graph_horizon(call: ServiceCall) -> None:

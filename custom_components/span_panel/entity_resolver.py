@@ -15,6 +15,7 @@ from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN
+from .device_id_migration import current_circuit_id
 from .id_builder import (
     build_bess_unique_id,
     build_binary_sensor_unique_id,
@@ -49,21 +50,31 @@ def entity_id_in_entry(
     return entity_id if entry is not None and entry.config_entry_id == entry_id else None
 
 
-def resolve_circuit_id(hass: HomeAssistant, entity_or_id: str, circuit_ids: Collection[str]) -> str:
+def resolve_circuit_id(
+    hass: HomeAssistant,
+    entity_or_id: str,
+    snapshot: SpanPanelSnapshot,
+    *,
+    service: str,
+    also: Collection[str] = (),
+) -> str:
     """Resolve one of this integration's entities, or a raw circuit id, to a circuit id.
 
-    The circuit is the one of `circuit_ids` that the entity's unique_id names; an
-    id is opaque, so it is found among them rather than by its shape. Only this
-    integration's entities are read: another integration's unique_id could hold a
-    segment equal to a short opaque id. Anything else is taken to be a circuit id
-    already, which keeps a call that names the id itself working.
+    The circuit is the one of the snapshot's circuits, or of `also`, that the
+    entity's unique_id names; an id is opaque, so it is found among them rather
+    than by its shape. Only this integration's entities are read: another
+    integration's unique_id could hold a segment equal to a short opaque id.
+    Anything else is taken to be a circuit id already, which keeps a call that
+    names the id itself working -- and one that names it by the id it had
+    before a firmware update gave it a new one reaches it under its new id,
+    with a WARNING naming `service` (`device_id_migration.current_circuit_id`).
     """
     entry = er.async_get(hass).async_get(entity_or_id)
     if entry is not None and entry.platform == DOMAIN and entry.unique_id:
-        circuit_id = match_circuit_id(entry.unique_id, circuit_ids)
+        circuit_id = match_circuit_id(entry.unique_id, {*snapshot.circuits, *also})
         if circuit_id is not None:
             return circuit_id
-    return entity_or_id
+    return current_circuit_id(snapshot, entity_or_id, service=service, takes_entity=True)
 
 
 def resolve_evse_display_suffix(

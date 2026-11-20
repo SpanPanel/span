@@ -11,11 +11,11 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -32,6 +32,7 @@ from .const import (
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
 )
+from .device_id_migration import rekeyed
 from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
 from .meter_capacity import meter_capacity_a
@@ -78,6 +79,24 @@ _MAINS_CURRENT_ATTRS: dict[str, str] = {
 
 _STORAGE_VERSION = 1
 _STORAGE_KEY_PREFIX = "span_panel_current_monitor"
+
+StoredMonitoring = TypedDict(
+    "StoredMonitoring",
+    {
+        "enabled": bool,
+        "circuit_overrides": dict[str, MonitoringSettings],
+        "mains_overrides": dict[str, MonitoringSettings],
+        "global": MonitoringSettings,
+    },
+    total=False,
+)
+"""One panel's monitoring settings, as `CurrentMonitor` saves them.
+
+The functional form, because `global` is a keyword. Not total: a store
+`async_save_disabled` wrote before monitoring was ever on holds `enabled`
+alone, and `global` is saved only once a global setting is. A compile-time
+claim only; `_read_stored` is what the disk is held to.
+"""
 
 
 @dataclass
@@ -169,7 +188,9 @@ def monitored_circuits(
             points[circuit_id] = MonitoredCircuit(
                 point_id=circuit_id,
                 members=(circuit_id,),
-                name=circuit.name or circuit_id,
+                # Its label, as a shared meter's members are named above: the
+                # panel's name, or its breaker positions, never its wire id.
+                name=construct_circuit_label(circuit, circuit_id),
                 current_a=circuit.current_a,
                 rating_a=rating.judged_a,
                 panel_rating_a=rating.panel_a,
@@ -202,11 +223,7 @@ class CurrentMonitor:
         self._mains_overrides: dict[str, MonitoringSettings] = {}
         self._global_settings: MonitoringSettings = {}
         self._last_snapshot: SpanPanelSnapshot | None = None
-        self._store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
+        self._store = _store_for(hass, entry)
 
     # --- Public API ---
 
@@ -401,25 +418,31 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, power_uid)
         return entity_id if entity_id is not None else circuit_id
 
-    def resolve_entity_to_circuit_id(self, entity_id: str, circuit_ids: Collection[str]) -> str:
+    def resolve_entity_to_circuit_id(
+        self, entity_id: str, snapshot: SpanPanelSnapshot, *, service: str
+    ) -> str:
         """Resolve one of the circuit's entities to its internal circuit_id.
 
         Accepts any of this integration's entities for the circuit, such as its
         current sensor (sensor.span_panel_kitchen_current), or a raw circuit_id
-        for backwards compatibility. The circuit is the one of
-        `circuit_ids` that the entity's unique_id names; an id is opaque, so it is
-        found among them rather than by its shape.
+        for backwards compatibility, an id from before a firmware update gave
+        the circuit a new one included (`entity_resolver.resolve_circuit_id`,
+        which logs it against `service`). The circuit is the one of the
+        snapshot's circuits that the entity's unique_id names; an id is opaque,
+        so it is found among them rather than by its shape.
 
-        The caller passes the coordinator's live ids rather than this monitor
-        reading its own last snapshot: the monitor sees a snapshot only on the
-        coordinator's next push after setup, and a threshold set before then
+        The caller passes the coordinator's live snapshot rather than this
+        monitor reading its own last one: the monitor sees a snapshot only on
+        the coordinator's next push after setup, and a threshold set before then
         must still land on its circuit.
 
         The ids this monitor holds overrides for are searched too, so a circuit
         that has left the panel can still have its override cleared through its
         orphaned entity.
         """
-        return resolve_circuit_id(self._hass, entity_id, {*circuit_ids, *self._circuit_overrides})
+        return resolve_circuit_id(
+            self._hass, entity_id, snapshot, service=service, also=self._circuit_overrides
+        )
 
     def resolve_entity_to_mains_leg(self, entity_id: str) -> str:
         """Resolve a current sensor entity_id to its internal mains leg name.
@@ -507,7 +530,7 @@ class CurrentMonitor:
             )
 
             circuits[entity_id] = {
-                "name": circuit.name if circuit else cid,
+                "name": construct_circuit_label(circuit, cid) if circuit else cid,
                 "basis": point.basis if point else "circuit",
                 # The point this entry's judgement is: members of a shared meter
                 # carry its key, so a consumer counts each point once.
@@ -605,24 +628,24 @@ class CurrentMonitor:
 
     async def async_save_disabled(self) -> None:
         """Mark monitoring as disabled in storage, preserving settings."""
-        data = await self._store.async_load() or {}
+        data = _read_stored(await self._store.async_load(), self._entry) or StoredMonitoring()
         data["enabled"] = False
         await self._store.async_save(data)
 
     async def async_save_overrides(self) -> None:
         """Persist circuit overrides, mains overrides, and global settings to storage."""
-        data: dict[str, Any] = {
-            "enabled": True,
-            "circuit_overrides": self._circuit_overrides,
-            "mains_overrides": self._mains_overrides,
-        }
+        data = StoredMonitoring(
+            enabled=True,
+            circuit_overrides=self._circuit_overrides,
+            mains_overrides=self._mains_overrides,
+        )
         if self._global_settings:
             data["global"] = self._global_settings
         await self._store.async_save(data)
 
     async def async_load_overrides(self) -> None:
         """Load circuit overrides, mains overrides, and global settings from storage."""
-        data = await self._store.async_load()
+        data = _read_stored(await self._store.async_load(), self._entry)
         if data is None:
             return
         self._circuit_overrides = data.get("circuit_overrides", {})
@@ -632,13 +655,8 @@ class CurrentMonitor:
     @staticmethod
     async def async_is_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Check if monitoring was previously enabled by reading storage."""
-        store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
-        data = await store.async_load()
-        return bool(data and data.get("enabled", False))
+        data = _read_stored(await _store_for(hass, entry).async_load(), entry)
+        return data is not None and data.get("enabled", False)
 
     # --- Threshold resolution (delegated to threshold_evaluator) ---
 
@@ -786,3 +804,104 @@ class CurrentMonitor:
 
     # Backward-compatible static alias kept for existing callers/tests.
     _format_notification = staticmethod(format_notification)
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredMonitoring]:
+    """Return the store holding one panel's monitoring settings."""
+    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+def _read_stored(stored: object, entry: ConfigEntry) -> StoredMonitoring | None:
+    """Read the monitoring store off disk, keeping what has the shape it is saved in.
+
+    None for nothing stored, or for anything but an object. `StoredMonitoring`
+    is a compile-time claim, and the disk violates it freely: a hand edit, a
+    partly restored backup. Each part is read on its own, and one of the wrong
+    shape is dropped with a WARNING rather than failing the setup that reads
+    it or a snapshot that judges by it later: `enabled` only as a boolean,
+    each override and the global settings only as an object, and in them only
+    an integer, boolean or string value under a string key, which is all a
+    setting holds. A dropped override leaves its point on the global settings.
+    """
+    if not isinstance(stored, dict):
+        return None
+    data = StoredMonitoring()
+    enabled = stored.get("enabled")
+    if isinstance(enabled, bool):
+        data["enabled"] = enabled
+    elif enabled is not None:
+        _warn_dropped(entry, "enabled", enabled)
+    for part in ("circuit_overrides", "mains_overrides"):
+        overrides = stored.get(part)
+        if overrides is None:
+            continue
+        if not isinstance(overrides, dict):
+            _warn_dropped(entry, part, overrides)
+            continue
+        kept: dict[str, MonitoringSettings] = {}
+        for point_id, override in overrides.items():
+            settings = _read_settings(override)
+            if isinstance(point_id, str) and settings is not None:
+                kept[point_id] = settings
+            else:
+                _warn_dropped(entry, f"{part}.{point_id}", override)
+        data[part] = kept
+    global_settings = stored.get("global")
+    if global_settings is not None:
+        settings = _read_settings(global_settings)
+        if settings is not None:
+            data["global"] = settings
+        else:
+            _warn_dropped(entry, "global", global_settings)
+    return data
+
+
+def _read_settings(value: object) -> MonitoringSettings | None:
+    """Read one override or the global settings: an object of setting values, or None.
+
+    A value of another type inside one is dropped alone, so the rest of the
+    override still applies; a setting holds only an integer, a boolean or a
+    string, and a boolean is an `int`.
+    """
+    if not isinstance(value, dict):
+        return None
+    return {
+        key: setting
+        for key, setting in value.items()
+        if isinstance(key, str) and isinstance(setting, (int, str))
+    }
+
+
+def _warn_dropped(entry: ConfigEntry, part: str, value: object) -> None:
+    """Log, at WARNING, a part of the monitoring store dropped for its shape."""
+    _LOGGER.warning(
+        "Ignoring %s in the monitoring settings of %s: found %s, which is not what is saved there",
+        part,
+        entry.entry_id,
+        type(value).__name__,
+    )
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move the stored circuit overrides from old circuit ids to new ones, on disk.
+
+    Run by the device-id migration before any monitor loads the store. A shared
+    meter's override is held under its first member, and its key moves to that
+    member's new id; the new ids keep the members' order, and should a group's
+    first member differ, `_fold_member_overrides` moves the override onto it at
+    the first snapshot, as it does for any member's. A value already under the
+    new id wins (`device_id_migration.rekeyed`). Every other part of the store
+    is written back as the monitor reads it (`_read_stored`). Written only when
+    something moved. Returns how many overrides moved.
+    """
+    store = _store_for(hass, entry)
+    data = _read_stored(await store.async_load(), entry)
+    if data is None:
+        return 0
+    rekeyed_overrides, moved = rekeyed(data.get("circuit_overrides", {}), mapping)
+    if moved:
+        data["circuit_overrides"] = rekeyed_overrides
+        await store.async_save(data)
+    return moved

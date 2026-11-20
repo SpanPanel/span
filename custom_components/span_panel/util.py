@@ -147,15 +147,14 @@ def pv_device_ref(identifier: str, panel_identifier: str) -> PvDeviceRef | None:
     Anchored on this panel's own prefix rather than tested as an infix, as
     `classify_sub_device_identifier` must be for kinds it cannot anchor: here
     the panel is known, so a charger whose node id contains `_pv_`, an adopted
-    device, or another panel's card cannot be mistaken for one of these.
+    device, or another panel's card cannot be mistaken for one of these. An
+    inverter's card is read by `inverter_key_of_device_identifier`, the
+    reading end of the one builder of its identifier.
     """
-    solar = f"{panel_identifier}_{SUB_DEVICE_PV}"
-    if identifier == solar:
+    if identifier == f"{panel_identifier}_{SUB_DEVICE_PV}":
         return PvDeviceRef(None)
-    key = identifier.removeprefix(f"{solar}_")
-    if key and key != identifier:
-        return PvDeviceRef(key)
-    return None
+    key = inverter_key_of_device_identifier(panel_identifier, identifier)
+    return PvDeviceRef(key) if key is not None else None
 
 
 def snapshot_to_device_info(
@@ -371,6 +370,37 @@ EMPTY_PV: Final = SpanPVSnapshot()
 """Stand-in for an inverter that has left the snapshot, as `EMPTY_EVSE` is for a charger."""
 
 
+def _pv_inverter_identifier_prefix(panel_identifier: str) -> str:
+    """Return what every inverter card's identifier on this panel starts with: `{panel serial}_pv_`."""
+    return f"{panel_identifier}_{SUB_DEVICE_PV}_"
+
+
+def pv_inverter_device_identifier(panel_identifier: str, inverter_key: str) -> str:
+    """Return the registry identifier of an inverter's own card: `{panel serial}_pv_{inverter key}`.
+
+    The one builder of it: the card's `DeviceInfo`, an extension that joins
+    the card (`extension.extension_device_identifier`) and the device-id
+    migration all ask here, and `inverter_key_of_device_identifier` reads it
+    back. Where `inverter_key` is the feeding circuit's id, the migration
+    builds this for the circuit's old id and its new one to re-key the card
+    in place.
+    """
+    return f"{_pv_inverter_identifier_prefix(panel_identifier)}{inverter_key}"
+
+
+def inverter_key_of_device_identifier(panel_identifier: str, identifier: str) -> str | None:
+    """Return the inverter key an inverter card's identifier carries on this panel, or None.
+
+    The reading end of `pv_inverter_device_identifier`, sharing its spelling.
+    It answers only for an identifier of exactly that form, with this panel's
+    identifier as given and a non-empty key, and returns the key whole.
+    """
+    prefix = _pv_inverter_identifier_prefix(panel_identifier)
+    if not identifier.startswith(prefix):
+        return None
+    return identifier[len(prefix) :] or None
+
+
 def pv_inverter_device_info(
     panel_identifier: str,
     inverter_key: str,
@@ -400,7 +430,7 @@ def pv_inverter_device_info(
     if display_suffix and display_suffix != label:
         name = f"{name} ({display_suffix})"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_PV}_{inverter_key}")},
+        identifiers={(DOMAIN, pv_inverter_device_identifier(panel_identifier, inverter_key))},
         name=name,
         manufacturer=pv.vendor_name or "Unknown",
         model=pv.model or "Solar Inverter",

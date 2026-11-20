@@ -1,0 +1,1131 @@
+{
+  "circuits": {
+    "00a83a811e6cc85aa17d188efdb3840a": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_00a83a811e6cc85aa17d188efdb3840a",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_4_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_4_consumed_energy",
+        "current": "sensor.span_panel_circuit_4_current",
+        "net_energy": "sensor.span_panel_circuit_4_net_energy",
+        "power": "sensor.span_panel_circuit_4_power",
+        "produced_energy": "sensor.span_panel_circuit_4_produced_energy",
+        "select": "select.span_panel_circuit_4_circuit_priority",
+        "switch": "switch.span_panel_circuit_4_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 4",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        6
+      ],
+      "voltage": 120
+    },
+    "032d7bdbfa381a805d7728ebbfefa785": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_id": "nt-9622-d9wa6_circuit_032d7bdbfa381a805d7728ebbfefa785",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_2_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_2_consumed_energy",
+        "current": "sensor.span_panel_circuit_2_current",
+        "net_energy": "sensor.span_panel_circuit_2_net_energy",
+        "power": "sensor.span_panel_circuit_2_power",
+        "produced_energy": "sensor.span_panel_circuit_2_produced_energy",
+        "select": "select.span_panel_circuit_2_circuit_priority",
+        "switch": "switch.span_panel_circuit_2_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 50.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 2",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        2,
+        4
+      ],
+      "voltage": 240
+    },
+    "06cee5432249bd55786f52ccb5ce8896": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_06cee5432249bd55786f52ccb5ce8896",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_22_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_22_consumed_energy",
+        "current": "sensor.span_panel_circuit_22_current",
+        "net_energy": "sensor.span_panel_circuit_22_net_energy",
+        "power": "sensor.span_panel_circuit_22_power",
+        "produced_energy": "sensor.span_panel_circuit_22_produced_energy",
+        "select": "select.span_panel_circuit_22_circuit_priority",
+        "switch": "switch.span_panel_circuit_22_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 22",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        29
+      ],
+      "voltage": 120
+    },
+    "0b19d9ada0e374b4d390e7177f6bcf52": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "nt-9622-d9wa6_circuit_0b19d9ada0e374b4d390e7177f6bcf52",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_25_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_25_consumed_energy",
+        "current": "sensor.span_panel_circuit_25_current",
+        "net_energy": "sensor.span_panel_circuit_25_net_energy",
+        "power": "sensor.span_panel_circuit_25_power",
+        "produced_energy": "sensor.span_panel_circuit_25_produced_energy",
+        "select": "select.span_panel_circuit_25_circuit_priority",
+        "switch": "switch.span_panel_circuit_25_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 25",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        32
+      ],
+      "voltage": 120
+    },
+    "1b0fc123f2e772403a50a1dd67a91342": {
+      "always_on": true,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_1b0fc123f2e772403a50a1dd67a91342",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_16_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_16_consumed_energy",
+        "current": "sensor.span_panel_circuit_16_current",
+        "net_energy": "sensor.span_panel_circuit_16_net_energy",
+        "power": "sensor.span_panel_circuit_16_power",
+        "produced_energy": "sensor.span_panel_circuit_16_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 16",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        23
+      ],
+      "voltage": 120
+    },
+    "3b6031f45584f7dcba15ce0ce4236467": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_3b6031f45584f7dcba15ce0ce4236467",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_14_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_14_consumed_energy",
+        "current": "sensor.span_panel_circuit_14_current",
+        "net_energy": "sensor.span_panel_circuit_14_net_energy",
+        "power": "sensor.span_panel_circuit_14_power",
+        "produced_energy": "sensor.span_panel_circuit_14_produced_energy",
+        "select": "select.span_panel_circuit_14_circuit_priority",
+        "switch": "switch.span_panel_circuit_14_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 14",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        21
+      ],
+      "voltage": 120
+    },
+    "3f284de3782f282b15663594abb3ecc6": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_id": "nt-9622-d9wa6_circuit_3f284de3782f282b15663594abb3ecc6",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_9_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_9_consumed_energy",
+        "current": "sensor.span_panel_circuit_9_current",
+        "net_energy": "sensor.span_panel_circuit_9_net_energy",
+        "power": "sensor.span_panel_circuit_9_power",
+        "produced_energy": "sensor.span_panel_circuit_9_produced_energy",
+        "select": "select.span_panel_circuit_9_circuit_priority",
+        "switch": "switch.span_panel_circuit_9_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 50.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 9",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13,
+        15
+      ],
+      "voltage": 240
+    },
+    "4e822045df563d484b44dd09bfbaa91e": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_4e822045df563d484b44dd09bfbaa91e",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_19_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_19_consumed_energy",
+        "current": "sensor.span_panel_circuit_19_current",
+        "net_energy": "sensor.span_panel_circuit_19_net_energy",
+        "power": "sensor.span_panel_circuit_19_power",
+        "produced_energy": "sensor.span_panel_circuit_19_produced_energy",
+        "select": "select.span_panel_circuit_19_circuit_priority",
+        "switch": "switch.span_panel_circuit_19_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 19",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        26
+      ],
+      "voltage": 120
+    },
+    "55e03b46051b230dc3405b0320cfb3c7": {
+      "always_on": false,
+      "breaker_rating_a": 40.0,
+      "device_id": "nt-9622-d9wa6_circuit_55e03b46051b230dc3405b0320cfb3c7",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_1_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_1_consumed_energy",
+        "current": "sensor.span_panel_circuit_1_current",
+        "net_energy": "sensor.span_panel_circuit_1_net_energy",
+        "power": "sensor.span_panel_circuit_1_power",
+        "produced_energy": "sensor.span_panel_circuit_1_produced_energy",
+        "select": "select.span_panel_circuit_1_circuit_priority",
+        "switch": "switch.span_panel_circuit_1_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 40.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 1",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        1,
+        3
+      ],
+      "voltage": 240
+    },
+    "57cfe7d2a854a7b2e817500d7dc768ec": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_57cfe7d2a854a7b2e817500d7dc768ec",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_12_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_12_consumed_energy",
+        "current": "sensor.span_panel_circuit_12_current",
+        "net_energy": "sensor.span_panel_circuit_12_net_energy",
+        "power": "sensor.span_panel_circuit_12_power",
+        "produced_energy": "sensor.span_panel_circuit_12_produced_energy",
+        "select": "select.span_panel_circuit_12_circuit_priority",
+        "switch": "switch.span_panel_circuit_12_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 12",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        19
+      ],
+      "voltage": 120
+    },
+    "58859e3997c3b0b03fd0a2faf4e98e17": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-9622-d9wa6_circuit_58859e3997c3b0b03fd0a2faf4e98e17",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_6_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_6_consumed_energy",
+        "current": "sensor.span_panel_circuit_6_current",
+        "net_energy": "sensor.span_panel_circuit_6_net_energy",
+        "power": "sensor.span_panel_circuit_6_power",
+        "produced_energy": "sensor.span_panel_circuit_6_produced_energy",
+        "select": "select.span_panel_circuit_6_circuit_priority",
+        "switch": "switch.span_panel_circuit_6_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 6",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9,
+        11
+      ],
+      "voltage": 240
+    },
+    "5c08fb0c6bbc4cbd03817bc6cf795899": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_5c08fb0c6bbc4cbd03817bc6cf795899",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_21_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_21_consumed_energy",
+        "current": "sensor.span_panel_circuit_21_current",
+        "net_energy": "sensor.span_panel_circuit_21_net_energy",
+        "power": "sensor.span_panel_circuit_21_power",
+        "produced_energy": "sensor.span_panel_circuit_21_produced_energy",
+        "select": "select.span_panel_circuit_21_circuit_priority",
+        "switch": "switch.span_panel_circuit_21_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 21",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        28
+      ],
+      "voltage": 120
+    },
+    "6d299387d00ffb189d7330c34fd3d452": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_6d299387d00ffb189d7330c34fd3d452",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_23_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_23_consumed_energy",
+        "current": "sensor.span_panel_circuit_23_current",
+        "net_energy": "sensor.span_panel_circuit_23_net_energy",
+        "power": "sensor.span_panel_circuit_23_power",
+        "produced_energy": "sensor.span_panel_circuit_23_produced_energy",
+        "select": "select.span_panel_circuit_23_circuit_priority",
+        "switch": "switch.span_panel_circuit_23_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 23",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        30
+      ],
+      "voltage": 120
+    },
+    "823c3f0a46b658d3fa3996d2b4541d7b": {
+      "always_on": true,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_823c3f0a46b658d3fa3996d2b4541d7b",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_5_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_5_consumed_energy",
+        "current": "sensor.span_panel_circuit_5_current",
+        "net_energy": "sensor.span_panel_circuit_5_net_energy",
+        "power": "sensor.span_panel_circuit_5_power",
+        "produced_energy": "sensor.span_panel_circuit_5_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 5",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        8
+      ],
+      "voltage": 120
+    },
+    "82e30b207a78d788afc5281d8d57cfc7": {
+      "always_on": false,
+      "breaker_rating_a": 70.0,
+      "device_id": "nt-9622-d9wa6_circuit_82e30b207a78d788afc5281d8d57cfc7",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_8_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_8_consumed_energy",
+        "current": "sensor.span_panel_circuit_8_current",
+        "net_energy": "sensor.span_panel_circuit_8_net_energy",
+        "power": "sensor.span_panel_circuit_8_power",
+        "produced_energy": "sensor.span_panel_circuit_8_produced_energy",
+        "select": "select.span_panel_circuit_8_circuit_priority",
+        "switch": "switch.span_panel_circuit_8_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 70.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 8",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        12,
+        14
+      ],
+      "voltage": 240
+    },
+    "86f6b4ccd3079d2527e89798c49a87c3": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_86f6b4ccd3079d2527e89798c49a87c3",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_13_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_13_consumed_energy",
+        "current": "sensor.span_panel_circuit_13_current",
+        "net_energy": "sensor.span_panel_circuit_13_net_energy",
+        "power": "sensor.span_panel_circuit_13_power",
+        "produced_energy": "sensor.span_panel_circuit_13_produced_energy",
+        "select": "select.span_panel_circuit_13_circuit_priority",
+        "switch": "switch.span_panel_circuit_13_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 13",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        20
+      ],
+      "voltage": 120
+    },
+    "9b42477ea229b1d251ed546c33b1e2f9": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_9b42477ea229b1d251ed546c33b1e2f9",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_7_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_7_consumed_energy",
+        "current": "sensor.span_panel_circuit_7_current",
+        "net_energy": "sensor.span_panel_circuit_7_net_energy",
+        "power": "sensor.span_panel_circuit_7_power",
+        "produced_energy": "sensor.span_panel_circuit_7_produced_energy",
+        "select": "select.span_panel_circuit_7_circuit_priority",
+        "switch": "switch.span_panel_circuit_7_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 7",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10
+      ],
+      "voltage": 120
+    },
+    "aea7d087cf568c52aa9042f4d7bf8efd": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "nt-9622-d9wa6_circuit_aea7d087cf568c52aa9042f4d7bf8efd",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_18_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_18_consumed_energy",
+        "current": "sensor.span_panel_circuit_18_current",
+        "net_energy": "sensor.span_panel_circuit_18_net_energy",
+        "power": "sensor.span_panel_circuit_18_power",
+        "produced_energy": "sensor.span_panel_circuit_18_produced_energy",
+        "select": "select.span_panel_circuit_18_circuit_priority",
+        "switch": "switch.span_panel_circuit_18_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 18",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        25
+      ],
+      "voltage": 120
+    },
+    "aedf9e74390600b34bd42cdb5def5c06": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_aedf9e74390600b34bd42cdb5def5c06",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_20_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_20_consumed_energy",
+        "current": "sensor.span_panel_circuit_20_current",
+        "net_energy": "sensor.span_panel_circuit_20_net_energy",
+        "power": "sensor.span_panel_circuit_20_power",
+        "produced_energy": "sensor.span_panel_circuit_20_produced_energy",
+        "select": "select.span_panel_circuit_20_circuit_priority",
+        "switch": "switch.span_panel_circuit_20_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 20",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        27
+      ],
+      "voltage": 120
+    },
+    "c3d9b9c7e6320276f9ff6c5529e27dd8": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "nt-9622-d9wa6_circuit_c3d9b9c7e6320276f9ff6c5529e27dd8",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_11_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_11_consumed_energy",
+        "current": "sensor.span_panel_circuit_11_current",
+        "net_energy": "sensor.span_panel_circuit_11_net_energy",
+        "power": "sensor.span_panel_circuit_11_power",
+        "produced_energy": "sensor.span_panel_circuit_11_produced_energy",
+        "select": "select.span_panel_circuit_11_circuit_priority",
+        "switch": "switch.span_panel_circuit_11_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 11",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17
+      ],
+      "voltage": 120
+    },
+    "c9da62d617e2857e314daaf03e04d2ff": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_c9da62d617e2857e314daaf03e04d2ff",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_15_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_15_consumed_energy",
+        "current": "sensor.span_panel_circuit_15_current",
+        "net_energy": "sensor.span_panel_circuit_15_net_energy",
+        "power": "sensor.span_panel_circuit_15_power",
+        "produced_energy": "sensor.span_panel_circuit_15_produced_energy",
+        "select": "select.span_panel_circuit_15_circuit_priority",
+        "switch": "switch.span_panel_circuit_15_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 15",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22
+      ],
+      "voltage": 120
+    },
+    "d016864aa8b237dbe188b71d91909d49": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_id": "nt-9622-d9wa6_circuit_d016864aa8b237dbe188b71d91909d49",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_10_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_10_consumed_energy",
+        "current": "sensor.span_panel_circuit_10_current",
+        "net_energy": "sensor.span_panel_circuit_10_net_energy",
+        "power": "sensor.span_panel_circuit_10_power",
+        "produced_energy": "sensor.span_panel_circuit_10_produced_energy",
+        "select": "select.span_panel_circuit_10_circuit_priority",
+        "switch": "switch.span_panel_circuit_10_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 60.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 10",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        16,
+        18
+      ],
+      "voltage": 240
+    },
+    "dd6704a4b735d36c01eb7ba79f4e7a0e": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_dd6704a4b735d36c01eb7ba79f4e7a0e",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_24_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_24_consumed_energy",
+        "current": "sensor.span_panel_circuit_24_current",
+        "net_energy": "sensor.span_panel_circuit_24_net_energy",
+        "power": "sensor.span_panel_circuit_24_power",
+        "produced_energy": "sensor.span_panel_circuit_24_produced_energy",
+        "select": "select.span_panel_circuit_24_circuit_priority",
+        "switch": "switch.span_panel_circuit_24_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 24",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        31
+      ],
+      "voltage": 120
+    },
+    "eff88cce483df576101417f59502d6a9": {
+      "always_on": false,
+      "breaker_rating_a": 90.0,
+      "device_id": "nt-9622-d9wa6_circuit_eff88cce483df576101417f59502d6a9",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_3_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_3_consumed_energy",
+        "current": "sensor.span_panel_circuit_3_current",
+        "net_energy": "sensor.span_panel_circuit_3_net_energy",
+        "power": "sensor.span_panel_circuit_3_power",
+        "produced_energy": "sensor.span_panel_circuit_3_produced_energy",
+        "select": "select.span_panel_circuit_3_circuit_priority",
+        "switch": "switch.span_panel_circuit_3_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 90.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 3",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        5,
+        7
+      ],
+      "voltage": 240
+    },
+    "f423243b27b5dbabf3bbffbdad92c43f": {
+      "always_on": false,
+      "breaker_rating_a": 20.0,
+      "device_id": "nt-9622-d9wa6_circuit_f423243b27b5dbabf3bbffbdad92c43f",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_circuit_17_breaker_rating",
+        "consumed_energy": "sensor.span_panel_circuit_17_consumed_energy",
+        "current": "sensor.span_panel_circuit_17_current",
+        "net_energy": "sensor.span_panel_circuit_17_net_energy",
+        "power": "sensor.span_panel_circuit_17_power",
+        "produced_energy": "sensor.span_panel_circuit_17_produced_energy",
+        "select": "select.span_panel_circuit_17_circuit_priority",
+        "switch": "switch.span_panel_circuit_17_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 20.0,
+      "monitoring_rating_user_set": false,
+      "name": "Circuit 17",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        24
+      ],
+      "voltage": 120
+    }
+  },
+  "config_entry_id": "entry-main32_r202639-upstream-pv",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
+  "device_id": "nt-9622-d9wa6",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202639/03",
+  "first_position": 1,
+  "last_position": 32,
+  "monitoring_rating_offered": true,
+  "panel_device_id": "nt-9622-d9wa6",
+  "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 32,
+  "serial": "nt-9622-d9wa6",
+  "shared_meter_groups": {},
+  "sub_devices": {
+    "nt-9622-d9wa6_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_nt-9622-d9wa6_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_nt-9622-d9wa6_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_nt-9622-d9wa6_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_nt-9622-d9wa6_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_nt-9622-d9wa6_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_nt-9622-d9wa6_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_nt-9622-d9wa6_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_nt-9622-d9wa6_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_nt-9622-d9wa6_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_nt-9622-d9wa6_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_nt-9622-d9wa6_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_nt-9622-d9wa6_bess_vendor"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Powerwall 2 AC",
+      "name": "Span Panel Battery",
+      "serial_number": "gf72448024117x",
+      "sw_version": "26.34.0 7d707328",
+      "type": "bess"
+    },
+    "nt-9622-d9wa6_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_nt-9622-d9wa6_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "gf66287929773q-qxg",
+      "sw_version": null,
+      "type": "mid"
+    },
+    "nt-9622-d9wa6_pv": {
+      "entities": {
+        "sensor.span_panel_solar_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_nt-9622-d9wa6_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_pv_power": {
+          "domain": "sensor",
+          "original_name": "PV Power",
+          "unique_id": "span_nt-9622-d9wa6_pv_power"
+        },
+        "sensor.span_panel_solar_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_nt-9622-d9wa6_pv_product"
+        },
+        "sensor.span_panel_solar_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_nt-9622-d9wa6_pv_vendor"
+        }
+      },
+      "manufacturer": "SolarEdge",
+      "model": "SE7600H-US",
+      "name": "Span Panel Solar",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": null,
+        "model": "SE7600H-US",
+        "power_entity_id": null,
+        "role": "site",
+        "site_power_entity_id": "sensor.span_panel_solar_pv_power",
+        "vendor": "SolarEdge"
+      },
+      "sw_version": null,
+      "type": "pv"
+    },
+    "nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-2d01681c0c1ec0d7e760602b33c3bd8c": {
+      "entities": {
+        "sensor.span_panel_solar_inverter_1_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-2d01681c0c1ec0d7e760602b33c3bd8c_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_inverter_1_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-2d01681c0c1ec0d7e760602b33c3bd8c_pv_product"
+        },
+        "sensor.span_panel_solar_inverter_1_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-2d01681c0c1ec0d7e760602b33c3bd8c_pv_vendor"
+        }
+      },
+      "manufacturer": "SolarEdge",
+      "model": "SE7600H-US",
+      "name": "Span Panel Solar Inverter (1)",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": null,
+        "model": "SE7600H-US",
+        "power_entity_id": null,
+        "role": "inverter",
+        "site_power_entity_id": null,
+        "vendor": "SolarEdge"
+      },
+      "sw_version": null,
+      "type": "pv"
+    },
+    "nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-e45a9179a3c0ee10065f56c82c760c08": {
+      "entities": {
+        "sensor.span_panel_solar_inverter_2_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-e45a9179a3c0ee10065f56c82c760c08_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_inverter_2_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-e45a9179a3c0ee10065f56c82c760c08_pv_product"
+        },
+        "sensor.span_panel_solar_inverter_2_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_nt-9622-d9wa6_pv_nt-9622-d9wa6-se7600h-us-e45a9179a3c0ee10065f56c82c760c08_pv_vendor"
+        }
+      },
+      "manufacturer": "SolarEdge",
+      "model": "SE7600H-US",
+      "name": "Span Panel Solar Inverter (2)",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": null,
+        "model": "SE7600H-US",
+        "power_entity_id": null,
+        "role": "inverter",
+        "site_power_entity_id": null,
+        "vendor": "SolarEdge"
+      },
+      "sw_version": null,
+      "type": "pv"
+    }
+  }
+}

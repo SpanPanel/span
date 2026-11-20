@@ -6,12 +6,14 @@ persistence.  Mirrors the CurrentMonitor storage pattern.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.helpers.storage import Store
 
 from .const import DEFAULT_GRAPH_HORIZON, VALID_GRAPH_HORIZONS
+from .device_id_migration import rekeyed
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -21,6 +23,19 @@ _LOGGER = logging.getLogger(__name__)
 
 _STORAGE_VERSION = 1
 _STORAGE_KEY_PREFIX = "span_panel_graph_horizon"
+
+
+class StoredGraphHorizons(TypedDict):
+    """One panel's graph horizons, as `GraphHorizonManager` saves them.
+
+    Circuit horizons are keyed by circuit id, sub-device horizons by device
+    registry id. A compile-time claim only; `_read_stored` is what the disk is
+    held to.
+    """
+
+    global_horizon: str
+    circuit_overrides: dict[str, str]
+    subdevice_overrides: dict[str, str]
 
 
 class GraphHorizonManager:
@@ -33,11 +48,7 @@ class GraphHorizonManager:
         self._global_horizon: str = DEFAULT_GRAPH_HORIZON
         self._circuit_overrides: dict[str, str] = {}
         self._subdevice_overrides: dict[str, str] = {}
-        self._store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
+        self._store = _store_for(hass, entry)
 
     def get_global_horizon(self) -> str:
         """Return the current global default horizon."""
@@ -113,32 +124,84 @@ class GraphHorizonManager:
 
     async def async_load(self) -> None:
         """Load settings from HA Storage."""
-        data = await self._store.async_load()
+        data = _read_stored(await self._store.async_load())
         if data is None:
             return
-        stored_horizon = data.get("global_horizon", DEFAULT_GRAPH_HORIZON)
-        if stored_horizon in VALID_GRAPH_HORIZONS:
-            self._global_horizon = stored_horizon
-        self._circuit_overrides = {
-            cid: h
-            for cid, h in data.get("circuit_overrides", {}).items()
-            if h in VALID_GRAPH_HORIZONS
-        }
-        self._subdevice_overrides = {
-            sid: h
-            for sid, h in data.get("subdevice_overrides", {}).items()
-            if h in VALID_GRAPH_HORIZONS
-        }
+        self._global_horizon = data["global_horizon"]
+        self._circuit_overrides = data["circuit_overrides"]
+        self._subdevice_overrides = data["subdevice_overrides"]
 
     async def async_save(self) -> None:
         """Persist settings to HA Storage."""
         await self._store.async_save(
-            {
-                "global_horizon": self._global_horizon,
-                "circuit_overrides": self._circuit_overrides,
-                "subdevice_overrides": self._subdevice_overrides,
-            }
+            StoredGraphHorizons(
+                global_horizon=self._global_horizon,
+                circuit_overrides=self._circuit_overrides,
+                subdevice_overrides=self._subdevice_overrides,
+            )
         )
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredGraphHorizons]:
+    """Return the store holding one panel's graph horizons."""
+    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+def _read_stored(stored: object) -> StoredGraphHorizons | None:
+    """Read the graph horizons off disk, keeping only valid horizons; None for nothing to read.
+
+    The one reader of the store, for the manager's load and the device-id
+    re-key alike. None for nothing stored, or anything but an object. A global
+    horizon that is not a valid preset reads as the default, and an override
+    that is not one, or is not keyed by a string, is dropped: the chart then
+    uses the global horizon, as it would had the override never been set.
+    """
+    if not isinstance(stored, dict):
+        return None
+    global_horizon = stored.get("global_horizon")
+    return StoredGraphHorizons(
+        global_horizon=(
+            global_horizon
+            if isinstance(global_horizon, str) and global_horizon in VALID_GRAPH_HORIZONS
+            else DEFAULT_GRAPH_HORIZON
+        ),
+        circuit_overrides=_read_horizons(stored.get("circuit_overrides")),
+        subdevice_overrides=_read_horizons(stored.get("subdevice_overrides")),
+    )
+
+
+def _read_horizons(value: object) -> dict[str, str]:
+    """Read one map of overrides: each valid horizon under a string key."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: horizon
+        for key, horizon in value.items()
+        if isinstance(key, str) and isinstance(horizon, str) and horizon in VALID_GRAPH_HORIZONS
+    }
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move the stored circuit horizons from old circuit ids to new ones, on disk.
+
+    Run by the device-id migration before the manager loads the store. The
+    sub-device horizons are keyed by device registry id, which the migration
+    keeps, so they stay as they are. A value already under the new id wins
+    (`device_id_migration.rekeyed`); every other part of the store is written
+    back as the manager reads it (`_read_stored`). Written only when something
+    moved. Returns how many horizons moved.
+    """
+    store = _store_for(hass, entry)
+    data = _read_stored(await store.async_load())
+    if data is None:
+        return 0
+    rekeyed_overrides, moved = rekeyed(data["circuit_overrides"], mapping)
+    if moved:
+        data["circuit_overrides"] = rekeyed_overrides
+        await store.async_save(data)
+    return moved
 
 
 def _validate_horizon(horizon: str) -> None:

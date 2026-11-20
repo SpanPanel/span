@@ -8,11 +8,16 @@ The schema-adapter payload the conformance tests replay is **not** here. It is p
 moves it.
 
 Nor are the captured panels. They are the reference captures `ebus-panel-sim` ships as package data, read by `tests/captures_replay.py` through
-`ebus_panel_sim.load_reference_capture` under their handles; the test-only pin in `pyproject.toml`'s `dev` group says which release the suite replays.
+`ebus_panel_sim.load_reference_capture` under their handles; the test-only pin in `pyproject.toml`'s `dev` group and `requirements_test.txt` says which release
+the suite replays. From 0.11.0 the set includes the r202645 captures, whose circuits and remote CTs carry the device ids that firmware gives them.
 
 What each captured panel produces is recorded here, per stem (a capture's handle, or a variant derived from it in-test): `expected_entities/` and `topology/`,
 written by `tests/test_expected_entities.py` under `--update-capture-fixtures` and compared otherwise, and `unread_declarations/`, the hand-kept baselines of
 `tests/test_declared_but_unread.py` (one per tree, the adapter's reference payload included as `parent_child_tree.json`).
+
+One stem records an install rather than a capture: `r202639-e-updated-to-r202645-e` is the `r202639-e` install set up again after its panel took firmware
+r202645, which gave its circuits new device ids. It equals the `r202645-e` record except the two Downstream Current rows the updated install keeps, and
+`tests/test_expected_entities.py` holds the two to that.
 
 ## The historical pyproject copies
 

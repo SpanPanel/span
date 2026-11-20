@@ -1,0 +1,325 @@
+{
+  "circuits": {
+    "xg-3940-9ooto-aaf398cca6c6167a-1-16-1": {
+      "always_on": false,
+      "breaker_rating_a": 50.0,
+      "device_id": "xg-3940-9ooto_circuit_xg-3940-9ooto-aaf398cca6c6167a-1-16-1",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_spare_consumed_energy",
+        "current": "sensor.span_panel_spare_current",
+        "net_energy": "sensor.span_panel_spare_net_energy",
+        "power": "sensor.span_panel_spare_power",
+        "produced_energy": "sensor.span_panel_spare_produced_energy",
+        "select": "select.span_panel_spare_circuit_priority",
+        "switch": "switch.span_panel_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 50.0,
+      "monitoring_rating_user_set": false,
+      "name": "Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        9,
+        11
+      ],
+      "voltage": 240.0
+    },
+    "xg-3940-9ooto-aaf398cca6c6167a-1-16-2": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "xg-3940-9ooto_circuit_xg-3940-9ooto-aaf398cca6c6167a-1-16-2",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bedroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bedroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_bedroom_outlets_current",
+        "net_energy": "sensor.span_panel_bedroom_outlets_net_energy",
+        "power": "sensor.span_panel_bedroom_outlets_power",
+        "produced_energy": "sensor.span_panel_bedroom_outlets_produced_energy",
+        "select": "select.span_panel_bedroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_bedroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Bedroom / Outlets",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        12
+      ],
+      "voltage": 120.0
+    },
+    "xg-3940-9ooto-aaf398cca6c6167a-1-16-3": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "xg-3940-9ooto_circuit_xg-3940-9ooto-aaf398cca6c6167a-1-16-3",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_bathroom_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_bathroom_outlets_consumed_energy",
+        "current": "sensor.span_panel_bathroom_outlets_current",
+        "net_energy": "sensor.span_panel_bathroom_outlets_net_energy",
+        "power": "sensor.span_panel_bathroom_outlets_power",
+        "produced_energy": "sensor.span_panel_bathroom_outlets_produced_energy",
+        "select": "select.span_panel_bathroom_outlets_circuit_priority",
+        "switch": "switch.span_panel_bathroom_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Bathroom / Outlets",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14
+      ],
+      "voltage": 120.0
+    },
+    "xg-3940-9ooto-aaf398cca6c6167a-1-16-4": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "xg-3940-9ooto_circuit_xg-3940-9ooto-aaf398cca6c6167a-1-16-4",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_kitchen_outlets_breaker_rating",
+        "consumed_energy": "sensor.span_panel_kitchen_outlets_consumed_energy",
+        "current": "sensor.span_panel_kitchen_outlets_current",
+        "net_energy": "sensor.span_panel_kitchen_outlets_net_energy",
+        "power": "sensor.span_panel_kitchen_outlets_power",
+        "produced_energy": "sensor.span_panel_kitchen_outlets_produced_energy",
+        "select": "select.span_panel_kitchen_outlets_circuit_priority",
+        "switch": "switch.span_panel_kitchen_outlets_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Kitchen / Outlets",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        16
+      ],
+      "voltage": 120.0
+    },
+    "xg-3940-9ooto-aaf398cca6c6167a-1-16-5": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_id": null,
+      "device_type": "evse",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ev_charger_span_drive_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ev_charger_span_drive_consumed_energy",
+        "current": "sensor.span_panel_ev_charger_span_drive_current",
+        "net_energy": "sensor.span_panel_ev_charger_span_drive_net_energy",
+        "power": "sensor.span_panel_ev_charger_span_drive_power",
+        "produced_energy": "sensor.span_panel_ev_charger_span_drive_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 60.0,
+      "monitoring_rating_user_set": false,
+      "name": "SPAN Drive",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        13,
+        15
+      ],
+      "voltage": 240.0
+    },
+    "xg-3940-9ooto-aaf398cca6c6167a-1-42-3": {
+      "always_on": null,
+      "breaker_rating_a": null,
+      "device_id": "xg-3940-9ooto_circuit_xg-3940-9ooto-aaf398cca6c6167a-1-42-3",
+      "device_type": "circuit",
+      "entities": {
+        "consumed_energy": "sensor.span_panel_remote_ct_3_consumed_energy",
+        "current": "sensor.span_panel_remote_ct_3_current",
+        "net_energy": "sensor.span_panel_remote_ct_3_net_energy",
+        "power": "sensor.span_panel_remote_ct_3_power",
+        "produced_energy": "sensor.span_panel_remote_ct_3_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": null,
+      "is_user_controllable": false,
+      "monitoring_rating_a": null,
+      "monitoring_rating_user_set": false,
+      "name": "Remote CT 3",
+      "outside_panel": true,
+      "package_ratings_a": null,
+      "package_ratings_form": null,
+      "package_ratings_state": null,
+      "priority": "UNKNOWN",
+      "priority_target": null,
+      "relay_state": "UNKNOWN",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [],
+      "voltage": null
+    }
+  },
+  "config_entry_id": "entry-r202645-a",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
+  "device_id": "xg-3940-9ooto",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202645/02",
+  "first_position": 9,
+  "last_position": 16,
+  "monitoring_rating_offered": false,
+  "panel_device_id": "xg-3940-9ooto",
+  "panel_entities": {
+    "current_power": "sensor.span_panel_current_power",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 0,
+  "serial": "xg-3940-9ooto",
+  "shared_meter_groups": {},
+  "sub_devices": {
+    "xg-3940-9ooto_evse_dt-3549-d9e9m": {
+      "entities": {
+        "binary_sensor.span_panel_ev_charger_span_drive_charging": {
+          "domain": "binary_sensor",
+          "original_name": "Charging",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_charging"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_ev_connected": {
+          "domain": "binary_sensor",
+          "original_name": "EV Connected",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_ev_connected"
+        },
+        "binary_sensor.span_panel_ev_charger_span_drive_evse_panel_link": {
+          "domain": "binary_sensor",
+          "original_name": "EVSE Panel Link",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_panel_link"
+        },
+        "lock.span_panel_ev_charger_span_drive_evse_lock": {
+          "domain": "lock",
+          "original_name": "EVSE Lock",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_lock"
+        },
+        "number.span_panel_ev_charger_span_drive_evse_charge_current_limit": {
+          "domain": "number",
+          "original_name": "EVSE Charge Current Limit",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_charge_current_limit"
+        },
+        "sensor.span_panel_ev_charger_span_drive_breaker_rating": {
+          "domain": "sensor",
+          "original_name": "Breaker Rating",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_breaker_rating"
+        },
+        "sensor.span_panel_ev_charger_span_drive_charger_status": {
+          "domain": "sensor",
+          "original_name": "Charger Status",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_status"
+        },
+        "sensor.span_panel_ev_charger_span_drive_consumed_energy": {
+          "domain": "sensor",
+          "original_name": "Consumed Energy",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_energy_consumed"
+        },
+        "sensor.span_panel_ev_charger_span_drive_current": {
+          "domain": "sensor",
+          "original_name": "Current",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_current"
+        },
+        "sensor.span_panel_ev_charger_span_drive_lock_state": {
+          "domain": "sensor",
+          "original_name": "Lock State",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_lock_state"
+        },
+        "sensor.span_panel_ev_charger_span_drive_net_energy": {
+          "domain": "sensor",
+          "original_name": "Net Energy",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_energy_net"
+        },
+        "sensor.span_panel_ev_charger_span_drive_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_xg-3940-9ooto_evse_dt-3549-d9e9m_evse_part_number"
+        },
+        "sensor.span_panel_ev_charger_span_drive_power": {
+          "domain": "sensor",
+          "original_name": "Power",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_power"
+        },
+        "sensor.span_panel_ev_charger_span_drive_produced_energy": {
+          "domain": "sensor",
+          "original_name": "Produced Energy",
+          "unique_id": "span_xg-3940-9ooto_xg-3940-9ooto-aaf398cca6c6167a-1-16-5_energy_produced"
+        }
+      },
+      "manufacturer": "SPAN",
+      "model": "SPAN Drive",
+      "name": "Span Panel EV Charger (SPAN Drive)",
+      "serial_number": "dt-3549-d9e9m",
+      "sw_version": "001.001.006.76f735f.ecf24fe3.0c03f042.A",
+      "type": "evse"
+    }
+  }
+}

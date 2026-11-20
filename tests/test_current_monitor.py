@@ -496,6 +496,16 @@ def _registry_holding(
         yield
 
 
+_SERVICE = "span_panel.set_circuit_threshold"
+
+
+def _panel_of(*circuit_ids: str) -> SpanPanelSnapshot:
+    """Return a panel holding these circuits and nothing else of note."""
+    return SpanPanelSnapshotFactory.create(
+        circuits={cid: SpanCircuitSnapshotFactory.create(circuit_id=cid) for cid in circuit_ids}
+    )
+
+
 class TestCircuitEntityResolution:
     """A threshold set through a circuit's entity lands on the circuit the panel names."""
 
@@ -517,7 +527,7 @@ class TestCircuitEntityResolution:
 
         with _registry_holding("span_nt-0000-test1_c-12_current"):
             circuit_id = monitor.resolve_entity_to_circuit_id(
-                "sensor.c_12_current", snapshot.circuits.keys()
+                "sensor.c_12_current", snapshot, service=_SERVICE
             )
         assert circuit_id == "c-12"
 
@@ -533,7 +543,12 @@ class TestCircuitEntityResolution:
         monitor = _make_monitor(hass)
 
         with _registry_holding("span_nt-0000-test1_b-7_power"):
-            assert monitor.resolve_entity_to_circuit_id("sensor.b_7_power", {"b-7"}) == "b-7"
+            assert (
+                monitor.resolve_entity_to_circuit_id(
+                    "sensor.b_7_power", _panel_of("b-7"), service=_SERVICE
+                )
+                == "b-7"
+            )
 
     def test_with_no_known_ids_the_input_is_taken_as_a_circuit_id(self):
         """Nothing is guessed from the shape of the unique id."""
@@ -541,9 +556,9 @@ class TestCircuitEntityResolution:
         monitor = _make_monitor(hass)
 
         with _registry_holding("span_nt-0000-test1_0123456789abcdef0123456789abcdef_power"):
-            assert monitor.resolve_entity_to_circuit_id("sensor.kitchen_power", ()) == (
-                "sensor.kitchen_power"
-            )
+            assert monitor.resolve_entity_to_circuit_id(
+                "sensor.kitchen_power", _panel_of(), service=_SERVICE
+            ) == "sensor.kitchen_power"
 
     def test_a_departed_circuit_with_an_override_still_resolves(self):
         """An orphaned entity reaches the override stored for its circuit, so it can be cleared."""
@@ -552,7 +567,9 @@ class TestCircuitEntityResolution:
         monitor.set_circuit_override("b-7", {SPIKE_THRESHOLD_PCT: 90})
 
         with _registry_holding("span_nt-0000-test1_b-7_power"):
-            circuit_id = monitor.resolve_entity_to_circuit_id("sensor.b_7_power", {"c-1"})
+            circuit_id = monitor.resolve_entity_to_circuit_id(
+                "sensor.b_7_power", _panel_of("c-1"), service=_SERVICE
+            )
         assert circuit_id == "b-7"
 
         monitor.clear_circuit_override(circuit_id)
@@ -570,9 +587,9 @@ class TestCircuitEntityResolution:
         with patch(
             "custom_components.span_panel.current_monitor.er.async_get", return_value=registry
         ):
-            assert monitor.resolve_entity_to_circuit_id("sensor.some_template", {"c-1"}) == (
-                "sensor.some_template"
-            )
+            assert monitor.resolve_entity_to_circuit_id(
+                "sensor.some_template", _panel_of("c-1"), service=_SERVICE
+            ) == "sensor.some_template"
 
 
 def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:

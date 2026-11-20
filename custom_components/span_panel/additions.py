@@ -27,6 +27,7 @@ place.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
@@ -220,6 +221,42 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
     )
     await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(announced | registered)))
     _LOGGER.debug("Announced %d new entities for %s", len(added), entry.entry_id)
+
+
+async def async_rekey_unique_ids(
+    hass: HomeAssistant, entry: ConfigEntry, new_unique_id: Callable[[str], str | None]
+) -> int:
+    """Record each announced entity the device-id migration re-keyed under its new unique id.
+
+    `new_unique_id` answers, for a unique id built for a circuit's old id,
+    the one built for its new id, and None for any other. An announced id is
+    replaced where this entry's registry holds its new id: the entity is the
+    one already announced, so the next announcement must not name it.
+
+    Read from the registry as it stands, not from what this setup moved, so a
+    setup that stopped after re-keying the registry and before this leaves
+    nothing for the next to announce. An entity that comes back under a new
+    id without a row to carry it over has no row there yet, and is still
+    announced as new. Set semantics: an older release that announced the new
+    id already loses nothing. Written only when something moved, and never
+    where there is no readable record: the next announcement seeds one from
+    the registry, which holds the new ids. Returns how many ids moved.
+    """
+    store = _store(hass, entry)
+    announced = _load(await store.async_load(), entry)
+    if announced is None:
+        return 0
+    registered = _registered(hass, entry)
+    moved = {
+        unique_id: current
+        for unique_id in announced
+        if (current := new_unique_id(unique_id)) is not None and current in registered
+    }
+    if not moved:
+        return 0
+    rekeyed = (announced - moved.keys()) | set(moved.values())
+    await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(rekeyed)))
+    return len(moved)
 
 
 def _entries(hass: HomeAssistant, entry: ConfigEntry) -> list[er.RegistryEntry]:

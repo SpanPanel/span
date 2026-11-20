@@ -13,7 +13,8 @@ pin is what moves it.
 
 `ReplayClient` replaces `SpanMqttClient` whole with such a replay, so a test can
 run the integration's real setup -- coordinator, platforms, registries -- over a
-static tree: nothing reconnects, goes offline, changes schema or streams.
+static tree: nothing reconnects, goes offline or changes schema, and a snapshot
+streams only when a test pushes one.
 """
 
 from __future__ import annotations
@@ -59,13 +60,35 @@ class Capture:
         return retained_tree(_published_tree(self.name))
 
 
-MAIN32_CAPTURES: Final = (Capture("main32_r202633"), Capture("main32_r202639"))
-"""The MAIN 32 captures, whose expected files are the record no change may move."""
+MAIN32_CAPTURES: Final = tuple(
+    Capture(name)
+    for name in (
+        "main32_r202633",
+        "main32_r202639",
+        "main32_r202639-upstream-pv",
+        "main32_r202645",
+        "main32_r202645-cascade",
+    )
+)
+"""The MAIN 32 captures, whose expected files are the record no change may move.
+
+`main32_r202645` is `main32_r202639`'s panel on firmware r202645, its device ids
+unchanged; `main32_r202645-cascade` is another panel. `main32_r202639-upstream-pv`
+has two inverters no circuit feeds.
+"""
 
 R202639_CAPTURES: Final = tuple(Capture(f"r202639-{handle}") for handle in "abcde")
 """The r202639 reference captures, by their opaque handles."""
 
-CAPTURES: Final = (*MAIN32_CAPTURES, *R202639_CAPTURES)
+R202645_CAPTURES: Final = tuple(Capture(f"r202645-{handle}") for handle in "aceg")
+"""The r202645 reference captures, whose circuits and remote CTs carry the new device ids.
+
+`r202645-a` and `r202645-e` are `r202639-a` and `r202639-e` after the update.
+`r202645-c` is `r202639-c`'s panel recommissioned between the two, so its
+circuits pair by trait instance only. `r202645-g` has no r202639 capture.
+"""
+
+CAPTURES: Final = (*MAIN32_CAPTURES, *R202639_CAPTURES, *R202645_CAPTURES)
 """The captures every replay runs over, by handle; each has its expected files on record."""
 
 
@@ -184,6 +207,113 @@ def without_topics(tree: RetainedTree, device_id: str, *topics: str) -> Retained
     }
 
 
+def renamed_devices(tree: RetainedTree, renames: Mapping[str, str]) -> RetainedTree:
+    """Return the tree as a panel that calls these devices by other ids publishes it.
+
+    Each renamed device keeps every topic under its new id, and every reference
+    to it the tree publishes follows: a parent's `$description.children` entry,
+    a description's `parent` and `root`, its own `name` where that spelled its
+    id, every `*-device-id` value and every element of a `*-device-ids` list.
+    Nothing else changes. That is what a firmware update that re-ids a panel's
+    circuits publishes, so one release's capture becomes the same panel under
+    another's ids -- a tree no capture has, derived rather than vendored.
+    """
+    for device_id in renames:
+        assert device_id in tree, f"{device_id!r} is not in the capture; nothing to rename"
+
+    def renamed(device_id: str) -> str:
+        return renames.get(device_id, device_id)
+
+    result: RetainedTree = {}
+    for device_id, topics in tree.items():
+        parsed = dict(description(tree, device_id))
+        children = parsed.get("children")
+        if isinstance(children, list):
+            parsed["children"] = [
+                renamed(child) if isinstance(child, str) else child for child in children
+            ]
+        for field in ("parent", "root"):
+            value = parsed.get(field)
+            if isinstance(value, str):
+                parsed[field] = renamed(value)
+        if parsed.get("name") == device_id:
+            parsed["name"] = renamed(device_id)
+        moved = {"$description": json.dumps(parsed)}
+        for topic, payload in topics.items():
+            if topic == "$description":
+                continue
+            if topic.endswith("-device-id"):
+                payload = renamed(payload)
+            elif topic.endswith("-device-ids"):
+                payload = ",".join(renamed(part.strip()) for part in payload.split(","))
+            moved[topic] = payload
+        result[renamed(device_id)] = moved
+    return result
+
+
+def with_serial(tree: RetainedTree, serial: str) -> RetainedTree:
+    """Return the tree as the same panel publishes it under another serial.
+
+    The enclosure's device id is its serial, and r202645 builds its circuits'
+    ids on it, so the root and every device whose id it begins are renamed
+    (`renamed_devices`, which carries every reference along) and the panel's
+    `info/serial-number` follows. For a case no capture has, such as a serial
+    with upper-case letters, which some unique-id builders lower-case and
+    others keep.
+    """
+    root = panel_device_id(tree)
+    renamed = renamed_devices(
+        tree,
+        {
+            device_id: serial + device_id.removeprefix(root)
+            for device_id in tree
+            if device_id == root or device_id.startswith(f"{root}-")
+        },
+    )
+    renamed[serial]["info/serial-number"] = serial
+    return renamed
+
+
+CONNECTION_POINT: Final = "connection-point"
+"""Whether the enclosure hosts a circuit or only measures it, which r202645 circuits declare."""
+
+_CONNECTION_POINT_DECLARATION: Final[Mapping[str, str]] = {
+    "datatype": "enum",
+    "format": "BRANCH,MONITORED",
+    "name": "Whether the enclosure hosts this circuit or only measures it",
+}
+"""The declaration, as the r202645 reference captures spell it."""
+
+
+def with_connection_point(tree: RetainedTree, points: Mapping[str, str]) -> RetainedTree:
+    """Return the tree with these devices declaring and publishing `connection/connection-point`.
+
+    `points` maps a device to its value: `BRANCH` for a circuit the enclosure
+    hosts, `MONITORED` for one it only measures. A device with no `connection`
+    node gets one holding this property alone.
+    """
+    result = {device_id: dict(topics) for device_id, topics in tree.items()}
+    for device_id, point in points.items():
+        parsed = dict(description(result, device_id))
+        nodes_value = parsed.get("nodes")
+        nodes = dict(nodes_value) if isinstance(nodes_value, dict) else {}
+        node_value = nodes.get("connection")
+        node = (
+            dict(node_value)
+            if isinstance(node_value, dict)
+            else {"name": "connection", "type": "energy.ebus.capability.connection"}
+        )
+        properties_value = node.get("properties")
+        properties = dict(properties_value) if isinstance(properties_value, dict) else {}
+        properties[CONNECTION_POINT] = dict(_CONNECTION_POINT_DECLARATION)
+        node["properties"] = properties
+        nodes["connection"] = node
+        parsed["nodes"] = nodes
+        result[device_id]["$description"] = json.dumps(parsed)
+        result[device_id][f"connection/{CONNECTION_POINT}"] = point
+    return result
+
+
 def retained_payload(value: str) -> str:
     """The payload a tree's value is replayed as: `""` as `0x00`, anything else as itself.
 
@@ -255,13 +385,28 @@ class ReplayClient:
 
     Explicit rather than a `MagicMock`, so a call the integration starts making
     fails here by name instead of answering with a truthy mock. The tree is
-    static: the snapshot never changes, nothing streams, and no callback fires.
-    Commands are not supported, because nothing that reads a capture sends one.
+    static until a test says otherwise: it can `serve` another tree, which the
+    next poll reads, or `push` one, which the snapshot callback the coordinator
+    registered receives as the library's stream would deliver it. Nothing
+    reconnects or changes schema, and no other callback fires. Commands are not
+    supported, because nothing that reads a capture sends one.
     """
 
     def __init__(self, adapter: SchemaAdapter) -> None:
         self._adapter = adapter
+        self._snapshot_callback: Callable[[SpanPanelSnapshot], Awaitable[None]] | None = None
         self.interceptor: ControlInterceptor | None = None
+
+    def serve(self, adapter: SchemaAdapter) -> None:
+        """Answer from another replayed tree from now on, as a panel that changed underneath us."""
+        self._adapter = adapter
+
+    async def push(self, adapter: SchemaAdapter) -> None:
+        """Serve another replayed tree and stream its snapshot to the registered callback."""
+        callback = self._snapshot_callback
+        assert callback is not None, "nothing registered for streamed snapshots"
+        self.serve(adapter)
+        await callback(adapter.build_snapshot())
 
     @property
     def schema_major(self) -> str:
@@ -315,6 +460,13 @@ class ReplayClient:
         return _unregister
 
     def register_snapshot_callback(
-        self, _callback: Callable[[SpanPanelSnapshot], Awaitable[None]]
+        self, callback: Callable[[SpanPanelSnapshot], Awaitable[None]]
     ) -> Callable[[], None]:
-        return _unregister
+        """Record the callback `push` streams to; unregistering forgets it."""
+        self._snapshot_callback = callback
+
+        def _forget() -> None:
+            if self._snapshot_callback is callback:
+                self._snapshot_callback = None
+
+        return _forget

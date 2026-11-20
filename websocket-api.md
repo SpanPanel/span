@@ -12,7 +12,7 @@ A custom card rendering the physical panel needs to know which breaker slot each
 controls its relay, and so on. Without this command, the card would need to query the device registry, entity registry, and individual entity states in separate
 calls, then infer which entities belong to the same circuit by parsing naming conventions. That correlation is fragile — entity naming patterns can differ
 between installs, each circuit's entities live on a device of the circuit's own, and EVSE feed circuit sensors live on the EVSE sub-device. The topology command
-provides all of these relationships explicitly, keyed by circuit UUID, so the card reads a single structured response instead of guessing.
+provides all of these relationships explicitly, keyed by circuit id, so the card reads a single structured response instead of guessing.
 
 Any logged-in user may call it, administrator or not, so the sidebar dashboard and the card work for whoever is viewing them. It carries the panel's layout,
 what the panel publishes about each circuit and device, the ratings current monitoring judges each circuit against, and the registry IDs that tie them together;
@@ -231,7 +231,7 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
 | `panel_entities`            | object      | Role-keyed map of the entity IDs of the panel's own readings and its status (see below)                                                                     |
 | `monitoring_rating_offered` | bool        | Whether `set_circuit_package_ratings` takes ratings on this panel: false where the panel publishes each circuit of a multi-load breaker with its own rating |
 | `control_access`            | object      | Whether the user asking may operate the panel, and if not, why (see below)                                                                                  |
-| `circuits`                  | object      | Circuit UUID keyed map (see below)                                                                                                                          |
+| `circuits`                  | object      | Circuit id keyed map (see below)                                                                                                                            |
 | `shared_meter_groups`       | object      | Each group of circuits that share a meter, keyed by the group key its members carry in `shared_meter_group` (see below); empty where no meter is shared     |
 | `sub_devices`               | object      | HA device ID keyed map of BESS/MID/EVSE/PV (see below)                                                                                                      |
 
@@ -438,7 +438,7 @@ const topology = await this.hass.callWS({
   device_id: this._config.device_id,
 });
 
-// topology.circuits is keyed by circuit UUID
+// topology.circuits is keyed by circuit id
 for (const [circuitId, circuit] of Object.entries(topology.circuits)) {
   // circuit.tabs => [5, 6] (breaker positions)
   // circuit.entities.power => "sensor.span_panel_kitchen_power"

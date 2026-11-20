@@ -13,6 +13,7 @@ Nothing here decides whether an entry applies. Every comparison is a call into
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
@@ -22,6 +23,7 @@ from span_panel_api import FieldMetadata, SpanPanelSnapshot
 
 from . import notices
 from .const import DOMAIN, EVENT_PACKAGE_RATINGS_CHANGED
+from .device_id_migration import rekeyed
 from .helpers import construct_circuit_label
 from .package_ratings import (
     ChangeReason,
@@ -267,7 +269,13 @@ class PackageRatingManager:
         self._store = _store_for(hass, entry)
 
     async def async_load(self) -> None:
-        """Load the entries and the unacknowledged removals from HA Storage."""
+        """Load the entries and the unacknowledged removals from HA Storage.
+
+        `async_setup_entry` calls this after the first refresh and the device-id
+        migration, which re-keys the store on disk first
+        (`async_rekey_circuit_ids`), and before `begin`. Nothing reads the
+        entries before then: `reconcile` waits for `begin`.
+        """
         data = await self._store.async_load()
         self._packages = _load_packages(data)
         self._unacknowledged = _load_unacknowledged(data)
@@ -512,23 +520,58 @@ class PackageRatingManager:
 
     async def async_save(self) -> None:
         """Persist the entries and the unacknowledged removals to HA Storage."""
-        await self._store.async_save(
-            StoredPackages(
-                packages={
-                    circuit_id: _StoredPackageRow(
-                        package_ratings_a=list(stored.ratings_a),
-                        space=stored.spaces[0],
-                        spaces=list(stored.spaces),
-                        label=stored.label,
-                    )
-                    for circuit_id, stored in self._packages.items()
-                },
-                unacknowledged={
-                    circuit_id: _change_row(change)
-                    for circuit_id, change in self._unacknowledged.items()
-                },
+        await self._store.async_save(_stored(self._packages, self._unacknowledged))
+
+
+def _stored(
+    packages: Mapping[str, StoredPackage], unacknowledged: Mapping[str, RatingChange]
+) -> StoredPackages:
+    """Return what is written to disk for these entries and removals, the shape every writer saves."""
+    return StoredPackages(
+        packages={
+            circuit_id: _StoredPackageRow(
+                package_ratings_a=list(stored.ratings_a),
+                space=stored.spaces[0],
+                spaces=list(stored.spaces),
+                label=stored.label,
             )
+            for circuit_id, stored in packages.items()
+        },
+        unacknowledged={
+            circuit_id: _change_row(change) for circuit_id, change in unacknowledged.items()
+        },
+    )
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move the stored entries and removals from old circuit ids to new ones, on disk.
+
+    Run by the device-id migration before `PackageRatingManager.async_load`, so
+    the manager never holds an old key and its first reconcile never removes an
+    entry for a circuit that only changed its id. Read and written with the
+    manager's own readers and shape. A value already under the new id wins
+    (`device_id_migration.rekeyed`): only a person copies a package, and a
+    removal is recorded under the id the circuit had when it was removed.
+    Written only when something moved. Returns how many values moved.
+    """
+    store = _store_for(hass, entry)
+    data = await store.async_load()
+    packages, moved_packages = rekeyed(_load_packages(data), mapping)
+    unacknowledged, moved_removals = rekeyed(_load_unacknowledged(data), mapping)
+    if not moved_packages and not moved_removals:
+        return 0
+    await store.async_save(
+        _stored(
+            packages,
+            {
+                circuit_id: replace(change, circuit_id=circuit_id)
+                for circuit_id, change in unacknowledged.items()
+            },
         )
+    )
+    return moved_packages + moved_removals
 
 
 def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredPackages]:

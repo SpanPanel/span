@@ -79,6 +79,7 @@ import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.typing import WebSocketGenerator
 from span_panel_api import SpanBatterySnapshot
+from span_panel_api.protocol import SchemaAdapter
 
 from custom_components.span_panel.config_flow import STEP_USER_DATA_SCHEMA
 from custom_components.span_panel.const import (
@@ -94,7 +95,7 @@ from custom_components.span_panel.const import (
     USE_DEVICE_PREFIX,
 )
 from custom_components.span_panel.control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL
-from custom_components.span_panel.id_builder import build_circuit_unique_id
+from custom_components.span_panel.id_builder import build_circuit_unique_id, build_panel_unique_id
 from custom_components.span_panel.migrations import (
     CURRENT_CONFIG_MINOR_VERSION,
     CURRENT_CONFIG_VERSION,
@@ -170,10 +171,16 @@ def expected_lingering_timers() -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Replay:
-    """A tree to set up, under the stem its fixtures are filed by."""
+    """A tree to set up, under the stem its fixtures are filed by.
+
+    With `updated_to`, the install is set up on `tree` first and then, as after
+    a firmware update and a restart, on `updated_to`: the record is what the
+    install holds then.
+    """
 
     stem: str
     tree: Callable[[], RetainedTree]
+    updated_to: Callable[[], RetainedTree] | None = None
 
 
 def _battery(tree: RetainedTree) -> str:
@@ -215,11 +222,15 @@ def _unpublished_readings() -> RetainedTree:
     return without_topics(tree, circuit, CIRCUIT_POWER_TOPIC)
 
 
+MIGRATED_STEM: Final = "r202639-e-updated-to-r202645-e"
+"""The `r202639-e` install after its panel took r202645 and gave its circuits new device ids."""
+
 REPLAYS: Final = (
     *(Replay(captured.name, captured.tree) for captured in CAPTURES),
     Replay(f"{R202639_CAPTURE}-no-battery", _no_battery),
     Replay(f"{R202639_CAPTURE}-battery-unvalued", _battery_unvalued),
     Replay(f"{R202639_CAPTURE}-unpublished-readings", _unpublished_readings),
+    Replay(MIGRATED_STEM, capture("r202639-e").tree, updated_to=capture("r202645-e").tree),
 )
 
 
@@ -227,13 +238,27 @@ def _ids(replays: tuple[Replay, ...]) -> list[str]:
     return [item.stem for item in replays]
 
 
+def _updated(item: Replay) -> RetainedTree | None:
+    return None if item.updated_to is None else item.updated_to()
+
+
 # ---------------------------------------------------------------------------
 # Installing a replay for real
 # ---------------------------------------------------------------------------
 
 
-async def _install(hass: HomeAssistant, tree: RetainedTree, stem: str) -> MockConfigEntry:
-    """Set the tree up the way a fresh installation of it is set up, its states settled."""
+async def _install(
+    hass: HomeAssistant,
+    tree: RetainedTree,
+    stem: str,
+    *,
+    updated_to: RetainedTree | None = None,
+) -> MockConfigEntry:
+    """Set the tree up the way a fresh installation of it is set up, its states settled.
+
+    With `updated_to`, the installation is then unloaded and set up again on
+    that tree, as Home Assistant restarting after the panel's firmware update.
+    """
     adapter = replay(tree)
     serial = adapter.build_snapshot().serial_number
     entry = MockConfigEntry(
@@ -255,6 +280,15 @@ async def _install(hass: HomeAssistant, tree: RetainedTree, stem: str) -> MockCo
         minor_version=CURRENT_CONFIG_MINOR_VERSION,
     )
     entry.add_to_hass(hass)
+    await _set_up(hass, entry, adapter)
+    if updated_to is not None:
+        assert await hass.config_entries.async_unload(entry.entry_id) is True
+        await hass.async_block_till_done()
+        await _set_up(hass, entry, replay(updated_to))
+    return entry
+
+
+async def _set_up(hass: HomeAssistant, entry: MockConfigEntry, adapter: SchemaAdapter) -> None:
     with patch("custom_components.span_panel.SpanMqttClient", return_value=ReplayClient(adapter)):
         assert await hass.config_entries.async_setup(entry.entry_id) is True
         await hass.async_block_till_done()
@@ -265,7 +299,6 @@ async def _install(hass: HomeAssistant, tree: RetainedTree, stem: str) -> MockCo
         assert runtime is not None
         runtime.coordinator.async_update_listeners()
         await hass.async_block_till_done()
-    return entry
 
 
 def _device_identifier(device: dr.AnyDeviceEntry) -> str:
@@ -484,7 +517,7 @@ def test_the_unvalued_variant_declares_its_battery_and_publishes_neither_reading
 async def test_a_replay_registers_exactly_the_expected_devices_and_entities(
     hass: HomeAssistant, item: Replay, update_capture_fixtures: bool
 ) -> None:
-    entry = await _install(hass, item.tree(), item.stem)
+    entry = await _install(hass, item.tree(), item.stem, updated_to=_updated(item))
     actual = _registered(hass, entry)
 
     expected = _compare_or_update(
@@ -509,7 +542,7 @@ async def test_a_replay_answers_the_expected_topology(
     item: Replay,
     update_capture_fixtures: bool,
 ) -> None:
-    entry = await _install(hass, item.tree(), item.stem)
+    entry = await _install(hass, item.tree(), item.stem, updated_to=_updated(item))
     actual = await _topology(hass, hass_ws_client, entry)
 
     expected = _compare_or_update(TOPOLOGY / f"{item.stem}.json", actual, update_capture_fixtures)
@@ -549,3 +582,37 @@ async def test_a_panel_without_a_battery_gets_no_battery_entity(hass: HomeAssist
         if entity.device_id in battery_cards
     ]
     assert (battery_cards, on_a_battery_card) == (set(), [])
+
+
+async def test_a_migrated_install_registers_what_a_new_install_does(hass: HomeAssistant) -> None:
+    """After the update, `r202639-e`'s install holds exactly what a new `r202645-e` install does.
+
+    Every device, and every row field by field -- its entity id, its name, the
+    device it is on, its classes, unit and category, whether it is disabled or
+    hidden, and its state -- except the two Downstream Current rows: a panel
+    with no downstream lugs never creates them, and the migrated install keeps
+    them registered rather than deleting a user's entities. Fails when a new
+    install and a migrated one diverge in any of these.
+    """
+    entry = await _install(
+        hass, capture("r202639-e").tree(), MIGRATED_STEM, updated_to=capture("r202645-e").tree()
+    )
+    migrated = _registered(hass, entry)
+    new_install: object = json.loads(
+        (EXPECTED_ENTITIES / "r202645-e.json").read_text(encoding="utf-8")
+    )
+    serial = str(entry.unique_id)
+    kept = {
+        build_panel_unique_id(serial, "downstream_l1_current"),
+        build_panel_unique_id(serial, "downstream_l2_current"),
+    }
+
+    devices = _section(new_install, "devices")
+    assert _section(migrated, "devices") == devices, _row_diff(
+        devices, _section(migrated, "devices")
+    )
+    rows = _section(new_install, "entities")
+    migrated_rows = _section(migrated, "entities")
+    assert migrated_rows.keys() - rows.keys() == kept
+    compared = {unique_id: row for unique_id, row in migrated_rows.items() if unique_id not in kept}
+    assert compared == rows, _row_diff(rows, compared)

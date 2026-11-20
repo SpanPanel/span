@@ -91,6 +91,7 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
+from .device_id_rekey import async_migrate_device_ids, entry_holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
     async_entry_changed,
@@ -118,7 +119,7 @@ from .frontend import (
     async_apply_panel_registration as async_apply_panel_registration,
     async_load_panel_settings as async_load_panel_settings,
     async_register_frontend_assets as async_register_frontend_assets,
-    async_save_panel_settings as async_save_panel_settings,
+    async_update_panel_settings as async_update_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
 from .hardware_guard import (
@@ -869,9 +870,6 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             entry.async_on_unload(lambda: client.set_control_interceptor(None))
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
-            # Before the first refresh, so the copied package ratings are in memory
-            # when the first snapshot is judged.
-            await coordinator.package_rating_manager.async_load()
             await coordinator.async_config_entry_first_refresh()
 
             # Before streaming starts and before any platform is forwarded, so a
@@ -880,9 +878,32 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # dispatch and closes the client -- before the error leaves setup.
             _async_enforce_hardware_verdict(hass, entry, hardware_version, coordinator.data.model)
 
-            # The first reconcile deletes every package whose circuit id the snapshot
-            # lacks, so a device-id migration, when one exists, must run immediately
-            # before this. It also needs the notices restored above.
+            # A panel whose firmware gave its circuits new device ids keeps
+            # everything this entry holds under the old ones: re-keyed here, from
+            # the first snapshot, before anything below loads, reconciles or
+            # registers circuit state. The notices it re-keys are the live view
+            # restored above.
+            await async_migrate_device_ids(hass, entry, coordinator.data)
+
+            # After the migration, which re-keys the store on disk, so the manager
+            # never holds an old key. Nothing judges a package before `begin`:
+            # the first refresh's reconcile waits for it, and the current monitor
+            # does not exist yet.
+            await coordinator.package_rating_manager.async_load()
+
+            # What this session is keyed by. A snapshot that later names these
+            # circuits by new ids -- the panel updating while this runs -- or
+            # brings circuits this setup lacked whose old ids the entry still
+            # holds reloads the entry, whose setup then migrates, rather than
+            # being published.
+            coordinator.arm_device_id_guard(
+                coordinator.data,
+                entry_holds_old_ids(hass, entry.entry_id, coordinator.data.serial_number),
+            )
+
+            # The first reconcile deletes every package whose circuit id the
+            # snapshot lacks, which the migration above has already re-keyed. It
+            # also needs the notices restored above.
             coordinator.package_rating_manager.begin(coordinator.data, client.field_metadata)
 
             await coordinator.async_setup_streaming()

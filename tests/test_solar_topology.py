@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from typing import Final
 
-from span_panel_api import SpanPanelSnapshot
+from span_panel_api import ExtensionSubject, SpanPanelSnapshot
 
+from custom_components.span_panel.extension import extension_device_identifier
 from custom_components.span_panel.helpers import has_pv
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.solar_topology import SolarTopology, solar_topology
-from custom_components.span_panel.util import PvDeviceRef, pv_device_ref
+from custom_components.span_panel.util import (
+    PvDeviceRef,
+    inverter_key_of_device_identifier,
+    pv_device_ref,
+    pv_inverter_device_identifier,
+)
 
 from .adapter_fixtures import (
     FIRST_PV,
@@ -47,6 +53,27 @@ def test_nothing_else_is_a_pv_device() -> None:
     assert pv_device_ref(f"{PANEL}_adopted_pv", PANEL) is None
     assert pv_device_ref(f"{PANEL}_pv_", PANEL) is None
     assert pv_device_ref("other-panel_pv", PANEL) is None
+    assert pv_device_ref(f"other-panel_pv_{SOLAR_CIRCUIT}", PANEL) is None
+
+
+def test_an_inverter_card_reads_back_through_the_builder_of_its_identifier() -> None:
+    """Every key the builder writes reads back whole: an opaque id, a circuit's old id and its new one.
+
+    One spelling, at `util.pv_inverter_device_identifier`, so the card, the
+    reader and an extension joining the card cannot drift apart.
+    """
+    for key in (SOLAR_CIRCUIT, "circuit-12", f"{PANEL}-0123456789abcdef-1-16-12", "a_b_c"):
+        identifier = pv_inverter_device_identifier(PANEL, key)
+        assert inverter_key_of_device_identifier(PANEL, identifier) == key
+        assert pv_device_ref(identifier, PANEL) == PvDeviceRef(key)
+        assert (
+            extension_device_identifier(PANEL, ExtensionSubject(kind="pv", instance_key=key))
+            == identifier
+        )
+    assert inverter_key_of_device_identifier(PANEL, f"{PANEL}_pv") is None
+    assert (
+        inverter_key_of_device_identifier(PANEL, pv_inverter_device_identifier(PANEL, "")) is None
+    )
 
 
 C: Final = SOLAR_CIRCUIT

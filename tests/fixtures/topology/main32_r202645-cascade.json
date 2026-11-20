@@ -1,0 +1,563 @@
+{
+  "circuits": {
+    "0b7e92e2a54c0a14cca4aab9c406f997": {
+      "always_on": false,
+      "breaker_rating_a": 60.0,
+      "device_id": "nt-6854-b816w_circuit_0b7e92e2a54c0a14cca4aab9c406f997",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_ev_charger_circuit_1_breaker_rating",
+        "consumed_energy": "sensor.span_panel_ev_charger_circuit_1_consumed_energy",
+        "current": "sensor.span_panel_ev_charger_circuit_1_current",
+        "net_energy": "sensor.span_panel_ev_charger_circuit_1_net_energy",
+        "power": "sensor.span_panel_ev_charger_circuit_1_power",
+        "produced_energy": "sensor.span_panel_ev_charger_circuit_1_produced_energy",
+        "select": "select.span_panel_ev_charger_circuit_1_circuit_priority",
+        "switch": "switch.span_panel_ev_charger_circuit_1_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 60.0,
+      "monitoring_rating_user_set": false,
+      "name": "EV-Charger-Circuit-1",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        25,
+        27
+      ],
+      "voltage": 240
+    },
+    "0d857f004c9dc27c671bf4d2520d3768": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_0d857f004c9dc27c671bf4d2520d3768",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_av_rack_2_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_av_rack_2_spare_consumed_energy",
+        "current": "sensor.span_panel_av_rack_2_spare_current",
+        "net_energy": "sensor.span_panel_av_rack_2_spare_net_energy",
+        "power": "sensor.span_panel_av_rack_2_spare_power",
+        "produced_energy": "sensor.span_panel_av_rack_2_spare_produced_energy",
+        "select": "select.span_panel_av_rack_2_spare_circuit_priority",
+        "switch": "switch.span_panel_av_rack_2_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "AV-Rack-2 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        14,
+        16
+      ],
+      "voltage": 240
+    },
+    "17b4ff245f55b8a5e5eef2b3d9b641bf": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_17b4ff245f55b8a5e5eef2b3d9b641bf",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_driveway_outlet_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_driveway_outlet_spare_consumed_energy",
+        "current": "sensor.span_panel_driveway_outlet_spare_current",
+        "net_energy": "sensor.span_panel_driveway_outlet_spare_net_energy",
+        "power": "sensor.span_panel_driveway_outlet_spare_power",
+        "produced_energy": "sensor.span_panel_driveway_outlet_spare_produced_energy",
+        "select": "select.span_panel_driveway_outlet_spare_circuit_priority",
+        "switch": "switch.span_panel_driveway_outlet_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Driveway-Outlet & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "OFF_GRID",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        17,
+        19
+      ],
+      "voltage": 240
+    },
+    "26709e5a7f3598ecf71d86b6d8d5746a": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_26709e5a7f3598ecf71d86b6d8d5746a",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_av_rack_1_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_av_rack_1_spare_consumed_energy",
+        "current": "sensor.span_panel_av_rack_1_spare_current",
+        "net_energy": "sensor.span_panel_av_rack_1_spare_net_energy",
+        "power": "sensor.span_panel_av_rack_1_spare_power",
+        "produced_energy": "sensor.span_panel_av_rack_1_spare_produced_energy",
+        "select": "select.span_panel_av_rack_1_spare_circuit_priority",
+        "switch": "switch.span_panel_av_rack_1_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "AV-Rack-1 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        10,
+        12
+      ],
+      "voltage": 240
+    },
+    "292dd3427ba6fa86e584927ef8594659": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_292dd3427ba6fa86e584927ef8594659",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_attic_back_1_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_attic_back_1_spare_consumed_energy",
+        "current": "sensor.span_panel_attic_back_1_spare_current",
+        "net_energy": "sensor.span_panel_attic_back_1_spare_net_energy",
+        "power": "sensor.span_panel_attic_back_1_spare_power",
+        "produced_energy": "sensor.span_panel_attic_back_1_spare_produced_energy",
+        "select": "select.span_panel_attic_back_1_spare_circuit_priority",
+        "switch": "switch.span_panel_attic_back_1_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Attic-Back-1 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        22,
+        24
+      ],
+      "voltage": 240
+    },
+    "661854f34330b97d27299a3d1cd2021c": {
+      "always_on": true,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_661854f34330b97d27299a3d1cd2021c",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_server_rack_1_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_server_rack_1_spare_consumed_energy",
+        "current": "sensor.span_panel_server_rack_1_spare_current",
+        "net_energy": "sensor.span_panel_server_rack_1_spare_net_energy",
+        "power": "sensor.span_panel_server_rack_1_spare_power",
+        "produced_energy": "sensor.span_panel_server_rack_1_spare_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Server-Rack-1 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        2,
+        4
+      ],
+      "voltage": 240
+    },
+    "721b50ef400bed34fa90c2f71a692b1e": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_721b50ef400bed34fa90c2f71a692b1e",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_attic_back_2_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_attic_back_2_spare_consumed_energy",
+        "current": "sensor.span_panel_attic_back_2_spare_current",
+        "net_energy": "sensor.span_panel_attic_back_2_spare_net_energy",
+        "power": "sensor.span_panel_attic_back_2_spare_power",
+        "produced_energy": "sensor.span_panel_attic_back_2_spare_produced_energy",
+        "select": "select.span_panel_attic_back_2_spare_circuit_priority",
+        "switch": "switch.span_panel_attic_back_2_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Attic-Back-2 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        26,
+        28
+      ],
+      "voltage": 240
+    },
+    "75a826b26bc378199e173abb692debbb": {
+      "always_on": false,
+      "breaker_rating_a": 15.0,
+      "device_id": "nt-6854-b816w_circuit_75a826b26bc378199e173abb692debbb",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_basement_ventilation_fan_breaker_rating",
+        "consumed_energy": "sensor.span_panel_basement_ventilation_fan_consumed_energy",
+        "current": "sensor.span_panel_basement_ventilation_fan_current",
+        "net_energy": "sensor.span_panel_basement_ventilation_fan_net_energy",
+        "power": "sensor.span_panel_basement_ventilation_fan_power",
+        "produced_energy": "sensor.span_panel_basement_ventilation_fan_produced_energy",
+        "select": "select.span_panel_basement_ventilation_fan_circuit_priority",
+        "switch": "switch.span_panel_basement_ventilation_fan_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Basement-Ventilation-Fan",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        1
+      ],
+      "voltage": 120
+    },
+    "ac563ae05f32870bb92d55e05463390e": {
+      "always_on": true,
+      "breaker_rating_a": 15.0,
+      "device_id": "nt-6854-b816w_circuit_ac563ae05f32870bb92d55e05463390e",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_smoke_detectors_breaker_rating",
+        "consumed_energy": "sensor.span_panel_smoke_detectors_consumed_energy",
+        "current": "sensor.span_panel_smoke_detectors_current",
+        "net_energy": "sensor.span_panel_smoke_detectors_net_energy",
+        "power": "sensor.span_panel_smoke_detectors_power",
+        "produced_energy": "sensor.span_panel_smoke_detectors_produced_energy"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": false,
+      "monitoring_rating_a": 15.0,
+      "monitoring_rating_user_set": false,
+      "name": "Smoke-Detectors",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "one_space",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        3
+      ],
+      "voltage": 120
+    },
+    "bc2c77195807e922a30c60eba827a9be": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_bc2c77195807e922a30c60eba827a9be",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_server_rack_2_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_server_rack_2_spare_consumed_energy",
+        "current": "sensor.span_panel_server_rack_2_spare_current",
+        "net_energy": "sensor.span_panel_server_rack_2_spare_net_energy",
+        "power": "sensor.span_panel_server_rack_2_spare_power",
+        "produced_energy": "sensor.span_panel_server_rack_2_spare_produced_energy",
+        "select": "select.span_panel_server_rack_2_spare_circuit_priority",
+        "switch": "switch.span_panel_server_rack_2_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Server-Rack-2 & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "SOC_THRESHOLD",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        6,
+        8
+      ],
+      "voltage": 240
+    },
+    "f15a1af17eec67d34079a1d3e3635c3d": {
+      "always_on": false,
+      "breaker_rating_a": 30.0,
+      "device_id": "nt-6854-b816w_circuit_f15a1af17eec67d34079a1d3e3635c3d",
+      "device_type": "circuit",
+      "entities": {
+        "breaker_rating": "sensor.span_panel_attic_front_spare_breaker_rating",
+        "consumed_energy": "sensor.span_panel_attic_front_spare_consumed_energy",
+        "current": "sensor.span_panel_attic_front_spare_current",
+        "net_energy": "sensor.span_panel_attic_front_spare_net_energy",
+        "power": "sensor.span_panel_attic_front_spare_power",
+        "produced_energy": "sensor.span_panel_attic_front_spare_produced_energy",
+        "select": "select.span_panel_attic_front_spare_circuit_priority",
+        "switch": "switch.span_panel_attic_front_spare_breaker"
+      },
+      "is_generation": false,
+      "is_never_backup": false,
+      "is_user_controllable": true,
+      "monitoring_rating_a": 30.0,
+      "monitoring_rating_user_set": false,
+      "name": "Attic-Front & Spare",
+      "outside_panel": false,
+      "package_ratings_a": null,
+      "package_ratings_form": "two_spaces",
+      "package_ratings_state": null,
+      "priority": "NEVER",
+      "priority_target": null,
+      "relay_state": "CLOSED",
+      "relay_state_target": null,
+      "shared_meter_group": null,
+      "shared_relay_group": null,
+      "tabs": [
+        18,
+        20
+      ],
+      "voltage": 240
+    }
+  },
+  "config_entry_id": "entry-main32_r202645-cascade",
+  "control_access": {
+    "may_operate": true,
+    "reason": null
+  },
+  "device_id": "nt-6854-b816w",
+  "device_name": "Span Panel",
+  "firmware": "spanos3/r202645/02",
+  "first_position": 1,
+  "last_position": 32,
+  "monitoring_rating_offered": true,
+  "panel_device_id": "nt-6854-b816w",
+  "panel_entities": {
+    "battery_level": "sensor.span_panel_battery_battery_level",
+    "battery_power": "sensor.span_panel_battery_battery_power",
+    "current_power": "sensor.span_panel_current_power",
+    "downstream_l1_current": "sensor.span_panel_downstream_l1_current",
+    "downstream_l2_current": "sensor.span_panel_downstream_l2_current",
+    "dsm_state": "sensor.span_panel_dsm_grid_state",
+    "feedthrough_power": "sensor.span_panel_feed_through_power",
+    "grid_power": "sensor.span_panel_grid_power",
+    "l1_voltage": "sensor.span_panel_l1_voltage",
+    "l2_voltage": "sensor.span_panel_l2_voltage",
+    "main_breaker_rating": "sensor.span_panel_main_breaker_rating",
+    "panel_status": "binary_sensor.span_panel_panel_status",
+    "pv_power": "sensor.span_panel_solar_pv_power",
+    "site_power": "sensor.span_panel_site_power",
+    "upstream_l1_current": "sensor.span_panel_upstream_l1_current",
+    "upstream_l2_current": "sensor.span_panel_upstream_l2_current"
+  },
+  "panel_size": 32,
+  "serial": "nt-6854-b816w",
+  "shared_meter_groups": {},
+  "sub_devices": {
+    "nt-6854-b816w_bess": {
+      "entities": {
+        "binary_sensor.span_panel_battery_bess_connected": {
+          "domain": "binary_sensor",
+          "original_name": "BESS Connected",
+          "unique_id": "span_nt-6854-b816w_bess_connected"
+        },
+        "sensor.span_panel_battery_battery_level": {
+          "domain": "sensor",
+          "original_name": "Battery Level",
+          "unique_id": "span_nt-6854-b816w_storage_battery_percentage"
+        },
+        "sensor.span_panel_battery_battery_power": {
+          "domain": "sensor",
+          "original_name": "Battery Power",
+          "unique_id": "span_nt-6854-b816w_battery_power"
+        },
+        "sensor.span_panel_battery_communication_state": {
+          "domain": "sensor",
+          "original_name": "Communication State",
+          "unique_id": "span_nt-6854-b816w_bess_communication_state"
+        },
+        "sensor.span_panel_battery_firmware_version": {
+          "domain": "sensor",
+          "original_name": "Firmware Version",
+          "unique_id": "span_nt-6854-b816w_bess_firmware_version"
+        },
+        "sensor.span_panel_battery_meter_power": {
+          "domain": "sensor",
+          "original_name": "Meter Power",
+          "unique_id": "span_nt-6854-b816w_bess_meter_power"
+        },
+        "sensor.span_panel_battery_model": {
+          "domain": "sensor",
+          "original_name": "Model",
+          "unique_id": "span_nt-6854-b816w_bess_model"
+        },
+        "sensor.span_panel_battery_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "Nameplate Capacity",
+          "unique_id": "span_nt-6854-b816w_bess_nameplate_capacity"
+        },
+        "sensor.span_panel_battery_part_number": {
+          "domain": "sensor",
+          "original_name": "Part Number",
+          "unique_id": "span_nt-6854-b816w_bess_part_number"
+        },
+        "sensor.span_panel_battery_serial_number": {
+          "domain": "sensor",
+          "original_name": "Serial Number",
+          "unique_id": "span_nt-6854-b816w_bess_serial_number"
+        },
+        "sensor.span_panel_battery_state_of_energy": {
+          "domain": "sensor",
+          "original_name": "State of Energy",
+          "unique_id": "span_nt-6854-b816w_bess_soe_kwh"
+        },
+        "sensor.span_panel_battery_vendor": {
+          "domain": "sensor",
+          "original_name": "Vendor",
+          "unique_id": "span_nt-6854-b816w_bess_vendor"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Powerwall 2 AC",
+      "name": "Span Panel Battery",
+      "serial_number": "tg681049356k0x",
+      "sw_version": "26.34.2 56d7ba06",
+      "type": "bess"
+    },
+    "nt-6854-b816w_mid": {
+      "entities": {
+        "sensor.span_panel_microgrid_interconnect_grid_state": {
+          "domain": "sensor",
+          "original_name": "Grid State",
+          "unique_id": "span_nt-6854-b816w_mid_mid_grid_state"
+        }
+      },
+      "manufacturer": "Tesla",
+      "model": "Microgrid Interconnect Device",
+      "name": "Span Panel Microgrid Interconnect",
+      "serial_number": "tg957432104u3d-djc",
+      "sw_version": null,
+      "type": "mid"
+    },
+    "nt-6854-b816w_pv": {
+      "entities": {
+        "sensor.span_panel_solar_pv_nameplate_capacity": {
+          "domain": "sensor",
+          "original_name": "PV Nameplate Capacity",
+          "unique_id": "span_nt-6854-b816w_pv_nameplate_capacity"
+        },
+        "sensor.span_panel_solar_pv_power": {
+          "domain": "sensor",
+          "original_name": "PV Power",
+          "unique_id": "span_nt-6854-b816w_pv_power"
+        },
+        "sensor.span_panel_solar_pv_product": {
+          "domain": "sensor",
+          "original_name": "PV Product",
+          "unique_id": "span_nt-6854-b816w_pv_product"
+        },
+        "sensor.span_panel_solar_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "span_nt-6854-b816w_pv_vendor"
+        }
+      },
+      "manufacturer": "Enphase Energy",
+      "model": "IQ7PLUS-72-x-US-&",
+      "name": "Span Panel Solar",
+      "serial_number": null,
+      "solar": {
+        "feed_circuit_id": null,
+        "model": "IQ7PLUS-72-x-US-&",
+        "power_entity_id": null,
+        "role": "site",
+        "site_power_entity_id": "sensor.span_panel_solar_pv_power",
+        "vendor": "Enphase Energy"
+      },
+      "sw_version": null,
+      "type": "pv"
+    }
+  }
+}

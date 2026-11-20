@@ -377,16 +377,29 @@ class TestPanelChoice:
         assert raised.value.translation_key == "package_ratings_panel_not_loaded"
 
 
+def _panel_of(*circuit_ids: str) -> SpanPanelSnapshot:
+    """Return a panel holding these circuits and nothing else of note."""
+    return SpanPanelSnapshotFactory.create(
+        circuits={cid: SpanCircuitSnapshotFactory.create(circuit_id=cid) for cid in circuit_ids}
+    )
+
+
+_SERVICE = "span_panel.set_circuit_package_ratings"
+
+
 class TestResolveCircuitId:
-    """An entity resolves to the circuit its unique id names, among the ids given."""
+    """An entity resolves to the circuit its unique id names, among the snapshot's circuits."""
 
     def test_one_of_this_integrations_entities(self, hass: HomeAssistant) -> None:
-        """The circuit id is found among the ids given."""
+        """The circuit id is found among the snapshot's circuits."""
         entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="sp3-001")
         entry.add_to_hass(hass)
         entity_id = _entity(hass, entry, "circuit-2")
 
-        assert resolve_circuit_id(hass, entity_id, {"circuit-2"}) == "circuit-2"
+        assert (
+            resolve_circuit_id(hass, entity_id, _panel_of("circuit-2"), service=_SERVICE)
+            == "circuit-2"
+        )
 
     def test_another_integrations_entity_is_not_read(self, hass: HomeAssistant) -> None:
         """Its unique id could hold a segment equal to a short opaque id."""
@@ -396,8 +409,14 @@ class TestResolveCircuitId:
             "sensor", "other", "other_circuit-2_x", config_entry=other
         )
 
-        assert resolve_circuit_id(hass, created.entity_id, {"circuit-2"}) == created.entity_id
+        assert (
+            resolve_circuit_id(hass, created.entity_id, _panel_of("circuit-2"), service=_SERVICE)
+            == created.entity_id
+        )
 
     def test_a_raw_id_is_returned_as_it_is(self, hass: HomeAssistant) -> None:
         """A name that is no entity is taken to be the circuit id."""
-        assert resolve_circuit_id(hass, "circuit-2", {"circuit-2"}) == "circuit-2"
+        assert (
+            resolve_circuit_id(hass, "circuit-2", _panel_of("circuit-2"), service=_SERVICE)
+            == "circuit-2"
+        )
