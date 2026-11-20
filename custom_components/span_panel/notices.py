@@ -148,9 +148,7 @@ async def async_restore(hass: HomeAssistant, entry: ConfigEntry) -> None:
     known = hass.data.setdefault(_DATA, {})
     notices = known.get(entry.entry_id)
     if notices is None:
-        store: Store[StoredNotices] = Store(
-            hass, _STORE_VERSION, f"{DOMAIN}.notices.{entry.entry_id}"
-        )
+        store = _store_for(hass, entry)
         stored = await store.async_load()
         notices = _Notices(
             store=store,
@@ -462,13 +460,25 @@ async def async_forget(hass: HomeAssistant, entry: ConfigEntry) -> None:
     restore notices about an upgrade the new entry never saw. The notifications
     themselves have to go too: nothing else clears them, so a removed panel would
     leave the user reading about a device that is no longer in their system.
+
+    The record goes whether or not this session restored it. An entry removed
+    while disabled, or after a setup that failed before `async_restore`, has
+    no live view, but its file is still on disk, and no entry would ever read
+    it again. Its notifications were never raised this session, so there are
+    none to dismiss.
     """
     notices = hass.data.get(_DATA, {}).pop(entry.entry_id, None)
     if notices is None:
+        await _store_for(hass, entry).async_remove()
         return
     for notice_id in notices.standing:
         async_dismiss(hass, _notification_id(entry, notice_id))
     await notices.store.async_remove()
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredNotices]:
+    """Return the store holding one entry's notices."""
+    return Store(hass, _STORE_VERSION, f"{DOMAIN}.notices.{entry.entry_id}")
 
 
 def read_translations(language: str, section: str) -> dict[str, str]:

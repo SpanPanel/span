@@ -857,6 +857,17 @@ def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredMonitorin
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
 
 
+async def async_forget_monitoring(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the monitoring settings when the config entry is removed.
+
+    Keyed by the entry's id, so no entry would ever load them again: left
+    behind, the file is one nothing owns. The overrides in it are keyed by
+    circuit ids, which a later entry for the same panel would carry too, and
+    whose user removed the panel to be rid of them.
+    """
+    await _store_for(hass, entry).async_remove()
+
+
 def _read_stored(stored: object, entry: ConfigEntry) -> StoredMonitoring | None:
     """Read the monitoring store off disk, keeping what has the shape it is saved in.
 

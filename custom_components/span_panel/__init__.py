@@ -90,7 +90,7 @@ from .conversion_repairs import (
 )
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
-from .current_monitor import CurrentMonitor
+from .current_monitor import CurrentMonitor, async_forget_monitoring
 from .device_id_rekey import async_migrate_device_ids, entry_holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
@@ -123,7 +123,7 @@ from .frontend import (
     async_register_frontend_assets as async_register_frontend_assets,
     async_update_panel_settings as async_update_panel_settings,
 )
-from .graph_horizon import GraphHorizonManager
+from .graph_horizon import GraphHorizonManager, async_forget_graph_horizons
 from .hardware_guard import (
     HARDWARE_UNREAD,
     HardwareRead,
@@ -1141,7 +1141,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     rather than registry ids, so a store left behind is one the next entry for
     the same panel would load and apply, re-asserting metadata the user is no
     longer here to have asked for. The copied package ratings go for that
-    reason too: they are keyed by wire circuit ids.
+    reason too: they are keyed by wire circuit ids. So do the monitoring
+    settings and the graph horizons, and every other store named for this
+    entry: no other entry reads a file named for this one, so left behind it
+    is a file nothing owns.
 
     The panel's favorites go as well, for the announcements' reason. They are
     kept in the domain's settings file under the panel's device id, and
@@ -1160,6 +1163,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)
     await async_forget_package_ratings(hass, entry)
+    await async_forget_monitoring(hass, entry)
+    await async_forget_graph_horizons(hass, entry)
     await async_forget(hass, entry)
     await async_forget_favorites_of(
         hass,

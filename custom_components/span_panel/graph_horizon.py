@@ -156,6 +156,15 @@ def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredGraphHori
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
 
 
+async def async_forget_graph_horizons(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the graph horizons when the config entry is removed.
+
+    Keyed by the entry's id, so no entry would ever load them again: left
+    behind, the file is one nothing owns.
+    """
+    await _store_for(hass, entry).async_remove()
+
+
 def _read_stored(stored: object) -> StoredGraphHorizons | None:
     """Read the graph horizons off disk, keeping only valid horizons; None for nothing to read.
 
