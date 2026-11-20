@@ -61,9 +61,9 @@ async def async_load_panel_settings(hass: HomeAssistant) -> dict[str, Any]:
     return data or {}
 
 
-async def _async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any]) -> None:
+async def _async_save_panel_settings(hass: HomeAssistant, settings: dict[str, object]) -> None:
     """Save domain-level panel settings to storage; only `async_update_panel_settings` calls it."""
-    store: Store[dict[str, Any]] = Store(
+    store: Store[dict[str, object]] = Store(
         hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
     )
     await store.async_save(settings)
@@ -97,7 +97,7 @@ async def async_update_panel_settings(
     if lock is None:
         lock = hass.data[_SETTINGS_LOCK] = asyncio.Lock()
     async with lock:
-        settings = await async_load_panel_settings(hass)
+        settings: dict[str, object] = await async_load_panel_settings(hass)
         if update(settings):
             await _async_save_panel_settings(hass, settings)
 
