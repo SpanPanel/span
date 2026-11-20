@@ -361,7 +361,8 @@ Applies to Main Meter and Feed Through energy sensors.
 
 Each circuit is a device of its own under the panel's device. It holds the sensors below and, on a user-controllable circuit, the
 [circuit controls](#circuit-controls-per-user-controllable-circuit). The circuit that feeds a charger is the exception: its sensors are on the
-[charger's device](#evse-device-naming). See [Entity Naming Pattern](#entity-naming-pattern) for how circuit devices and their entities are named.
+[charger's device](#evse-device-naming). A circuit's device takes the circuit's name from the SPAN app, and [Entity Naming Pattern](#entity-naming-pattern)
+describes how its entities' IDs are built.
 
 | Sensor          | Device Class | Unit | Notes                                                                                         |
 | --------------- | ------------ | ---- | --------------------------------------------------------------------------------------------- |
