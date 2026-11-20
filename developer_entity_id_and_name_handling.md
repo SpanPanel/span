@@ -572,7 +572,8 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
       (`test_every_form_table_entry_has_a_new_wording_and_vice_versa`).
 - [ ] A reworded description label adds the old label to `legacy_names` so §6.1 still recognizes what 2.0.8 wrote.
-- [ ] Unique IDs and circuit device identifiers are untouched by any of this; `CIRCUIT_SUFFIX_MAPPING` is closed.
+- [ ] Unique IDs and circuit device identifiers are untouched by any of this; `CIRCUIT_SUFFIX_MAPPING` is closed. `device_id_rekey` re-keys both once,
+      deliberately, when firmware gives a panel's circuits new device ids, and keeps every `entity_id`, device registry id, name and base, so R1 and R5 hold.
 - [ ] `tests/test_naming.py`, `tests/test_recreate_entity_ids.py` and `tests/test_circuit_number_ids.py` pass. The last two drive a real `EntityPlatform` and
       the real registries, so a composition regression fails there rather than in a unit test of a builder.
 - [ ] Run the `entity-id-auditor` agent after editing `id_builder.py`, `entity_resolver.py`, `naming.py`, `circuit_object_ids.py`, `circuit_number_ids.py` or
