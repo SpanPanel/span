@@ -66,7 +66,7 @@ real-time state updates without polling.
    A panel that registers by passphrase only skips the choice and asks for the passphrase. If the panel is limiting registration attempts, setup says how long
    to wait before trying again.
 
-8. Choose your entity ID naming pattern (see naming patterns below)
+8. Choose your entity ID naming pattern (see [Entity Naming Pattern](#entity-naming-pattern))
 9. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
 If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
