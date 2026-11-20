@@ -15,10 +15,14 @@ circuits the entry still holds under old ones (`DeviceIdGuard`), and a
 service, which circuit an automation means when it names one by its old id
 (`current_circuit_id`).
 
-**The only reader of the parts of a circuit id.** Every other module treats an
-id as opaque, and so does this one once the pairing is made: the map runs old
-to new and is consumed only to look up or rebuild stored values. Nothing reads
-the parts of a new id.
+**The only reader of the parts of a circuit id, but for one label.** This
+module reads an id's trait suffix to pair it, and then treats ids as opaque:
+the map runs old to new and is consumed only to look up or rebuild stored
+values. One other reader exists: `helpers.outside_meter_label` names a meter
+with no breaker space by its id's trailing digits, which are the trait
+instance on both forms, so `remote-ct-3` and `{prefix}-1-42-3` are both named
+`Remote CT 3`. It pairs nothing and reads no other part. Every other module
+treats an id as opaque.
 
 **A leaf, split from `device_id_rekey` on purpose.** The coordinator asks this
 module on every snapshot and the service resolver on every call, while

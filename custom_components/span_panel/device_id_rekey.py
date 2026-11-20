@@ -14,6 +14,16 @@ install keeps every entity, device and setting it had, with no visible step:
 3. **Stores and notices**: each module that owns a circuit-keyed store re-keys
    it, by its own shape, before anything loads it.
 
+**Names are kept, but for one fallback.** A circuit's device and entities are
+named from what the panel publishes for it -- its name, or its breaker
+positions -- and none of that changes with its id. A name built from the raw
+id does. `helpers.construct_circuit_identifier_from_tabs` names a circuit with
+no breaker positions `Circuit {circuit id}`: in circuit-numbers mode always,
+and otherwise where the panel gives it no name. From the first setup on the
+new ids it names the new id. No capture reaches it; the paths that can are a
+hosted circuit whose spaces are declared but carry no value, and the card of
+an inverter such a circuit feeds.
+
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit
 state. It acts only where the registry or a store of this entry still holds an
@@ -33,16 +43,18 @@ empty, so every setup looks again, and writes only what is still left to move:
 - the notices' live view and the issue registry are checked in memory.
 
 On a migrated install that is reads and nothing else: no registry entry,
-store or notice is written. Not a
-config-entry version step: that runs before setup, with no snapshot. No version
-changes, because what this leaves is exactly what a release without it builds
-on the new firmware.
+store or notice is written.
+
+Not a config-entry version step: that runs before setup, with no snapshot. No
+version changes, because what this leaves is exactly what a release without it
+builds on the new firmware.
 
 **An earlier release running across the change** registered a second entity
 for each circuit and new devices under the new ids. Those give way to the
 originals, which hold the history: the newer devices' entities and the devices
-are removed, then the originals re-keyed. For a stored value the rule is the
-other way round (`device_id_migration.rekeyed`).
+are removed, each breaker switch with the area notice raised about it, then the
+originals re-keyed. For a stored value the rule is the other way round
+(`device_id_migration.rekeyed`).
 
 **Split from `device_id_migration` on purpose.** This module imports every
 store's owner, `extension` and `conversion_repairs` among them, and those import
