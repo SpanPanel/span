@@ -1336,8 +1336,10 @@ async def test_rows_an_earlier_release_added_under_the_new_ids_give_way(
     """An earlier release on the new firmware registered a second set; the originals win.
 
     Its entities (`_2`), its circuit devices -- one put in a room -- and its
-    breaker-switch notice are removed, and the originals re-keyed. A setting
-    the user made under a new id outranks the one it would replace.
+    breaker-switch notices are removed, and the originals re-keyed: a notice
+    the original had takes the newer one's place, and one with no original
+    goes with its switch. A setting the user made under a new id outranks the
+    one it would replace.
 
     Fails when the newer entities, devices or notices do not give way: Core
     refuses the re-key of an id already in use.
@@ -1381,6 +1383,16 @@ async def test_rows_an_earlier_release_added_under_the_new_ids_give_way(
     ir.async_ignore_issue(
         panel.hass, DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch), True
     )
+    # A newer notice with no original behind it: the range's newer switch, in
+    # the room its newer device was given.
+    newer_range_switch = build_switch_unique_id(panel.serial, new_id_e(RANGE))
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", newer_range_switch),
+        switch_unique_id=newer_range_switch,
+        area_name="Kitchen",
+    )
     await panel.call("set_circuit_graph_horizon", circuit_id=new_id_e(RANGE), horizon="1w")
     caplog.clear()
 
@@ -1399,6 +1411,12 @@ async def test_rows_an_earlier_release_added_under_the_new_ids_give_way(
     assert issue.dismissed_version is None, "the original's state, not the newer notice's"
     assert issue.translation_placeholders is not None
     assert "Garage" in issue.translation_placeholders["area"]
+    assert (
+        ir.async_get(panel.hass).async_get_issue(
+            DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_range_switch)
+        )
+        is None
+    ), "the newer switch's notice gave way with its row, though no original took its place"
     bath = panel.circuit_device(new_id_e(BATH))
     assert (bath.name_by_user, bath.area_id) == ("Bath outlets", bathroom)
     assert panel.circuit_device(new_id_e(RANGE)).area_id is None
@@ -1502,8 +1520,9 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
     id, so it converted none and registered a second set under the new ids, on
     circuit devices of its own -- the only circuit devices there are. Those are
     kept, with the room the user gave one: the second set of entities gives
-    way, and the conversion moves the originals, re-keyed, onto those devices.
-    Nothing is announced: every entity there is one the install had.
+    way, with the breaker-switch notice raised about one of them, and the
+    conversion moves the originals, re-keyed, onto those devices. Nothing is
+    announced: every entity there is one the install had.
 
     Fails when a newer device with no original is removed as though it
     collided. Home Assistant would restore such a device from its tombstone,
@@ -1536,6 +1555,16 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
     kitchen = ar.async_get(panel.hass).async_create("Kitchen").id
     range_device = panel.circuit_device(new_id_e(RANGE))
     devices.async_update_child_device(range_device.id, area_id=kitchen)
+    # A notice the earlier release raised about its own bath switch, which
+    # gives way to the original.
+    newer_bath_switch = build_switch_unique_id(panel.serial, new_id_e(BATH))
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", newer_bath_switch),
+        switch_unique_id=newer_bath_switch,
+        area_name="Bathroom",
+    )
     removals = async_capture_events(panel.hass, dr.EVENT_DEVICE_REGISTRY_UPDATED)
 
     with patch(
@@ -1563,6 +1592,12 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
         if row.device_id == panel.runtime.panel_device_id
         and names_an_old_id(row.unique_id, OLD_IDS_E)
     ]
+    assert (
+        ir.async_get(panel.hass).async_get_issue(
+            DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_bath_switch)
+        )
+        is None
+    ), "the newer bath switch gave way, and its notice with it"
 
 
 # ---------------------------------------------------------------------------

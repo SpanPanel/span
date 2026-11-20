@@ -62,6 +62,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
 
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from span_panel_api import SpanPanelSnapshot
@@ -193,8 +194,10 @@ async def async_migrate_device_ids(
     unique_ids = _UniqueIds.of(serial, mapping)
 
     _warn_on_renamed_pairs(device_registry, entry.entry_id, snapshot, mapping)
-    devices = _rekey_devices(device_registry, entity_registry, entry.entry_id, serial, mapping)
-    entities = _rekey_entities(entity_registry, entry.entry_id, unique_ids)
+    devices = _rekey_devices(
+        hass, device_registry, entity_registry, entry.entry_id, serial, mapping
+    )
+    entities = _rekey_entities(hass, entity_registry, entry.entry_id, unique_ids)
 
     stored = 0
     stored += await package_rating_manager.async_rekey_circuit_ids(hass, entry, mapping)
@@ -290,6 +293,7 @@ def _warn_on_renamed_pairs(
 
 
 def _rekey_devices(
+    hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
     entity_registry: er.EntityRegistry,
     entry_id: str,
@@ -316,7 +320,7 @@ def _rekey_devices(
             )
             if newer_circuit is not None:
                 entities_removed += _remove_device(
-                    device_registry, entity_registry, entry_id, newer_circuit.id
+                    hass, device_registry, entity_registry, entry_id, newer_circuit.id
                 )
                 devices_removed += 1
             device_registry.async_update_child_device(
@@ -329,7 +333,7 @@ def _rekey_devices(
             newer_card = _inverter_card(device_registry, entry_id, serial, new_id)
             if newer_card is not None:
                 entities_removed += _remove_device(
-                    device_registry, entity_registry, entry_id, newer_card.id
+                    hass, device_registry, entity_registry, entry_id, newer_card.id
                 )
                 devices_removed += 1
             device_registry.async_update_device(
@@ -350,6 +354,7 @@ def _inverter_card(
 
 
 def _remove_device(
+    hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
     entity_registry: er.EntityRegistry,
     entry_id: str,
@@ -366,14 +371,29 @@ def _remove_device(
         entity_registry, device_id, include_disabled_entities=True
     ):
         if row.config_entry_id == entry_id:
-            entity_registry.async_remove(row.entity_id)
+            _give_way(hass, entity_registry, entry_id, row)
             removed += 1
     device_registry.async_remove_device(device_id)
     return removed
 
 
+def _give_way(
+    hass: HomeAssistant, entity_registry: er.EntityRegistry, entry_id: str, row: er.RegistryEntry
+) -> None:
+    """Remove a row an earlier release added under a new id, and the notice raised about it.
+
+    A breaker switch's area notice is keyed by the switch's unique id and
+    describes that switch, so it gives way with the row: with the row gone, it
+    describes nothing. Deleted in the same step, so no setup can stop between
+    the two and leave it for the next, which would find no row to tell it by.
+    """
+    entity_registry.async_remove(row.entity_id)
+    if row.domain == Platform.SWITCH:
+        conversion_repairs.async_forget_breaker_switch(hass, entry_id, row.unique_id)
+
+
 def _rekey_entities(
-    entity_registry: er.EntityRegistry, entry_id: str, unique_ids: _UniqueIds
+    hass: HomeAssistant, entity_registry: er.EntityRegistry, entry_id: str, unique_ids: _UniqueIds
 ) -> _Rekeyed:
     """Re-key every entity row built for an old circuit id to the unique id built for its new one.
 
@@ -387,8 +407,9 @@ def _rekey_entities(
         if original is None:
             continue
         newer = entity_id_in_entry(entity_registry, entry_id, domain, new_unique_id)
-        if newer is not None:
-            entity_registry.async_remove(newer)
+        newer_row = entity_registry.async_get(newer) if newer is not None else None
+        if newer_row is not None:
+            _give_way(hass, entity_registry, entry_id, newer_row)
             gave_way += 1
         holder = entity_registry.async_get_entity_id(domain, DOMAIN, new_unique_id)
         if holder is not None:

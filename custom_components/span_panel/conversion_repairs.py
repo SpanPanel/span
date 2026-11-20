@@ -146,9 +146,11 @@ def async_rekey_circuit_ids(
 
     A notice already under the new id gives way, as the registries' newer rows
     do: it was raised by an older release about the second switch it
-    registered after the panel changed its ids, which the migration removes.
-    `serial` is the panel's, as `build_switch_unique_id` takes it. Returns how
-    many notices moved.
+    registered after the panel changed its ids. The migration deletes it as it
+    removes that switch (`async_forget_breaker_switch`), whether or not an
+    original notice follows here; the delete below covers the same notice
+    should it be left. `serial` is the panel's, as `build_switch_unique_id`
+    takes it. Returns how many notices moved.
     """
     registry = ir.async_get(hass)
     moved = 0
@@ -188,6 +190,17 @@ def async_rekey_circuit_ids(
         ir.async_delete_issue(hass, DOMAIN, old_issue_id)
         moved += 1
     return moved
+
+
+@callback
+def async_forget_breaker_switch(hass: HomeAssistant, entry_id: str, switch_unique_id: str) -> None:
+    """Delete the area notice about a breaker switch whose row is being removed.
+
+    The notice names the switch, so it outlives the row only as a notice about
+    nothing. The device-id migration removes a second breaker switch an older
+    release registered under a new id, and its notice with it.
+    """
+    ir.async_delete_issue(hass, DOMAIN, breaker_switch_area_issue_id(entry_id, switch_unique_id))
 
 
 def _area_name(areas: ar.AreaRegistry, area_id: str) -> str:
