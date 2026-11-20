@@ -1998,14 +1998,18 @@ def fed_inverters(tree: RetainedTree, feeds: Mapping[str, str]) -> RetainedTree:
     return tree
 
 
+@pytest.mark.parametrize("mixed_case", [False, True], ids=["as-captured", "a-mixed-case-serial"])
 async def test_an_inverter_a_circuit_feeds_follows_its_circuit(
-    panels: Callable[..., Panel], hass_storage: dict[str, object]
+    panels: Callable[..., Panel], hass_storage: dict[str, object], mixed_case: bool
 ) -> None:
     """On a panel with two inverters, each fed by a circuit, everything keyed by the feed follows.
 
     The bound record, the other inverter's card and entities, its curated
-    extension key and its graph horizon. Fails when inverter devices are not
-    re-keyed in place, or the binding or the curation is skipped.
+    extension key and its graph horizon. On the capture's serial, and on it
+    with upper-case letters, which the inverter's card identifier and unique
+    ids keep as they are. Fails when inverter devices are not re-keyed in
+    place, the binding or the curation is skipped, or the card's ids are built
+    for a serial spelled otherwise than its builders spell it.
 
     Derived from `main32_r202639-upstream-pv`, the one capture with two
     inverters. No circuit feeds them there, so their keys are their own device
@@ -2014,6 +2018,8 @@ async def test_an_inverter_a_circuit_feeds_follows_its_circuit(
     circuit there already declares.
     """
     upstream = capture("main32_r202639-upstream-pv").tree()
+    if mixed_case:
+        upstream = with_serial(upstream, with_first_letters_upper_cased(panel_device_id(upstream)))
     snap = snapshot(upstream)
     inverters = sorted(snap.pv_inverters)
     by_space = sorted(snap.circuits, key=lambda cid: min(snap.circuits[cid].tabs))
@@ -2042,6 +2048,7 @@ async def test_an_inverter_a_circuit_feeds_follows_its_circuit(
         "data": {"records": {f"pv_{carded}/vendor/cell-temperature": {"entity_category": "none"}}},
     }
     await panel.set_up(before_tree)
+    assert (panel.serial != panel.serial.lower()) is mixed_case
     assert panel.runtime.pv_binding.bound_key == bound
     devices = dr.async_get(panel.hass)
     card = devices.async_get_device_by_identifier((DOMAIN, f"{panel.serial}_pv_{carded}"), entry_id)
@@ -2096,21 +2103,31 @@ def with_vendor_readings(tree: RetainedTree, circuit_id: str) -> RetainedTree:
     return tree
 
 
+@pytest.mark.parametrize(
+    "serial", [None, MIXED_CASE_SERIAL], ids=["as-captured", "a-mixed-case-serial"]
+)
 async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
     panels: Callable[..., Panel],
     hass_storage: dict[str, object],
     caplog: pytest.LogCaptureFixture,
+    serial: str | None,
 ) -> None:
     """Its entities, its curated key and the overflow notice's record move; the notice is not raised again.
 
-    Fails when the notices re-key is skipped: the overflow would read as news
-    and be raised again, naming the new id.
+    On the capture's serial, and on it with upper-case letters, which an
+    extension's scope prefix keeps as it is. Fails when the notices re-key is
+    skipped: the overflow would read as news and be raised again, naming the
+    new id; or when the prefixes are built for a serial spelled otherwise than
+    the extension's builder spells it.
     """
     caplog.set_level(logging.WARNING)
-    before_tree = with_vendor_readings(capture(BEFORE).tree(), RANGE)
-    after_tree = with_vendor_readings(capture(AFTER).tree(), new_id_e(RANGE))
+    before_tree, after_tree = updated_trees(serial)
+    renamed = new_ids_of(after_tree)
+    before_tree = with_vendor_readings(before_tree, RANGE)
+    after_tree = with_vendor_readings(after_tree, renamed[RANGE])
     panel = panels(before_tree)
     await panel.set_up(before_tree)
+    assert panel.serial == (serial or snapshot(capture(BEFORE).tree()).serial_number)
     prefix = f"span_{panel.serial}_adopted_circuit_{RANGE}/"
     rows = {
         row.id: row.entity_id
@@ -2139,7 +2156,7 @@ async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
     flush_delayed_saves(panel.hass)
     await panel.hass.async_block_till_done()
 
-    new_prefix = f"span_{panel.serial}_adopted_circuit_{new_id_e(RANGE)}/"
+    new_prefix = f"span_{panel.serial}_adopted_circuit_{renamed[RANGE]}/"
     after = {
         row.id: row.entity_id
         for row in er.async_entries_for_config_entry(er.async_get(panel.hass), panel.entry.entry_id)
@@ -2147,11 +2164,11 @@ async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
     }
     assert after == rows
     assert panel.runtime.curation.as_dicts() == {
-        f"circuit_{new_id_e(RANGE)}/vendor/reading-0": {"entity_category": "none"}
+        f"circuit_{renamed[RANGE]}/vendor/reading-0": {"entity_category": "none"}
     }
     stored = hass_storage[notices_key]
     assert isinstance(stored, dict)
-    assert stored["data"]["announced"][notice_id] == f"circuit:{new_id_e(RANGE)} (1)"
+    assert stored["data"]["announced"][notice_id] == f"circuit:{renamed[RANGE]} (1)"
     assert (
         stored["data"]["standing"][notice_id] == json.loads(standing)["data"]["standing"][notice_id]
     )
