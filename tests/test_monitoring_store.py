@@ -19,7 +19,11 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.current_monitor import CurrentMonitor, async_rekey_circuit_ids
-from custom_components.span_panel.options import SPIKE_THRESHOLD_PCT, WINDOW_DURATION_M
+from custom_components.span_panel.options import (
+    NOTIFY_TARGETS,
+    SPIKE_THRESHOLD_PCT,
+    WINDOW_DURATION_M,
+)
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 
 _KEY: Final = "span_panel_current_monitor"
@@ -57,7 +61,7 @@ _MALFORMED: Final = {
         "circuit-2": "off",
     },
     "mains_overrides": ["upstream_l1"],
-    "global": {WINDOW_DURATION_M: 30},
+    "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
 }
 """A store of valid JSON and the wrong shape in four places, around parts of the right one."""
 
@@ -70,7 +74,7 @@ async def test_what_the_monitor_saves_it_reads_back(
     monitor = _monitor(hass, entry)
     monitor.set_circuit_override("circuit-1", {SPIKE_THRESHOLD_PCT: 120})
     monitor.set_mains_override("upstream_l1", {SPIKE_THRESHOLD_PCT: 90})
-    monitor.set_global_settings({WINDOW_DURATION_M: 30})
+    monitor.set_global_settings({WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"})
     await hass.async_block_till_done()
 
     reloaded = _monitor(hass, entry)
@@ -80,7 +84,7 @@ async def test_what_the_monitor_saves_it_reads_back(
         "enabled": True,
         "circuit_overrides": {"circuit-1": {SPIKE_THRESHOLD_PCT: 120}},
         "mains_overrides": {"upstream_l1": {SPIKE_THRESHOLD_PCT: 90}},
-        "global": {WINDOW_DURATION_M: 30},
+        "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
     }
     assert reloaded.get_global_settings()[WINDOW_DURATION_M] == 30
     assert await CurrentMonitor.async_is_enabled(hass, entry)
@@ -89,7 +93,7 @@ async def test_what_the_monitor_saves_it_reads_back(
         "enabled": True,
         "circuit_overrides": {"circuit-1": {SPIKE_THRESHOLD_PCT: 120}},
         "mains_overrides": {"upstream_l1": {SPIKE_THRESHOLD_PCT: 90}},
-        "global": {WINDOW_DURATION_M: 30},
+        "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
     }
 
 
@@ -115,7 +119,7 @@ async def test_a_part_of_the_wrong_shape_is_dropped_and_the_rest_kept(
         "enabled": True,
         "circuit_overrides": {"circuit-1": {SPIKE_THRESHOLD_PCT: 120, "monitoring_enabled": False}},
         "mains_overrides": {},
-        "global": {WINDOW_DURATION_M: 30},
+        "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
     }
     dropped = [
         record.getMessage()
@@ -160,7 +164,7 @@ async def test_switching_monitoring_off_keeps_the_settings(
     assert _stored(hass_storage, entry) == {
         "enabled": False,
         "circuit_overrides": {"circuit-1": {SPIKE_THRESHOLD_PCT: 120, "monitoring_enabled": False}},
-        "global": {WINDOW_DURATION_M: 30},
+        "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
     }
 
 
@@ -180,5 +184,5 @@ async def test_the_re_key_reads_through_the_same_reader(
     assert moved == 1
     assert _stored(hass_storage, entry) == {
         "circuit_overrides": {"p-1-16-1": {SPIKE_THRESHOLD_PCT: 120, "monitoring_enabled": False}},
-        "global": {WINDOW_DURATION_M: 30},
+        "global": {WINDOW_DURATION_M: 30, NOTIFY_TARGETS: "notify.phone"},
     }

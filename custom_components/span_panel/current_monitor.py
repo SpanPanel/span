@@ -861,14 +861,14 @@ def _read_settings(value: object) -> MonitoringSettings | None:
 
     A value of another type inside one is dropped alone, so the rest of the
     override still applies; a setting holds only an integer, a boolean or a
-    string.
+    string, and a boolean is an `int`.
     """
     if not isinstance(value, dict):
         return None
     return {
         key: setting
         for key, setting in value.items()
-        if isinstance(key, str) and isinstance(setting, int | bool | str)
+        if isinstance(key, str) and isinstance(setting, (int, str))
     }
 
 
