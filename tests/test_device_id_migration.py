@@ -44,7 +44,7 @@ from pytest_homeassistant.common import (
 )
 from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.const import DOMAIN, USE_CIRCUIT_NUMBERS
 from custom_components.span_panel.conversion_repairs import (
     async_raise_breaker_switch_area_notice,
     breaker_switch_area_issue_id,
@@ -81,11 +81,12 @@ from .captures_replay import (
     replay,
     snapshot,
     with_connection_point,
+    with_serial,
     without_device,
     without_topics,
 )
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
-from .replayed_panel import PANEL_NAME, Panel, replayed_panels
+from .replayed_panel import MONITORED_OPTIONS, PANEL_NAME, Panel, replayed_panels
 
 BEFORE: Final = "r202639-e"
 AFTER: Final = "r202645-e"
@@ -127,8 +128,13 @@ def new_ids(name: str) -> dict[str, str]:
     masked afresh needs no edit here. Read by splitting the id, not through the
     integration's pairing, which is what the tests hold to account.
     """
+    return new_ids_of(capture(name).tree())
+
+
+def new_ids_of(tree: RetainedTree) -> dict[str, str]:
+    """Return each r202639 id's counterpart in an r202645 tree, read off its ids as `new_ids` reads a capture's."""
     ids: dict[str, str] = {}
-    for circuit_id in snapshot(capture(name).tree()).circuits:
+    for circuit_id in snapshot(tree).circuits:
         head, trait, n = circuit_id.rsplit("-", 2)
         assert head.endswith("-1") and trait in _FAMILY_OF_TRAIT, circuit_id
         ids[f"{_FAMILY_OF_TRAIT[trait]}-{n}"] = circuit_id
@@ -310,8 +316,13 @@ async def assert_carried_over(
     before: Registered,
     bathroom: str,
     caplog: pytest.LogCaptureFixture,
+    *,
+    renamed: Mapping[str, str] = NEW_IDS_E,
 ) -> None:
-    """Everything the r202639-e install held, held now under r202645-e's ids, read back by its owner."""
+    """Everything the r202639-e install held, held now under r202645-e's ids, read back by its owner.
+
+    `renamed` is each old id's new one, as the panel serving the update calls it.
+    """
     hass = panel.hass
     after = registered(hass, panel.entry)
     old_ids = OLD_IDS_E
@@ -343,33 +354,33 @@ async def assert_carried_over(
     assert not dead
 
     # The renamed circuit device is the same device, its name and room kept.
-    bath = panel.circuit_device(new_id_e(BATH))
+    bath = panel.circuit_device(renamed[BATH])
     assert (bath.name_by_user, bath.area_id) == ("Bath outlets", bathroom)
 
     # Monitoring: the pair's override, and the circuit switched out.
-    pair = panel.monitoring(new_id_e(TANDEM[1]))
-    assert (pair["point_id"], pair["spike_threshold_pct"]) == (new_id_e(TANDEM[0]), 150)
-    assert panel.monitoring(new_id_e(RANGE))["monitoring_enabled"] is False
+    pair = panel.monitoring(renamed[TANDEM[1]])
+    assert (pair["point_id"], pair["spike_threshold_pct"]) == (renamed[TANDEM[0]], 150)
+    assert panel.monitoring(renamed[RANGE])["monitoring_enabled"] is False
 
     # The horizon and the favorite.
     horizons = panel.runtime.coordinator.graph_horizon_manager
     assert horizons is not None
     assert horizons.get_all_settings()["circuits"] == {
-        new_id_e(RANGE): {"horizon": "1d", "has_override": True}
+        renamed[RANGE]: {"horizon": "1d", "has_override": True}
     }
     favorites = await async_get_favorites(hass)
-    assert favorites[panel.runtime.panel_device_id]["circuits"] == [new_id_e(RANGE)]
+    assert favorites[panel.runtime.panel_device_id]["circuits"] == [renamed[RANGE]]
 
     # The removal the notice still lists.
     removals = panel.runtime.coordinator.package_rating_manager.diagnostics(panel.snapshot)[
         "unacknowledged"
     ]
-    assert list(removals) == [new_id_e(BATH)]
-    assert removals[new_id_e(BATH)]["circuit_id"] == new_id_e(BATH)
+    assert list(removals) == [renamed[BATH]]
+    assert removals[renamed[BATH]]["circuit_id"] == renamed[BATH]
 
     # The breaker-switch notice, under the switch's new id and still ignored.
     switch_issue = breaker_switch_area_issue_id(
-        panel.entry.entry_id, build_switch_unique_id(panel.serial, new_id_e(HVAC))
+        panel.entry.entry_id, build_switch_unique_id(panel.serial, renamed[HVAC])
     )
     issue = ir.async_get(hass).async_get_issue(DOMAIN, switch_issue)
     assert issue is not None and issue.dismissed_version is not None
@@ -392,16 +403,29 @@ async def assert_carried_over(
     ]
 
 
+def updated_trees(serial: str | None = None) -> tuple[RetainedTree, RetainedTree]:
+    """Return r202639-e and r202645-e, under another serial where one is given (`with_serial`)."""
+    before, after = capture(BEFORE).tree(), capture(AFTER).tree()
+    if serial is None:
+        return before, after
+    return with_serial(before, serial), with_serial(after, serial)
+
+
 async def install_and_update(
-    panels: Callable[..., Panel], hass_storage: dict[str, object]
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    *,
+    options: Mapping[str, object] = MONITORED_OPTIONS,
+    serial: str | None = None,
 ) -> tuple[Panel, Registered, str]:
     """Install on r202639-e with every setting the panel can hold, then restart on r202645-e."""
-    panel = panels(capture(BEFORE).tree())
+    before_tree, after_tree = updated_trees(serial)
+    panel = panels(before_tree, options=options)
     seed_package_removal(hass_storage, panel.entry.entry_id)
-    await panel.set_up(capture(BEFORE).tree())
+    await panel.set_up(before_tree)
     bathroom = await seed_settings(panel)
     before = registered(panel.hass, panel.entry)
-    await panel.restart_on(capture(AFTER).tree())
+    await panel.restart_on(after_tree)
     return panel, before, bathroom
 
 
@@ -440,21 +464,59 @@ async def assert_a_second_migration_writes_nothing(panel: Panel) -> None:
 # ---------------------------------------------------------------------------
 
 
+def with_first_letters_upper_cased(serial: str) -> str:
+    """Return `serial` with its first two characters upper-cased."""
+    return serial[:2].upper() + serial[2:]
+
+
+MIXED_CASE_SERIAL: Final = with_first_letters_upper_cased(
+    snapshot(capture(BEFORE).tree()).serial_number
+)
+"""`r202639-e`'s serial with its first letters upper-cased: a serial of mixed case, which no capture has.
+
+The circuit sensors' unique ids lower-case the serial, and the breaker
+switch's, the priority select's, the inverter card's and every device
+identifier keep it as it is (`id_builder`), so the migration must build each
+family's old and new ids exactly as its builder does.
+"""
+
+
+@pytest.mark.parametrize(
+    ("options", "serial"),
+    [
+        pytest.param(MONITORED_OPTIONS, None, id="circuit-names"),
+        pytest.param({**MONITORED_OPTIONS, USE_CIRCUIT_NUMBERS: True}, None, id="circuit-numbers"),
+        pytest.param(MONITORED_OPTIONS, MIXED_CASE_SERIAL, id="a-mixed-case-serial"),
+    ],
+)
 async def test_an_install_keeps_everything_across_the_update(
     panels: Callable[..., Panel],
     hass_storage: dict[str, object],
     caplog: pytest.LogCaptureFixture,
+    options: Mapping[str, object],
+    serial: str | None,
 ) -> None:
     """Every entity, device and setting of r202639-e is held under r202645-e's ids.
 
-    Fails when a registry family, a device kind or a store is skipped, when the
-    package ratings load before the migration, or when the migration runs after
-    the platforms are forwarded.
+    In circuit-numbers mode as in the default: a re-keyed row is what keeps
+    the platform from creating its circuit entity anew with a circuit-number
+    id preset. And on a serial of mixed case, which the builders spell two
+    ways. Fails when a registry family, a device kind or a store is skipped,
+    when an id is built for a serial spelled otherwise than its builder spells
+    it, when the package ratings load before the migration, or when the
+    migration runs after the platforms are forwarded.
     """
     caplog.set_level(logging.INFO)
-    panel, before, bathroom = await install_and_update(panels, hass_storage)
+    panel, before, bathroom = await install_and_update(
+        panels, hass_storage, options=options, serial=serial
+    )
+    if serial is not None:
+        assert panel.serial == serial and serial not in (serial.lower(), serial.upper())
+    renamed = new_ids_of(updated_trees(serial)[1])
+    if options.get(USE_CIRCUIT_NUMBERS):
+        assert panel.power(renamed[RANGE]).endswith("_circuit_9_power")
 
-    await assert_carried_over(panel, before, bathroom, caplog)
+    await assert_carried_over(panel, before, bathroom, caplog, renamed=renamed)
     infos = [
         record.getMessage()
         for record in caplog.records

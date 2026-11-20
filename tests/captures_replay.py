@@ -251,6 +251,29 @@ def renamed_devices(tree: RetainedTree, renames: Mapping[str, str]) -> RetainedT
     return result
 
 
+def with_serial(tree: RetainedTree, serial: str) -> RetainedTree:
+    """Return the tree as the same panel publishes it under another serial.
+
+    The enclosure's device id is its serial, and r202645 builds its circuits'
+    ids on it, so the root and every device whose id it begins are renamed
+    (`renamed_devices`, which carries every reference along) and the panel's
+    `info/serial-number` follows. For a case no capture has, such as a serial
+    with upper-case letters, which some unique-id builders lower-case and
+    others keep.
+    """
+    root = panel_device_id(tree)
+    renamed = renamed_devices(
+        tree,
+        {
+            device_id: serial + device_id.removeprefix(root)
+            for device_id in tree
+            if device_id == root or device_id.startswith(f"{root}-")
+        },
+    )
+    renamed[serial]["info/serial-number"] = serial
+    return renamed
+
+
 CONNECTION_POINT: Final = "connection-point"
 """Whether the enclosure hosts a circuit or only measures it, which r202645 circuits declare."""
 
