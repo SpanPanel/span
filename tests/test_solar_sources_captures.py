@@ -25,6 +25,8 @@ from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.diagnostics import async_get_config_entry_diagnostics
+from custom_components.span_panel.id_builder import build_panel_unique_id
+from custom_components.span_panel.sensor_definitions import PV_POWER_SENSOR
 from custom_components.span_panel.solar_sources import solar_sources
 from custom_components.span_panel.util import SUB_DEVICE_PV, classify_sub_device_identifier
 
@@ -75,8 +77,13 @@ def _solar_devices(hass: HomeAssistant, entry: MockConfigEntry) -> list[dr.Devic
 
 
 def _pv_power_entity_id(hass: HomeAssistant, replayed: SpanPanelSnapshot) -> str | None:
+    """Return the panel PV power sensor's entity id, by the unique id its builder makes.
+
+    Built rather than spelled: the builder lower-cases the serial, which a
+    capture whose serial has capitals shows.
+    """
     return er.async_get(hass).async_get_entity_id(
-        "sensor", DOMAIN, f"span_{replayed.serial_number}_pv_power"
+        "sensor", DOMAIN, build_panel_unique_id(replayed.serial_number, PV_POWER_SENSOR.key)
     )
 
 

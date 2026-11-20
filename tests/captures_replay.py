@@ -77,8 +77,17 @@ unchanged; `main32_r202645-cascade` is another panel. `main32_r202639-upstream-p
 has two inverters no circuit feeds.
 """
 
-R202639_CAPTURES: Final = tuple(Capture(f"r202639-{handle}") for handle in "abcde")
-"""The r202639 reference captures, by their opaque handles."""
+R202639_CAPTURES: Final = tuple(Capture(f"r202639-{handle}") for handle in "abcdef")
+"""The r202639 reference captures, by their opaque handles.
+
+`r202639-f` ships as its tree alone: the emitter package derives a definition
+and ticks from the tree at load, and the replay here reads only the tree, as it
+does for every capture. It is masked another way. Its devices are
+`masked-<kind>-<n>` and its serial is the capitals `MASKED-PANEL`, which is not
+its root device's id, where every other capture's serial is its root's id in
+lower case. So it is the one capture whose serial the unique-id builders that
+lower-case it spell differently from the device identifiers, which keep it.
+"""
 
 R202645_CAPTURES: Final = tuple(Capture(f"r202645-{handle}") for handle in "aceg")
 """The r202645 reference captures, whose circuits and remote CTs carry the new device ids.
