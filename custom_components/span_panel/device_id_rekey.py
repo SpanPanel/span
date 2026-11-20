@@ -14,15 +14,28 @@ install keeps every entity, device and setting it had, with no visible step:
 3. **Stores and notices**: each module that owns a circuit-keyed store re-keys
    it, by its own shape, before anything loads it.
 
-**Names are kept, but for one fallback.** A circuit's device and entities are
-named from what the panel publishes for it -- its name, or its breaker
-positions -- and none of that changes with its id. A name built from the raw
-id does. `helpers.construct_circuit_identifier_from_tabs` names a circuit with
-no breaker positions `Circuit {circuit id}`: in circuit-numbers mode always,
-and otherwise where the panel gives it no name. From the first setup on the
-new ids it names the new id. No capture reaches it; the paths that can are a
-hosted circuit whose spaces are declared but carry no value, and the card of
-an inverter such a circuit feeds.
+**Names are kept, but where one is built from the raw id.** A circuit's
+device and entities are named from what the panel publishes for it -- its
+name, or its breaker positions -- and a remote CT's by `outside_meter_label`,
+from the trait instance both its ids end in, in either mode; none of that
+changes with the id. `helpers.construct_circuit_identifier_from_tabs` names a
+circuit with no breaker positions `Circuit {circuit id}`, and from the first
+setup on the new ids that is the new id. No capture reaches it. Three names
+can:
+
+- the device of a hosted circuit whose declared spaces carry no value, where
+  the panel gives it no name and it is not a solar circuit
+  (`helpers.circuit_device_name`), and with it its entities' names;
+- the card of an inverter fed by a circuit with no breaker positions, a
+  remote CT included, unless the install names circuits by name and the
+  panel names that one (`helpers.resolve_pv_display_suffix`, which has no
+  `outside_meter_label` branch);
+- in circuit-numbers mode, the identifier a hosted circuit with no tabs names
+  its entities by, whether the panel names it or not.
+
+A circuit's label in a message or the monitoring status
+(`helpers.construct_circuit_label`) follows the id the same way; nothing
+stores it.
 
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit
