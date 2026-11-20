@@ -27,7 +27,7 @@ from span_panel_api.exceptions import (
 )
 
 from .const import DOMAIN
-from .device_id_migration import migration_pending
+from .device_id_migration import migration_pending, pair_device_ids, warn_of_trait_conflict
 from .energy_orientation import EnergyCounter, EnergyMeter
 from .entry_issues import entry_removed
 from .entry_reloads import async_request_rebuild, async_update_entry_data_applied
@@ -120,6 +120,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # then, and the guard asks nothing. See `_device_ids_changed`.
         self._session_circuit_ids: frozenset[str] | None = None
         self._device_id_reload_asked = False
+        self._device_id_conflict_warned = False
 
         # Schema validation — runs once SUCCESSFULLY; a pass that finds no
         # metadata yet leaves the flag unset so a later one can still answer.
@@ -241,10 +242,22 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         Keyed on what changed, the circuit ids, never on the firmware version,
         which arrives on its own schedule. A circuit that leaves a panel whose
         ids are new already, or opaque, has no old-form counterpart, so it asks
-        nothing (`device_id_migration.migration_pending`).
+        nothing (`device_id_migration.migration_pending`). The pairing is worked
+        out only when a session circuit is missing, so a settled panel costs one
+        set difference per snapshot. A pairing two new ids refuse asks nothing
+        either, and is warned of once a session rather than at every snapshot.
         """
         session = self._session_circuit_ids
-        if session is None or not migration_pending(session, snapshot):
+        if session is None:
+            return False
+        missing = session - snapshot.circuits.keys()
+        if not missing:
+            return False
+        pairing = pair_device_ids(snapshot)
+        if pairing.conflict is not None and not self._device_id_conflict_warned:
+            self._device_id_conflict_warned = True
+            warn_of_trait_conflict(pairing.conflict)
+        if not migration_pending(missing, pairing):
             return False
         if not self._device_id_reload_asked:
             self._device_id_reload_asked = True

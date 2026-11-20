@@ -49,8 +49,11 @@ from custom_components.span_panel.conversion_repairs import (
     breaker_switch_area_issue_id,
 )
 from custom_components.span_panel.device_id_migration import (
+    DeviceIdPairing,
+    TraitConflict,
     current_circuit_id,
     migration_pending,
+    pair_device_ids,
     previous_device_ids,
     rekeyed,
 )
@@ -453,8 +456,8 @@ async def test_a_second_setup_on_the_new_ids_changes_nothing(
     stores_before = stores(hass_storage, panel.entry.entry_id)
 
     with patch(
-        "custom_components.span_panel.device_id_rekey.previous_device_ids",
-        wraps=previous_device_ids,
+        "custom_components.span_panel.device_id_rekey.pair_device_ids",
+        wraps=pair_device_ids,
     ) as pairing:
         await panel.restart_on(capture(AFTER).tree())
     flush_delayed_saves(panel.hass)
@@ -575,9 +578,15 @@ class TestPreviousDeviceIds:
     def test_two_ids_claiming_one_trait_instance_refuse_the_whole_mapping(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """A guess between them would carry one circuit's history onto another."""
-        assert previous_device_ids(panel_of("a-1-16-5", "b-1-16-5", "a-1-16-6")) == {}
-        assert "share trait instance circuit-5" in caplog.text
+        """A guess between them would carry one circuit's history onto another.
+
+        The refusal comes back with the pairing, and nothing is logged: the
+        caller warns of it, once.
+        """
+        pairing = pair_device_ids(panel_of("a-1-16-5", "b-1-16-5", "a-1-16-6"))
+        assert pairing == DeviceIdPairing({}, TraitConflict("circuit-5", "a-1-16-5", "b-1-16-5"))
+        assert previous_device_ids(panel_of("a-1-16-5", "b-1-16-5")) == {}
+        assert not caplog.records
 
     def test_every_capture_of_a_new_tree_pairs_each_of_its_circuits(self) -> None:
         """Every circuit of every r202645 capture has an old id to pair with."""
@@ -609,20 +618,21 @@ class TestMigrationPending:
 
     def test_new_ids_for_the_sessions_circuits(self) -> None:
         """The session's circuit is missing, and the snapshot pairs it with a new id."""
-        assert migration_pending(frozenset({"circuit-5"}), panel_of("p-1-16-5"))
+        assert migration_pending({"circuit-5"}, pair_device_ids(panel_of("p-1-16-5")))
 
     def test_a_circuit_gone_from_a_panel_on_new_ids(self) -> None:
         """A circuit missing from a panel already on new ids has no counterpart."""
-        assert not migration_pending(frozenset({"p-1-16-5", "p-1-16-6"}), panel_of("p-1-16-5"))
+        assert not migration_pending({"p-1-16-6"}, pair_device_ids(panel_of("p-1-16-5")))
 
     def test_a_circuit_gone_from_a_panel_on_opaque_ids(self) -> None:
         """A circuit missing from a panel on opaque ids has no counterpart either."""
         opaque = "0123456789abcdef0123456789abcdef"
-        assert not migration_pending(frozenset({opaque, "x"}), panel_of(opaque))
+        assert not migration_pending({"x"}, pair_device_ids(panel_of(opaque)))
 
-    def test_the_same_circuits(self) -> None:
-        """Nothing missing, nothing pending."""
-        assert not migration_pending(frozenset({"circuit-5"}), panel_of("circuit-5"))
+    def test_a_refused_pairing(self) -> None:
+        """Two new ids claiming one trait instance pair nothing, so nothing is pending."""
+        refused = pair_device_ids(panel_of("a-1-16-5", "b-1-16-5"))
+        assert not migration_pending({"circuit-5"}, refused)
 
 
 class TestCurrentCircuitId:
@@ -889,20 +899,18 @@ async def test_a_main32_panel_migrates_nothing(
     await panel.hass.async_block_till_done()
     written = stores(hass_storage, panel.entry.entry_id)
 
-    pairings: list[Mapping[str, str]] = []
+    pairings: list[DeviceIdPairing] = []
 
-    def pairing(tree_snapshot: SpanPanelSnapshot) -> Mapping[str, str]:
-        pairings.append(previous_device_ids(tree_snapshot))
+    def pairing(tree_snapshot: SpanPanelSnapshot) -> DeviceIdPairing:
+        pairings.append(pair_device_ids(tree_snapshot))
         return pairings[-1]
 
-    with patch(
-        "custom_components.span_panel.device_id_rekey.previous_device_ids", side_effect=pairing
-    ):
+    with patch("custom_components.span_panel.device_id_rekey.pair_device_ids", side_effect=pairing):
         await panel.restart_on(capture(second).tree())
     flush_delayed_saves(panel.hass)
     await panel.hass.async_block_till_done()
 
-    assert pairings == [{}]
+    assert pairings == [DeviceIdPairing({})]
     after = registered(panel.hass, panel.entry)
     assert {key: after.entities[key] for key in before.entities} == before.entities
     assert {key: after.devices[key] for key in before.devices} == before.devices
@@ -1570,3 +1578,64 @@ async def test_a_new_unique_id_another_entry_holds_is_left_alone(
     row = registry.async_get(kept.entity_id)
     assert row is not None and row.unique_id == old
     assert f"its new unique id {new} is held by" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# A refused pairing
+# ---------------------------------------------------------------------------
+
+
+def conflicts(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Return every warning that two new ids claimed one trait instance."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MAPPING_LOGGER and "share trait instance" in record.getMessage()
+    ]
+
+
+async def test_a_refused_pairing_is_warned_of_once_a_session(
+    panels: Callable[..., Panel], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Two new ids claiming one trait instance migrate nothing, reload nothing, and warn once.
+
+    Once a session, not once a snapshot: a running session that keeps being
+    told the same thing is warned once, and a new session -- the setup after a
+    restart -- once more. SPAN says the case cannot arise; the tree is derived.
+
+    Fails when the coordinator warns at every snapshot, or the pairing logs by
+    itself.
+    """
+    caplog.set_level(logging.WARNING)
+    after = capture(AFTER).tree()
+    second = f"{panel_device_id(after)}-{DERIVED_HEX}-1-16-5"
+    conflicting = renamed_devices(after, {new_id_e("circuit-6"): second})
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    rebuilds: list[str] = []
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        side_effect=lambda _hass, entry_id: rebuilds.append(entry_id),
+    ):
+        for _ in range(3):
+            await panel.push(conflicting)
+
+    assert rebuilds == []
+    assert len(conflicts(caplog)) == 1
+    assert second in conflicts(caplog)[0]
+
+    # A new session warns once more, at its setup. That setup builds entities
+    # for circuits it could not pair, whose first update asks for one reload,
+    # and the reload's setup is a session of its own; so the setups are counted.
+    with patch(
+        "custom_components.span_panel.device_id_rekey.pair_device_ids", wraps=pair_device_ids
+    ) as setups:
+        await panel.restart_on(conflicting)
+        settled = len(conflicts(caplog))
+        for _ in range(2):
+            await panel.push(conflicting)
+
+    assert setups.call_count >= 1
+    assert settled == 1 + setups.call_count
+    assert len(conflicts(caplog)) == settled

@@ -34,7 +34,8 @@ migration reaches either.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Set
+from dataclasses import dataclass
 import logging
 import re
 from types import MappingProxyType
@@ -60,12 +61,37 @@ _OLD_FAMILY: Final = MappingProxyType({"16": "circuit", "42": "remote-ct"})
 _NO_PAIRS: Final[Mapping[str, str]] = MappingProxyType({})
 
 
-def previous_device_ids(snapshot: SpanPanelSnapshot) -> Mapping[str, str]:
-    """Map each old-form circuit id to the new-form id of the same trait instance.
+@dataclass(frozen=True, slots=True)
+class TraitConflict:
+    """Two new ids claiming one trait instance, which refuses the whole pairing."""
 
-    Built from the snapshot alone. Two new ids claiming one trait instance
-    refuse the whole mapping, with a WARNING: SPAN says it cannot happen, and a
-    guess between them would re-key one circuit's history onto another.
+    trait_instance: str
+    """The old id both would take, such as `circuit-5`."""
+
+    first: str
+    second: str
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceIdPairing:
+    """What a snapshot says each old-form circuit id is called now, or why it says nothing."""
+
+    previous: Mapping[str, str]
+    """Each old-form id to the new-form id of the same trait instance; empty when refused."""
+
+    conflict: TraitConflict | None = None
+    """The trait instance two new ids claim, when that refused the pairing."""
+
+
+def pair_device_ids(snapshot: SpanPanelSnapshot) -> DeviceIdPairing:
+    """Pair each old-form circuit id with the new-form id of the same trait instance.
+
+    Built from the snapshot alone, and pure: it logs nothing. Two new ids
+    claiming one trait instance refuse the whole pairing -- SPAN says it cannot
+    happen, and a guess between them would re-key one circuit's history onto
+    another -- and the refusal comes back as `conflict`, for the caller to warn
+    of once (`warn_of_trait_conflict`), since some callers ask on every
+    snapshot.
     """
     mapping: dict[str, str] = {}
     for circuit_id in snapshot.circuits:
@@ -74,15 +100,24 @@ def previous_device_ids(snapshot: SpanPanelSnapshot) -> Mapping[str, str]:
             continue
         old_id = f"{_OLD_FAMILY[match['trait']]}-{match['n']}"
         if old_id in mapping:
-            _LOGGER.warning(
-                "Device ids %s and %s share trait instance %s; not migrating",
-                mapping[old_id],
-                circuit_id,
-                old_id,
-            )
-            return _NO_PAIRS
+            return DeviceIdPairing(_NO_PAIRS, TraitConflict(old_id, mapping[old_id], circuit_id))
         mapping[old_id] = circuit_id
-    return MappingProxyType(mapping)
+    return DeviceIdPairing(MappingProxyType(mapping))
+
+
+def previous_device_ids(snapshot: SpanPanelSnapshot) -> Mapping[str, str]:
+    """Map each old-form circuit id to the new-form id of the same trait instance; empty when refused."""
+    return pair_device_ids(snapshot).previous
+
+
+def warn_of_trait_conflict(conflict: TraitConflict) -> None:
+    """Log, at WARNING, that two new ids claim one trait instance, so nothing is migrated."""
+    _LOGGER.warning(
+        "Device ids %s and %s share trait instance %s; not migrating",
+        conflict.first,
+        conflict.second,
+        conflict.trait_instance,
+    )
 
 
 def rekeyed[ValueT](
@@ -106,16 +141,16 @@ def rekeyed[ValueT](
     return kept, moved
 
 
-def migration_pending(session_circuit_ids: frozenset[str], snapshot: SpanPanelSnapshot) -> bool:
-    """Whether the snapshot calls, by new ids, circuits this session is keyed by under old ones.
+def migration_pending(missing: Set[str], pairing: DeviceIdPairing) -> bool:
+    """Whether a snapshot calls, by new ids, circuits a session is keyed by under old ones.
 
-    One set difference per snapshot: the pairing is worked out only when a
-    circuit the session holds is missing. A circuit that has left a panel whose
-    ids are already new, or opaque, is missing with no old-form counterpart, so
-    the answer is no.
+    `missing` is the session's circuits the snapshot lacks, and `pairing` the
+    snapshot's. The caller works the pairing out only when some are missing,
+    which keeps the guard to one set difference per snapshot. A circuit that
+    has left a panel whose ids are already new, or opaque, is missing with no
+    old-form counterpart, so the answer is no; so it is for a refused pairing.
     """
-    missing = session_circuit_ids - snapshot.circuits.keys()
-    return bool(missing) and not missing.isdisjoint(previous_device_ids(snapshot))
+    return not missing.isdisjoint(pairing.previous)
 
 
 def current_circuit_id(snapshot: SpanPanelSnapshot, circuit_id: str, *, service: str) -> str:

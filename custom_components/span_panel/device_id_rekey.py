@@ -63,7 +63,7 @@ from . import (
     pv_binding,
 )
 from .const import DOMAIN
-from .device_id_migration import previous_device_ids
+from .device_id_migration import pair_device_ids, warn_of_trait_conflict
 from .entity_resolver import entity_id_in_entry
 from .helpers import circuit_device_name
 from .id_builder import build_circuit_device_identifier, circuit_entity_unique_ids
@@ -99,9 +99,13 @@ async def async_migrate_device_ids(
     `snapshot` is the setup's, from the first refresh. Devices go before
     entities, so a newer device's rows are gone when the originals take their
     ids; the stores follow, each re-keyed on disk before its owner loads it.
-    One INFO line reports the counts when anything moved.
+    One INFO line reports the counts when anything moved. A pairing two new
+    ids refuse is warned of here, once a setup, and nothing moves.
     """
-    mapping = previous_device_ids(snapshot)
+    pairing = pair_device_ids(snapshot)
+    if pairing.conflict is not None:
+        warn_of_trait_conflict(pairing.conflict)
+    mapping = pairing.previous
     if not mapping:
         return
     serial = snapshot.serial_number
