@@ -891,6 +891,11 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # does not exist yet.
             await coordinator.package_rating_manager.async_load()
 
+            # What this session is keyed by. A snapshot that later names these
+            # circuits by new ids -- the panel updating while this runs -- reloads
+            # the entry, whose setup then migrates, rather than being published.
+            coordinator.record_session_circuit_ids(coordinator.data)
+
             # The first reconcile deletes every package whose circuit id the
             # snapshot lacks, which the migration above has already re-keyed. It
             # also needs the notices restored above.

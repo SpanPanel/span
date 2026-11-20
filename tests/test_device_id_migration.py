@@ -26,6 +26,7 @@ import logging
 from typing import Final
 from unittest.mock import patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     area_registry as ar,
@@ -50,6 +51,7 @@ from custom_components.span_panel.device_id_migration import (
     rekeyed,
 )
 from custom_components.span_panel.device_id_rekey import async_migrate_device_ids
+from custom_components.span_panel.entry_reloads import async_request_rebuild
 from custom_components.span_panel.frontend import async_get_favorites
 from custom_components.span_panel.helpers import outside_meter_label
 from custom_components.span_panel.id_builder import (
@@ -65,6 +67,7 @@ from .captures_replay import (
     description,
     panel_device_id,
     renamed_devices,
+    replay,
     snapshot,
     with_connection_point,
     without_device,
@@ -605,6 +608,160 @@ def test_a_value_under_the_new_id_wins_over_the_old() -> None:
     assert rekeyed({"old": 1, "new": 2, "other": 3}, {"old": "new"}) == ({"new": 2, "other": 3}, 1)
     assert rekeyed({"old": 1, "other": 3}, {"old": "new"}) == ({"other": 3, "new": 1}, 1)
     assert rekeyed({"other": 3}, {"old": "new"}) == ({"other": 3}, 0)
+
+
+# ---------------------------------------------------------------------------
+# the live transition, and the guard staying silent
+# ---------------------------------------------------------------------------
+
+
+def entity_states(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, tuple[object, ...]]:
+    """Every entity's state as written: its value, attributes and when it last changed."""
+    states: dict[str, tuple[object, ...]] = {}
+    for row in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id):
+        state = hass.states.get(row.entity_id)
+        if state is not None:
+            states[row.entity_id] = (state.state, dict(state.attributes), state.last_updated)
+    return states
+
+
+def with_excluded_circuit_over_its_breaker(tree: RetainedTree, circuit_id: str) -> RetainedTree:
+    """Return the tree with one circuit drawing 25 A on its 20 A breaker: an alert, unless excluded."""
+    tree[circuit_id]["meter/current"] = "25.0"
+    return tree
+
+
+@pytest.mark.parametrize("path", ["push", "poll"])
+async def test_the_panel_updating_under_a_running_session_reloads_it(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+    path: str,
+) -> None:
+    """A snapshot naming the session's circuits by new ids is dropped, and the entry rebuilt.
+
+    Nothing reads it: no store written, no reconcile, no alert -- for the
+    circuit the user excluded from monitoring, which defaults would judge -- and
+    no entity updated. One rebuild is asked for however often it arrives, and
+    the setup it runs carries everything over, as a restart onto the new ids does.
+
+    Fails when the guard is removed, placed after `_reconcile_package_ratings`
+    or after `async_set_updated_data`, or asks through `request_reload`.
+    """
+    caplog.set_level(logging.INFO)
+    panel = panels(capture(BEFORE).tree())
+    seed_package_removal(hass_storage, panel.entry.entry_id)
+    await panel.set_up(capture(BEFORE).tree())
+    bathroom = await seed_settings(panel)
+    before = registered(panel.hass, panel.entry)
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+    written = stores(hass_storage, panel.entry.entry_id)
+    states = entity_states(panel.hass, panel.entry)
+    held = panel.runtime.coordinator.data
+    updated = with_excluded_circuit_over_its_breaker(capture(AFTER).tree(), new_id_e(RANGE))
+    # What the panel serves from now on, the rebuild's client included.
+    panel.tree = updated
+    rebuilds: list[str] = []
+    manager = panel.runtime.coordinator.package_rating_manager
+
+    with (
+        patch(
+            "custom_components.span_panel.coordinator.async_request_rebuild",
+            side_effect=lambda _hass, entry_id: rebuilds.append(entry_id),
+        ),
+        patch("custom_components.span_panel.current_monitor.dispatch_alert") as alerts,
+        patch.object(manager, "reconcile", wraps=manager.reconcile) as reconcile,
+    ):
+        for _ in range(2):
+            if path == "push":
+                await panel.push(updated)
+            else:
+                panel.clients[-1].serve(replay(updated))
+                await panel.runtime.coordinator.async_refresh()
+                await panel.hass.async_block_till_done()
+        flush_delayed_saves(panel.hass)
+        await panel.hass.async_block_till_done()
+
+    assert rebuilds == [panel.entry.entry_id]
+    alerts.assert_not_called()
+    reconcile.assert_not_called()
+    assert panel.runtime.coordinator.data is held
+    assert stores(hass_storage, panel.entry.entry_id) == written
+    assert entity_states(panel.hass, panel.entry) == states
+    assert (
+        sum("now calls its circuits by new device ids" in r.getMessage() for r in caplog.records)
+        == 1
+    )
+
+    # The rebuild it asked for, as `entry_reloads` runs it.
+    async_request_rebuild(panel.hass, panel.entry.entry_id)
+    await panel.hass.async_block_till_done()
+    assert panel.entry.state is ConfigEntryState.LOADED
+    await panel.push(updated)
+
+    await assert_carried_over(panel, before, bathroom, caplog)
+
+
+async def test_a_circuit_leaving_a_panel_on_new_ids_reloads_nothing(
+    panels: Callable[..., Panel],
+) -> None:
+    """On a panel whose ids are new already, a circuit that goes is just gone.
+
+    Fails when `migration_pending` drops its old-form test.
+    """
+    panel = panels(capture(AFTER).tree())
+    await panel.set_up(capture(AFTER).tree())
+    rebuilds: list[str] = []
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        side_effect=lambda _hass, entry_id: rebuilds.append(entry_id),
+    ):
+        await panel.push(without_device(capture(AFTER).tree(), new_id_e(RANGE)))
+
+    assert rebuilds == []
+    assert new_id_e(RANGE) not in panel.runtime.coordinator.data.circuits
+
+
+async def test_a_main32_update_that_drops_a_circuit_behaves_as_today(
+    panels: Callable[..., Panel],
+) -> None:
+    """MAIN 32's ids do not change: its firmware moving and a circuit going reload nothing.
+
+    The circuit's copied package is removed as it always was, with the notice.
+    Fails when `migration_pending` drops its old-form test or keys on the
+    firmware version.
+    """
+    tree = capture("main32_r202639").tree()
+    panel = panels(tree)
+    await panel.set_up(tree)
+    circuit_id, circuit = next(
+        (cid, c)
+        for cid, c in panel.snapshot.circuits.items()
+        if len(c.tabs) == 1 and c.breaker_rating_a is not None
+    )
+    rating = int(circuit.breaker_rating_a or 0)
+    await panel.call(
+        "set_circuit_package_ratings",
+        circuit_id=panel.power(circuit_id),
+        package_ratings_a=[rating, rating],
+    )
+    manager = panel.runtime.coordinator.package_rating_manager
+    assert manager.resolve(circuit_id, panel.snapshot).user_set
+    updated = without_device(tree, circuit_id)
+    updated[panel.serial]["info/firmware-version"] = "spanos3/r202645/02"
+    rebuilds: list[str] = []
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        side_effect=lambda _hass, entry_id: rebuilds.append(entry_id),
+    ):
+        await panel.push(updated)
+
+    assert rebuilds == []
+    assert circuit_id not in manager.diagnostics(panel.runtime.coordinator.data)["packages"]
+    assert is_standing(panel.hass, panel.entry, _PACKAGE_NOTICE)
 
 
 # ---------------------------------------------------------------------------

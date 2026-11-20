@@ -27,6 +27,7 @@ from span_panel_api.exceptions import (
 )
 
 from .const import DOMAIN
+from .device_id_migration import migration_pending
 from .energy_orientation import EnergyCounter, EnergyMeter
 from .entry_issues import entry_removed
 from .entry_reloads import async_request_rebuild, async_update_entry_data_applied
@@ -113,6 +114,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # mind about whether a circuit may be operated, in either direction.
         # None until the first snapshot, which is the baseline.
         self._known_settability: dict[str, tuple[bool, bool]] | None = None
+
+        # The circuit ids this session is keyed by, recorded by setup once the
+        # device-id migration has run (`record_session_circuit_ids`). None until
+        # then, and the guard asks nothing. See `_device_ids_changed`.
+        self._session_circuit_ids: frozenset[str] | None = None
+        self._device_id_reload_asked = False
 
         # Schema validation — runs once SUCCESSFULLY; a pass that finds no
         # metadata yet leaves the flag unset so a later one can still answer.
@@ -208,6 +215,45 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def request_reload(self) -> None:
         """Request a reload of the integration, started once the current update is done."""
         self._reload_requested = True
+
+    def record_session_circuit_ids(self, snapshot: SpanPanelSnapshot) -> None:
+        """Record the circuit ids this session is keyed by, which arms the device-id guard.
+
+        Called by `async_setup_entry` with the setup snapshot, once the device-id
+        migration has re-keyed what the entry holds to it. Every entity, device
+        and store the session builds or loads from then on is keyed by these.
+        """
+        self._session_circuit_ids = frozenset(snapshot.circuits)
+
+    def _device_ids_changed(self, snapshot: SpanPanelSnapshot) -> bool:
+        """Whether this snapshot names, by new device ids, circuits this session holds under old ones.
+
+        The panel updating its firmware while this runs. Nothing in the session
+        can read such a snapshot: every circuit entity looks up an id it lacks,
+        monitoring finds none of the user's overrides, and the package ratings
+        would be judged against circuits they are not keyed by. So it is not
+        reconciled, published or post-processed, and the entry is rebuilt: the
+        reload's setup builds a fresh client, which waits for the new tree and
+        its names, and migrates on it. Asked for once per session and logged
+        once, straight from `entry_reloads` rather than through
+        `request_reload`, which waits for the post-update tasks this skips.
+
+        Keyed on what changed, the circuit ids, never on the firmware version,
+        which arrives on its own schedule. A circuit that leaves a panel whose
+        ids are new already, or opaque, has no old-form counterpart, so it asks
+        nothing (`device_id_migration.migration_pending`).
+        """
+        session = self._session_circuit_ids
+        if session is None or not migration_pending(session, snapshot):
+            return False
+        if not self._device_id_reload_asked:
+            self._device_id_reload_asked = True
+            _LOGGER.info(
+                "%s now calls its circuits by new device ids; reloading so they are carried over",
+                self.config_entry.title or "SPAN Panel",
+            )
+            self._async_schedule_reload()
+        return True
 
     @callback
     def _async_schedule_reload(self) -> None:
@@ -426,7 +472,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._mark_transport_dead(error)
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
-        """Handle a pushed snapshot from MQTT streaming."""
+        """Handle a pushed snapshot from MQTT streaming.
+
+        A snapshot that calls this session's circuits by new device ids is
+        dropped before anything reads it, and the entry is rebuilt
+        (`_device_ids_changed`): no reconcile, no baseline moved, nothing
+        published, no post-update task.
+        """
+        if self._device_ids_changed(snapshot):
+            return
         self._mark_panel_online()
         # Before the snapshot is published: the current monitor and the panel
         # topology judge circuits by the packages resolved against it, and neither
@@ -852,7 +906,13 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Data update ---
 
     async def _async_update_data(self) -> SpanPanelSnapshot:
-        """Fetch data from the panel client."""
+        """Fetch data from the panel client.
+
+        A snapshot that calls this session's circuits by new device ids is not
+        read, and the entry is rebuilt (`_device_ids_changed`); the data already
+        held is returned, as the offline branch returns it, so the entities keep
+        their last values for the seconds the reload takes.
+        """
         try:
             # Performance timing
             cycle_start = _epoch_time()
@@ -861,6 +921,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             fetch_start = _epoch_time()
             snapshot = await self._client.get_snapshot()
             fetch_duration = _epoch_time() - fetch_start
+
+            if self._device_ids_changed(snapshot):
+                return self.data
 
             cycle_total = _epoch_time() - cycle_start
             _LOGGER.debug(
