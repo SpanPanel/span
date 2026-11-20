@@ -22,7 +22,6 @@
   "distribution-enclosure/status/time-zone": "deliberate skip: no curated entity, because Home Assistant owns the time zone and a mismatch is a Repair rather than an entity, and a new install creates no vendor reading for it either. Only an install that already holds that disabled reading keeps it",
   "lugs/connection/backed-up": "whether the lugs' feed is backed up off-grid; topology no entity models",
   "lugs/connection/count": "no adapter maps it: it counts the physical units aggregated downstream (microinverters, packs), which nothing here models",
-  "lugs/connection/fed-by-device-id": "declared and not published on this panel; where it is published it decides whether the lugs are the service entrance and links a battery or inverter ahead of them",
   "lugs/connection/fed-by-device-status": "declared and not published on this panel; link health is read only for a battery or inverter the lugs name, and these lugs name none",
   "lugs/connection/fed-by-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
   "lugs/connection/feeds-device-status": "feedthrough link-health; the feeds-* half of the downstream lugs record is topology to consume, and no producer publishes it",

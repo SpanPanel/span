@@ -296,6 +296,12 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "panel.busbar_current_a": Producibility.UNMAPPED,
         "panel.frequency_hz": Producibility.UNMAPPED,
         "panel.upstream_protection_rating_a": Producibility.UNMAPPED,
+        # Whether the upstream lugs are the utility connection point, shown as
+        # the grid power sensor's `at_service_entrance` attribute
+        # (`SpanPanelPowerSensor.extra_state_attributes`). The library answers
+        # it from the lugs' `connection/fed-by-device-id` and maps no row for
+        # it: topology, not a reading.
+        "panel.lugs_at_service_entrance": Producibility.UNMAPPED,
         # What a circuit's `connection/feeds-role` declares, which orients its
         # power and Net Energy as generation where the role is solar
         # (`energy_orientation.circuit_is_generation`).
