@@ -271,15 +271,23 @@ def _warn_on_renamed_pairs(
     Nothing gates on it: the pairing is the panel's trait instance, which a
     recommissioned panel reuses for another circuit, as it would on any
     firmware. The device's registry `name` is the panel's name for the circuit
-    when it was last set up, never the user's own (`name_by_user`); an unnamed
-    circuit's carries its breaker positions, so a moved breaker shows here too.
+    when it was last set up, never the user's own (`name_by_user`).
+
+    Only a new circuit the panel names is compared. Names can lag the new
+    tree: a rebuild the guard asks for can set up before they arrive, and the
+    client waits for them only so long. A circuit without one would be
+    compared by the placeholder it is given, its breaker positions, which
+    says nothing about whether it is the same circuit.
     """
     serial = snapshot.serial_number
     for old_id, new_id in mapping.items():
+        circuit = snapshot.circuits[new_id]
+        if not circuit.name:
+            continue
         device = circuit_device(device_registry, serial, old_id, config_entry_id=entry_id)
         if device is None or device.name is None:
             continue
-        current = circuit_device_name(snapshot.circuits[new_id], new_id)
+        current = circuit_device_name(circuit, new_id)
         if device.name != current:
             _LOGGER.warning(
                 "Circuit %s (%s) is carried over to %s, which the panel now names %s: the panel "

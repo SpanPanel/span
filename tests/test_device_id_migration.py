@@ -82,6 +82,7 @@ from .captures_replay import (
     snapshot,
     with_connection_point,
     without_device,
+    without_topics,
 )
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 from .replayed_panel import PANEL_NAME, Panel, replayed_panels
@@ -1268,6 +1269,42 @@ async def test_a_recommissioned_panels_circuits_follow_their_trait_instance(
         (line,) = [line for line in warnings if f"Circuit {old_id} " in line]
         assert names[old_id] in line and new_id in line and str(after[new_id].name) in line
     assert is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+async def test_a_pair_whose_new_circuit_the_panel_has_not_named_yet_is_not_warned_of(
+    panels: Callable[..., Panel], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Names can lag the new tree, and a circuit without one has nothing to compare: no WARNING.
+
+    Three circuits come up unnamed, as a rebuild may set up before their names
+    arrive; they are carried over as every circuit is. A circuit the panel
+    names otherwise is still warned of
+    (`test_a_recommissioned_panels_circuits_follow_their_trait_instance`).
+    Fails when an unnamed circuit is compared by its placeholder, its breaker
+    positions.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    rows = {cid: panel.power(cid) for cid in (RANGE, BATH, HVAC)}
+    lagging = capture(AFTER).tree()
+    for old_id in rows:
+        lagging = without_topics(lagging, new_id_e(old_id), "info/name")
+    assert not any(snapshot(lagging).circuits[new_id_e(cid)].name for cid in rows)
+    caplog.clear()
+
+    await panel.restart_on(lagging)
+
+    assert not [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno >= logging.WARNING
+    ]
+    entities = er.async_get(panel.hass)
+    for old_id, entity_id in rows.items():
+        row = entities.async_get(entity_id)
+        assert row is not None and row.unique_id == build_circuit_unique_id(
+            panel.serial, new_id_e(old_id), "instantPowerW"
+        ), old_id
 
 
 # ---------------------------------------------------------------------------
