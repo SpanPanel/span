@@ -60,45 +60,44 @@ class Capture:
         return retained_tree(_published_tree(self.name))
 
 
-MAIN32_CAPTURES: Final = (Capture("main32_r202633"), Capture("main32_r202639"))
-"""The MAIN 32 captures, whose expected files are the record no change may move."""
+MAIN32_CAPTURES: Final = tuple(
+    Capture(name)
+    for name in (
+        "main32_r202633",
+        "main32_r202639",
+        "main32_r202639-upstream-pv",
+        "main32_r202645",
+        "main32_r202645-cascade",
+    )
+)
+"""The MAIN 32 captures, whose expected files are the record no change may move.
+
+`main32_r202645` is `main32_r202639`'s panel on firmware r202645, its device ids
+unchanged; `main32_r202645-cascade` is another panel. `main32_r202639-upstream-pv`
+has two inverters no circuit feeds.
+"""
 
 R202639_CAPTURES: Final = tuple(Capture(f"r202639-{handle}") for handle in "abcde")
 """The r202639 reference captures, by their opaque handles."""
 
-CAPTURES: Final = (*MAIN32_CAPTURES, *R202639_CAPTURES)
-"""The captures every replay runs over, by handle; each has its expected files on record."""
+R202645_CAPTURES: Final = tuple(Capture(f"r202645-{handle}") for handle in "aceg")
+"""The r202645 reference captures, whose circuits and remote CTs carry the new device ids.
 
-LATER_CAPTURES: Final = tuple(
-    Capture(name)
-    for name in (
-        "main32_r202639-upstream-pv",
-        "main32_r202645",
-        "main32_r202645-cascade",
-        "r202645-a",
-        "r202645-c",
-        "r202645-e",
-        "r202645-g",
-    )
-)
-"""Reference captures a test reads by handle that no replay runs over yet, so none has records.
-
-The r202645 captures, whose circuits and remote CTs carry the new device ids:
-`r202645-a` and `r202645-e` are `r202639-a` and `r202639-e` after the update,
-`r202645-c` is `r202639-c`'s panel recommissioned between the two, and
-`r202645-g` has no r202639 capture. `main32_r202645` is `main32_r202639`'s
-panel on r202645, ids unchanged; `main32_r202645-cascade` is another panel; and
-`main32_r202639-upstream-pv` has two inverters no circuit feeds.
+`r202645-a` and `r202645-e` are `r202639-a` and `r202639-e` after the update.
+`r202645-c` is `r202639-c`'s panel recommissioned between the two, so its
+circuits pair by trait instance only. `r202645-g` has no r202639 capture.
 """
+
+CAPTURES: Final = (*MAIN32_CAPTURES, *R202639_CAPTURES, *R202645_CAPTURES)
+"""The captures every replay runs over, by handle; each has its expected files on record."""
 
 
 def capture(name: str) -> Capture:
     """The capture with this handle, or fail naming the ones there are."""
-    for candidate in (*CAPTURES, *LATER_CAPTURES):
+    for candidate in CAPTURES:
         if candidate.name == name:
             return candidate
-    known = [c.name for c in (*CAPTURES, *LATER_CAPTURES)]
-    raise AssertionError(f"no capture {name!r}; there are {known}")
+    raise AssertionError(f"no capture {name!r}; there are {[c.name for c in CAPTURES]}")
 
 
 @functools.cache

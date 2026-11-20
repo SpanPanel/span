@@ -1,0 +1,14 @@
+{
+  "circuit/breaker/poles": "reaches circuit.is_240v and stops there; the voltage attribute is derived from the tab count instead, so no entity or attribute reads the field",
+  "circuit/connection/count": "declared and never published by this panel, and no adapter maps it: it counts the physical units aggregated downstream (microinverters, packs), which nothing here models",
+  "circuit/connection/feeds-device-id": "declared and not published on this panel, so the probe names a device that does not exist and dereferences to nothing. Where it is published it places a DER on its circuit",
+  "circuit/connection/feeds-device-status": "declared and not published on this panel; a circuit's link status is read only for the device its feeds-device-id names, and no circuit names one here",
+  "circuit/connection/feeds-device-type": "redundant: the library resolves a DER's class by dereferencing feeds-device-id against the tree's declared $type",
+  "distribution-enclosure/status/postal-code": "deliberate skip: no curated entity, because location has no Home Assistant value, and a new install creates no vendor reading for it either. Only an install that already holds that disabled reading keeps it",
+  "distribution-enclosure/status/time-zone": "deliberate skip: no curated entity, because Home Assistant owns the time zone and a mismatch is a Repair rather than an entity, and a new install creates no vendor reading for it either. Only an install that already holds that disabled reading keeps it",
+  "lugs/connection/count": "declared and never published by this panel, and no adapter maps it: it counts the physical units aggregated downstream (microinverters, packs), which nothing here models",
+  "lugs/connection/fed-by-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
+  "lugs/connection/feeds-device-status": "feedthrough link health: the feeds-* half of the downstream lugs' record, topology to consume, and this panel publishes none",
+  "lugs/connection/feeds-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
+  "pv/info/serial-number": "declared and not published by either inverter. Nothing reads a PV serial: each inverter's card is keyed <panel serial>_pv_<key>, its pv_inverters key, here its own device id since no circuit feeds it, and carries no serial"
+}

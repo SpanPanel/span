@@ -15,6 +15,10 @@ What each captured panel produces is recorded here, per stem (a capture's handle
 written by `tests/test_expected_entities.py` under `--update-capture-fixtures` and compared otherwise, and `unread_declarations/`, the hand-kept baselines of
 `tests/test_declared_but_unread.py` (one per tree, the adapter's reference payload included as `parent_child_tree.json`).
 
+One stem records an install rather than a capture: `r202639-e-updated-to-r202645-e` is the `r202639-e` install set up again after its panel took firmware
+r202645, which gave its circuits new device ids. It equals the `r202645-e` record except the two Downstream Current rows the updated install keeps, and
+`tests/test_expected_entities.py` holds the two to that.
+
 ## The historical pyproject copies
 
 `pyproject_both_blocks_redirected.toml` and `pyproject_type_checker_path_left_behind.toml` are byte copies of this repository's own `pyproject.toml`, taken from
