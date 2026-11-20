@@ -169,7 +169,9 @@ def monitored_circuits(
             points[circuit_id] = MonitoredCircuit(
                 point_id=circuit_id,
                 members=(circuit_id,),
-                name=circuit.name or circuit_id,
+                # Its label, as a shared meter's members are named above: the
+                # panel's name, or its breaker positions, never its wire id.
+                name=construct_circuit_label(circuit, circuit_id),
                 current_a=circuit.current_a,
                 rating_a=rating.judged_a,
                 panel_rating_a=rating.panel_a,
@@ -507,7 +509,7 @@ class CurrentMonitor:
             )
 
             circuits[entity_id] = {
-                "name": circuit.name if circuit else cid,
+                "name": construct_circuit_label(circuit, cid) if circuit else cid,
                 "basis": point.basis if point else "circuit",
                 # The point this entry's judgement is: members of a shared meter
                 # carry its key, so a consumer counts each point once.
