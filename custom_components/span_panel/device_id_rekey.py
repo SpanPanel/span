@@ -17,8 +17,21 @@ install keeps every entity, device and setting it had, with no visible step:
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit
 state. It acts only where the registry or a store of this entry still holds an
-old id, so a setup that migrated part of a panel finishes the job at the next,
-and a migrated install costs one pairing per setup and nothing else. Not a
+old id, so a setup that migrated part of a panel finishes the job at the next.
+
+**What a setup costs.** On a panel whose ids are opaque nothing pairs, and it
+returns after the pairing. On a panel on the new ids the pairing is never
+empty, so every setup looks again, and writes only what is still left to move:
+
+- the registries: each pair's circuit device and inverter card are looked up
+  by identifier, every unique id built for its old id is looked up, and this
+  entry's entity rows are scanned once for extension prefixes;
+- the stores: each circuit-keyed store is read from disk, and saved only when
+  a value in it moved; the settings file is read under its lock;
+- the notices' live view and the issue registry are checked in memory.
+
+On a migrated install that is reads and nothing else: no registry entry,
+store or notice is written. Not a
 config-entry version step: that runs before setup, with no snapshot. No version
 changes, because what this leaves is exactly what a release without it builds
 on the new firmware.

@@ -896,19 +896,22 @@ def rekey_overflow_fingerprint(fingerprint: str, mapping: Mapping[str, str]) -> 
     Reads back the grammar `_render_declined` writes, `{kind}:{key} ({count})`
     joined by `, `, and renders it again the same way, so the result is what
     `async_notice_declined_extensions` computes for the same overflow under the
-    new ids and the notice is not raised again. A fingerprint this module did
-    not write is returned as it is.
+    new ids and the notice is not raised again. A fingerprint naming no id
+    `mapping` holds, or one this module did not write, is returned as it is,
+    so the record is rewritten only when something in it moved.
     """
     declined: dict[str, int] = {}
+    moved = False
     for entry in fingerprint.split(", "):
         match = _DECLINED_ENTRY.fullmatch(entry)
         if match is None:
             return fingerprint
         kind, separator, instance_key = match["key"].partition(":")
         current = mapping.get(instance_key) if separator and kind in _REKEYED_KINDS else None
+        moved = moved or current is not None
         key = match["key"] if current is None else f"{kind}:{current}"
         declined[key] = int(match["count"])
-    return _render_declined(declined)
+    return _render_declined(declined) if moved else fingerprint
 
 
 @callback

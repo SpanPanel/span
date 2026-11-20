@@ -34,6 +34,7 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant.common import (
@@ -66,7 +67,7 @@ from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_switch_unique_id,
 )
-from custom_components.span_panel.notices import is_standing
+from custom_components.span_panel.notices import async_raise as raise_notice, is_standing
 
 from .captures_replay import (
     RetainedTree,
@@ -400,6 +401,36 @@ async def install_and_update(
     return panel, before, bathroom
 
 
+async def assert_a_second_migration_writes_nothing(panel: Panel) -> None:
+    """Run the migration again on a migrated install: it looks everywhere and writes nothing.
+
+    Every circuit-keyed store, the settings file, the notices and the three
+    registries persist through `Store.async_save` or `Store.async_delay_save`,
+    so recording both records every write the migration makes.
+    """
+    written: list[str] = []
+    save, delay_save = Store.async_save, Store.async_delay_save
+
+    async def recording_save(store: Store[object], data: object) -> None:
+        written.append(store.key)
+        await save(store, data)
+
+    def recording_delay_save(
+        store: Store[object], data_func: Callable[[], object], delay: float = 0
+    ) -> None:
+        written.append(store.key)
+        delay_save(store, data_func, delay)
+
+    with (
+        patch.object(Store, "async_save", recording_save),
+        patch.object(Store, "async_delay_save", recording_delay_save),
+    ):
+        await async_migrate_device_ids(panel.hass, panel.entry, panel.snapshot)
+        await panel.hass.async_block_till_done()
+
+    assert written == []
+
+
 # ---------------------------------------------------------------------------
 # before and after, real captures
 # ---------------------------------------------------------------------------
@@ -479,6 +510,21 @@ async def test_a_second_setup_on_the_new_ids_changes_nothing(
     } == children_before
     assert dict(ir.async_get(panel.hass).issues) == issues_before
     assert stores(hass_storage, panel.entry.entry_id) == stores_before
+
+
+async def test_a_migrated_install_is_looked_at_again_and_nothing_is_written(
+    panels: Callable[..., Panel], hass_storage: dict[str, object]
+) -> None:
+    """On the new ids every setup pairs, looks in the registries and reads each store; it writes nothing.
+
+    Over every store an install on r202639-e holds a value in: package
+    ratings, monitoring, graph horizons, favorites, the announcement record and
+    the breaker-switch notice. Fails when a store re-key, or a registry step,
+    writes without a value having moved.
+    """
+    panel, _, _ = await install_and_update(panels, hass_storage)
+
+    await assert_a_second_migration_writes_nothing(panel)
 
 
 # ---------------------------------------------------------------------------
@@ -1100,6 +1146,7 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
     circuit devices of its own -- the only circuit devices there are. Those are
     kept, with the room the user gave one: the second set of entities gives
     way, and the conversion moves the originals, re-keyed, onto those devices.
+    Nothing is announced: every entity there is one the install had.
 
     Fails when a newer device with no original is removed as though it
     collided. Home Assistant would restore such a device from its tombstone,
@@ -1134,9 +1181,13 @@ async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_or
     devices.async_update_child_device(range_device.id, area_id=kitchen)
     removals = async_capture_events(panel.hass, dr.EVENT_DEVICE_REGISTRY_UPDATED)
 
-    await panel.restart_on(capture(AFTER).tree())
+    with patch(
+        "custom_components.span_panel.additions.async_raise", wraps=raise_notice
+    ) as announced:
+        await panel.restart_on(capture(AFTER).tree())
 
     assert not [event for event in removals if event.data["action"] == "remove"]
+    assert not announced.called, "nothing is new, so nothing is announced"
 
     rows = {
         row.id: row for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
@@ -1351,6 +1402,7 @@ async def test_an_inverter_a_circuit_feeds_follows_its_circuit(
     horizons = panel.runtime.coordinator.graph_horizon_manager
     assert horizons is not None
     assert horizons.get_effective_subdevice_horizon(card.id) == "1M"
+    await assert_a_second_migration_writes_nothing(panel)
 
 
 VENDOR_READINGS: Final = 61
@@ -1436,6 +1488,7 @@ async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
         stored["data"]["standing"][notice_id] == json.loads(standing)["data"]["standing"][notice_id]
     )
     assert "Vendor readings beyond the per-device limit" not in caplog.text
+    await assert_a_second_migration_writes_nothing(panel)
 
 
 async def test_circuits_a_partial_tree_lacks_migrate_at_the_next_setup(
