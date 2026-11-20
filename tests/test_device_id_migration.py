@@ -1329,7 +1329,7 @@ async def test_the_guard_judges_each_set_of_circuits_once(
     tree = without_late_circuit(capture(AFTER).tree())
     panel = panels(tree)
     with patch(
-        "custom_components.span_panel.holds_old_ids", wraps=holds_old_ids
+        "custom_components.span_panel.device_id_rekey.holds_old_ids", wraps=holds_old_ids
     ) as registry_lookups:
         await panel.set_up(tree)
         with patch(

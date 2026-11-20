@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from functools import partial
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -92,7 +91,7 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
-from .device_id_rekey import async_migrate_device_ids, holds_old_ids
+from .device_id_rekey import async_migrate_device_ids, entry_holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
     async_entry_changed,
@@ -899,7 +898,7 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             # being published.
             coordinator.arm_device_id_guard(
                 coordinator.data,
-                partial(holds_old_ids, hass, entry.entry_id, coordinator.data.serial_number),
+                entry_holds_old_ids(hass, entry.entry_id, coordinator.data.serial_number),
             )
 
             # The first reconcile deletes every package whose circuit id the

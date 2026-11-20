@@ -222,7 +222,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         Called by `async_setup_entry` with the setup snapshot, once the device-id
         migration has re-keyed what the entry holds to it. Every entity, device
         and store the session builds or loads from then on is keyed by these.
-        `holds_old_ids` is `device_id_rekey.holds_old_ids` bound to this entry,
+        `holds_old_ids` is `device_id_rekey.entry_holds_old_ids` for this entry,
         which the guard asks about circuits that arrive later.
         """
         self._device_id_guard = DeviceIdGuard(snapshot.circuits.keys(), holds_old_ids)

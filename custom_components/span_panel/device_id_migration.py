@@ -159,9 +159,9 @@ def migration_pending(missing: Set[str], pairing: DeviceIdPairing) -> bool:
 type HoldsOldIds = Callable[[Mapping[str, str]], bool]
 """Whether an entry still holds rows or devices under an old id of these pairs, old to new.
 
-`device_id_rekey.holds_old_ids`, bound to one entry by its setup. A callable
-rather than an import, because that module imports the coordinator's
-dependents and this one may import nothing of this package.
+`device_id_rekey.entry_holds_old_ids` binds `holds_old_ids` to one entry at
+its setup. A callable rather than an import, because that module imports the
+coordinator's dependents and this one may import nothing of this package.
 """
 
 

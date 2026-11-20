@@ -91,7 +91,7 @@ from . import (
     pv_binding,
 )
 from .const import DOMAIN
-from .device_id_migration import pair_device_ids, warn_of_trait_conflict
+from .device_id_migration import HoldsOldIds, pair_device_ids, warn_of_trait_conflict
 from .entity_resolver import entity_id_in_entry
 from .helpers import circuit_device_name
 from .id_builder import build_circuit_device_identifier, circuit_entity_unique_ids
@@ -253,8 +253,8 @@ def holds_old_ids(
 
     Asked by the coordinator's guard (`device_id_migration.DeviceIdGuard`)
     when circuits a session was set up without arrive under new ids, bound to
-    the entry by its setup; a yes rebuilds the entry, whose setup migrates
-    them.
+    the entry by its setup (`entry_holds_old_ids`); a yes rebuilds the entry,
+    whose setup migrates them.
     """
     device_registry = dr.async_get(hass)
     if any(
@@ -270,6 +270,20 @@ def holds_old_ids(
             entity_registry, entry_id
         )
     )
+
+
+def entry_holds_old_ids(hass: HomeAssistant, entry_id: str, serial: str) -> HoldsOldIds:
+    """Return `holds_old_ids` bound to one entry, for the coordinator's guard.
+
+    A closure rather than `functools.partial`, whose call takes any arguments,
+    so the type checker holds what the guard calls to `HoldsOldIds`: one map
+    of old ids to new ones, answering a boolean.
+    """
+
+    def holds(mapping: Mapping[str, str]) -> bool:
+        return holds_old_ids(hass, entry_id, serial, mapping)
+
+    return holds
 
 
 def _warn_on_renamed_pairs(
