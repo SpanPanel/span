@@ -585,29 +585,34 @@ async def test_a_panel_without_a_battery_gets_no_battery_entity(hass: HomeAssist
 
 
 async def test_a_migrated_install_registers_what_a_new_install_does(hass: HomeAssistant) -> None:
-    """After the update, `r202639-e`'s install holds exactly a new `r202645-e` install's rows.
+    """After the update, `r202639-e`'s install holds exactly what a new `r202645-e` install does.
 
-    The same unique ids and the same entity ids, except the two Downstream
-    Current rows: a panel with no downstream lugs never creates them, and the
-    migrated install keeps them registered rather than deleting a user's
-    entities. Fails when a new install and a migrated one diverge.
+    Every device, and every row field by field -- its entity id, its name, the
+    device it is on, its classes, unit and category, whether it is disabled or
+    hidden, and its state -- except the two Downstream Current rows: a panel
+    with no downstream lugs never creates them, and the migrated install keeps
+    them registered rather than deleting a user's entities. Fails when a new
+    install and a migrated one diverge in any of these.
     """
     entry = await _install(
         hass, capture("r202639-e").tree(), MIGRATED_STEM, updated_to=capture("r202645-e").tree()
     )
-    migrated = {unique_id: row["entity_id"] for unique_id, row in _entity_rows(hass, entry).items()}
-    new_install = _section(
-        json.loads((EXPECTED_ENTITIES / "r202645-e.json").read_text(encoding="utf-8")), "entities"
+    migrated = _registered(hass, entry)
+    new_install: object = json.loads(
+        (EXPECTED_ENTITIES / "r202645-e.json").read_text(encoding="utf-8")
     )
-    fresh = {
-        unique_id: row["entity_id"]
-        for unique_id, row in new_install.items()
-        if isinstance(row, dict)
-    }
     serial = str(entry.unique_id)
-
-    assert migrated.keys() - fresh.keys() == {
+    kept = {
         build_panel_unique_id(serial, "downstream_l1_current"),
         build_panel_unique_id(serial, "downstream_l2_current"),
     }
-    assert {unique_id: migrated[unique_id] for unique_id in fresh} == fresh
+
+    devices = _section(new_install, "devices")
+    assert _section(migrated, "devices") == devices, _row_diff(
+        devices, _section(migrated, "devices")
+    )
+    rows = _section(new_install, "entities")
+    migrated_rows = _section(migrated, "entities")
+    assert migrated_rows.keys() - rows.keys() == kept
+    compared = {unique_id: row for unique_id, row in migrated_rows.items() if unique_id not in kept}
+    assert compared == rows, _row_diff(rows, compared)
