@@ -237,6 +237,21 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
 
     Used as a fallback when a circuit has no panel-assigned name.
 
+    **`Circuit {circuit_id}` where there are no tabs, kept on purpose.** No name
+    is built from a wire id where anything else can name the circuit. A meter
+    outside the panel never has tabs, and is named by `outside_meter_label`
+    wherever it is named: its device and entities (`circuit_device_name`), an
+    inverter it feeds (`resolve_pv_display_suffix`), a message or attribute
+    naming it (`construct_circuit_label`). It has no breaker switch or priority
+    select, whose circuit-numbers identifiers alone come here directly. What
+    still reaches this without tabs is a hosted circuit whose spaces are
+    declared and carry no value yet, and a message about a circuit that has
+    left the snapshot, which nothing else names. The first is transient, the
+    spaces arriving with the rest of the tree, and whatever name it takes here
+    is the one entity ids are composed from at creation: any other placeholder
+    would be baked into them just the same, while this one at least names the
+    circuit uniquely.
+
     Args:
         tabs: Every panel position the breaker occupies
         circuit_id: Fallback identifier when tabs are unavailable
@@ -305,10 +320,14 @@ def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str
 
     The panel's own name where there is one, and the tab identifier otherwise --
     which is what the entity itself was named from, so an error names the thing
-    the user is looking at rather than a wire UUID. `None` is accepted because a
-    circuit can drop out of a snapshot between a command and its failure, and an
-    error message is the worst possible place to raise a second error.
+    the user is looking at rather than a wire UUID. A meter outside the panel
+    has no tabs, and takes `outside_meter_label`, as its own device does.
+    `None` is accepted because a circuit can drop out of a snapshot between a
+    command and its failure, and an error message is the worst possible place
+    to raise a second error.
     """
+    if circuit is not None and circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
     if circuit is not None and circuit.name:
         return circuit.name
     tabs = circuit.tabs if circuit is not None else []
@@ -510,8 +529,11 @@ def resolve_pv_display_suffix(
     Taken from the circuit that feeds the inverter, in the mode the user names
     circuits in: the circuit's panel name in friendly-names mode, its breaker
     positions in circuit-numbers mode, and the positions in either mode when
-    the circuit has no name. The inverter's serial is not a candidate, unlike a
-    charger's: it is usually unpublished, and nothing here reads it.
+    the circuit has no name. A meter outside the panel, such as a remote CT,
+    has no positions, and takes `outside_meter_label` in either mode, the label
+    its own device and entities carry, so no inverter is named by a wire id.
+    The inverter's serial is not a candidate, unlike a charger's: it is usually
+    unpublished, and nothing here reads it.
 
     Returns None for an inverter no circuit feeds. See
     `resolve_pv_display_suffixes`, which keeps several inverters' names apart.
@@ -519,6 +541,8 @@ def resolve_pv_display_suffix(
     circuit = snapshot.circuits.get(pv.feed_circuit_id) if pv.feed_circuit_id else None
     if circuit is None:
         return None
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit.circuit_id)
     if not use_circuit_numbers and circuit.name:
         name: str = circuit.name
         return name

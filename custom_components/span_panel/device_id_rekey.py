@@ -26,16 +26,16 @@ can:
 - the device of a hosted circuit whose declared spaces carry no value, where
   the panel gives it no name and it is not a solar circuit
   (`helpers.circuit_device_name`), and with it its entities' names;
-- the card of an inverter fed by a circuit with no breaker positions, a
-  remote CT included, unless the install names circuits by name and the
-  panel names that one (`helpers.resolve_pv_display_suffix`, which has no
-  `outside_meter_label` branch);
+- the card of an inverter fed by a hosted circuit with no breaker positions,
+  unless the install names circuits by name and the panel names that one
+  (`helpers.resolve_pv_display_suffix`); an inverter a remote CT feeds is
+  named by the remote CT's label;
 - in circuit-numbers mode, the identifier a hosted circuit with no tabs names
   its entities by, whether the panel names it or not.
 
-A circuit's label in a message or the monitoring status
-(`helpers.construct_circuit_label`) follows the id the same way; nothing
-stores it.
+A hosted circuit's label in a message or the monitoring status
+(`helpers.construct_circuit_label`) follows the id the same way, as does that
+of a circuit that has left the snapshot; nothing stores either.
 
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit
