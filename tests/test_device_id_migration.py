@@ -2281,11 +2281,12 @@ async def test_a_refused_pairing_is_warned_of_once_a_session(
     """Two new ids claiming one trait instance migrate nothing, reload nothing, and warn once.
 
     Once a session, not once a snapshot: a running session that keeps being
-    told the same thing is warned once, and a new session -- the setup after a
-    restart -- once more. SPAN says the case cannot arise; the tree is derived.
+    told the same thing is warned once, whichever circuits the snapshots carry
+    besides, and a new session -- the setup after a restart -- once more. SPAN
+    says the case cannot arise; the tree is derived.
 
-    Fails when the coordinator warns at every snapshot, or the pairing logs by
-    itself.
+    Fails when the guard warns at every snapshot or at every set of circuits
+    it judges, or the pairing logs by itself.
     """
     caplog.set_level(logging.WARNING)
     after = capture(AFTER).tree()
@@ -2299,8 +2300,9 @@ async def test_a_refused_pairing_is_warned_of_once_a_session(
         "custom_components.span_panel.coordinator.async_request_rebuild",
         side_effect=lambda _hass, entry_id: rebuilds.append(entry_id),
     ):
-        for _ in range(3):
-            await panel.push(conflicting)
+        # Three sets of circuits for the guard to judge, each refused.
+        for tree in (conflicting, without_device(conflicting, new_id_e(BATH)), conflicting):
+            await panel.push(tree)
 
     assert rebuilds == []
     assert len(conflicts(caplog)) == 1
