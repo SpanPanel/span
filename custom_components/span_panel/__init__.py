@@ -117,6 +117,8 @@ from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
     async_apply_panel_registration as async_apply_panel_registration,
+    async_drop_orphaned_favorites,
+    async_forget_favorites_of,
     async_load_panel_settings as async_load_panel_settings,
     async_register_frontend_assets as async_register_frontend_assets,
     async_update_panel_settings as async_update_panel_settings,
@@ -198,6 +200,10 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
+    # Before the services and any entry, everything that reads favorites; the
+    # device registry is loaded by now. See `async_drop_orphaned_favorites`.
+    await async_drop_orphaned_favorites(hass)
+
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
@@ -1137,6 +1143,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     longer here to have asked for. The copied package ratings go for that
     reason too: they are keyed by wire circuit ids.
 
+    The panel's favorites go as well, for the announcements' reason. They are
+    kept in the domain's settings file under the panel's device id, and
+    re-adding the same panel brings that id back: Home Assistant restores the
+    device, its id included, from the tombstone the removal leaves. The entry's
+    devices are still registered here, since Home Assistant clears them only
+    once this returns.
+
     The pending reloads go first, before anything here can raise: Home Assistant
     catches what this function raises, and a reload still waiting for the
     removed entry would otherwise try it and warn.
@@ -1148,6 +1161,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_forget_pv_binding(hass, entry)
     await async_forget_package_ratings(hass, entry)
     await async_forget(hass, entry)
+    await async_forget_favorites_of(
+        hass,
+        {
+            device.id
+            for device in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        },
+    )
 
 
 async def async_remove_config_entry_device(

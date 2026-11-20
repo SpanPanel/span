@@ -7,7 +7,7 @@ panel registration, and panel settings storage.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 import hashlib
 import logging
 import os
@@ -19,6 +19,7 @@ from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.collection import ItemNotFound
 from homeassistant.helpers.storage import Store
 from homeassistant.util.hass_dict import HassKey
@@ -261,6 +262,58 @@ async def async_rekey_favorite_circuits(
 
     await async_update_panel_settings(hass, _rekey)
     return moved
+
+
+async def async_forget_favorites_of(hass: HomeAssistant, device_ids: Collection[str]) -> None:
+    """Drop the favorites kept under any of `device_ids`: those of a config entry being removed.
+
+    The favorites map is keyed by each panel's device registry id, and the
+    file outlives every entry. Left there, a removed entry's favorites come
+    back with the panel: re-adding it restores the device's id from its
+    tombstone. `async_remove_entry` passes every device the entry owns, since
+    Home Assistant clears them only after that returns, so the panel's is among
+    them; its runtime data, which names the panel's device, is gone by then.
+    Written through `async_update_panel_settings`, and only when a key went.
+    """
+    if device_ids:
+        await async_update_panel_settings(
+            hass, lambda settings: _drop_favorites(settings, device_ids.__contains__)
+        )
+
+
+async def async_drop_orphaned_favorites(hass: HomeAssistant) -> None:
+    """Drop the favorites kept under a device id the device registry holds no device for.
+
+    What an entry removed before `async_forget_favorites_of` existed left
+    behind, and what any removal it did not see leaves. Only an id with no
+    device at all goes: a panel's device stays in the registry while its entry
+    is disabled, failed or not yet set up, and so do its favorites. Run once,
+    from the domain's `async_setup`, before the services and any entry that
+    reads favorites; written only when a key went, so a clean file costs one
+    read.
+    """
+    devices = dr.async_get(hass)
+    await async_update_panel_settings(
+        hass,
+        lambda settings: _drop_favorites(
+            settings, lambda device_id: devices.async_get(device_id) is None
+        ),
+    )
+
+
+def _drop_favorites(settings: dict[str, object], gone: Callable[[str], bool]) -> bool:
+    """Drop each panel's favorites whose device id `gone` answers for; whether any went.
+
+    The rest are kept as `_normalize_favorites_blob` reads them, so a file in
+    the legacy shape that loses a key is written back in the current one, as
+    any favorites write leaves it. A file that loses none is not written.
+    """
+    favorites = _normalize_favorites_blob(settings.get("favorites"))
+    kept = {device_id: kinds for device_id, kinds in favorites.items() if not gone(device_id)}
+    if len(kept) == len(favorites):
+        return False
+    settings["favorites"] = kept
+    return True
 
 
 def _is_legacy_resource(item: Mapping[str, object]) -> bool:
