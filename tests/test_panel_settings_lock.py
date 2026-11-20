@@ -3,9 +3,10 @@
 `span_panel_settings` holds every panel's favorites and the sidebar settings in
 one file. A writer loads the whole file, changes its part and saves the whole
 file again, so two writers interleaved at their awaits would each save what
-they read and the first save would be lost. Favorites and the options flow
-both write through `frontend.async_update_panel_settings`, which holds the
-lock across the three steps.
+they read and the first save would be lost. Favorites, the options flow and the
+device-id migration's rewrite of favorites all write through
+`frontend.async_update_panel_settings`, which holds the lock across the three
+steps.
 """
 
 from __future__ import annotations
@@ -23,7 +24,10 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.span_panel import frontend
 from custom_components.span_panel.const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
-from custom_components.span_panel.frontend import async_set_favorite
+from custom_components.span_panel.frontend import (
+    async_rekey_favorite_circuits,
+    async_set_favorite,
+)
 
 from .helpers import seed_panel_settings, shown_values, stored_panel_settings
 
@@ -98,3 +102,52 @@ async def test_an_options_save_and_a_favorite_add_interleaved_both_survive(
     stored = stored_panel_settings(hass_storage)
     assert stored[PANEL_ADMIN_ONLY] is True
     assert stored["favorites"] == {"panel-device": {"circuits": ["circuit-5"], "sub_devices": []}}
+
+
+async def test_the_migrations_favorites_rewrite_and_a_favorite_add_both_survive(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The device-id migration writes favorites through the same lock as the services."""
+    hass_storage["span_panel_settings"] = {
+        "version": 1,
+        "key": "span_panel_settings",
+        "data": {"favorites": {"panel-device": {"circuits": ["circuit-5"], "sub_devices": []}}},
+    }
+
+    with readers_meet_between_read_and_save():
+        moved, _ = await asyncio.gather(
+            async_rekey_favorite_circuits(hass, "panel-device", {"circuit-5": "p-1-16-5"}),
+            async_set_favorite(hass, "panel-device", "circuits", "p-1-16-6", True),
+        )
+
+    assert moved == 1
+    assert stored_panel_settings(hass_storage)["favorites"] == {
+        "panel-device": {"circuits": ["p-1-16-5", "p-1-16-6"], "sub_devices": []}
+    }
+
+
+async def test_a_favorite_already_under_its_new_id_keeps_its_place(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The new id records a favorite made after the update; the old entry is dropped, others stay."""
+    hass_storage["span_panel_settings"] = {
+        "version": 1,
+        "key": "span_panel_settings",
+        "data": {
+            "favorites": {
+                "panel-device": {"circuits": ["circuit-5", "x", "p-1-16-5"], "sub_devices": []},
+                "other-panel": {"circuits": ["circuit-5"], "sub_devices": []},
+            },
+            PANEL_SHOW_SIDEBAR: False,
+        },
+    }
+
+    assert await async_rekey_favorite_circuits(hass, "panel-device", {"circuit-5": "p-1-16-5"}) == 1
+
+    assert stored_panel_settings(hass_storage) == {
+        "favorites": {
+            "panel-device": {"circuits": ["x", "p-1-16-5"], "sub_devices": []},
+            "other-panel": {"circuits": ["circuit-5"], "sub_devices": []},
+        },
+        PANEL_SHOW_SIDEBAR: False,
+    }

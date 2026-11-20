@@ -6,12 +6,14 @@ persistence.  Mirrors the CurrentMonitor storage pattern.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.storage import Store
 
 from .const import DEFAULT_GRAPH_HORIZON, VALID_GRAPH_HORIZONS
+from .device_id_migration import rekeyed
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -33,11 +35,7 @@ class GraphHorizonManager:
         self._global_horizon: str = DEFAULT_GRAPH_HORIZON
         self._circuit_overrides: dict[str, str] = {}
         self._subdevice_overrides: dict[str, str] = {}
-        self._store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
+        self._store = _store_for(hass, entry)
 
     def get_global_horizon(self) -> str:
         """Return the current global default horizon."""
@@ -139,6 +137,37 @@ class GraphHorizonManager:
                 "subdevice_overrides": self._subdevice_overrides,
             }
         )
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict[str, Any]]:
+    """Return the store holding one panel's graph horizons."""
+    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move the stored circuit horizons from old circuit ids to new ones, on disk.
+
+    Run by the device-id migration before the manager loads the store. The
+    sub-device horizons are keyed by device registry id, which the migration
+    keeps, so they stay as they are. A value already under the new id wins
+    (`device_id_migration.rekeyed`); every other part of the store is written
+    back as it was read. Written only when something moved. Returns how many
+    horizons moved.
+    """
+    store = _store_for(hass, entry)
+    data = await store.async_load()
+    if data is None:
+        return 0
+    overrides = data.get("circuit_overrides")
+    if not isinstance(overrides, dict):
+        return 0
+    rekeyed_overrides, moved = rekeyed(overrides, mapping)
+    if moved:
+        data["circuit_overrides"] = rekeyed_overrides
+        await store.async_save(data)
+    return moved
 
 
 def _validate_horizon(horizon: str) -> None:

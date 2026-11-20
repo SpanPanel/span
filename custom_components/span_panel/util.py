@@ -371,6 +371,16 @@ EMPTY_PV: Final = SpanPVSnapshot()
 """Stand-in for an inverter that has left the snapshot, as `EMPTY_EVSE` is for a charger."""
 
 
+def pv_inverter_device_identifier(panel_identifier: str, inverter_key: str) -> str:
+    """Return the registry identifier of an inverter's own card: `{panel serial}_pv_{inverter key}`.
+
+    Read back by `pv_device_ref`. Where `inverter_key` is the feeding circuit's
+    id, the device-id migration builds this for the circuit's old id and its
+    new one to re-key the card in place.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_PV}_{inverter_key}"
+
+
 def pv_inverter_device_info(
     panel_identifier: str,
     inverter_key: str,
@@ -400,7 +410,7 @@ def pv_inverter_device_info(
     if display_suffix and display_suffix != label:
         name = f"{name} ({display_suffix})"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_PV}_{inverter_key}")},
+        identifiers={(DOMAIN, pv_inverter_device_identifier(panel_identifier, inverter_key))},
         name=name,
         manufacturer=pv.vendor_name or "Unknown",
         model=pv.model or "Solar Inverter",

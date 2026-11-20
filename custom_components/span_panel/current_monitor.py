@@ -32,6 +32,7 @@ from .const import (
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
 )
+from .device_id_migration import rekeyed
 from .entity_resolver import resolve_circuit_id
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
 from .meter_capacity import meter_capacity_a
@@ -204,11 +205,7 @@ class CurrentMonitor:
         self._mains_overrides: dict[str, MonitoringSettings] = {}
         self._global_settings: MonitoringSettings = {}
         self._last_snapshot: SpanPanelSnapshot | None = None
-        self._store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
+        self._store = _store_for(hass, entry)
 
     # --- Public API ---
 
@@ -634,12 +631,7 @@ class CurrentMonitor:
     @staticmethod
     async def async_is_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Check if monitoring was previously enabled by reading storage."""
-        store: Store[dict[str, Any]] = Store(
-            hass,
-            _STORAGE_VERSION,
-            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
-        )
-        data = await store.async_load()
+        data = await _store_for(hass, entry).async_load()
         return bool(data and data.get("enabled", False))
 
     # --- Threshold resolution (delegated to threshold_evaluator) ---
@@ -788,3 +780,36 @@ class CurrentMonitor:
 
     # Backward-compatible static alias kept for existing callers/tests.
     _format_notification = staticmethod(format_notification)
+
+
+def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict[str, Any]]:
+    """Return the store holding one panel's monitoring settings."""
+    return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move the stored circuit overrides from old circuit ids to new ones, on disk.
+
+    Run by the device-id migration before any monitor loads the store. A shared
+    meter's override is held under its first member, and its key moves to that
+    member's new id; the new ids keep the members' order, and should a group's
+    first member differ, `_fold_member_overrides` moves the override onto it at
+    the first snapshot, as it does for any member's. A value already under the
+    new id wins (`device_id_migration.rekeyed`). Every other part of the store
+    is written back as it was read. Written only when something moved. Returns
+    how many overrides moved.
+    """
+    store = _store_for(hass, entry)
+    data = await store.async_load()
+    if data is None:
+        return 0
+    overrides = data.get("circuit_overrides")
+    if not isinstance(overrides, dict):
+        return 0
+    rekeyed_overrides, moved = rekeyed(overrides, mapping)
+    if moved:
+        data["circuit_overrides"] = rekeyed_overrides
+        await store.async_save(data)
+    return moved

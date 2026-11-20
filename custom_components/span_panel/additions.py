@@ -27,6 +27,7 @@ place.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
@@ -220,6 +221,31 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
     )
     await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(announced | registered)))
     _LOGGER.debug("Announced %d new entities for %s", len(added), entry.entry_id)
+
+
+async def async_rekey_unique_ids(
+    hass: HomeAssistant, entry: ConfigEntry, unique_ids: Mapping[str, str]
+) -> int:
+    """Record each re-keyed entity as announced under its new unique id rather than its old one.
+
+    `unique_ids` maps each old unique id the device-id migration re-keyed in
+    the registry to its new one. The entity is the one already announced, so
+    the next announcement must not name it. Only ids the registry really
+    re-keyed are passed, so an entity that comes back under a new id without
+    a row to carry it over is still announced as new. Set semantics: an older
+    release that announced the new id already loses nothing. Written only when
+    something moved, and never where there is no readable record: the next
+    announcement seeds one from the registry, which holds the new ids. Returns
+    how many ids moved.
+    """
+    store = _store(hass, entry)
+    announced = _load(await store.async_load(), entry)
+    moved = frozenset(unique_ids).intersection(announced or ())
+    if announced is None or not moved:
+        return 0
+    rekeyed = (announced - moved) | {unique_ids[unique_id] for unique_id in moved}
+    await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(rekeyed)))
+    return len(moved)
 
 
 def _entries(hass: HomeAssistant, entry: ConfigEntry) -> list[er.RegistryEntry]:

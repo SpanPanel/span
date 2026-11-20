@@ -86,7 +86,7 @@ switch is where a new one has always been.
 
 from __future__ import annotations
 
-from collections.abc import Container, Iterable
+from collections.abc import Container, Iterable, Mapping
 from typing import Final
 
 from homeassistant.core import HomeAssistant, callback
@@ -130,6 +130,64 @@ def conversion_notice_issue_id(entry_id: str) -> str:
 def breaker_switch_area_issue_id(entry_id: str, switch_unique_id: str) -> str:
     """Issue id for the notice about one of an entry's breaker switches."""
     return EntryIssueFamily.BREAKER_SWITCH_IN_AREA.issue_id(entry_id, switch_unique_id)
+
+
+@callback
+def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry, serial: str, mapping: Mapping[str, str]
+) -> int:
+    """Move each breaker switch notice from its switch's old unique id to its new one.
+
+    A notice's id carries the switch's unique id, which the device-id migration
+    re-keys. The same notice is raised again under the new id -- its severity,
+    persistence, text and data copied -- ignored again if the user had ignored
+    it, and the old one deleted. Its `created` becomes now, and an ignored
+    one's `dismissed_version` the running Home Assistant version.
+
+    A notice already under the new id gives way, as the registries' newer rows
+    do: it was raised by an older release about the second switch it
+    registered after the panel changed its ids, which the migration removes.
+    `serial` is the panel's, as `build_switch_unique_id` takes it. Returns how
+    many notices moved.
+    """
+    registry = ir.async_get(hass)
+    moved = 0
+    for old_id, new_id in mapping.items():
+        old_issue_id = breaker_switch_area_issue_id(
+            entry.entry_id, build_switch_unique_id(serial, old_id)
+        )
+        issue = registry.async_get_issue(DOMAIN, old_issue_id)
+        if (
+            issue is None
+            or issue.is_fixable is None
+            or issue.severity is None
+            or issue.translation_key is None
+        ):
+            # None, or one Home Assistant restored without what raising it
+            # again needs: a notice is persistent, so it always has it.
+            continue
+        new_switch = build_switch_unique_id(serial, new_id)
+        ir.async_delete_issue(
+            hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, new_switch)
+        )
+        async_create_entry_issue(
+            hass,
+            entry,
+            EntryIssueFamily.BREAKER_SWITCH_IN_AREA.for_key(new_switch),
+            is_fixable=issue.is_fixable,
+            is_persistent=issue.is_persistent,
+            severity=issue.severity,
+            translation_key=issue.translation_key,
+            translation_placeholders=issue.translation_placeholders,
+            data=issue.data,
+        )
+        if issue.dismissed_version is not None:
+            ir.async_ignore_issue(
+                hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, new_switch), True
+            )
+        ir.async_delete_issue(hass, DOMAIN, old_issue_id)
+        moved += 1
+    return moved
 
 
 def _area_name(areas: ar.AreaRegistry, area_id: str) -> str:

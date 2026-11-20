@@ -18,23 +18,59 @@ fail.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
+from datetime import timedelta
+import json
+import logging
 from typing import Final
+from unittest.mock import patch
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
+from homeassistant.util import dt as dt_util
 import pytest
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 from span_panel_api import SpanPanelSnapshot
 
+from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.conversion_repairs import (
+    async_raise_breaker_switch_area_notice,
+    breaker_switch_area_issue_id,
+)
 from custom_components.span_panel.device_id_migration import (
     current_circuit_id,
     migration_pending,
     previous_device_ids,
     rekeyed,
 )
+from custom_components.span_panel.device_id_rekey import async_migrate_device_ids
+from custom_components.span_panel.frontend import async_get_favorites
+from custom_components.span_panel.helpers import outside_meter_label
+from custom_components.span_panel.id_builder import (
+    build_circuit_device_identifier,
+    build_circuit_unique_id,
+    build_switch_unique_id,
+)
+from custom_components.span_panel.notices import is_standing
 
 from .captures_replay import (
+    RetainedTree,
     capture,
+    description,
+    panel_device_id,
+    renamed_devices,
     snapshot,
+    with_connection_point,
+    without_device,
 )
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .replayed_panel import PANEL_NAME, Panel, replayed_panels
 
 BEFORE: Final = "r202639-e"
 AFTER: Final = "r202645-e"
@@ -96,6 +132,343 @@ def new_id_e(old_id: str) -> str:
 def expected_lingering_timers() -> bool:
     """Allow the switch platform's relock and debounce timers to outlive a test."""
     return True
+
+
+@pytest.fixture
+def panels(hass: HomeAssistant) -> Iterator[Callable[..., Panel]]:
+    """Make panels whose setups connect to the trees they serve."""
+    with replayed_panels(hass) as make:
+        yield make
+
+
+# ---------------------------------------------------------------------------
+# What an install holds, read back
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Registered:
+    """Every row and device the entry has: by registry id, what identifies it."""
+
+    entities: Mapping[str, tuple[str, str]]
+    """Registry id to `(entity_id, unique_id)`."""
+
+    devices: Mapping[str, frozenset[str]]
+    """Registry id to the device's identifiers in this domain."""
+
+    issues: frozenset[str]
+
+
+def registered(hass: HomeAssistant, entry: MockConfigEntry) -> Registered:
+    devices = dr.async_get(hass)
+    return Registered(
+        entities={
+            row.id: (row.entity_id, row.unique_id)
+            for row in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        },
+        devices={
+            device.id: frozenset(name for domain, name in device.identifiers if domain == DOMAIN)
+            for device in (
+                *dr.async_entries_for_config_entry(devices, entry.entry_id),
+                *dr.async_child_entries_for_config_entry(devices, entry.entry_id),
+            )
+        },
+        issues=frozenset(
+            issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN
+        ),
+    )
+
+
+def names_an_old_id(value: str, old_ids: frozenset[str]) -> bool:
+    """Whether a unique id or an identifier still carries one of `old_ids` as a whole segment."""
+    return any(
+        f"_{old_id}_" in value or value.endswith(f"_{old_id}") or f"_{old_id}/" in value
+        for old_id in old_ids
+    )
+
+
+def flush_delayed_saves(hass: HomeAssistant) -> None:
+    """Fire the timers delayed store writes wait on, so the stores hold what was written."""
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=30))
+
+
+def stores(hass_storage: Mapping[str, object], entry_id: str) -> dict[str, str]:
+    """Every store this entry writes, serialised, plus the shared settings file."""
+    return {
+        key: json.dumps(value, sort_keys=True)
+        for key, value in hass_storage.items()
+        if key.endswith(entry_id) or key == "span_panel_settings"
+    }
+
+
+# ---------------------------------------------------------------------------
+# What an install on r202639-e holds
+# ---------------------------------------------------------------------------
+
+
+def seed_package_removal(hass_storage: dict[str, object], entry_id: str) -> None:
+    """Leave a removal the user has not dismissed, for `circuit-7`, with its notice standing.
+
+    What a panel that describes its breakers can hold: a package copied before
+    the panel said so, removed for that reason, and listed while the notice
+    stands (`package_ratings.panel_describes_breakers`).
+    """
+    hass_storage[f"{_PACKAGES_KEY}.{entry_id}"] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": f"{_PACKAGES_KEY}.{entry_id}",
+        "data": {
+            "packages": {},
+            "unacknowledged": {
+                BATH: {
+                    "circuit_id": BATH,
+                    "label": "Primary Bath Outlets",
+                    "reason": "panel_describes_breakers",
+                    "package_ratings_a": [20, 30],
+                    "panel_after_a": 20.0,
+                    "service_a": None,
+                }
+            },
+        },
+    }
+    hass_storage[f"{_NOTICES_KEY}.{entry_id}"] = {
+        "version": 1,
+        "key": f"{_NOTICES_KEY}.{entry_id}",
+        "data": {
+            "standing": {
+                _PACKAGE_NOTICE: {
+                    "title": "SPAN Panel ratings copied from the SPAN app removed",
+                    "message": "- **Primary Bath Outlets**",
+                }
+            },
+            "announced": {},
+        },
+    }
+
+
+async def seed_settings(panel: Panel) -> str:
+    """Make the user's settings an install on r202639-e can hold; return the area used.
+
+    Through the services and registries a user reaches them by: an override on
+    a tandem member, which monitoring holds under the pair's first circuit; a
+    circuit switched out of monitoring; a graph horizon and a favorite; an
+    ignored breaker-switch notice; a circuit device renamed and put in a room.
+    """
+    hass = panel.hass
+    await panel.call(
+        "set_circuit_threshold", circuit_id=panel.power(TANDEM[1]), spike_threshold_pct=150
+    )
+    await panel.call(
+        "set_circuit_threshold", circuit_id=panel.power(RANGE), monitoring_enabled=False
+    )
+    await panel.call("set_circuit_graph_horizon", circuit_id=RANGE, horizon="1d")
+    await hass.services.async_call(
+        DOMAIN,
+        "add_favorite",
+        {"entity_id": panel.power(RANGE)},
+        blocking=True,
+        return_response=True,
+    )
+
+    switch_unique_id = build_switch_unique_id(panel.serial, HVAC)
+    async_raise_breaker_switch_area_notice(
+        hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", switch_unique_id),
+        switch_unique_id=switch_unique_id,
+        area_name="Garage",
+    )
+    ir.async_ignore_issue(
+        hass, DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, switch_unique_id), True
+    )
+
+    bathroom = ar.async_get(hass).async_create("Bathroom").id
+    dr.async_get(hass).async_update_child_device(
+        panel.circuit_device(BATH).id, name_by_user="Bath outlets", area_id=bathroom
+    )
+    await hass.async_block_till_done()
+    return bathroom
+
+
+async def assert_carried_over(
+    panel: Panel,
+    before: Registered,
+    bathroom: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Everything the r202639-e install held, held now under r202645-e's ids, read back by its owner."""
+    hass = panel.hass
+    after = registered(hass, panel.entry)
+    old_ids = OLD_IDS_E
+
+    # Every row and device kept its registry id and its entity id ...
+    assert after.entities.keys() == before.entities.keys()
+    assert {registry_id: entity_id for registry_id, (entity_id, _) in after.entities.items()} == {
+        registry_id: entity_id for registry_id, (entity_id, _) in before.entities.items()
+    }
+    assert after.devices.keys() == before.devices.keys()
+    # ... and none is keyed by an old id any more.
+    assert not [uid for _, uid in after.entities.values() if names_an_old_id(uid, old_ids)]
+    assert not [
+        name for names in after.devices.values() for name in names if names_an_old_id(name, old_ids)
+    ]
+    registry = er.async_get(hass)
+    for registry_id, (_, old_unique_id) in before.entities.items():
+        if names_an_old_id(old_unique_id, old_ids):
+            row = registry.async_get(after.entities[registry_id][0])
+            assert row is not None and row.previous_unique_id == old_unique_id
+
+    # Every enabled entity is live: the platforms built it on its re-keyed row,
+    # rather than a second one the migration then had to remove.
+    dead = [
+        row.entity_id
+        for row in er.async_entries_for_config_entry(registry, panel.entry.entry_id)
+        if row.disabled_by is None and hass.states.get(row.entity_id) is None
+    ]
+    assert not dead
+
+    # The renamed circuit device is the same device, its name and room kept.
+    bath = panel.circuit_device(new_id_e(BATH))
+    assert (bath.name_by_user, bath.area_id) == ("Bath outlets", bathroom)
+
+    # Monitoring: the pair's override, and the circuit switched out.
+    pair = panel.monitoring(new_id_e(TANDEM[1]))
+    assert (pair["point_id"], pair["spike_threshold_pct"]) == (new_id_e(TANDEM[0]), 150)
+    assert panel.monitoring(new_id_e(RANGE))["monitoring_enabled"] is False
+
+    # The horizon and the favorite.
+    horizons = panel.runtime.coordinator.graph_horizon_manager
+    assert horizons is not None
+    assert horizons.get_all_settings()["circuits"] == {
+        new_id_e(RANGE): {"horizon": "1d", "has_override": True}
+    }
+    favorites = await async_get_favorites(hass)
+    assert favorites[panel.runtime.panel_device_id]["circuits"] == [new_id_e(RANGE)]
+
+    # The removal the notice still lists.
+    removals = panel.runtime.coordinator.package_rating_manager.diagnostics(panel.snapshot)[
+        "unacknowledged"
+    ]
+    assert list(removals) == [new_id_e(BATH)]
+    assert removals[new_id_e(BATH)]["circuit_id"] == new_id_e(BATH)
+
+    # The breaker-switch notice, under the switch's new id and still ignored.
+    switch_issue = breaker_switch_area_issue_id(
+        panel.entry.entry_id, build_switch_unique_id(panel.serial, new_id_e(HVAC))
+    )
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, switch_issue)
+    assert issue is not None and issue.dismissed_version is not None
+    assert after.issues == (
+        before.issues
+        - {
+            breaker_switch_area_issue_id(
+                panel.entry.entry_id, build_switch_unique_id(panel.serial, HVAC)
+            )
+        }
+    ) | {switch_issue}
+
+    # Nothing announced, and no pairing warning.
+    assert not is_standing(hass, panel.entry, _NEW_ENTITIES_NOTICE)
+    assert is_standing(hass, panel.entry, _PACKAGE_NOTICE)
+    assert not [
+        record
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno >= logging.WARNING
+    ]
+
+
+async def install_and_update(
+    panels: Callable[..., Panel], hass_storage: dict[str, object]
+) -> tuple[Panel, Registered, str]:
+    """Install on r202639-e with every setting the panel can hold, then restart on r202645-e."""
+    panel = panels(capture(BEFORE).tree())
+    seed_package_removal(hass_storage, panel.entry.entry_id)
+    await panel.set_up(capture(BEFORE).tree())
+    bathroom = await seed_settings(panel)
+    before = registered(panel.hass, panel.entry)
+    await panel.restart_on(capture(AFTER).tree())
+    return panel, before, bathroom
+
+
+# ---------------------------------------------------------------------------
+# before and after, real captures
+# ---------------------------------------------------------------------------
+
+
+async def test_an_install_keeps_everything_across_the_update(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Every entity, device and setting of r202639-e is held under r202645-e's ids.
+
+    Fails when a registry family, a device kind or a store is skipped, when the
+    package ratings load before the migration, or when the migration runs after
+    the platforms are forwarded.
+    """
+    caplog.set_level(logging.INFO)
+    panel, before, bathroom = await install_and_update(panels, hass_storage)
+
+    await assert_carried_over(panel, before, bathroom, caplog)
+    infos = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno == logging.INFO
+    ]
+    assert len(infos) == 1, infos
+    assert "devices" in infos[0]
+
+
+async def test_a_second_setup_on_the_new_ids_changes_nothing(
+    panels: Callable[..., Panel], hass_storage: dict[str, object]
+) -> None:
+    """The migration is idempotent: a later setup leaves registries and stores as they are.
+
+    Fails when the migration acts on anything but an old id the entry still holds.
+    """
+    panel, _, _ = await install_and_update(panels, hass_storage)
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+    registry_before = dict(er.async_get(panel.hass).entities)
+    devices_before = {
+        device.id: device
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(panel.hass), panel.entry.entry_id
+        )
+    }
+    children_before = {
+        child.id: child
+        for child in dr.async_child_entries_for_config_entry(
+            dr.async_get(panel.hass), panel.entry.entry_id
+        )
+    }
+    issues_before = dict(ir.async_get(panel.hass).issues)
+    stores_before = stores(hass_storage, panel.entry.entry_id)
+
+    with patch(
+        "custom_components.span_panel.device_id_rekey.previous_device_ids",
+        wraps=previous_device_ids,
+    ) as pairing:
+        await panel.restart_on(capture(AFTER).tree())
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+
+    assert pairing.call_count == 1
+    assert dict(er.async_get(panel.hass).entities) == registry_before
+    assert {
+        device.id: device
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(panel.hass), panel.entry.entry_id
+        )
+    } == devices_before
+    assert {
+        child.id: child
+        for child in dr.async_child_entries_for_config_entry(
+            dr.async_get(panel.hass), panel.entry.entry_id
+        )
+    } == children_before
+    assert dict(ir.async_get(panel.hass).issues) == issues_before
+    assert stores(hass_storage, panel.entry.entry_id) == stores_before
 
 
 # ---------------------------------------------------------------------------
@@ -232,3 +605,701 @@ def test_a_value_under_the_new_id_wins_over_the_old() -> None:
     assert rekeyed({"old": 1, "new": 2, "other": 3}, {"old": "new"}) == ({"new": 2, "other": 3}, 1)
     assert rekeyed({"old": 1, "other": 3}, {"old": "new"}) == ({"other": 3, "new": 1}, 1)
     assert rekeyed({"other": 3}, {"old": "new"}) == ({"other": 3}, 0)
+
+
+# ---------------------------------------------------------------------------
+# a recommissioned panel
+# ---------------------------------------------------------------------------
+
+
+async def test_a_recommissioned_panels_circuits_follow_their_trait_instance(
+    panels: Callable[..., Panel], caplog: pytest.LogCaptureFixture
+) -> None:
+    """`circuit-1`, -2, -3 and -5 pair by `<n>` whatever they are called now; `circuit-4` has no pair.
+
+    Each pair whose names differ is logged once, naming both; the circuits the
+    recommission added are announced as new. Fails when a name gate is added,
+    or the WARNING is dropped.
+    """
+    before_tree = capture("r202639-c").tree()
+    panel = panels(before_tree)
+    await panel.set_up(before_tree)
+    names = {cid: circuit.name for cid, circuit in panel.snapshot.circuits.items()}
+    rows = {cid: er.async_get(panel.hass).async_get(panel.power(cid)) for cid in names}
+    caplog.clear()
+
+    await panel.restart_on(capture("r202645-c").tree())
+
+    renamed = new_ids("r202645-c")
+    after = panel.snapshot.circuits
+    for n in (1, 2, 3, 5):
+        old_id = f"circuit-{n}"
+        new_id = renamed[old_id]
+        row = er.async_get(panel.hass).async_get(panel.power(new_id))
+        before_row = rows[old_id]
+        assert row is not None and before_row is not None
+        assert (row.id, row.entity_id) == (before_row.id, before_row.entity_id)
+    left = er.async_get(panel.hass).async_get_entity_id(
+        "sensor", DOMAIN, build_circuit_unique_id(panel.serial, "circuit-4", "instantPowerW")
+    )
+    assert left is not None, "circuit-4 has no new id, and its rows are left as they are"
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 4, warnings
+    for n in (1, 2, 3, 5):
+        old_id = f"circuit-{n}"
+        new_id = renamed[old_id]
+        (line,) = [line for line in warnings if f"Circuit {old_id} " in line]
+        assert names[old_id] in line and new_id in line and str(after[new_id].name) in line
+    assert is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+# ---------------------------------------------------------------------------
+# MAIN 32 migrates nothing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("main32_r202639", "main32_r202645"),
+        ("main32_r202633", "main32_r202633"),
+        ("main32_r202639-upstream-pv", "main32_r202639-upstream-pv"),
+    ],
+)
+async def test_a_main32_panel_migrates_nothing(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+    first: str,
+    second: str,
+) -> None:
+    """Its ids are opaque on every release, so nothing pairs and nothing moves.
+
+    Fails when the expression matches a 32-digit hexadecimal id.
+    """
+    caplog.set_level(logging.INFO)
+    panel = panels(capture(first).tree())
+    await panel.set_up(capture(first).tree())
+    before = registered(panel.hass, panel.entry)
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+    written = stores(hass_storage, panel.entry.entry_id)
+
+    pairings: list[Mapping[str, str]] = []
+
+    def pairing(tree_snapshot: SpanPanelSnapshot) -> Mapping[str, str]:
+        pairings.append(previous_device_ids(tree_snapshot))
+        return pairings[-1]
+
+    with patch(
+        "custom_components.span_panel.device_id_rekey.previous_device_ids", side_effect=pairing
+    ):
+        await panel.restart_on(capture(second).tree())
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+
+    assert pairings == [{}]
+    after = registered(panel.hass, panel.entry)
+    assert {key: after.entities[key] for key in before.entities} == before.entities
+    assert {key: after.devices[key] for key in before.devices} == before.devices
+    assert not [record for record in caplog.records if record.name == MIGRATION_LOGGER]
+    if first == second:
+        assert after == before
+        assert stores(hass_storage, panel.entry.entry_id) == written
+
+
+# ---------------------------------------------------------------------------
+# what an earlier release added after the update gives way
+# ---------------------------------------------------------------------------
+
+
+async def test_rows_an_earlier_release_added_under_the_new_ids_give_way(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An earlier release on the new firmware registered a second set; the originals win.
+
+    Its entities (`_2`), its circuit devices -- one put in a room -- and its
+    breaker-switch notice are removed, and the originals re-keyed. A setting
+    the user made under a new id outranks the one it would replace.
+
+    Fails when the newer entities, devices or notices do not give way: Core
+    refuses the re-key of an id already in use.
+    """
+    caplog.set_level(logging.INFO)
+    panel = panels(capture(BEFORE).tree())
+    seed_package_removal(hass_storage, panel.entry.entry_id)
+    await panel.set_up(capture(BEFORE).tree())
+    bathroom = await seed_settings(panel)
+    before = registered(panel.hass, panel.entry)
+
+    # An earlier release, set up on the new firmware: no migration.
+    await panel.unload()
+    with patch("custom_components.span_panel.async_migrate_device_ids"):
+        await panel.set_up(capture(AFTER).tree())
+    newer = registered(panel.hass, panel.entry)
+    newer_devices = newer.devices.keys() - before.devices.keys()
+    newer_rows = newer.entities.keys() - before.entities.keys()
+    assert newer_devices and newer_rows
+    kitchen = ar.async_get(panel.hass).async_create("Kitchen").id
+    dr.async_get(panel.hass).async_update_child_device(
+        panel.circuit_device(new_id_e(RANGE)).id, area_id=kitchen
+    )
+    newer_switch = build_switch_unique_id(panel.serial, new_id_e(HVAC))
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", newer_switch),
+        switch_unique_id=newer_switch,
+        area_name="Kitchen",
+    )
+    # The two notices told apart by what the user did with each: the original
+    # shown again, the newer one ignored. The original's state must survive.
+    original_switch = build_switch_unique_id(panel.serial, HVAC)
+    ir.async_ignore_issue(
+        panel.hass,
+        DOMAIN,
+        breaker_switch_area_issue_id(panel.entry.entry_id, original_switch),
+        False,
+    )
+    ir.async_ignore_issue(
+        panel.hass, DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch), True
+    )
+    await panel.call("set_circuit_graph_horizon", circuit_id=new_id_e(RANGE), horizon="1w")
+    caplog.clear()
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    after = registered(panel.hass, panel.entry)
+    assert after.entities.keys() == before.entities.keys()
+    assert {rid: eid for rid, (eid, _) in after.entities.items()} == {
+        rid: eid for rid, (eid, _) in before.entities.items()
+    }
+    assert not newer_rows & after.entities.keys()
+    assert after.devices.keys() == before.devices.keys()
+    switch_issue = breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch)
+    issue = ir.async_get(panel.hass).async_get_issue(DOMAIN, switch_issue)
+    assert issue is not None
+    assert issue.dismissed_version is None, "the original's state, not the newer notice's"
+    assert issue.translation_placeholders is not None
+    assert "Garage" in issue.translation_placeholders["area"]
+    bath = panel.circuit_device(new_id_e(BATH))
+    assert (bath.name_by_user, bath.area_id) == ("Bath outlets", bathroom)
+    assert panel.circuit_device(new_id_e(RANGE)).area_id is None
+    horizons = panel.runtime.coordinator.graph_horizon_manager
+    assert horizons is not None
+    assert horizons.get_effective_horizon(new_id_e(RANGE)) == "1w"
+    infos = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno == logging.INFO
+    ]
+    assert len(infos) == 1, infos
+    assert f"{len(newer_rows)} entities and {len(newer_devices)} devices" in infos[0]
+
+
+# ---------------------------------------------------------------------------
+# an install from before circuits had devices
+# ---------------------------------------------------------------------------
+
+
+def as_before_circuit_devices(panel: Panel) -> None:
+    """Put the registry back as a release before circuit devices left it.
+
+    Every circuit entity on the panel's device, named with its circuit's name
+    in front of its label, and no circuit device. Derived from a real install,
+    so every entity the platforms build is there, and the announcement record
+    knows them all.
+    """
+    entities = er.async_get(panel.hass)
+    devices = dr.async_get(panel.hass)
+    panel_device = devices.async_get_device_by_identifier(
+        (DOMAIN, panel.serial), panel.entry.entry_id
+    )
+    assert panel_device is not None
+    for child in dr.async_child_entries_for_config_entry(devices, panel.entry.entry_id):
+        for row in er.async_entries_for_device(entities, child.id, include_disabled_entities=True):
+            entities.async_update_entity(
+                row.entity_id,
+                device_id=panel_device.id,
+                original_name=f"{child.name} {row.original_name}",
+            )
+        devices.async_remove_device(child.id)
+
+
+@pytest.mark.parametrize("target", [BEFORE, AFTER])
+async def test_an_install_from_before_circuit_devices_converts_under_the_new_ids(
+    panels: Callable[..., Panel], target: str
+) -> None:
+    """The conversion runs on r202645-e as on r202639-e: the same lines, the same entity ids.
+
+    Fails when the migration runs after `async_convert_circuit_entities`: the
+    conversion would find no row for a circuit of the snapshot and leave them
+    all on the panel's device.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    fridge = panel.power(RANGE)
+    await panel.unload()
+    as_before_circuit_devices(panel)
+    er.async_get(panel.hass).async_update_entity(fridge, name="Fridge Power")
+    entity_ids = {
+        row.id: row.entity_id
+        for row in er.async_entries_for_config_entry(er.async_get(panel.hass), panel.entry.entry_id)
+    }
+
+    await panel.set_up(capture(target).tree())
+
+    entities = er.async_get(panel.hass)
+    circuit_of = new_id_e if target == AFTER else str
+    range_device = panel.circuit_device(circuit_of(RANGE))
+    row = entities.async_get(fridge)
+    assert row is not None and row.device_id == range_device.id
+    on_the_panel = [
+        row.entity_id
+        for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+        if row.device_id == panel.runtime.panel_device_id
+        and names_an_old_id(row.unique_id, OLD_IDS_E)
+    ]
+    assert not on_the_panel
+    assert {
+        row.id: row.entity_id
+        for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+        if row.id in entity_ids
+    } == entity_ids
+    notice = ir.async_get(panel.hass).async_get_issue(
+        DOMAIN, f"circuit_devices_converted_{panel.entry.entry_id}"
+    )
+    assert notice is not None and notice.translation_placeholders is not None
+    assert notice.translation_placeholders["renamed"] == (
+        f"- {PANEL_NAME} Fridge Power → {PANEL_NAME} Electric range Fridge Power"
+    )
+    assert not is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+# ---------------------------------------------------------------------------
+# A remote CT, and the panel it is on, before and after
+# ---------------------------------------------------------------------------
+
+
+async def test_a_remote_ct_and_its_panel_carry_over_and_what_is_new_is_announced(
+    panels: Callable[..., Panel], caplog: pytest.LogCaptureFixture
+) -> None:
+    """`r202639-a` to `r202645-a`: `remote-ct-3` becomes `{prefix}-1-42-3` and keeps everything.
+
+    Its sensors and its own device, `Remote CT 3`, keep their registry ids and
+    entity ids, and its label does not change. `circuit-3` and `circuit-4` keep
+    theirs too, and are logged once each, because the panel dropped the number
+    in front of their names. The three circuits and the charger the panel
+    gained are new, and announced as new.
+
+    Fails when the `42` family is dropped from the pairing, or the label stops
+    reading the trailing number.
+    """
+    caplog.set_level(logging.WARNING)
+    renamed = new_ids("r202645-a")
+    before_tree = capture("r202639-a").tree()
+    panel = panels(before_tree)
+    await panel.set_up(before_tree)
+    entities = er.async_get(panel.hass)
+    kept = ("remote-ct-3", "circuit-3", "circuit-4")
+    devices = {old_id: panel.circuit_device(old_id) for old_id in kept}
+    rows = {
+        old_id: {row.id: row.entity_id for row in er.async_entries_for_device(entities, device.id)}
+        for old_id, device in devices.items()
+    }
+    assert all(rows.values())
+    assert devices["remote-ct-3"].name == "Remote CT 3"
+    registered = {
+        row.id for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+    }
+    caplog.clear()
+
+    await panel.restart_on(capture("r202645-a").tree())
+
+    for old_id in kept:
+        moved = panel.circuit_device(renamed[old_id])
+        assert moved.id == devices[old_id].id, old_id
+        assert {
+            row.id: row.entity_id for row in er.async_entries_for_device(entities, moved.id)
+        } == rows[old_id], old_id
+    assert panel.circuit_device(renamed["remote-ct-3"]).name == "Remote CT 3"
+    assert outside_meter_label(renamed["remote-ct-3"]) == "Remote CT 3"
+
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MIGRATION_LOGGER and record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 2, warnings
+    for old_id in ("circuit-3", "circuit-4"):
+        (line,) = [line for line in warnings if f"Circuit {old_id} " in line]
+        new_name = panel.snapshot.circuits[renamed[old_id]].name
+        assert f"({devices[old_id].name})" in line and f"now names {new_name}" in line
+
+    charger = {
+        device.id
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(panel.hass), panel.entry.entry_id
+        )
+        if any(
+            identifier.endswith(f"_evse_{key}")
+            for _, identifier in device.identifiers
+            for key in panel.snapshot.evse
+        )
+    }
+    # The charger's feed circuit has no device of its own: its sensors are on
+    # the charger's, and it has neither a breaker switch nor a priority select.
+    gained = {
+        device.id
+        for n in (1, 2, 5)
+        if (
+            device := dr.async_get(panel.hass).async_get_child_device_by_identifier(
+                (DOMAIN, build_circuit_device_identifier(panel.serial, renamed[f"circuit-{n}"])),
+                panel.entry.entry_id,
+            )
+        )
+        is not None
+    }
+    added = {
+        row.device_id
+        for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+        if row.id not in registered
+    }
+    assert charger and added == gained | charger
+    assert is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+# ---------------------------------------------------------------------------
+# Derived trees: what no capture has
+# ---------------------------------------------------------------------------
+
+DERIVED_HEX: Final = "0123456789abcdef"
+"""Stands in for the sixteen hexadecimal digits r202645 puts after a panel's root id."""
+
+
+def on_new_ids(tree: RetainedTree, renames: Mapping[str, str]) -> RetainedTree:
+    """Return the tree re-ided as r202645 does it, each circuit declaring where it is connected."""
+    renamed = renamed_devices(tree, renames)
+    return with_connection_point(
+        renamed,
+        {
+            new_id: "MONITORED" if old_id.startswith("remote-ct-") else "BRANCH"
+            for old_id, new_id in renames.items()
+        },
+    )
+
+
+def fed_inverters(tree: RetainedTree, feeds: Mapping[str, str]) -> RetainedTree:
+    """Return the tree with each circuit of `feeds` feeding its inverter, by the connection it declares."""
+    for circuit_id, inverter in feeds.items():
+        tree[circuit_id]["connection/feeds-device-id"] = inverter
+        tree[circuit_id]["connection/feeds-device-status"] = "OK"
+        tree[circuit_id]["connection/feeds-device-type"] = "energy.ebus.device.pv"
+    return tree
+
+
+async def test_an_inverter_a_circuit_feeds_follows_its_circuit(
+    panels: Callable[..., Panel], hass_storage: dict[str, object]
+) -> None:
+    """On a panel with two inverters, each fed by a circuit, everything keyed by the feed follows.
+
+    The bound record, the other inverter's card and entities, its curated
+    extension key and its graph horizon. Fails when inverter devices are not
+    re-keyed in place, or the binding or the curation is skipped.
+
+    Derived from `main32_r202639-upstream-pv`, the one capture with two
+    inverters. No circuit feeds them there, so their keys are their own device
+    ids and nothing would follow a circuit; the derived tree has two of its
+    circuits feed them, through the `connection/feeds-device-*` properties every
+    circuit there already declares.
+    """
+    upstream = capture("main32_r202639-upstream-pv").tree()
+    snap = snapshot(upstream)
+    inverters = sorted(snap.pv_inverters)
+    by_space = sorted(snap.circuits, key=lambda cid: min(snap.circuits[cid].tabs))
+    root = panel_device_id(upstream)
+    before_names = {cid: f"circuit-{min(snap.circuits[cid].tabs)}" for cid in by_space}
+    feeding = dict(zip(by_space[:2], inverters, strict=True))
+    fed = fed_inverters(upstream, feeding)
+    before_tree = renamed_devices(fed, before_names)
+    bound, carded = (before_names[cid] for cid in by_space[:2])
+    after_ids = {
+        old: f"{root}-{DERIVED_HEX}-1-16-{old.removeprefix('circuit-')}"
+        for old in before_names.values()
+    }
+    after_tree = on_new_ids(before_tree, after_ids)
+
+    panel = panels(before_tree)
+    entry_id = panel.entry.entry_id
+    hass_storage[f"{DOMAIN}.pv_binding.{entry_id}"] = {
+        "version": 1,
+        "key": f"{DOMAIN}.pv_binding.{entry_id}",
+        "data": {"circuit_id": bound},
+    }
+    hass_storage[f"{DOMAIN}.curation.{entry_id}"] = {
+        "version": 1,
+        "key": f"{DOMAIN}.curation.{entry_id}",
+        "data": {"records": {f"pv_{carded}/vendor/cell-temperature": {"entity_category": "none"}}},
+    }
+    await panel.set_up(before_tree)
+    assert panel.runtime.pv_binding.bound_key == bound
+    devices = dr.async_get(panel.hass)
+    card = devices.async_get_device_by_identifier((DOMAIN, f"{panel.serial}_pv_{carded}"), entry_id)
+    assert card is not None
+    card_rows = {
+        row.id: row.entity_id
+        for row in er.async_entries_for_device(er.async_get(panel.hass), card.id)
+    }
+    assert card_rows
+    await panel.call("set_subdevice_graph_horizon", subdevice_id=card.id, horizon="1M")
+
+    await panel.restart_on(after_tree)
+
+    assert panel.runtime.pv_binding.bound_key == after_ids[bound]
+    moved = devices.async_get_device_by_identifier(
+        (DOMAIN, f"{panel.serial}_pv_{after_ids[carded]}"), entry_id
+    )
+    assert moved is not None and moved.id == card.id
+    assert {
+        row.id: row.entity_id
+        for row in er.async_entries_for_device(er.async_get(panel.hass), moved.id)
+    } == card_rows
+    assert panel.runtime.curation.as_dicts() == {
+        f"pv_{after_ids[carded]}/vendor/cell-temperature": {"entity_category": "none"}
+    }
+    horizons = panel.runtime.coordinator.graph_horizon_manager
+    assert horizons is not None
+    assert horizons.get_effective_subdevice_horizon(card.id) == "1M"
+
+
+VENDOR_READINGS: Final = 61
+"""One more than a device may add (`extension.MAX_PER_DEVICE`), so the overflow notice stands."""
+
+
+def with_vendor_readings(tree: RetainedTree, circuit_id: str) -> RetainedTree:
+    """Return the tree with a vendor node on one circuit, declaring and publishing `VENDOR_READINGS` readings."""
+    parsed = dict(description(tree, circuit_id))
+    nodes = dict(parsed["nodes"]) if isinstance(parsed.get("nodes"), dict) else {}
+    nodes["vendor"] = {
+        "name": "vendor",
+        "type": "com.example.vendor",
+        "properties": {
+            f"reading-{i}": {"datatype": "float", "unit": "V", "name": f"Reading {i}"}
+            for i in range(VENDOR_READINGS)
+        },
+    }
+    parsed["nodes"] = nodes
+    tree[circuit_id]["$description"] = json.dumps(parsed)
+    for i in range(VENDOR_READINGS):
+        tree[circuit_id][f"vendor/reading-{i}"] = f"{120 + i}.0"
+    return tree
+
+
+async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Its entities, its curated key and the overflow notice's record move; the notice is not raised again.
+
+    Fails when the notices re-key is skipped: the overflow would read as news
+    and be raised again, naming the new id.
+    """
+    caplog.set_level(logging.WARNING)
+    before_tree = with_vendor_readings(capture(BEFORE).tree(), RANGE)
+    after_tree = with_vendor_readings(capture(AFTER).tree(), new_id_e(RANGE))
+    panel = panels(before_tree)
+    await panel.set_up(before_tree)
+    prefix = f"span_{panel.serial}_adopted_circuit_{RANGE}/"
+    rows = {
+        row.id: row.entity_id
+        for row in er.async_entries_for_config_entry(er.async_get(panel.hass), panel.entry.entry_id)
+        if row.unique_id.startswith(prefix)
+    }
+    assert len(rows) == VENDOR_READINGS - 1
+    notice_id = "extension_overflow"
+    assert is_standing(panel.hass, panel.entry, notice_id)
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+    notices_key = f"{_NOTICES_KEY}.{panel.entry.entry_id}"
+    standing = json.dumps(hass_storage[notices_key], sort_keys=True)
+    assert f"circuit:{RANGE} (1)" in standing
+    curation = hass_storage.setdefault(
+        f"{DOMAIN}.curation.{panel.entry.entry_id}",
+        {"version": 1, "key": f"{DOMAIN}.curation.{panel.entry.entry_id}", "data": {"records": {}}},
+    )
+    assert isinstance(curation, dict)
+    curation["data"] = {
+        "records": {f"circuit_{RANGE}/vendor/reading-0": {"entity_category": "none"}}
+    }
+    caplog.clear()
+
+    await panel.restart_on(after_tree)
+    flush_delayed_saves(panel.hass)
+    await panel.hass.async_block_till_done()
+
+    new_prefix = f"span_{panel.serial}_adopted_circuit_{new_id_e(RANGE)}/"
+    after = {
+        row.id: row.entity_id
+        for row in er.async_entries_for_config_entry(er.async_get(panel.hass), panel.entry.entry_id)
+        if row.unique_id.startswith(new_prefix)
+    }
+    assert after == rows
+    assert panel.runtime.curation.as_dicts() == {
+        f"circuit_{new_id_e(RANGE)}/vendor/reading-0": {"entity_category": "none"}
+    }
+    stored = hass_storage[notices_key]
+    assert isinstance(stored, dict)
+    assert stored["data"]["announced"][notice_id] == f"circuit:{new_id_e(RANGE)} (1)"
+    assert (
+        stored["data"]["standing"][notice_id] == json.loads(standing)["data"]["standing"][notice_id]
+    )
+    assert "Vendor readings beyond the per-device limit" not in caplog.text
+
+
+async def test_circuits_a_partial_tree_lacks_migrate_at_the_next_setup(
+    panels: Callable[..., Panel],
+) -> None:
+    """Three circuits missing from the first r202645-e setup migrate at the one after it.
+
+    Fails when the migration needs the whole tree, or records itself as done.
+    """
+    late = ("circuit-12", "circuit-13", "circuit-14")
+    partial = capture(AFTER).tree()
+    for old_id in late:
+        partial = without_device(partial, new_id_e(old_id))
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    old_power = {
+        cid: build_circuit_unique_id(panel.serial, cid, "instantPowerW") for cid in (*late, RANGE)
+    }
+    rows = {cid: panel.entity_id("sensor", uid) for cid, uid in old_power.items()}
+
+    await panel.restart_on(partial)
+
+    entities = er.async_get(panel.hass)
+    for cid in late:
+        row = entities.async_get(rows[cid])
+        assert row is not None and row.unique_id == old_power[cid], cid
+    moved = entities.async_get(rows[RANGE])
+    assert moved is not None and new_id_e(RANGE) in moved.unique_id
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    for cid in late:
+        row = entities.async_get(rows[cid])
+        assert row is not None and new_id_e(cid) in row.unique_id, cid
+
+
+async def test_a_control_withdrawn_before_the_update_returns_as_a_new_entity(
+    panels: Callable[..., Panel],
+) -> None:
+    """Tombstones are not re-keyed: a switch the panel withdrew comes back new, and is announced.
+
+    A characterisation of the accepted gap. Fails when a change starts
+    re-keying Core's `deleted_entities`.
+    """
+    tree = capture(BEFORE).tree()
+    panel = panels(tree)
+    await panel.set_up(tree)
+    switch_uid = build_switch_unique_id(panel.serial, RANGE)
+    original = er.async_get(panel.hass).async_get(panel.entity_id("switch", switch_uid))
+    assert original is not None
+    withdrawn = capture(BEFORE).tree()
+    withdrawn[RANGE]["switch/relay-controllable"] = "false"
+    await panel.restart_on(withdrawn)
+    assert er.async_get(panel.hass).async_get_entity_id("switch", DOMAIN, switch_uid) is None
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    returned = er.async_get(panel.hass).async_get(
+        panel.entity_id("switch", build_switch_unique_id(panel.serial, new_id_e(RANGE)))
+    )
+    assert returned is not None and returned.id != original.id
+    assert is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+async def test_an_inverter_card_an_earlier_release_added_gives_way(
+    panels: Callable[..., Panel],
+) -> None:
+    """An inverter's card: the original card is re-keyed in place, the newer one removed."""
+    upstream = capture("main32_r202639-upstream-pv").tree()
+    snap = snapshot(upstream)
+    by_space = sorted(snap.circuits, key=lambda cid: min(snap.circuits[cid].tabs))
+    root = panel_device_id(upstream)
+    before_names = {cid: f"circuit-{min(snap.circuits[cid].tabs)}" for cid in by_space}
+    fed = fed_inverters(upstream, dict(zip(by_space[:2], sorted(snap.pv_inverters), strict=True)))
+    before_tree = renamed_devices(fed, before_names)
+    after_ids = {
+        old: f"{root}-{DERIVED_HEX}-1-16-{old.removeprefix('circuit-')}"
+        for old in before_names.values()
+    }
+    after_tree = on_new_ids(before_tree, after_ids)
+    panel = panels(before_tree)
+    await panel.set_up(before_tree)
+    devices = dr.async_get(panel.hass)
+    cards = {
+        key: devices.async_get_device_by_identifier(
+            (DOMAIN, f"{panel.serial}_pv_{key}"), panel.entry.entry_id
+        )
+        for key in panel.snapshot.pv_inverters
+    }
+    originals = {key: card.id for key, card in cards.items() if card is not None}
+    assert originals
+    await panel.unload()
+    with patch("custom_components.span_panel.async_migrate_device_ids"):
+        await panel.set_up(after_tree)
+    newer = {
+        key: card.id
+        for key in originals
+        if (
+            card := devices.async_get_device_by_identifier(
+                (DOMAIN, f"{panel.serial}_pv_{after_ids[key]}"), panel.entry.entry_id
+            )
+        )
+        is not None
+    }
+    assert newer.keys() == originals.keys()
+
+    await panel.restart_on(after_tree)
+
+    for key, device_id in originals.items():
+        card = devices.async_get_device_by_identifier(
+            (DOMAIN, f"{panel.serial}_pv_{after_ids[key]}"), panel.entry.entry_id
+        )
+        assert card is not None and card.id == device_id
+        assert devices.async_get(newer[key]) is None
+
+
+async def test_a_new_unique_id_another_entry_holds_is_left_alone(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A row is never re-keyed onto a unique id another entry's row holds: it is logged and kept."""
+    ours = MockConfigEntry(domain=DOMAIN, entry_id="entry-ours", unique_id="sp3-x")
+    theirs = MockConfigEntry(domain=DOMAIN, entry_id="entry-theirs", unique_id="sp3-y")
+    ours.add_to_hass(hass)
+    theirs.add_to_hass(hass)
+    registry = er.async_get(hass)
+    old = build_circuit_unique_id("sp3-x", "circuit-5", "instantPowerW")
+    new = build_circuit_unique_id("sp3-x", "p-1-16-5", "instantPowerW")
+    kept = registry.async_get_or_create("sensor", DOMAIN, old, config_entry=ours)
+    registry.async_get_or_create("sensor", DOMAIN, new, config_entry=theirs)
+
+    await async_migrate_device_ids(
+        hass,
+        ours,
+        SpanPanelSnapshotFactory.create(
+            serial_number="sp3-x",
+            circuits={"p-1-16-5": SpanCircuitSnapshotFactory.create(circuit_id="p-1-16-5")},
+        ),
+    )
+
+    row = registry.async_get(kept.entity_id)
+    assert row is not None and row.unique_id == old
+    assert f"its new unique id {new} is held by" in caplog.text

@@ -39,6 +39,7 @@ from homeassistant.const import EntityCategory, Platform
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
+from .device_id_migration import rekeyed
 from .util import NUMERIC_DATATYPES, declares_a_number
 
 if TYPE_CHECKING:
@@ -375,6 +376,33 @@ def _readable_records(stored: StoredCuration | None) -> dict[str, dict[str, str]
             if isinstance(existing_key, str) and parse_record(raw) is not None:
                 raw_records[existing_key] = dict(raw)
     return raw_records
+
+
+async def async_rekey_scopes(
+    hass: HomeAssistant, entry: ConfigEntry, scopes: Mapping[str, str]
+) -> int:
+    """Move every record under an old scope to the same address under its new one, on disk.
+
+    `scopes` maps a scope segment to the one replacing it, as
+    `extension.rekeyed_scopes` builds them for circuits whose device ids
+    changed: a record keyed `{old}/{node}/{property}` moves to
+    `{new}/{node}/{property}`. Run by the device-id migration before
+    `async_load_curation` reads the store. A record already under the new key
+    wins: only the owner of the device writes one, so it records something
+    asserted after the change (`device_id_migration.rekeyed`). Written only when
+    something moved. Returns how many records moved.
+    """
+    store = _store(hass, entry)
+    raw_records = _readable_records(await store.async_load())
+    keys: dict[str, str] = {}
+    for key in raw_records:
+        scope, separator, address = key.partition("/")
+        if separator and scope in scopes:
+            keys[key] = f"{scopes[scope]}/{address}"
+    records, moved = rekeyed(raw_records, keys)
+    if moved:
+        await store.async_save({"records": records})
+    return moved
 
 
 async def async_forget_curation(hass: HomeAssistant, entry: ConfigEntry) -> None:

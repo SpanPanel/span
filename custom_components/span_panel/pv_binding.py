@@ -276,25 +276,36 @@ def _registered_in(registry: er.EntityRegistry, entry_id: str, domain: str, uniq
     return entity_id_in_entry(registry, entry_id, domain, unique_id) is not None
 
 
+def inverter_card_unique_ids(serial: str, key: str) -> dict[tuple[str, str], str]:
+    """Return the unique id of every entity inverter `key`'s own card carries, by domain and description key.
+
+    Built with `build_pv_inverter_unique_id`, as `SpanPVInverterSensor` and
+    `SpanPVInverterBinarySensor` build theirs, over the closed set those two
+    are built from (`_CARD_ENTITIES`). Where `key` is the circuit that feeds
+    the inverter, the device-id migration asks this for the circuit's old id
+    and its new one and pairs the answers key by key.
+    """
+    return {
+        (domain, description_key): build_pv_inverter_unique_id(serial, key, description_key)
+        for domain, description_key in _CARD_ENTITIES
+    }
+
+
 def keys_holding_cards(
     registry: er.EntityRegistry, entry_id: str, serial: str, keys: Iterable[str]
 ) -> frozenset[str]:
     """Return the inverter keys among `keys` that already have an entity on a card of their own, in this entry.
 
-    Built with `build_pv_inverter_unique_id`, as `SpanPVInverterSensor` and
-    `SpanPVInverterBinarySensor` build theirs; scoped to `entry_id` like every
+    Read by `inverter_card_unique_ids`; scoped to `entry_id` like every
     registry lookup here.
     """
 
     def holds(key: str) -> bool:
         return any(
-            _registered_in(
-                registry,
-                entry_id,
-                domain,
-                build_pv_inverter_unique_id(serial, key, description_key),
-            )
-            for domain, description_key in _CARD_ENTITIES
+            _registered_in(registry, entry_id, domain, unique_id)
+            for (domain, _description_key), unique_id in inverter_card_unique_ids(
+                serial, key
+            ).items()
         )
 
     return frozenset(key for key in keys if holds(key))
@@ -356,6 +367,27 @@ async def async_resolve_pv_binding(
         await store.async_save(kept)
         _LOGGER.info("Solar card's PV entities: %s", identity.mode)
     return identity
+
+
+async def async_rekey_circuit_ids(
+    hass: HomeAssistant, entry: ConfigEntry, mapping: Mapping[str, str]
+) -> int:
+    """Move a bound record from its circuit's old id to its new one, on disk.
+
+    Run by the device-id migration before `async_resolve_pv_binding` reads the
+    record, so the Solar card's PV entities stay bound to the inverter they
+    describe. Nothing can collide: the one write an older release makes
+    without being asked refines an unbound record, whose value was `None`.
+    Returns 1 when the record moved, 0 otherwise.
+    """
+    store = store_for(hass, entry)
+    record = read_record(await store.async_load())
+    bound = record["circuit_id"] if record is not None else None
+    current = mapping.get(bound) if bound is not None else None
+    if current is None:
+        return 0
+    await store.async_save(StoredPvBinding(circuit_id=current))
+    return 1
 
 
 async def async_forget_pv_binding(hass: HomeAssistant, entry: ConfigEntry) -> None:

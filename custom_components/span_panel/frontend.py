@@ -76,8 +76,9 @@ The file holds the favorites of every panel and the sidebar settings in one
 blob, and HA's Store serialises writes but not the load -> mutate -> save
 around them, so two writers interleaved at their awaits would each save what
 they read and one change would be lost. It guards the whole file, not one key:
-favorites and the options flow's sidebar settings both write through
-`async_update_panel_settings`, which holds it. Kept on `hass` rather than as a module global, as the file it
+favorites, the options flow's sidebar settings and the device-id migration's
+rewrite of favorites all write through `async_update_panel_settings`, which
+holds it. Kept on `hass` rather than as a module global, as the file it
 guards belongs to one Home Assistant: an `asyncio.Lock` belongs to the event
 loop that first waits on it.
 """
@@ -219,6 +220,47 @@ async def async_set_favorite(
 
     await async_update_panel_settings(hass, _toggle)
     return favorites
+
+
+async def async_rekey_favorite_circuits(
+    hass: HomeAssistant, panel_device_id: str, mapping: Mapping[str, str]
+) -> int:
+    """Move one panel's favorite circuits from their old circuit ids to their new ones.
+
+    Only the favorites of `panel_device_id` are touched, in their order. A
+    circuit already favorited under its new id keeps that place and the old
+    entry is dropped: the new id records a favorite made since the panel
+    changed its ids. Written through `async_update_panel_settings`, and only
+    when an entry moved. Returns how many moved.
+    """
+    moved = 0
+
+    def _rekey(settings: dict[str, object]) -> bool:
+        nonlocal moved
+        favorites = _normalize_favorites_blob(settings.get("favorites"))
+        panel_entry = favorites.get(panel_device_id)
+        if panel_entry is None:
+            return False
+        circuits = panel_entry["circuits"]
+        if not any(circuit_id in mapping for circuit_id in circuits):
+            return False
+        present = set(circuits)
+        rekeyed: list[str] = []
+        for circuit_id in circuits:
+            current = mapping.get(circuit_id)
+            if current is not None:
+                moved += 1
+                if current in present:
+                    continue
+            kept = circuit_id if current is None else current
+            if kept not in rekeyed:
+                rekeyed.append(kept)
+        panel_entry["circuits"] = rekeyed
+        settings["favorites"] = favorites
+        return True
+
+    await async_update_panel_settings(hass, _rekey)
+    return moved
 
 
 def _is_legacy_resource(item: Mapping[str, object]) -> bool:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -299,12 +299,12 @@ async def _set_up(
     entry: MockConfigEntry,
     snapshot: SpanPanelSnapshot,
     *,
-    before_begin: object | None = None,
+    before_begin: Callable[[], None] | None = None,
 ) -> tuple[MagicMock, SpanPanelCoordinator]:
     """Run `async_setup_entry` with a real coordinator whose first refresh yields `snapshot`.
 
-    `before_begin` stands in for a device-id migration: it runs in place of the
-    hardware verdict, the call immediately before `begin`.
+    `before_begin` runs as `begin` is called: after the device-id migration
+    and the load, so it sees the manager as `begin` does.
     """
     entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
     client = _client(_DECLARED)
@@ -314,6 +314,7 @@ async def _set_up(
     client.start_streaming = AsyncMock()
     client.stop_streaming = AsyncMock()
     coordinators: list[SpanPanelCoordinator] = []
+    begin = PackageRatingManager.begin
 
     def _build(
         hass_: HomeAssistant, client_: MagicMock, entry_: MockConfigEntry
@@ -321,6 +322,15 @@ async def _set_up(
         coordinator = SpanPanelCoordinator(hass_, client_, entry_)
         coordinators.append(coordinator)
         return coordinator
+
+    def _begin(
+        manager: PackageRatingManager,
+        begun: SpanPanelSnapshot,
+        field_metadata: Mapping[str, FieldMetadata] | None,
+    ) -> None:
+        if before_begin is not None:
+            before_begin()
+        begin(manager, begun, field_metadata)
 
     with (
         patch("custom_components.span_panel.async_register_commands"),
@@ -330,9 +340,7 @@ async def _set_up(
             "custom_components.span_panel.ensure_device_registered",
             AsyncMock(side_effect=ensure_device_registered_stand_in),
         ),
-        patch(
-            "custom_components.span_panel._async_enforce_hardware_verdict", side_effect=before_begin
-        ),
+        patch.object(PackageRatingManager, "begin", _begin),
         patch.object(SpanPanelCoordinator, "async_setup_streaming", AsyncMock()),
         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
         patch.object(hass.config_entries, "async_update_entry"),
@@ -367,7 +375,7 @@ async def test_a_package_for_a_missing_circuit_survives_until_begin_and_is_then_
     events = _events(hass)
     before: list[tuple[int, int]] = []
 
-    def _look(*_: object) -> None:
+    def _look() -> None:
         manager = coordinators_manager[0]
         before.append((len(manager._packages), len(events)))
 
@@ -386,29 +394,27 @@ async def test_a_package_for_a_missing_circuit_survives_until_begin_and_is_then_
     assert [event.data["circuit_ids"] for event in events] == [["old-circuit"]]
 
 
-async def test_a_stand_in_rekey_before_begin_keeps_the_package_on_the_new_id(
+async def test_a_package_under_a_circuits_old_device_id_is_judged_under_its_new_one(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:
+    """The migration re-keys the store before the manager loads it, so `begin` removes nothing.
+
+    Fails if the load runs before the migration: the manager would hold the
+    package under `circuit-5`, which the snapshot lacks, and remove it.
+    """
     entry = _entry()
     entry.add_to_hass(hass)
-    _seed(hass_storage, entry, "old-circuit")
-    snapshot = _snapshot({"new-circuit": 20.0})
+    _seed(hass_storage, entry, "circuit-5")
+    new_id = "sp3-rating-001-00000000000000aa-1-16-5"
+    snapshot = _snapshot({new_id: 20.0})
     events = _events(hass)
-    managers: list[PackageRatingManager] = []
-    orig_load = PackageRatingManager.async_load
 
-    async def _capture(self: PackageRatingManager) -> None:
-        managers.append(self)
-        await orig_load(self)
+    _, coordinator = await _set_up(hass, entry, snapshot)
 
-    def _migrate(*_: object) -> None:
-        packages = managers[0]._packages
-        packages["new-circuit"] = packages.pop("old-circuit")
-
-    with patch.object(PackageRatingManager, "async_load", _capture):
-        _, coordinator = await _set_up(hass, entry, snapshot, before_begin=_migrate)
-
-    rating = coordinator.package_rating_manager.resolve("new-circuit", snapshot)
+    rating = coordinator.package_rating_manager.resolve(new_id, snapshot)
     assert (rating.user_set, rating.judged_a) == (True, 40)
     assert events == []
     assert not is_standing(hass, entry, _NOTICE)
+    stored = hass_storage[f"span_panel_package_ratings.{entry.entry_id}"]
+    assert isinstance(stored, dict)
+    assert list(stored["data"]["packages"]) == [new_id]
