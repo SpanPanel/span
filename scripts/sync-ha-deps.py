@@ -39,8 +39,8 @@ def update_pyproject_constraints(ha_deps):
 
         # Dependencies that should match HA exactly
         exact_match_deps = {
-            "httpx",
-            "voluptuous",
+            "httpx2",
+            "probatio",
             "aiohttp",
             "yarl",
             "typing-extensions",
