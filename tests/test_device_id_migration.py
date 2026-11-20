@@ -1598,6 +1598,61 @@ async def test_rows_an_earlier_release_added_under_the_new_ids_give_way(
     assert f"{len(newer_rows)} entities and {len(newer_devices)} devices" in infos[0]
 
 
+async def test_a_moved_notice_keeps_the_originals_state_over_a_newer_one_left_behind(
+    panels: Callable[..., Panel],
+) -> None:
+    """An earlier release's second HVAC switch went before this release; the notice the user ignored for it stayed.
+
+    The panel withdrew the control, or the user deleted the switch while it
+    stood beside the original, so nothing removes its notice with it. The
+    original switch, re-keyed, takes the new id, and its notice, shown, takes
+    the key: what stands under it is the original's state, not the ignored
+    one's. Fails when the moved notice is raised over the one already under
+    its key, whose dismissal Home Assistant keeps.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    original_switch = build_switch_unique_id(panel.serial, HVAC)
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", original_switch),
+        switch_unique_id=original_switch,
+        area_name="Garage",
+    )
+    await panel.unload()
+    with patch("custom_components.span_panel.async_migrate_device_ids"):
+        await panel.set_up(capture(AFTER).tree())
+    newer_switch = build_switch_unique_id(panel.serial, new_id_e(HVAC))
+    async_raise_breaker_switch_area_notice(
+        panel.hass,
+        panel.entry,
+        switch_entity_id=panel.entity_id("switch", newer_switch),
+        switch_unique_id=newer_switch,
+        area_name="Kitchen",
+    )
+    ir.async_ignore_issue(
+        panel.hass, DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch), True
+    )
+    er.async_get(panel.hass).async_remove(panel.entity_id("switch", newer_switch))
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    issues = ir.async_get(panel.hass)
+    moved = issues.async_get_issue(
+        DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, newer_switch)
+    )
+    assert moved is not None and moved.translation_placeholders is not None
+    assert moved.translation_placeholders["area"] == "Garage"
+    assert moved.dismissed_version is None, "the original's state, not the ignored notice's"
+    assert (
+        issues.async_get_issue(
+            DOMAIN, breaker_switch_area_issue_id(panel.entry.entry_id, original_switch)
+        )
+        is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # an install from before circuits had devices
 # ---------------------------------------------------------------------------

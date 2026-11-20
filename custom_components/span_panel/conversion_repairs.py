@@ -148,12 +148,16 @@ def async_rekey_circuit_ids(
     setup that stopped before this step leaves the next to finish it.
 
     A notice an older release raised under the new id, about the second
-    switch it registered after the panel changed its ids, is gone by now: the
-    migration deletes it with that switch (`async_forget_breaker_switch`). A
-    notice whose switch was not carried over -- one the user deleted while it
-    read nothing -- stays as it was, and so does the notice of the switch now
-    under the new id. `serial` is the panel's, as `build_switch_unique_id`
-    takes it. Returns how many notices moved.
+    switch it registered after the panel changed its ids, gives way. The
+    migration deletes it with that switch (`async_forget_breaker_switch`); one
+    whose switch went before -- withdrawn by the panel, or deleted by the user
+    -- is deleted here, before the original's takes its key, since raising a
+    notice over a standing one keeps that one's dismissal. Only a notice whose
+    switch now holds the key moves, so what is deleted is never about the
+    switch under it. A notice whose switch was not carried over -- one the
+    user deleted while it read nothing -- stays as it was, and so does the
+    notice of the switch now under the new id. `serial` is the panel's, as
+    `build_switch_unique_id` takes it. Returns how many notices moved.
     """
     registry = ir.async_get(hass)
     entity_registry = er.async_get(hass)
@@ -176,6 +180,9 @@ def async_rekey_circuit_ids(
         row = entity_registry.async_get(switch) if switch is not None else None
         if row is None or row.previous_unique_id != old_switch:
             continue
+        ir.async_delete_issue(
+            hass, DOMAIN, breaker_switch_area_issue_id(entry.entry_id, new_switch)
+        )
         async_create_entry_issue(
             hass,
             entry,
