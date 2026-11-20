@@ -36,7 +36,11 @@ from homeassistant.helpers import (
 )
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+)
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel.const import DOMAIN
@@ -1076,6 +1080,73 @@ async def test_an_install_from_before_circuit_devices_converts_under_the_new_ids
         f"- {PANEL_NAME} Fridge Power → {PANEL_NAME} Electric range Fridge Power"
     )
     assert not is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
+async def test_the_circuit_devices_an_earlier_release_added_are_kept_where_no_original_exists(
+    panels: Callable[..., Panel],
+) -> None:
+    """An install from before circuit devices, which an earlier 2.3 release ran across the update.
+
+    That release found every circuit entity on the panel's device under an old
+    id, so it converted none and registered a second set under the new ids, on
+    circuit devices of its own -- the only circuit devices there are. Those are
+    kept, with the room the user gave one: the second set of entities gives
+    way, and the conversion moves the originals, re-keyed, onto those devices.
+
+    Fails when a newer device with no original is removed as though it
+    collided. Home Assistant would restore such a device from its tombstone,
+    with its registry id and room, when the conversion asks for it again, so
+    the registry alone cannot show it went; the removal events do.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    power = panel.power(RANGE)
+    await panel.unload()
+    as_before_circuit_devices(panel)
+    entities = er.async_get(panel.hass)
+    devices = dr.async_get(panel.hass)
+    originals = {
+        row.id: row.entity_id
+        for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+    }
+    assert not dr.async_child_entries_for_config_entry(devices, panel.entry.entry_id)
+
+    # The earlier release, on the new firmware: no migration.
+    with patch("custom_components.span_panel.async_migrate_device_ids"):
+        await panel.set_up(capture(AFTER).tree())
+    newer_devices = {
+        child.id for child in dr.async_child_entries_for_config_entry(devices, panel.entry.entry_id)
+    }
+    newer_rows = {
+        row.id for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+    } - originals.keys()
+    assert newer_devices and newer_rows
+    kitchen = ar.async_get(panel.hass).async_create("Kitchen").id
+    range_device = panel.circuit_device(new_id_e(RANGE))
+    devices.async_update_child_device(range_device.id, area_id=kitchen)
+    removals = async_capture_events(panel.hass, dr.EVENT_DEVICE_REGISTRY_UPDATED)
+
+    await panel.restart_on(capture(AFTER).tree())
+
+    assert not [event for event in removals if event.data["action"] == "remove"]
+
+    rows = {
+        row.id: row for row in er.async_entries_for_config_entry(entities, panel.entry.entry_id)
+    }
+    assert {registry_id: rows[registry_id].entity_id for registry_id in originals} == originals
+    assert not newer_rows & rows.keys()
+    assert {
+        child.id for child in dr.async_child_entries_for_config_entry(devices, panel.entry.entry_id)
+    } == newer_devices
+    moved = entities.async_get(power)
+    assert moved is not None and moved.device_id == range_device.id
+    assert panel.circuit_device(new_id_e(RANGE)).area_id == kitchen
+    assert not [
+        row.entity_id
+        for row in rows.values()
+        if row.device_id == panel.runtime.panel_device_id
+        and names_an_old_id(row.unique_id, OLD_IDS_E)
+    ]
 
 
 # ---------------------------------------------------------------------------
