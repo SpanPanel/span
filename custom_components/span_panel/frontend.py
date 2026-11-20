@@ -7,7 +7,7 @@ panel registration, and panel settings storage.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import hashlib
 import logging
 import os
@@ -21,8 +21,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.collection import ItemNotFound
 from homeassistant.helpers.storage import Store
+from homeassistant.util.hass_dict import HassKey
 
-from .const import PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
+from .const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,12 +61,44 @@ async def async_load_panel_settings(hass: HomeAssistant) -> dict[str, Any]:
     return data or {}
 
 
-async def async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any]) -> None:
-    """Save domain-level panel settings to storage."""
+async def _async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any]) -> None:
+    """Save domain-level panel settings to storage; only `async_update_panel_settings` calls it."""
     store: Store[dict[str, Any]] = Store(
         hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
     )
     await store.async_save(settings)
+
+
+_SETTINGS_LOCK: HassKey[asyncio.Lock] = HassKey(f"{DOMAIN}_panel_settings_lock")
+"""Serialises every read-modify-write of `span_panel_settings`.
+
+The file holds the favorites of every panel and the sidebar settings in one
+blob, and HA's Store serialises writes but not the load -> mutate -> save
+around them, so two writers interleaved at their awaits would each save what
+they read and one change would be lost. It guards the whole file, not one key:
+favorites and the options flow's sidebar settings both write through
+`async_update_panel_settings`, which holds it. Kept on `hass` rather than as a module global, as the file it
+guards belongs to one Home Assistant: an `asyncio.Lock` belongs to the event
+loop that first waits on it.
+"""
+
+
+async def async_update_panel_settings(
+    hass: HomeAssistant, update: Callable[[dict[str, object]], bool]
+) -> None:
+    """Read the settings file, apply `update` to it in place, and write it back, as one step.
+
+    The one way anything writes `span_panel_settings`, so no write can land
+    between another writer's read and its save. `update` answers whether it
+    changed anything; the file is written only when it did.
+    """
+    lock = hass.data.get(_SETTINGS_LOCK)
+    if lock is None:
+        lock = hass.data[_SETTINGS_LOCK] = asyncio.Lock()
+    async with lock:
+        settings = await async_load_panel_settings(hass)
+        if update(settings):
+            await _async_save_panel_settings(hass, settings)
 
 
 FavoriteKind = Literal["circuits", "sub_devices"]
@@ -124,12 +157,6 @@ def _normalize_favorites_blob(raw: Any) -> dict[str, dict[str, list[str]]]:
     return result
 
 
-# Module-level lock serializing favorites read-then-write so concurrent
-# add/remove calls don't clobber each other. HA's Store serializes writes
-# but not the surrounding load → mutate → save sequence.
-_FAVORITES_LOCK = asyncio.Lock()
-
-
 async def async_get_favorites(
     hass: HomeAssistant,
 ) -> dict[str, dict[str, list[str]]]:
@@ -159,15 +186,17 @@ async def async_set_favorite(
     on add; drops empty lists and empty panel entries on remove. Returns
     the updated full favorites map.
 
-    Holds a module-level lock around load → mutate → save so concurrent
-    callers can't race; also persists the normalized shape so legacy data
-    is migrated in place on the first write touching it.
+    Written through `async_update_panel_settings`, so concurrent callers
+    can't race; also persists the normalized shape so legacy data is migrated
+    in place on the first write touching it.
     """
     if kind not in _FAVORITE_KINDS:
         raise ValueError(f"Unknown favorite kind: {kind!r}")
 
-    async with _FAVORITES_LOCK:
-        settings = await async_load_panel_settings(hass)
+    favorites: dict[str, dict[str, list[str]]] = {}
+
+    def _toggle(settings: dict[str, object]) -> bool:
+        nonlocal favorites
         favorites = _normalize_favorites_blob(settings.get("favorites"))
 
         panel_entry = favorites.get(panel_device_id) or _empty_panel_favorites()
@@ -186,8 +215,10 @@ async def async_set_favorite(
             favorites.pop(panel_device_id, None)
 
         settings["favorites"] = favorites
-        await async_save_panel_settings(hass, settings)
-        return favorites
+        return True
+
+    await async_update_panel_settings(hass, _toggle)
+    return favorites
 
 
 def _is_legacy_resource(item: Mapping[str, object]) -> bool:

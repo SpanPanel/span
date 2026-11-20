@@ -2192,7 +2192,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         from . import (  # pylint: disable=import-outside-toplevel
             async_apply_panel_registration,
             async_load_panel_settings,
-            async_save_panel_settings,
+            async_update_panel_settings,
         )
 
         if user_input is not None:
@@ -2202,10 +2202,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             if not errors:
                 # Save panel settings to domain-level storage, merged into the
-                # stored ones so a setting the form hid keeps its value.
-                current_ps = await async_load_panel_settings(self.hass)
-                current_ps.update(panel_settings)
-                await async_save_panel_settings(self.hass, current_ps)
+                # stored ones so a setting the form hid keeps its value. Through
+                # the settings file's one locked writer, which favorites also
+                # write through: the file holds both.
+                def _merge(settings: dict[str, object]) -> bool:
+                    settings.update(panel_settings)
+                    return True
+
+                await async_update_panel_settings(self.hass, _merge)
                 await async_apply_panel_registration(self.hass)
                 return self.async_create_entry(title="", data=filtered_input)
         else:

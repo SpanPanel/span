@@ -118,7 +118,7 @@ from .frontend import (
     async_apply_panel_registration as async_apply_panel_registration,
     async_load_panel_settings as async_load_panel_settings,
     async_register_frontend_assets as async_register_frontend_assets,
-    async_save_panel_settings as async_save_panel_settings,
+    async_update_panel_settings as async_update_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
 from .hardware_guard import (
