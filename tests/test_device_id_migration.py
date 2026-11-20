@@ -530,6 +530,44 @@ async def test_a_migrated_install_is_looked_at_again_and_nothing_is_written(
     await assert_a_second_migration_writes_nothing(panel)
 
 
+@pytest.mark.parametrize("vendor", [False, True], ids=["captures", "with-a-vendor-extension"])
+async def test_a_setup_that_stopped_after_the_registry_leaves_nothing_to_announce(
+    panels: Callable[..., Panel], vendor: bool
+) -> None:
+    """A store that cannot be re-keyed stops the first setup after the update; the next announces nothing.
+
+    The registry was re-keyed before the store failed, so the next setup moves
+    no entity, and finds no extension row under an old scope. The record of
+    what was announced still names the old ids, and is brought to the registry
+    as it stands. Fails when the record follows only what the same setup
+    moved, or only the rows it finds under old ids.
+    """
+    before_tree, after_tree = capture(BEFORE).tree(), capture(AFTER).tree()
+    if vendor:
+        before_tree = with_vendor_readings(before_tree, RANGE)
+        after_tree = with_vendor_readings(after_tree, new_id_e(RANGE))
+    panel = panels(before_tree)
+    await panel.set_up(before_tree)
+    await panel.unload()
+    panel.tree = after_tree
+
+    with patch(
+        "custom_components.span_panel.package_rating_manager.async_rekey_circuit_ids",
+        side_effect=OSError("the store could not be written"),
+    ):
+        assert await panel.hass.config_entries.async_setup(panel.entry.entry_id) is False
+        await panel.hass.async_block_till_done()
+    assert panel.entry.state is ConfigEntryState.SETUP_ERROR
+    row = er.async_get(panel.hass).async_get(panel.power(new_id_e(RANGE)))
+    assert row is not None and row.previous_unique_id == build_circuit_unique_id(
+        panel.serial, RANGE, "instantPowerW"
+    ), "the registry was re-keyed before the store failed"
+
+    await panel.restart_on(after_tree)
+
+    assert not is_standing(panel.hass, panel.entry, _NEW_ENTITIES_NOTICE)
+
+
 # ---------------------------------------------------------------------------
 # old ids in services
 # ---------------------------------------------------------------------------

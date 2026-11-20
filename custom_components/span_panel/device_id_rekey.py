@@ -100,10 +100,73 @@ class _Moved:
 
 @dataclass(frozen=True, slots=True)
 class _Rekeyed:
-    """What the entity step did: each unique id it moved, old to new, and how many rows gave way."""
+    """What the entity step did: how many rows it re-keyed, and how many gave way."""
 
-    unique_ids: Mapping[str, str]
+    moved: int
     gave_way: int
+
+
+@dataclass(frozen=True, slots=True)
+class _UniqueIds:
+    """Every unique id an old circuit id's entities can be under, and the one built for its new id.
+
+    Built from the pairs alone, with the builders the platforms create with,
+    so it answers the same whatever the registry holds now: the closed
+    families key by key, and an extension, whose key set is open, by its
+    builder's scope prefix.
+    """
+
+    built: tuple[tuple[str, str, str], ...]
+    """`(domain, old unique id, new unique id)` for every key of the closed families."""
+
+    prefixes: Mapping[str, str]
+    """Each extension scope prefix built for an old id, to the one built for its new id."""
+
+    renamed: Mapping[str, str]
+    """`built`'s old unique ids to their new ones."""
+
+    @classmethod
+    def of(cls, serial: str, mapping: Mapping[str, str]) -> _UniqueIds:
+        """Build both answers for each pair of `mapping`."""
+        built: list[tuple[str, str, str]] = []
+        for old_id, new_id in mapping.items():
+            for builders in (circuit_entity_unique_ids, pv_binding.inverter_card_unique_ids):
+                old_ids, new_ids = builders(serial, old_id), builders(serial, new_id)
+                built.extend(
+                    (domain, old_unique_id, new_ids[domain, key])
+                    for (domain, key), old_unique_id in old_ids.items()
+                )
+        prefixes = {
+            extension.extension_unique_id_prefix(serial, old_scope): (
+                extension.extension_unique_id_prefix(serial, new_scope)
+            )
+            for old_scope, new_scope in extension.rekeyed_scopes(mapping).items()
+        }
+        renamed = {old_unique_id: new_unique_id for _, old_unique_id, new_unique_id in built}
+        return cls(tuple(built), prefixes, renamed)
+
+    def new_unique_id(self, unique_id: str) -> str | None:
+        """Return the unique id built for the new id of whatever `unique_id` was built for, or None."""
+        renamed = self.renamed.get(unique_id)
+        if renamed is not None:
+            return renamed
+        for old_prefix, new_prefix in self.prefixes.items():
+            if unique_id.startswith(old_prefix):
+                return new_prefix + unique_id[len(old_prefix) :]
+        return None
+
+    def in_entry(
+        self, entity_registry: er.EntityRegistry, entry_id: str
+    ) -> list[tuple[str, str, str]]:
+        """`(domain, old unique id, new unique id)` for every built pair and every entry row under an old prefix."""
+        pairs = list(self.built)
+        for row in er.async_entries_for_config_entry(entity_registry, entry_id):
+            for old_prefix, new_prefix in self.prefixes.items():
+                if row.unique_id.startswith(old_prefix):
+                    pairs.append(
+                        (row.domain, row.unique_id, new_prefix + row.unique_id[len(old_prefix) :])
+                    )
+        return pairs
 
 
 async def async_migrate_device_ids(
@@ -127,9 +190,11 @@ async def async_migrate_device_ids(
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
 
+    unique_ids = _UniqueIds.of(serial, mapping)
+
     _warn_on_renamed_pairs(device_registry, entry.entry_id, snapshot, mapping)
     devices = _rekey_devices(device_registry, entity_registry, entry.entry_id, serial, mapping)
-    entities = _rekey_entities(entity_registry, entry.entry_id, serial, mapping)
+    entities = _rekey_entities(entity_registry, entry.entry_id, unique_ids)
 
     stored = 0
     stored += await package_rating_manager.async_rekey_circuit_ids(hass, entry, mapping)
@@ -140,17 +205,17 @@ async def async_migrate_device_ids(
     panel = device_registry.async_get_device_by_identifier((DOMAIN, serial), entry.entry_id)
     if panel is not None:
         stored += await frontend.async_rekey_favorite_circuits(hass, panel.id, mapping)
-    stored += await additions.async_rekey_unique_ids(hass, entry, entities.unique_ids)
+    stored += await additions.async_rekey_unique_ids(hass, entry, unique_ids.new_unique_id)
     stored += extension.async_rekey_overflow_notice(hass, entry, mapping)
     issues = conversion_repairs.async_rekey_circuit_ids(hass, entry, serial, mapping)
 
-    if devices.moved or entities.unique_ids or stored or issues:
+    if devices.moved or entities.moved or stored or issues:
         _LOGGER.info(
             "%s: carried its circuits over to their new device ids: %d entities, %d devices, "
             "%d stored values and %d notices re-keyed; %d entities and %d devices an earlier "
             "release added under the new ids removed",
             entry.title,
-            len(entities.unique_ids),
+            entities.moved,
             devices.moved,
             stored,
             issues,
@@ -186,7 +251,9 @@ def holds_old_ids(
     entity_registry = er.async_get(hass)
     return any(
         entity_id_in_entry(entity_registry, entry_id, domain, old_unique_id) is not None
-        for domain, old_unique_id, _ in _unique_id_pairs(entity_registry, entry_id, serial, mapping)
+        for domain, old_unique_id, _ in _UniqueIds.of(serial, mapping).in_entry(
+            entity_registry, entry_id
+        )
     )
 
 
@@ -306,18 +373,16 @@ def _remove_device(
 
 
 def _rekey_entities(
-    entity_registry: er.EntityRegistry, entry_id: str, serial: str, mapping: Mapping[str, str]
+    entity_registry: er.EntityRegistry, entry_id: str, unique_ids: _UniqueIds
 ) -> _Rekeyed:
     """Re-key every entity row built for an old circuit id to the unique id built for its new one.
 
     A row already registered under the new id gives way: it was added by an
     earlier release after the change, and the original holds the history.
     """
-    rekeyed: dict[str, str] = {}
+    moved = 0
     gave_way = 0
-    for domain, old_unique_id, new_unique_id in _unique_id_pairs(
-        entity_registry, entry_id, serial, mapping
-    ):
+    for domain, old_unique_id, new_unique_id in unique_ids.in_entry(entity_registry, entry_id):
         original = entity_id_in_entry(entity_registry, entry_id, domain, old_unique_id)
         if original is None:
             continue
@@ -337,37 +402,5 @@ def _rekey_entities(
             )
             continue
         entity_registry.async_update_entity(original, new_unique_id=new_unique_id)
-        rekeyed[old_unique_id] = new_unique_id
-    return _Rekeyed(rekeyed, gave_way)
-
-
-def _unique_id_pairs(
-    entity_registry: er.EntityRegistry, entry_id: str, serial: str, mapping: Mapping[str, str]
-) -> list[tuple[str, str, str]]:
-    """Every `(domain, old unique id, new unique id)` an old circuit id's entities can be under.
-
-    The closed families are built for both ids by their owners and paired key
-    by key. An extension's key set is open, so its rows are found by the
-    builder's own scope prefix, and the rest of the id carried across.
-    """
-    pairs: list[tuple[str, str, str]] = []
-    for old_id, new_id in mapping.items():
-        for builders in (circuit_entity_unique_ids, pv_binding.inverter_card_unique_ids):
-            old_ids, new_ids = builders(serial, old_id), builders(serial, new_id)
-            pairs.extend(
-                (domain, old_unique_id, new_ids[domain, key])
-                for (domain, key), old_unique_id in old_ids.items()
-            )
-    prefixes = {
-        extension.extension_unique_id_prefix(serial, old_scope): (
-            extension.extension_unique_id_prefix(serial, new_scope)
-        )
-        for old_scope, new_scope in extension.rekeyed_scopes(mapping).items()
-    }
-    for row in er.async_entries_for_config_entry(entity_registry, entry_id):
-        for old_prefix, new_prefix in prefixes.items():
-            if row.unique_id.startswith(old_prefix):
-                pairs.append(
-                    (row.domain, row.unique_id, new_prefix + row.unique_id[len(old_prefix) :])
-                )
-    return pairs
+        moved += 1
+    return _Rekeyed(moved, gave_way)
