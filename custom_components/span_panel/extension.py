@@ -74,6 +74,7 @@ from .util import (
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
     declares_a_number,
+    pv_device_identifier,
     pv_inverter_device_identifier,
 )
 
@@ -335,7 +336,7 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
     if subject.kind == "pv" and subject.instance_key is not None:
         return pv_inverter_device_identifier(panel_identifier, subject.instance_key)
     if subject.kind == "pv":
-        return f"{panel_identifier}_{SUB_DEVICE_PV}"
+        return pv_device_identifier(panel_identifier)
     if subject.kind == "evse" and subject.instance_key is not None:
         return f"{panel_identifier}_{SUB_DEVICE_EVSE}_{subject.instance_key}"
     return None
