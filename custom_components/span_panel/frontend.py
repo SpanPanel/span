@@ -11,7 +11,6 @@ from collections.abc import Callable, Collection, Mapping
 import hashlib
 import logging
 import os
-from typing import Any, Literal
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
@@ -25,6 +24,13 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
+from .panel_settings import (
+    FAVORITE_KINDS,
+    FavoriteKind,
+    PanelFavorites,
+    PanelSettings,
+    read_panel_settings,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,18 +59,17 @@ def _frontend_file_hash(filename: str) -> str:
         return "0"
 
 
-async def async_load_panel_settings(hass: HomeAssistant) -> dict[str, Any]:
-    """Load domain-level panel settings from storage."""
-    store: Store[dict[str, Any]] = Store(
+async def async_load_panel_settings(hass: HomeAssistant) -> PanelSettings:
+    """Load domain-level panel settings from storage, read by `panel_settings.read_panel_settings`."""
+    store: Store[PanelSettings] = Store(
         hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
     )
-    data = await store.async_load()
-    return data or {}
+    return read_panel_settings(await store.async_load())
 
 
-async def _async_save_panel_settings(hass: HomeAssistant, settings: dict[str, object]) -> None:
+async def _async_save_panel_settings(hass: HomeAssistant, settings: PanelSettings) -> None:
     """Save domain-level panel settings to storage; only `async_update_panel_settings` calls it."""
-    store: Store[dict[str, object]] = Store(
+    store: Store[PanelSettings] = Store(
         hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
     )
     await store.async_save(settings)
@@ -86,7 +91,7 @@ loop that first waits on it.
 
 
 async def async_update_panel_settings(
-    hass: HomeAssistant, update: Callable[[dict[str, object]], bool]
+    hass: HomeAssistant, update: Callable[[PanelSettings], bool]
 ) -> None:
     """Read the settings file, apply `update` to it in place, and write it back, as one step.
 
@@ -98,70 +103,18 @@ async def async_update_panel_settings(
     if lock is None:
         lock = hass.data[_SETTINGS_LOCK] = asyncio.Lock()
     async with lock:
-        settings: dict[str, object] = await async_load_panel_settings(hass)
+        settings = await async_load_panel_settings(hass)
         if update(settings):
             await _async_save_panel_settings(hass, settings)
 
 
-FavoriteKind = Literal["circuits", "sub_devices"]
-
-_FAVORITE_KINDS: tuple[FavoriteKind, ...] = ("circuits", "sub_devices")
-
-
-def _empty_panel_favorites() -> dict[str, list[str]]:
-    return {kind: [] for kind in _FAVORITE_KINDS}
-
-
-def _normalize_favorites_blob(raw: Any) -> dict[str, dict[str, list[str]]]:
-    """Normalize raw stored favorites into the canonical nested shape.
-
-    Tolerates the legacy ``{panel_id: [uuid, ...]}`` shape (read transparently
-    as circuits-only). Logs a warning on dropped/malformed entries so storage
-    corruption is visible during debugging.
-    """
-    result: dict[str, dict[str, list[str]]] = {}
-    if not isinstance(raw, dict):
-        return result
-    for panel_id, value in raw.items():
-        if not isinstance(panel_id, str):
-            _LOGGER.warning(
-                "span_panel_settings: dropping favorites entry with non-string panel id %r",
-                panel_id,
-            )
-            continue
-        # Legacy shape: panel_id maps to a flat list of circuit uuids.
-        if isinstance(value, list):
-            circuits = [u for u in value if isinstance(u, str) and u]
-            if circuits:
-                result[panel_id] = {"circuits": circuits, "sub_devices": []}
-            continue
-        if not isinstance(value, dict):
-            _LOGGER.warning(
-                "span_panel_settings: dropping favorites entry %s with unsupported value type %s",
-                panel_id,
-                type(value).__name__,
-            )
-            continue
-        circuits_raw = value.get("circuits", [])
-        sub_devices_raw = value.get("sub_devices", [])
-        circuits = (
-            [u for u in circuits_raw if isinstance(u, str) and u]
-            if isinstance(circuits_raw, list)
-            else []
-        )
-        sub_devices = (
-            [u for u in sub_devices_raw if isinstance(u, str) and u]
-            if isinstance(sub_devices_raw, list)
-            else []
-        )
-        if circuits or sub_devices:
-            result[panel_id] = {"circuits": circuits, "sub_devices": sub_devices}
-    return result
+def _empty_panel_favorites() -> PanelFavorites:
+    return {"circuits": [], "sub_devices": []}
 
 
 async def async_get_favorites(
     hass: HomeAssistant,
-) -> dict[str, dict[str, list[str]]]:
+) -> dict[str, PanelFavorites]:
     """Return the stored favorites map.
 
     Shape: ``{panel_device_id: {"circuits": [uuid, ...], "sub_devices": [devid, ...]}}``.
@@ -171,7 +124,7 @@ async def async_get_favorites(
     so favorites that were stored before sub-device support are preserved.
     """
     settings = await async_load_panel_settings(hass)
-    return _normalize_favorites_blob(settings.get("favorites"))
+    return settings.get("favorites", {})
 
 
 async def async_set_favorite(
@@ -180,7 +133,7 @@ async def async_set_favorite(
     kind: FavoriteKind,
     target_id: str,
     favorited: bool,
-) -> dict[str, dict[str, list[str]]]:
+) -> dict[str, PanelFavorites]:
     """Add or remove a circuit or sub-device from the favorites map.
 
     ``kind`` is either ``"circuits"`` or ``"sub_devices"``. ``target_id`` is
@@ -192,17 +145,17 @@ async def async_set_favorite(
     can't race; also persists the normalized shape so legacy data is migrated
     in place on the first write touching it.
     """
-    if kind not in _FAVORITE_KINDS:
+    if kind not in FAVORITE_KINDS:
         raise ValueError(f"Unknown favorite kind: {kind!r}")
 
-    favorites: dict[str, dict[str, list[str]]] = {}
+    favorites: dict[str, PanelFavorites] = {}
 
-    def _toggle(settings: dict[str, object]) -> bool:
+    def _toggle(settings: PanelSettings) -> bool:
         nonlocal favorites
-        favorites = _normalize_favorites_blob(settings.get("favorites"))
+        favorites = settings.get("favorites", {})
 
         panel_entry = favorites.get(panel_device_id) or _empty_panel_favorites()
-        current = list(panel_entry.get(kind, []))
+        current = list(panel_entry[kind])
         if favorited:
             if target_id not in current:
                 current.append(target_id)
@@ -211,7 +164,7 @@ async def async_set_favorite(
                 current.remove(target_id)
 
         panel_entry[kind] = current
-        if any(panel_entry[k] for k in _FAVORITE_KINDS):
+        if any(panel_entry[k] for k in FAVORITE_KINDS):
             favorites[panel_device_id] = panel_entry
         else:
             favorites.pop(panel_device_id, None)
@@ -236,9 +189,9 @@ async def async_rekey_favorite_circuits(
     """
     moved = 0
 
-    def _rekey(settings: dict[str, object]) -> bool:
+    def _rekey(settings: PanelSettings) -> bool:
         nonlocal moved
-        favorites = _normalize_favorites_blob(settings.get("favorites"))
+        favorites = settings.get("favorites", {})
         panel_entry = favorites.get(panel_device_id)
         if panel_entry is None:
             return False
@@ -301,14 +254,14 @@ async def async_drop_orphaned_favorites(hass: HomeAssistant) -> None:
     )
 
 
-def _drop_favorites(settings: dict[str, object], gone: Callable[[str], bool]) -> bool:
+def _drop_favorites(settings: PanelSettings, gone: Callable[[str], bool]) -> bool:
     """Drop each panel's favorites whose device id `gone` answers for; whether any went.
 
-    The rest are kept as `_normalize_favorites_blob` reads them, so a file in
+    The rest are kept as `panel_settings.normalize_favorites` read them, so a file in
     the legacy shape that loses a key is written back in the current one, as
-    any favorites write leaves it. A file that loses none is not written.
+    any write leaves it. A file that loses none is not written.
     """
-    favorites = _normalize_favorites_blob(settings.get("favorites"))
+    favorites = settings.get("favorites", {})
     kept = {device_id: kinds for device_id, kinds in favorites.items() if not gone(device_id)}
     if len(kept) == len(favorites):
         return False

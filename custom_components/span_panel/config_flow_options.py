@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant import data_entry_flow
@@ -40,6 +41,7 @@ from .options import (
     RELAY_DEBOUNCE_SECONDS,
     SNAPSHOT_UPDATE_INTERVAL,
 )
+from .panel_settings import PanelSettings, read_sidebar_settings
 
 # Each condition hides a field only when the form submits the value that turns
 # its feature off. Core decides visibility from the submitted values, never from
@@ -115,7 +117,7 @@ GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
 
 def get_general_options_defaults(
     config_entry: ConfigEntry,
-    panel_settings: dict[str, Any] | None = None,
+    panel_settings: PanelSettings | None = None,
 ) -> dict[str, Any]:
     """Get default values for general options form.
 
@@ -127,7 +129,7 @@ def get_general_options_defaults(
         Dictionary of default values
 
     """
-    ps = panel_settings or {}
+    ps = panel_settings or PanelSettings()
     return {
         PANEL_SHOW_SIDEBAR: ps.get(PANEL_SHOW_SIDEBAR, True),
         PANEL_ADMIN_ONLY: ps.get(PANEL_ADMIN_ONLY, False),
@@ -166,8 +168,8 @@ _PANEL_SETTING_KEYS = {PANEL_SHOW_SIDEBAR, PANEL_ADMIN_ONLY}
 
 def process_general_options_input(
     config_entry: ConfigEntry,
-    user_input: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
+    user_input: Mapping[str, object],
+) -> tuple[dict[str, Any], dict[str, str], PanelSettings]:
     """Process user input for general options.
 
     Args:
@@ -181,7 +183,7 @@ def process_general_options_input(
     errors: dict[str, str] = {}
 
     # Extract panel settings (domain-level, not per-entry)
-    panel_settings = {k: v for k, v in user_input.items() if k in _PANEL_SETTING_KEYS}
+    panel_settings = read_sidebar_settings(user_input)
 
     # Filter out separator fields and panel settings from entry options
     filtered_input = {

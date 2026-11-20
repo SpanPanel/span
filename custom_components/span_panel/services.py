@@ -38,10 +38,11 @@ from .const import (
 from .current_monitor import CurrentMonitor
 from .device_id_migration import current_circuit_id
 from .entity_resolver import resolve_circuit_id
-from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
+from .frontend import FavoriteKind, PanelFavorites, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
 from .hardware_guard import async_read_hardware_version, registers_by_passphrase_only
 from .id_builder import build_circuit_unique_id, match_circuit_id
+from .json_values import json_object
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -497,7 +498,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         monitor = runtime_data.coordinator.current_monitor
         if monitor is None:
             return {"enabled": False}
-        status: JsonObjectType = monitor.get_monitoring_status()
+        status = json_object(monitor.get_monitoring_status())
         status["enabled"] = True
         # Whether the panel takes copied package ratings, as the topology root says,
         # so the Monitoring tab, which reads only this status, need not fetch the
@@ -725,8 +726,7 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
             if entry_id is None or entry.entry_id == entry_id:
                 mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
-                    settings: JsonObjectType = mgr.get_all_settings()
-                    return settings
+                    return json_object(mgr.get_all_settings())
         return {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}}
 
     hass.services.async_register(
@@ -797,11 +797,12 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
 
 def _known_circuit_ids(
     live: Collection[str] | None,
-    stored: Mapping[str, Mapping[str, Collection[str]]],
+    stored: Mapping[str, PanelFavorites],
     panel_device_id: str,
 ) -> set[str]:
     """Return the circuit ids a favorite may name: the live ones and the panel's stored ones."""
-    return {*(live or ()), *stored.get(panel_device_id, {}).get("circuits", ())}
+    panel = stored.get(panel_device_id)
+    return {*(live or ()), *(panel["circuits"] if panel is not None else ())}
 
 
 def _circuit_device_target(
@@ -877,7 +878,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         return runtime_data.coordinator.data.circuits.keys()
 
     def _resolve_entity_to_favorite_target(
-        entity_id: str, stored: Mapping[str, Mapping[str, Collection[str]]]
+        entity_id: str, stored: Mapping[str, PanelFavorites]
     ) -> tuple[str, FavoriteKind, str]:
         """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
 
@@ -989,20 +990,16 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             return panel_device_id, "circuits", circuit_id
         raise _names_no_known_circuit(entity_id, panel_loaded=live is not None)
 
-    def _favorites_response(favorites: dict[str, dict[str, list[str]]]) -> ServiceResponse:
+    def _favorites_response(favorites: Mapping[str, PanelFavorites]) -> ServiceResponse:
         """Wrap the favorites map in the shape all three favorites services return.
 
         The map is rebuilt rather than handed over as-is because `dict` and
         `list` are invariant: the storage type says exactly `list[str]`, and a
         JSON response value says `list[JsonValueType]`, so the two are not the
-        same type however identical the contents. Rebuilding also means the
-        response cannot alias the caller's map.
+        same type however identical the contents (`json_object`). Rebuilding
+        also means the response cannot alias the caller's map.
         """
-        payload: JsonObjectType = {
-            panel_device_id: {kind: list(target_ids) for kind, target_ids in kinds.items()}
-            for panel_device_id, kinds in favorites.items()
-        }
-        return {"favorites": payload}
+        return {"favorites": json_object(favorites)}
 
     async def async_handle_get_favorites(_call: ServiceCall) -> ServiceResponse:
         return _favorites_response(await async_get_favorites(hass))
