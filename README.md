@@ -3,7 +3,7 @@
 [Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel), a smart electrical panel that provides circuit-level
 monitoring and control of your home's electrical system.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![Marketplace](https://img.shields.io/badge/Home%20Assistant-Marketplace-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace)
 [![GitHub Release](https://img.shields.io/github/release/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/commits)
 [![License](https://img.shields.io/github/license/SpanPanel/span.svg?style=flat-square)](LICENSE)
@@ -46,8 +46,8 @@ real-time state updates without polling.
 
 ## Prerequisites
 
-- [Home Assistant](https://www.home-assistant.io/) 2026.11 or later
-- [HACS](https://hacs.xyz/) installed
+- [Home Assistant](https://www.home-assistant.io/) 2026.11 or later, whose built-in [Marketplace](https://www.home-assistant.io/integrations/marketplace)
+  installs this integration
 - SPAN Panel firmware newer than spanos2 (see below)
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door; a panel that registers by passphrase only needs the passphrase
 
@@ -58,23 +58,21 @@ that raises a second repair, which needs you to act (see [Troubleshooting](#trou
 
 ## Installation
 
-1. Install [HACS](https://hacs.xyz/)
-2. Go to HACS in the left side bar of your Home Assistant installation
-3. Search for "Span"
-4. Open the repository and click "Download"
-5. Restart Home Assistant (you will be prompted by a repair notification)
-6. Go to `Settings` > `Devices & Services`
-7. Click `+ Add Integration` and search for "Span"
-8. Pick your panel from the discovered list, or enter its IP address or `.local` name (both shown in the mobile app)
-9. The integration detects the panel as v2 and presents an authentication choice:
+1. As an administrator, go to `Settings` > `Marketplace`. The first time you open it, read and accept its warning about community content
+2. Search for "SpanPanel", the GitHub organization this integration's repository belongs to, and open the SPAN Panel integration it finds
+3. Select `Install`, check the version, and select `Install` again
+4. If Home Assistant needs a restart, a repair under `Settings` > `System` > `Repairs` says so and can restart it for you
+5. Continue in the setup page that opens after the install, or go to `Settings` > `Devices & Services`, click `+ Add Integration` and search for "Span"
+6. Pick your panel from the discovered list, or enter its IP address or `.local` name (both shown in the mobile app)
+7. The integration detects the panel as v2 and presents an authentication choice:
    - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
    - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
 
    A panel that registers by passphrase only skips the choice and asks for the passphrase. If the panel is limiting registration attempts, setup says how long
    to wait before trying again.
 
-10. Choose your entity ID naming pattern (see naming patterns below)
-11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
+8. Choose your entity ID naming pattern (see naming patterns below)
+9. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
 If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
 
@@ -853,7 +851,7 @@ This integration is published under the MIT license.
 This repository is set up as part of an organization so a single committer is not the weak link. The repository is a fork in a long line of SPAN forks that may
 or may not be stable (from newer to older):
 
-- SpanPanel/span (current GitHub organization, current repository, currently listed in HACS)
+- SpanPanel/span (current GitHub organization, current repository, currently listed in the Home Assistant Marketplace)
 - SpanPanel/Span (was moved to [SpanPanel/SpanCustom](https://github.com/SpanPanel/SpanCustom))
 - cayossarian/span
 - haext/span

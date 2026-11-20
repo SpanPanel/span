@@ -586,7 +586,7 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
 In circuit-numbers mode an offer of the circuit's name is expected (R3), and after it is accepted nothing more is offered. For an offer that is missing:
 
 1. Confirm the running code: `manifest.json` version and the presence of `custom_components/span_panel/naming.py`. A 2.0.8 install with a newer release selected
-   in HACS but not yet loaded shows exactly this symptom, because its rows still hold the 2.0.8 preset in `suggested_object_id` (§3.4).
+   in the Marketplace but not yet loaded shows exactly this symptom, because its rows still hold the 2.0.8 preset in `suggested_object_id` (§3.4).
 2. Read the entity's row in `.storage/core.entity_registry`: on 2.3.0 after at least one reload, `suggested_object_id` is `null` and `object_id_base` reads the
    suffix (`breaker`), or is empty where the ID stops at the circuit's name. A non-null `suggested_object_id` means the entity has not been added again since
    the preset was made.
