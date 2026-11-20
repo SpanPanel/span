@@ -10,8 +10,8 @@ hexadecimal id, publishes no such suffix and pairs nothing.
 Everything this integration keys by a circuit's id -- unique ids, device
 identifiers, stored settings -- is re-keyed once, at setup, by
 `device_id_rekey.async_migrate_device_ids`. This module is what that and two
-other readers ask: the coordinator, whether a snapshot names by new ids the
-circuits a running session holds under old ones (`migration_pending`), and a
+other readers ask: the coordinator, whether a snapshot carries by new ids
+circuits the entry still holds under old ones (`DeviceIdGuard`), and a
 service, which circuit an automation means when it names one by its old id
 (`current_circuit_id`).
 
@@ -34,7 +34,7 @@ migration reaches either.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Set
+from collections.abc import Callable, Mapping, Set
 from dataclasses import dataclass
 import logging
 import re
@@ -145,12 +145,80 @@ def migration_pending(missing: Set[str], pairing: DeviceIdPairing) -> bool:
     """Whether a snapshot calls, by new ids, circuits a session is keyed by under old ones.
 
     `missing` is the session's circuits the snapshot lacks, and `pairing` the
-    snapshot's. The caller works the pairing out only when some are missing,
-    which keeps the guard to one set difference per snapshot. A circuit that
-    has left a panel whose ids are already new, or opaque, is missing with no
-    old-form counterpart, so the answer is no; so it is for a refused pairing.
+    snapshot's. A circuit that has left a panel whose ids are already new, or
+    opaque, is missing with no old-form counterpart, so the answer is no; so
+    it is for a refused pairing.
     """
     return not missing.isdisjoint(pairing.previous)
+
+
+type HoldsOldIds = Callable[[Mapping[str, str]], bool]
+"""Whether an entry still holds rows or devices under an old id of these pairs, old to new.
+
+`device_id_rekey.holds_old_ids`, bound to one entry by its setup. A callable
+rather than an import, because that module imports the coordinator's
+dependents and this one may import nothing of this package.
+"""
+
+
+class DeviceIdGuard:
+    """What a running session asks of every snapshot: does it carry circuits the entry holds under old ids.
+
+    A snapshot does in two ways, and either drops it and rebuilds the entry,
+    whose setup migrates:
+
+    - **it lacks circuits the session is keyed by and pairs them with new
+      ids** -- the panel updated while the session ran (`migration_pending`);
+    - **it brings circuits the session does not know whose old ids the entry
+      still holds rows or devices under** -- the session was set up on a tree
+      missing them, and they have now arrived. Rows count wherever they sit,
+      so an install from before circuit devices, whose rows are on the
+      panel's device, counts too.
+
+    Neither fires on a panel whose ids are opaque, which pairs nothing; on a
+    circuit that leaves, which arrives nowhere; or on a downgrade, whose old
+    ids pair nothing.
+
+    **Judged once per set of circuits.** A snapshot with the circuits the last
+    one judged had answers what that one did, so a settled panel costs one set
+    comparison per snapshot: no pairing, no registry look-up. Only a change in
+    which circuits the panel publishes is judged, and only a pair whose new id
+    the session does not know is looked up in the registries. A cached answer
+    stays right because nothing registers state under an old id once a
+    session is keyed by new ones.
+    """
+
+    def __init__(self, session: Set[str], holds_old_ids: HoldsOldIds) -> None:
+        """Arm the guard with the circuit ids the session is keyed by and the entry's registry look-up."""
+        self._session = frozenset(session)
+        self._holds_old_ids = holds_old_ids
+        self._judged = self._session
+        self._pending = False
+        self._conflict_warned = False
+
+    def migration_pending(self, snapshot: SpanPanelSnapshot) -> bool:
+        """Whether this snapshot carries circuits the entry holds under old ids, so it must not be read.
+
+        A pairing two new ids refuse answers no, and is warned of once a
+        session rather than at every set of circuits judged.
+        """
+        circuits = snapshot.circuits.keys()
+        if circuits == self._judged:
+            return self._pending
+        self._judged = frozenset(circuits)
+        pairing = pair_device_ids(snapshot)
+        if pairing.conflict is not None and not self._conflict_warned:
+            self._conflict_warned = True
+            warn_of_trait_conflict(pairing.conflict)
+        arrived = {
+            old_id: new_id
+            for old_id, new_id in pairing.previous.items()
+            if new_id not in self._session
+        }
+        self._pending = migration_pending(self._session - self._judged, pairing) or (
+            bool(arrived) and self._holds_old_ids(arrived)
+        )
+        return self._pending
 
 
 def current_circuit_id(snapshot: SpanPanelSnapshot, circuit_id: str, *, service: str) -> str:

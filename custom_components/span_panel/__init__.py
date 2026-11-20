@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -91,7 +92,7 @@ from .conversion_repairs import (
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
-from .device_id_rekey import async_migrate_device_ids
+from .device_id_rekey import async_migrate_device_ids, holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
     async_entry_changed,
@@ -892,9 +893,14 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
             await coordinator.package_rating_manager.async_load()
 
             # What this session is keyed by. A snapshot that later names these
-            # circuits by new ids -- the panel updating while this runs -- reloads
-            # the entry, whose setup then migrates, rather than being published.
-            coordinator.record_session_circuit_ids(coordinator.data)
+            # circuits by new ids -- the panel updating while this runs -- or
+            # brings circuits this setup lacked whose old ids the entry still
+            # holds reloads the entry, whose setup then migrates, rather than
+            # being published.
+            coordinator.arm_device_id_guard(
+                coordinator.data,
+                partial(holds_old_ids, hass, entry.entry_id, coordinator.data.serial_number),
+            )
 
             # The first reconcile deletes every package whose circuit id the
             # snapshot lacks, which the migration above has already re-keyed. It

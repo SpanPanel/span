@@ -58,7 +58,7 @@ from custom_components.span_panel.device_id_migration import (
     previous_device_ids,
     rekeyed,
 )
-from custom_components.span_panel.device_id_rekey import async_migrate_device_ids
+from custom_components.span_panel.device_id_rekey import async_migrate_device_ids, holds_old_ids
 from custom_components.span_panel.entry_reloads import async_request_rebuild
 from custom_components.span_panel.frontend import async_get_favorites
 from custom_components.span_panel.helpers import outside_meter_label
@@ -66,13 +66,16 @@ from custom_components.span_panel.id_builder import (
     build_circuit_device_identifier,
     build_circuit_unique_id,
     build_switch_unique_id,
+    circuit_entity_unique_ids,
 )
 from custom_components.span_panel.notices import async_raise as raise_notice, is_standing
+from custom_components.span_panel.util import pv_inverter_device_identifier
 
 from .captures_replay import (
     RetainedTree,
     capture,
     description,
+    devices_of_type,
     panel_device_id,
     renamed_devices,
     replay,
@@ -702,6 +705,89 @@ class TestCurrentCircuitId:
         assert not caplog.records
 
 
+_SERIAL: Final = "nj-0000-00000"
+"""A synthetic panel serial for the registry-level tests."""
+
+_LATE_PAIR: Final = {"circuit-12": f"{_SERIAL}-0123456789abcdef-1-16-12"}
+
+
+class TestHoldsOldIds:
+    """What the guard asks of an entry's registries about circuits that arrive under new ids."""
+
+    @staticmethod
+    def entry(hass: HomeAssistant, entry_id: str = "entry-holds") -> tuple[MockConfigEntry, str]:
+        """Add an entry with its panel's device; return it and the panel device's registry id."""
+        entry = MockConfigEntry(domain=DOMAIN, entry_id=entry_id, unique_id=_SERIAL)
+        entry.add_to_hass(hass)
+        panel = dr.async_get(hass).async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={(DOMAIN, _SERIAL)}
+        )
+        return entry, panel.id
+
+    async def test_nothing_under_the_old_id(self, hass: HomeAssistant) -> None:
+        """An entry holding only another circuit's row holds nothing under this one."""
+        entry, panel = self.entry(hass)
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            DOMAIN,
+            build_circuit_unique_id(_SERIAL, "circuit-13", "instantPowerW"),
+            config_entry=entry,
+            device_id=panel,
+        )
+        assert not holds_old_ids(hass, entry.entry_id, _SERIAL, _LATE_PAIR)
+
+    async def test_the_circuits_own_device(self, hass: HomeAssistant) -> None:
+        """Its device alone counts: its rows may be gone while it was missing."""
+        entry, panel = self.entry(hass)
+        dr.async_get(hass).async_get_or_create_child(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, build_circuit_device_identifier(_SERIAL, "circuit-12"))},
+            parent_device_id=panel,
+        )
+        assert holds_old_ids(hass, entry.entry_id, _SERIAL, _LATE_PAIR)
+
+    async def test_the_card_of_an_inverter_it_feeds(self, hass: HomeAssistant) -> None:
+        """The card keyed by the feeding circuit's id counts, as the migration re-keys it."""
+        entry, _ = self.entry(hass)
+        dr.async_get(hass).async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, pv_inverter_device_identifier(_SERIAL, "circuit-12"))},
+        )
+        assert holds_old_ids(hass, entry.entry_id, _SERIAL, _LATE_PAIR)
+
+    @pytest.mark.parametrize(
+        ("domain", "unique_id"),
+        [
+            ("sensor", build_circuit_unique_id(_SERIAL, "circuit-12", "instantPowerW")),
+            ("switch", build_switch_unique_id(_SERIAL, "circuit-12")),
+            ("sensor", f"span_{_SERIAL}_adopted_circuit_circuit-12/vendor/reading"),
+        ],
+        ids=["a-sensor", "its-breaker-switch", "a-vendor-extension"],
+    )
+    async def test_a_row_on_the_panels_device(
+        self, hass: HomeAssistant, domain: str, unique_id: str
+    ) -> None:
+        """A row built for the old id counts on the panel's device, as an install from before circuit devices has it."""
+        entry, panel = self.entry(hass)
+        er.async_get(hass).async_get_or_create(
+            domain, DOMAIN, unique_id, config_entry=entry, device_id=panel
+        )
+        assert holds_old_ids(hass, entry.entry_id, _SERIAL, _LATE_PAIR)
+
+    async def test_another_entrys_row(self, hass: HomeAssistant) -> None:
+        """Only this entry's registries are asked."""
+        entry, _ = self.entry(hass)
+        other, other_panel = self.entry(hass, "entry-other")
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            DOMAIN,
+            build_circuit_unique_id(_SERIAL, "circuit-12", "instantPowerW"),
+            config_entry=other,
+            device_id=other_panel,
+        )
+        assert not holds_old_ids(hass, entry.entry_id, _SERIAL, _LATE_PAIR)
+
+
 def test_a_value_under_the_new_id_wins_over_the_old() -> None:
     """The stores' collision rule: a value set after the update outranks the one it replaces."""
     assert rekeyed({"old": 1, "new": 2, "other": 3}, {"old": "new"}) == ({"new": 2, "other": 3}, 1)
@@ -861,6 +947,239 @@ async def test_a_main32_update_that_drops_a_circuit_behaves_as_today(
     assert rebuilds == []
     assert circuit_id not in manager.diagnostics(panel.runtime.coordinator.data)["packages"]
     assert is_standing(panel.hass, panel.entry, _PACKAGE_NOTICE)
+
+
+LATE: Final = "circuit-12"
+"""`Kitchen Sink Garbage Disposal`, 15 A on space 23: the circuit a first new tree lacks."""
+
+
+def without_first_circuit(tree: RetainedTree) -> RetainedTree:
+    """Return the tree without its first circuit by id: a circuit commissioned after it."""
+    return without_device(tree, sorted(devices_of_type(tree, CIRCUIT_TYPE))[0])
+
+
+def without_late_circuit(tree: RetainedTree) -> RetainedTree:
+    """Return r202645-e without `LATE`, as the panel's first tree after the update may publish it."""
+    return without_device(tree, new_id_e(LATE))
+
+
+def with_late_circuit_over_its_breaker(tree: RetainedTree) -> RetainedTree:
+    """Return r202645-e with `LATE` drawing 60 A on its 15 A breaker: an alert, unless excluded."""
+    tree[new_id_e(LATE)]["meter/current"] = "60.0"
+    return tree
+
+
+async def test_a_circuit_the_first_new_tree_lacked_is_carried_over_when_it_arrives(
+    panels: Callable[..., Panel],
+) -> None:
+    """The panel updates under a running session, first without `circuit-12`, then with it.
+
+    The first new tree rebuilds the entry, whose setup migrates the 45 circuits
+    it holds. When `circuit-12` arrives, at 60 A on its 15 A breaker, the
+    snapshot carrying it is dropped and the entry rebuilt once more, so its
+    rows read it under their own entity ids and the user's exclusion from
+    monitoring holds: no alert, at any point.
+
+    Fails when the guard judges only the circuits the session is keyed by.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    await panel.call(
+        "set_circuit_threshold", circuit_id=panel.power(LATE), monitoring_enabled=False
+    )
+    late_rows = {
+        key: entity_id
+        for key, unique_id in circuit_entity_unique_ids(panel.serial, LATE).items()
+        if (entity_id := er.async_get(panel.hass).async_get_entity_id(key[0], DOMAIN, unique_id))
+    }
+    assert len(late_rows) == 8, late_rows
+    partial = without_late_circuit(capture(AFTER).tree())
+    full = with_late_circuit_over_its_breaker(capture(AFTER).tree())
+
+    with (
+        patch(
+            "custom_components.span_panel.coordinator.async_request_rebuild",
+            wraps=async_request_rebuild,
+        ) as rebuilds,
+        patch("custom_components.span_panel.current_monitor.dispatch_alert") as alerts,
+    ):
+        panel.tree = partial
+        await panel.push(partial)
+        assert rebuilds.call_count == 1
+        assert panel.entry.state is ConfigEntryState.LOADED
+        assert new_id_e(LATE) not in panel.snapshot.circuits
+
+        panel.tree = full
+        await panel.push(full)
+        assert rebuilds.call_count == 2
+        assert panel.entry.state is ConfigEntryState.LOADED
+        await panel.push(full)
+        assert rebuilds.call_count == 2
+
+    alerts.assert_not_called()
+    assert new_id_e(LATE) in panel.snapshot.circuits
+    entities = er.async_get(panel.hass)
+    new_unique_ids = circuit_entity_unique_ids(panel.serial, new_id_e(LATE))
+    for key, entity_id in late_rows.items():
+        row = entities.async_get(entity_id)
+        assert row is not None and row.unique_id == new_unique_ids[key], entity_id
+    power = panel.hass.states.get(late_rows["sensor", "instantPowerW"])
+    assert power is not None and power.state not in ("unavailable", "unknown")
+    assert panel.monitoring(new_id_e(LATE))["monitoring_enabled"] is False
+
+
+async def test_a_late_circuit_of_an_install_from_before_circuit_devices_is_carried_over(
+    panels: Callable[..., Panel],
+) -> None:
+    """Its rows sit on the panel's device, with no circuit device to find, and still count.
+
+    The first r202645-e setup lacks `circuit-12`, so its rows stay on the
+    panel's device under the old ids. When it arrives, the entry is rebuilt,
+    and that setup re-keys the rows and converts them onto the circuit's new
+    device. Fails when the guard asks only the device registry.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    power = panel.power(LATE)
+    await panel.unload()
+    as_before_circuit_devices(panel)
+    await panel.set_up(without_late_circuit(capture(AFTER).tree()))
+    entities = er.async_get(panel.hass)
+    row = entities.async_get(power)
+    assert row is not None and row.unique_id == build_circuit_unique_id(
+        panel.serial, LATE, "instantPowerW"
+    )
+    assert row.device_id == panel.runtime.panel_device_id
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        wraps=async_request_rebuild,
+    ) as rebuilds:
+        panel.tree = capture(AFTER).tree()
+        await panel.push(capture(AFTER).tree())
+
+    assert rebuilds.call_count == 1
+    assert panel.entry.state is ConfigEntryState.LOADED
+    row = entities.async_get(power)
+    assert row is not None and row.unique_id == build_circuit_unique_id(
+        panel.serial, new_id_e(LATE), "instantPowerW"
+    )
+    assert row.device_id == panel.circuit_device(new_id_e(LATE)).id
+
+
+async def test_a_late_circuit_whose_rows_the_user_deleted_keeps_its_device(
+    panels: Callable[..., Panel],
+) -> None:
+    """While `circuit-12` is missing its rows read nothing, and a user may delete them; its device stays.
+
+    The device alone is what the entry holds under the old id, and it is
+    enough: when the circuit arrives the entry is rebuilt, and the device is
+    re-keyed with its name and room. Fails when the guard asks only the
+    entity registry.
+    """
+    panel = panels(capture(BEFORE).tree())
+    await panel.set_up(capture(BEFORE).tree())
+    kitchen = ar.async_get(panel.hass).async_create("Kitchen").id
+    device = panel.circuit_device(LATE)
+    dr.async_get(panel.hass).async_update_child_device(
+        device.id, name_by_user="Disposal", area_id=kitchen
+    )
+    await panel.restart_on(without_late_circuit(capture(AFTER).tree()))
+    entities = er.async_get(panel.hass)
+    for row in er.async_entries_for_device(entities, device.id, include_disabled_entities=True):
+        entities.async_remove(row.entity_id)
+    assert panel.circuit_device(LATE).id == device.id
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        wraps=async_request_rebuild,
+    ) as rebuilds:
+        panel.tree = capture(AFTER).tree()
+        await panel.push(capture(AFTER).tree())
+
+    assert rebuilds.call_count == 1
+    assert panel.entry.state is ConfigEntryState.LOADED
+    carried = panel.circuit_device(new_id_e(LATE))
+    assert (carried.id, carried.name_by_user, carried.area_id) == (device.id, "Disposal", kitchen)
+
+
+@pytest.mark.parametrize(
+    ("first", "then"),
+    [
+        pytest.param(
+            lambda: without_late_circuit(capture(AFTER).tree()),
+            lambda: capture(AFTER).tree(),
+            id="a-new-circuit-on-new-ids",
+        ),
+        pytest.param(
+            lambda: without_first_circuit(capture("main32_r202645").tree()),
+            lambda: capture("main32_r202645").tree(),
+            id="a-new-circuit-on-opaque-ids",
+        ),
+        pytest.param(
+            lambda: capture(AFTER).tree(),
+            lambda: capture(BEFORE).tree(),
+            id="a-downgrade",
+        ),
+    ],
+)
+async def test_circuits_arriving_with_nothing_held_under_an_old_id_reload_nothing(
+    panels: Callable[..., Panel],
+    first: Callable[[], RetainedTree],
+    then: Callable[[], RetainedTree],
+) -> None:
+    """A circuit the session does not know is just read, unless the entry holds its old id.
+
+    A circuit commissioned after the update has an old-form counterpart that
+    this entry holds nothing under; `main32_r202645`'s opaque ids and a
+    downgraded panel's old ones pair nothing. Each snapshot is read as it is today. Fails when the
+    guard rebuilds for a circuit whose old id the entry holds nothing under.
+    """
+    panel = panels(first())
+    await panel.set_up(first())
+
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        wraps=async_request_rebuild,
+    ) as rebuilds:
+        await panel.push(then())
+
+    rebuilds.assert_not_called()
+    assert panel.snapshot.circuits.keys() == snapshot(then()).circuits.keys()
+
+
+async def test_the_guard_judges_each_set_of_circuits_once(
+    panels: Callable[..., Panel],
+) -> None:
+    """A settled panel costs no pairing and no registry look-up, however often it publishes.
+
+    Pairing runs once for each new set of circuits a snapshot carries, and the
+    registries are asked only about circuits whose new ids the session does
+    not know. Fails when the guard pairs every snapshot, or asks the
+    registries about pairs the session is keyed by.
+    """
+    tree = without_late_circuit(capture(AFTER).tree())
+    panel = panels(tree)
+    with patch(
+        "custom_components.span_panel.holds_old_ids", wraps=holds_old_ids
+    ) as registry_lookups:
+        await panel.set_up(tree)
+        with patch(
+            "custom_components.span_panel.device_id_migration.pair_device_ids",
+            wraps=pair_device_ids,
+        ) as pairings:
+            for _ in range(3):
+                await panel.push(tree)
+            settled = (pairings.call_count, registry_lookups.call_count)
+            for _ in range(3):
+                await panel.push(without_device(tree, new_id_e(RANGE)))
+            leaving = (pairings.call_count, registry_lookups.call_count)
+            for _ in range(3):
+                await panel.push(capture(AFTER).tree())
+            arriving = (pairings.call_count, registry_lookups.call_count)
+
+    assert (settled, leaving, arriving) == ((0, 0), (1, 0), (2, 1))
+    assert registry_lookups.call_args.args[-1] == {LATE: new_id_e(LATE)}
 
 
 # ---------------------------------------------------------------------------
@@ -1491,12 +1810,17 @@ async def test_a_circuits_vendor_extension_and_its_overflow_notice_follow_it(
     await assert_a_second_migration_writes_nothing(panel)
 
 
-async def test_circuits_a_partial_tree_lacks_migrate_at_the_next_setup(
-    panels: Callable[..., Panel],
+@pytest.mark.parametrize("heal", ["arriving", "restarting"])
+async def test_circuits_a_partial_tree_lacks_migrate_once_they_arrive(
+    panels: Callable[..., Panel], heal: str
 ) -> None:
-    """Three circuits missing from the first r202645-e setup migrate at the one after it.
+    """Three circuits missing from the first r202645-e setup migrate when the panel publishes them.
 
-    Fails when the migration needs the whole tree, or records itself as done.
+    Within the session: the snapshot that brings them is dropped and the entry
+    rebuilt once, as for the update itself. Or at the next setup, when Home
+    Assistant restarts first. Fails when the migration needs the whole tree or
+    records itself as done, or when the guard judges only the circuits the
+    session is keyed by.
     """
     late = ("circuit-12", "circuit-13", "circuit-14")
     partial = capture(AFTER).tree()
@@ -1518,11 +1842,27 @@ async def test_circuits_a_partial_tree_lacks_migrate_at_the_next_setup(
     moved = entities.async_get(rows[RANGE])
     assert moved is not None and new_id_e(RANGE) in moved.unique_id
 
-    await panel.restart_on(capture(AFTER).tree())
+    with patch(
+        "custom_components.span_panel.coordinator.async_request_rebuild",
+        wraps=async_request_rebuild,
+    ) as rebuilds:
+        if heal == "arriving":
+            panel.tree = capture(AFTER).tree()
+            await panel.push(capture(AFTER).tree())
+            assert rebuilds.call_count == 1
+            assert panel.entry.state is ConfigEntryState.LOADED
+            await panel.push(capture(AFTER).tree())
+        else:
+            await panel.restart_on(capture(AFTER).tree())
+        assert rebuilds.call_count == (1 if heal == "arriving" else 0)
 
     for cid in late:
         row = entities.async_get(rows[cid])
-        assert row is not None and new_id_e(cid) in row.unique_id, cid
+        assert row is not None and row.unique_id == build_circuit_unique_id(
+            panel.serial, new_id_e(cid), "instantPowerW"
+        ), cid
+        state = panel.hass.states.get(rows[cid])
+        assert state is not None and state.state not in ("unavailable", "unknown"), cid
 
 
 async def test_a_control_withdrawn_before_the_update_returns_as_a_new_entity(

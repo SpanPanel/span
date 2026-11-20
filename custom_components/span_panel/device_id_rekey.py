@@ -17,7 +17,9 @@ install keeps every entity, device and setting it had, with no visible step:
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit
 state. It acts only where the registry or a store of this entry still holds an
-old id, so a setup that migrated part of a panel finishes the job at the next.
+old id, so a setup that migrated part of a panel finishes the job at the next,
+which the coordinator's guard asks for as soon as the missing circuits arrive
+(`holds_old_ids`).
 
 **What a setup costs.** On a panel whose ids are opaque nothing pairs, and it
 returns after the pairing. On a panel on the new ids the pairing is never
@@ -157,6 +159,37 @@ async def async_migrate_device_ids(
         )
 
 
+def holds_old_ids(
+    hass: HomeAssistant, entry_id: str, serial: str, mapping: Mapping[str, str]
+) -> bool:
+    """Whether this entry still holds a row or a device under an old id of `mapping`.
+
+    What the migration would move for those pairs in the registries: a
+    circuit's own device, the card of an inverter it feeds, or any row whose
+    unique id is built for the old id. A row counts wherever it sits, so an
+    install from before circuit devices, whose rows are on the panel's
+    device, counts too. Built with the migration's own look-ups, never by
+    reading an id.
+
+    Asked by the coordinator's guard (`device_id_migration.DeviceIdGuard`)
+    when circuits a session was set up without arrive under new ids, bound to
+    the entry by its setup; a yes rebuilds the entry, whose setup migrates
+    them.
+    """
+    device_registry = dr.async_get(hass)
+    if any(
+        circuit_device(device_registry, serial, old_id, config_entry_id=entry_id) is not None
+        or _inverter_card(device_registry, entry_id, serial, old_id) is not None
+        for old_id in mapping
+    ):
+        return True
+    entity_registry = er.async_get(hass)
+    return any(
+        entity_id_in_entry(entity_registry, entry_id, domain, old_unique_id) is not None
+        for domain, old_unique_id, _ in _unique_id_pairs(entity_registry, entry_id, serial, mapping)
+    )
+
+
 def _warn_on_renamed_pairs(
     device_registry: dr.DeviceRegistry,
     entry_id: str,
@@ -224,20 +257,29 @@ def _rekey_devices(
             )
             moved += 1
 
-        new_card = (DOMAIN, pv_inverter_device_identifier(serial, new_id))
-        card = device_registry.async_get_device_by_identifier(
-            (DOMAIN, pv_inverter_device_identifier(serial, old_id)), entry_id
-        )
+        card = _inverter_card(device_registry, entry_id, serial, old_id)
         if card is not None:
-            newer_card = device_registry.async_get_device_by_identifier(new_card, entry_id)
+            newer_card = _inverter_card(device_registry, entry_id, serial, new_id)
             if newer_card is not None:
                 entities_removed += _remove_device(
                     device_registry, entity_registry, entry_id, newer_card.id
                 )
                 devices_removed += 1
-            device_registry.async_update_device(card.id, new_identifiers={new_card})
+            device_registry.async_update_device(
+                card.id,
+                new_identifiers={(DOMAIN, pv_inverter_device_identifier(serial, new_id))},
+            )
             moved += 1
     return _Moved(moved, devices_removed, entities_removed)
+
+
+def _inverter_card(
+    device_registry: dr.DeviceRegistry, entry_id: str, serial: str, circuit_id: str
+) -> dr.DeviceEntry | None:
+    """Return the card of the inverter `circuit_id` feeds, on a panel with several, or None."""
+    return device_registry.async_get_device_by_identifier(
+        (DOMAIN, pv_inverter_device_identifier(serial, circuit_id)), entry_id
+    )
 
 
 def _remove_device(
