@@ -48,13 +48,8 @@ real-time state updates without polling.
 
 - [Home Assistant](https://www.home-assistant.io/) 2026.11 or later, whose built-in [Marketplace](https://www.home-assistant.io/integrations/marketplace)
   installs this integration
-- SPAN Panel firmware newer than spanos2 (see below)
+- SPAN Panel firmware newer than spanos2
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door; a panel that registers by passphrase only needs the passphrase
-
-**Panels on spanos2 firmware, which publishes the older flat eBus schema, are not supported.** Adding one is refused with a message to update its firmware, and
-discovery does not offer it. A configured panel on spanos2 firmware does not load: Home Assistant shows a repair asking for a firmware update and keeps retrying
-quietly in the background. Once the panel's firmware is updated, it reconnects on its own, unless the update also changed the panel's certificate authority:
-that raises a second repair, which needs you to act (see [Troubleshooting](#troubleshooting)).
 
 ## Installation
 
