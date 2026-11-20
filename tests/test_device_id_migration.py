@@ -475,6 +475,45 @@ async def test_a_second_setup_on_the_new_ids_changes_nothing(
 
 
 # ---------------------------------------------------------------------------
+# old ids in services
+# ---------------------------------------------------------------------------
+
+
+async def test_a_service_naming_a_circuits_old_id_reaches_it(
+    panels: Callable[..., Panel],
+    hass_storage: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An automation that names `circuit-5` after the update sets `...-1-16-5`, with a WARNING.
+
+    Fails when the resolver's raw-id branch or the graph-horizon handlers stop
+    asking `current_circuit_id`.
+    """
+    panel, _, _ = await install_and_update(panels, hass_storage)
+    caplog.clear()
+
+    await panel.call("set_circuit_threshold", circuit_id=RANGE, spike_threshold_pct=120)
+    await panel.call("set_circuit_graph_horizon", circuit_id=RANGE, horizon="1w")
+
+    assert panel.monitoring(new_id_e(RANGE))["spike_threshold_pct"] == 120
+    horizons = panel.runtime.coordinator.graph_horizon_manager
+    assert horizons is not None
+    assert horizons.get_effective_horizon(new_id_e(RANGE)) == "1w"
+    assert RANGE not in horizons.get_all_settings()["circuits"]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == MAPPING_LOGGER and record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 2, warnings
+    assert all(RANGE in line and new_id_e(RANGE) in line for line in warnings)
+    assert [line.split(" ", 1)[0] for line in warnings] == [
+        "span_panel.set_circuit_threshold",
+        "span_panel.set_circuit_graph_horizon",
+    ]
+
+
+# ---------------------------------------------------------------------------
 # the mapping itself
 # ---------------------------------------------------------------------------
 

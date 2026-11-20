@@ -11,7 +11,7 @@ notifications.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -400,25 +400,31 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, power_uid)
         return entity_id if entity_id is not None else circuit_id
 
-    def resolve_entity_to_circuit_id(self, entity_id: str, circuit_ids: Collection[str]) -> str:
+    def resolve_entity_to_circuit_id(
+        self, entity_id: str, snapshot: SpanPanelSnapshot, *, service: str
+    ) -> str:
         """Resolve one of the circuit's entities to its internal circuit_id.
 
         Accepts any of this integration's entities for the circuit, such as its
         current sensor (sensor.span_panel_kitchen_current), or a raw circuit_id
-        for backwards compatibility. The circuit is the one of
-        `circuit_ids` that the entity's unique_id names; an id is opaque, so it is
-        found among them rather than by its shape.
+        for backwards compatibility, an id from before a firmware update gave
+        the circuit a new one included (`entity_resolver.resolve_circuit_id`,
+        which logs it against `service`). The circuit is the one of the
+        snapshot's circuits that the entity's unique_id names; an id is opaque,
+        so it is found among them rather than by its shape.
 
-        The caller passes the coordinator's live ids rather than this monitor
-        reading its own last snapshot: the monitor sees a snapshot only on the
-        coordinator's next push after setup, and a threshold set before then
+        The caller passes the coordinator's live snapshot rather than this
+        monitor reading its own last one: the monitor sees a snapshot only on
+        the coordinator's next push after setup, and a threshold set before then
         must still land on its circuit.
 
         The ids this monitor holds overrides for are searched too, so a circuit
         that has left the panel can still have its override cleared through its
         orphaned entity.
         """
-        return resolve_circuit_id(self._hass, entity_id, {*circuit_ids, *self._circuit_overrides})
+        return resolve_circuit_id(
+            self._hass, entity_id, snapshot, service=service, also=self._circuit_overrides
+        )
 
     def resolve_entity_to_mains_leg(self, entity_id: str) -> str:
         """Resolve a current sensor entity_id to its internal mains leg name.
