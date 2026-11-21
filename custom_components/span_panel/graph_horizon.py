@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from homeassistant.helpers.storage import Store
 
@@ -23,6 +23,21 @@ _LOGGER = logging.getLogger(__name__)
 
 _STORAGE_VERSION = 1
 _STORAGE_KEY_PREFIX = "span_panel_graph_horizon"
+
+
+class HorizonOverride(TypedDict):
+    """One circuit's or sub-device's own horizon, as the card reads it."""
+
+    horizon: str
+    has_override: bool
+
+
+class GraphHorizonSettings(TypedDict):
+    """Every horizon the card's charts follow: the global one, and each override by what it is for."""
+
+    global_horizon: str
+    circuits: dict[str, HorizonOverride]
+    sub_devices: dict[str, HorizonOverride]
 
 
 class StoredGraphHorizons(TypedDict):
@@ -102,24 +117,18 @@ class GraphHorizonManager:
         self._subdevice_overrides.pop(subdevice_id, None)
         self._hass.async_create_task(self.async_save())
 
-    def get_all_settings(self) -> dict[str, Any]:
+    def get_all_settings(self) -> GraphHorizonSettings:
         """Return full state for frontend consumption."""
-        circuits: dict[str, dict[str, Any]] = {}
-        for circuit_id, horizon in self._circuit_overrides.items():
-            circuits[circuit_id] = {
-                "horizon": horizon,
-                "has_override": True,
-            }
-        sub_devices: dict[str, dict[str, Any]] = {}
-        for subdevice_id, horizon in self._subdevice_overrides.items():
-            sub_devices[subdevice_id] = {
-                "horizon": horizon,
-                "has_override": True,
-            }
         return {
             "global_horizon": self._global_horizon,
-            "circuits": circuits,
-            "sub_devices": sub_devices,
+            "circuits": {
+                circuit_id: {"horizon": horizon, "has_override": True}
+                for circuit_id, horizon in self._circuit_overrides.items()
+            },
+            "sub_devices": {
+                subdevice_id: {"horizon": horizon, "has_override": True}
+                for subdevice_id, horizon in self._subdevice_overrides.items()
+            },
         }
 
     async def async_load(self) -> None:
@@ -145,6 +154,15 @@ class GraphHorizonManager:
 def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredGraphHorizons]:
     """Return the store holding one panel's graph horizons."""
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_forget_graph_horizons(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the graph horizons when the config entry is removed.
+
+    Keyed by the entry's id, so no entry would ever load them again: left
+    behind, the file is one nothing owns.
+    """
+    await _store_for(hass, entry).async_remove()
 
 
 def _read_stored(stored: object) -> StoredGraphHorizons | None:

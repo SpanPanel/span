@@ -450,13 +450,12 @@ async def test_a_serial_arriving_on_the_wire_does_not_move_the_device(
 ) -> None:
     """The whole reason the identifier does not mention the inverter's serial.
 
-    `_der_identifier` on the producer side prefers a serial over an instance id,
-    so the day firmware starts publishing `info/serial-number` the inverter's
-    *Homie* device id changes. A Home Assistant identifier derived from it would
-    change with it, and a changed identifier is a new device: the card empties,
-    the entities orphan, and an upgrade rehearsal becomes a device-replacement
-    rehearsal. Keyed on the panel's serial and the kind instead, so this test
-    publishes a serial and watches nothing move.
+    `info/serial-number` is declared by every PV `$description` and published by
+    no producer today. An identifier preferring it would change the day firmware
+    starts publishing one, and a changed identifier is a new device: the card
+    empties, the entities orphan, and an upgrade rehearsal becomes a
+    device-replacement rehearsal. Keyed on the panel's serial and the kind
+    instead, so this test publishes a serial and watches nothing move.
     """
     before = await _install(hass, _pv_snapshot(), "entry-pv-noserial")
     identifier_before = _pv_device(hass, before)

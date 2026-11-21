@@ -220,8 +220,11 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # carry none: a row states a *reading's* unit and datatype, and a
         # version string is not a reading.
         #
-        # `pv.serial_number` is deliberately absent -- from this table, from the
-        # card and from the snapshot. See `pv_device_info`.
+        # `pv.serial_number` is deliberately absent from this table and from the
+        # card. The library reads `info/serial-number` into the snapshot where an
+        # inverter publishes one, and nothing here reads it there, so no card or
+        # identifier can start depending on a value no producer publishes yet.
+        # See `pv_device_info`.
         "pv.software_version": Producibility.UNMAPPED,
         # The `mid_grid_state` sensor's source field — utility-supply health,
         # the one non-metadata entity the MID brings. The adapter maps nothing
@@ -296,6 +299,12 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "panel.busbar_current_a": Producibility.UNMAPPED,
         "panel.frequency_hz": Producibility.UNMAPPED,
         "panel.upstream_protection_rating_a": Producibility.UNMAPPED,
+        # Whether the upstream lugs are the utility connection point, shown as
+        # the grid power sensor's `at_service_entrance` attribute
+        # (`SpanPanelPowerSensor.extra_state_attributes`). The library answers
+        # it from the lugs' `connection/fed-by-device-id` and maps no row for
+        # it: topology, not a reading.
+        "panel.lugs_at_service_entrance": Producibility.UNMAPPED,
         # What a circuit's `connection/feeds-role` declares, which orients its
         # power and Net Energy as generation where the role is solar
         # (`energy_orientation.circuit_is_generation`).

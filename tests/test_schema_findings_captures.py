@@ -60,6 +60,7 @@ _RECORDED: Final[Mapping[str, _Recorded]] = {
     "r202639-c": _EVERY_FIELD_RESOLVED,
     "r202639-d": _EVERY_FIELD_RESOLVED,
     "r202639-e": _EVERY_FIELD_RESOLVED,
+    "r202639-f": _EVERY_FIELD_RESOLVED,
     "main32_r202639-no-battery": _EVERY_FIELD_RESOLVED,
     "main32_r202639-battery-unvalued": _EVERY_FIELD_RESOLVED,
     "main32_r202639-unpublished-readings": _EVERY_FIELD_RESOLVED,

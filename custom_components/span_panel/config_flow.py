@@ -107,6 +107,7 @@ from .options import (
     ENERGY_DISPLAY_PRECISION,
     POWER_DISPLAY_PRECISION,
 )
+from .panel_settings import PanelSettings
 
 if TYPE_CHECKING:
     from .runtime import SpanPanelConfigEntry
@@ -2205,7 +2206,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # stored ones so a setting the form hid keeps its value. Through
                 # the settings file's one locked writer, which favorites also
                 # write through: the file holds both.
-                def _merge(settings: dict[str, object]) -> bool:
+                def _merge(settings: PanelSettings) -> bool:
                     settings.update(panel_settings)
                     return True
 

@@ -65,7 +65,12 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .package_rating_manager import PackageRatingManager
-    from .package_ratings import JudgedState, MonitoringRating, PackageRatings
+    from .package_ratings import (
+        JudgedState,
+        MonitoringRating,
+        PackageRatings,
+        PackageRatingsForm,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +121,48 @@ class MonitoredPointState:
 
 type MonitoringBasis = Literal["circuit", "group"]
 """What a monitored point's rating is: one circuit's judged-against rating, or a shared meter's capacity."""
+
+
+class PointMonitoringStatus(TypedDict):
+    """What monitoring reports of one point, as the Monitoring tab reads it: the mains' entry.
+
+    The figures are a judgement, so a point nobody is monitoring reports no
+    current, utilization or window, while its alert times, being history, stay.
+    """
+
+    name: str
+    last_current_a: float | None
+    breaker_rating_a: float | None
+    monitoring_rating_a: float | None
+    monitoring_rating_user_set: bool
+    package_ratings_a: list[int] | None
+    package_ratings_form: PackageRatingsForm | None
+    package_ratings_state: JudgedState | None
+    utilization_pct: float | None
+    continuous_threshold_pct: int
+    spike_threshold_pct: int
+    window_duration_m: int
+    cooldown_duration_m: int
+    has_override: bool
+    monitoring_enabled: bool
+    over_threshold_since: str | None
+    last_spike_alert: str | None
+    last_continuous_alert: str | None
+
+
+class CircuitMonitoringStatus(PointMonitoringStatus):
+    """What monitoring reports of one circuit: its point's entry, and which point it is."""
+
+    basis: MonitoringBasis
+    point_id: str
+    """The point this entry's judgement is: a shared meter's members carry its key."""
+
+
+class MonitoringStatus(TypedDict):
+    """Every point monitoring tracks, each by the entity the Monitoring tab shows it under."""
+
+    circuits: dict[str, CircuitMonitoringStatus]
+    mains: dict[str, PointMonitoringStatus]
 
 
 @dataclass(frozen=True, slots=True)
@@ -475,12 +522,12 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
         return entity_id if entity_id is not None else leg
 
-    def get_monitoring_status(self) -> dict[str, Any]:
+    def get_monitoring_status(self) -> MonitoringStatus:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
         main_rating = service_rating_a(snapshot) if snapshot else None
 
-        circuits: dict[str, dict[str, Any]] = {}
+        circuits: dict[str, CircuitMonitoringStatus] = {}
         # Include all circuits from the snapshot, not just those with active state.
         # Circuits with relays off may have no state yet but should still appear.
         all_circuit_ids = set(self._circuit_states.keys())
@@ -519,7 +566,6 @@ class CurrentMonitor:
             )
             entity_id = self._resolve_circuit_entity_id(cid)
             has_override = bool(override)
-            monitoring_enabled = override.get("monitoring_enabled", True)
             # The form a copy of the circuit's package takes, by the rule the topology
             # says it by. None on a shared meter's entry, which is the group's
             # judgement and takes no copy, and for a circuit no longer on the panel.
@@ -550,7 +596,7 @@ class CurrentMonitor:
                 "window_duration_m": window_m,
                 "cooldown_duration_m": cooldown_m,
                 "has_override": has_override,
-                "monitoring_enabled": monitoring_enabled,
+                "monitoring_enabled": judged,
                 "over_threshold_since": state.over_threshold_since.isoformat()
                 if state and judged and state.over_threshold_since
                 else None,
@@ -566,7 +612,7 @@ class CurrentMonitor:
         # The main breaker is a single 240V breaker; internally we still evaluate
         # per-leg, but the UI shows one combined "Mains Breaker" point. Only legs
         # that have been sampled count; with neither, there is no current to show.
-        mains: dict[str, dict[str, Any]] = {}
+        mains: dict[str, PointMonitoringStatus] = {}
         upstream = (self._mains_states.get("upstream_l1"), self._mains_states.get("upstream_l2"))
         sampled = [
             leg.last_current_a
@@ -575,7 +621,8 @@ class CurrentMonitor:
         ]
         override = self._mains_overrides.get("upstream_l1", {})
         # As for a circuit: the mains' figures are a judgement, and none is made while it is off.
-        peak_current = max(sampled) if sampled and not is_monitoring_disabled(override) else None
+        judged = not is_monitoring_disabled(override)
+        peak_current = max(sampled) if sampled and judged else None
         utilization = (
             round(peak_current / main_rating * 100, 1)
             if main_rating and peak_current is not None
@@ -587,7 +634,6 @@ class CurrentMonitor:
             override, self.get_global_settings()
         )
         has_override = bool(override)
-        monitoring_enabled = override.get("monitoring_enabled", True)
 
         # Resolve to the current_power entity for the mains entry key
         mains_entity_id = self._resolve_mains_entity_id("upstream_l1")
@@ -607,7 +653,7 @@ class CurrentMonitor:
             "window_duration_m": window_m,
             "cooldown_duration_m": cooldown_m,
             "has_override": has_override,
-            "monitoring_enabled": monitoring_enabled,
+            "monitoring_enabled": judged,
             "over_threshold_since": None,
             "last_spike_alert": None,
             "last_continuous_alert": None,
@@ -809,6 +855,17 @@ class CurrentMonitor:
 def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredMonitoring]:
     """Return the store holding one panel's monitoring settings."""
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_forget_monitoring(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the monitoring settings when the config entry is removed.
+
+    Keyed by the entry's id, so no entry would ever load them again: left
+    behind, the file is one nothing owns. The overrides in it are keyed by
+    circuit ids, which a later entry for the same panel would carry too, and
+    whose user removed the panel to be rid of them.
+    """
+    await _store_for(hass, entry).async_remove()
 
 
 def _read_stored(stored: object, entry: ConfigEntry) -> StoredMonitoring | None:

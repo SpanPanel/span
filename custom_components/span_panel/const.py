@@ -156,8 +156,8 @@ MAINS_LEGS: Final[tuple[str, ...]] = (
 )
 
 # Panel sidebar settings (domain-level, shared across config entries)
-PANEL_SHOW_SIDEBAR = "show_panel"
-PANEL_ADMIN_ONLY = "panel_admin_only"
+PANEL_SHOW_SIDEBAR: Final = "show_panel"
+PANEL_ADMIN_ONLY: Final = "panel_admin_only"
 
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 

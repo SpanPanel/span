@@ -147,11 +147,12 @@ def pv_device_ref(identifier: str, panel_identifier: str) -> PvDeviceRef | None:
     Anchored on this panel's own prefix rather than tested as an infix, as
     `classify_sub_device_identifier` must be for kinds it cannot anchor: here
     the panel is known, so a charger whose node id contains `_pv_`, an adopted
-    device, or another panel's card cannot be mistaken for one of these. An
-    inverter's card is read by `inverter_key_of_device_identifier`, the
-    reading end of the one builder of its identifier.
+    device, or another panel's card cannot be mistaken for one of these. Each
+    card is read back through the module's one builder of its identifier: the
+    Solar card's by `is_pv_device_identifier`, an inverter's by
+    `inverter_key_of_device_identifier`.
     """
-    if identifier == f"{panel_identifier}_{SUB_DEVICE_PV}":
+    if is_pv_device_identifier(panel_identifier, identifier):
         return PvDeviceRef(None)
     key = inverter_key_of_device_identifier(panel_identifier, identifier)
     return PvDeviceRef(key) if key is not None else None
@@ -194,6 +195,39 @@ def snapshot_to_device_info(
     )
 
 
+def bess_device_identifier(panel_identifier: str) -> str:
+    """Return the registry identifier of the panel's battery card: `{panel serial}_bess`.
+
+    The one builder of it: the card's `DeviceInfo` (`bess_device_info`) and an
+    extension that joins the card (`extension.extension_device_identifier`)
+    ask here. `classify_sub_device_identifier` reads its kind back by the
+    `SUB_DEVICE_BESS` token it ends in.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_BESS}"
+
+
+def mid_device_identifier(panel_identifier: str) -> str:
+    """Return the registry identifier of the panel's microgrid interconnect card: `{panel serial}_mid`.
+
+    The one builder of it, for `mid_device_info` and for an extension that joins
+    the card (`extension.extension_device_identifier`).
+    `classify_sub_device_identifier` reads its kind back by the
+    `SUB_DEVICE_MID` token it ends in.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_MID}"
+
+
+def evse_device_identifier(panel_identifier: str, node_id: str) -> str:
+    """Return the registry identifier of a charger's card: `{panel serial}_evse_{node id}`.
+
+    The one builder of it, for `evse_device_info` and for an extension that
+    joins the card (`extension.extension_device_identifier`), whose subject's
+    instance key is the charger's node id. `classify_sub_device_identifier`
+    reads its kind back by the `_evse_` infix.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_EVSE}_{node_id}"
+
+
 def bess_device_info(
     panel_identifier: str,
     battery: SpanBatterySnapshot,
@@ -209,7 +243,7 @@ def bess_device_info(
     """
     name = f"{panel_name} Battery"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_BESS}")},
+        identifiers={(DOMAIN, bess_device_identifier(panel_identifier))},
         name=name,
         manufacturer=battery.vendor_name or "Unknown",
         # `model` is the human designation, which the BESS publishes as `info/model`.
@@ -241,7 +275,7 @@ def mid_device_info(
     would put the MID one level deeper than its siblings for no reader's benefit.
     """
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_MID}")},
+        identifiers={(DOMAIN, mid_device_identifier(panel_identifier))},
         name=f"{panel_name} Microgrid Interconnect",
         manufacturer=mid.vendor_name or "Unknown",
         model=mid.model or "Microgrid Interconnect Device",
@@ -301,7 +335,7 @@ def evse_device_info(
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_EVSE}_{evse.node_id}")},
+        identifiers={(DOMAIN, evse_device_identifier(panel_identifier, evse.node_id))},
         name=evse_display_name(evse, panel_name, display_suffix),
         manufacturer=evse.vendor_name or "SPAN",
         model=evse.model or "SPAN Drive",
@@ -353,7 +387,7 @@ def pv_device_info(
     and each charger seed no area either.
     """
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_PV}")},
+        identifiers={(DOMAIN, pv_device_identifier(panel_identifier))},
         name=f"{panel_name} Solar",
         manufacturer=pv.vendor_name or "Unknown",
         model=pv.model or "Solar Inverter",
@@ -370,9 +404,26 @@ EMPTY_PV: Final = SpanPVSnapshot()
 """Stand-in for an inverter that has left the snapshot, as `EMPTY_EVSE` is for a charger."""
 
 
+def pv_device_identifier(panel_identifier: str) -> str:
+    """Return the registry identifier of the panel's Solar card: `{panel serial}_pv`.
+
+    The one builder of it: the card's `DeviceInfo` (`pv_device_info`) and an
+    extension that joins the card (`extension.extension_device_identifier`)
+    ask here, and `is_pv_device_identifier` reads it back. Each inverter's
+    card, on a panel with several, is this identifier with its key after it
+    (`pv_inverter_device_identifier`).
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_PV}"
+
+
+def is_pv_device_identifier(panel_identifier: str, identifier: str) -> bool:
+    """Whether `identifier` is this panel's Solar card's, the reading end of `pv_device_identifier`."""
+    return identifier == pv_device_identifier(panel_identifier)
+
+
 def _pv_inverter_identifier_prefix(panel_identifier: str) -> str:
     """Return what every inverter card's identifier on this panel starts with: `{panel serial}_pv_`."""
-    return f"{panel_identifier}_{SUB_DEVICE_PV}_"
+    return f"{pv_device_identifier(panel_identifier)}_"
 
 
 def pv_inverter_device_identifier(panel_identifier: str, inverter_key: str) -> str:

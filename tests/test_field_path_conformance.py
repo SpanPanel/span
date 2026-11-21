@@ -286,7 +286,7 @@ def test_every_exempt_path_matches_its_annotation() -> None:
 
 
 _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
-    # The 62, by group:
+    # The 63, by group:
     #   2  `$target` echoes: `circuit.relay_state_target`, `circuit.priority_target`
     #   2  assembled from topology: `circuit.device_type`, `circuit.relative_position`
     #   1  `panel.panel_size`, outside the typed field surface
@@ -305,12 +305,13 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     #   2  a circuit's meter and relay peers
     #   2  a circuit's nominal voltage and protection functions
     #   3  the panel readings created only where declared
+    #   1  `panel.lugs_at_service_entrance`, the grid power sensor's `at_service_entrance`
     #   1  `circuit.feeds_role`
     #   2  a circuit's `always_on` and `is_sheddable`
     #   2  answers the library derives: `panel.dominant_power_source`, `panel.grid_islandable`
     #   5  the charger's device card and the circuit that feeds it
     #   1  `battery.connected`, the panel-side link record
-    Producibility.UNMAPPED: 62,
+    Producibility.UNMAPPED: 63,
     # The two reads the adapter maps and validation is kept from, each with its
     # reason beside it in `RESIDUAL_EXEMPT_PATHS`: the controllability gate and
     # the charge-limit ceiling.

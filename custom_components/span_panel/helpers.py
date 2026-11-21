@@ -237,6 +237,31 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
 
     Used as a fallback when a circuit has no panel-assigned name.
 
+    **`Circuit {circuit_id}` where there are no tabs, kept on purpose.** No name
+    is built from a wire id where anything else can name the circuit. A meter
+    outside the panel never has tabs, and is named by `outside_meter_label`
+    wherever it is named: its device and entities (`circuit_device_name`), an
+    inverter it feeds (`resolve_pv_display_suffix`), a message or attribute
+    naming it (`construct_circuit_label`).
+
+    No captured remote CT has a breaker switch or a priority select: each
+    declares a meter, and on r202645 its connection point, and no `switch` or
+    `load-shed` node, so the controls' gates (`circuit_has_a_breaker_switch`,
+    `circuit_has_a_priority_select`) create neither. Nothing else holds that.
+    A meter outside the panel that declared a `switch` node the user may
+    operate would get a breaker switch, and with a settable `load-shed`
+    priority a priority select as well. Their circuit-numbers identifiers come
+    here directly, so in circuit-numbers mode their entity ids would be
+    composed from `Circuit {circuit_id}`.
+
+    What still reaches this without tabs is a hosted circuit whose spaces are
+    declared and carry no value yet, and a message about a circuit that has
+    left the snapshot, which nothing else names. The first is transient, the
+    spaces arriving with the rest of the tree, and whatever name it takes here
+    is the one entity ids are composed from at creation: any other placeholder
+    would be baked into them just the same, while this one at least names the
+    circuit uniquely.
+
     Args:
         tabs: Every panel position the breaker occupies
         circuit_id: Fallback identifier when tabs are unavailable
@@ -305,10 +330,14 @@ def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str
 
     The panel's own name where there is one, and the tab identifier otherwise --
     which is what the entity itself was named from, so an error names the thing
-    the user is looking at rather than a wire UUID. `None` is accepted because a
-    circuit can drop out of a snapshot between a command and its failure, and an
-    error message is the worst possible place to raise a second error.
+    the user is looking at rather than a wire UUID. A meter outside the panel
+    has no tabs, and takes `outside_meter_label`, as its own device does.
+    `None` is accepted because a circuit can drop out of a snapshot between a
+    command and its failure, and an error message is the worst possible place
+    to raise a second error.
     """
+    if circuit is not None and circuit.measures_outside_panel:
+        return outside_meter_label(circuit_id)
     if circuit is not None and circuit.name:
         return circuit.name
     tabs = circuit.tabs if circuit is not None else []
@@ -510,8 +539,11 @@ def resolve_pv_display_suffix(
     Taken from the circuit that feeds the inverter, in the mode the user names
     circuits in: the circuit's panel name in friendly-names mode, its breaker
     positions in circuit-numbers mode, and the positions in either mode when
-    the circuit has no name. The inverter's serial is not a candidate, unlike a
-    charger's: it is usually unpublished, and nothing here reads it.
+    the circuit has no name. A meter outside the panel, such as a remote CT,
+    has no positions, and takes `outside_meter_label` in either mode, the label
+    its own device and entities carry, so no inverter is named by a wire id.
+    The inverter's serial is not a candidate, unlike a charger's: it is usually
+    unpublished, and nothing here reads it.
 
     Returns None for an inverter no circuit feeds. See
     `resolve_pv_display_suffixes`, which keeps several inverters' names apart.
@@ -519,6 +551,8 @@ def resolve_pv_display_suffix(
     circuit = snapshot.circuits.get(pv.feed_circuit_id) if pv.feed_circuit_id else None
     if circuit is None:
         return None
+    if circuit.measures_outside_panel:
+        return outside_meter_label(circuit.circuit_id)
     if not use_circuit_numbers and circuit.name:
         name: str = circuit.name
         return name
@@ -536,6 +570,15 @@ def resolve_pv_display_suffixes(
     circuit-fed inverter falls back to its breaker positions, and whatever is
     still missing or shared then takes an ordinal, assigned in key order.
     Without this, two inverters' devices would carry the same name.
+
+    One narrow collision follows from a remote CT being named by its label in
+    either mode. In circuit-names mode, a hosted circuit the user named
+    exactly as a remote CT's label, such as `Remote CT 3`, shares its suffix
+    with the inverter the remote CT feeds. Both then fall back to the
+    circuit-numbers form: the hosted circuit's to its breaker positions, the
+    remote CT's to its label again, which is its circuit-numbers form too. So
+    the remote CT's inverter keeps `Remote CT 3`, and the hosted circuit's is
+    named by its positions rather than by the name the user gave it.
     """
     inverters = snapshot.pv_inverters
     suffixes = {

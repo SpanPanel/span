@@ -11,8 +11,11 @@ from custom_components.span_panel.helpers import has_pv
 from custom_components.span_panel.pv_binding import PvBinding
 from custom_components.span_panel.solar_topology import SolarTopology, solar_topology
 from custom_components.span_panel.util import (
+    SUB_DEVICE_PV,
     PvDeviceRef,
     inverter_key_of_device_identifier,
+    is_pv_device_identifier,
+    pv_device_identifier,
     pv_device_ref,
     pv_inverter_device_identifier,
 )
@@ -36,6 +39,22 @@ PANEL = "sp3-solar-001"
 
 def test_the_solar_device_is_the_panels_pv_identifier() -> None:
     assert pv_device_ref(f"{PANEL}_pv", PANEL) == PvDeviceRef(None)
+
+
+def test_the_solar_card_reads_back_through_the_builder_of_its_identifier() -> None:
+    """One spelling, `util.pv_device_identifier`, for the card, its reader and an extension on it.
+
+    Pinned to `{panel serial}_pv` as every installed Solar card carries it, so
+    the builder cannot move an identifier the registry already holds.
+    """
+    identifier = pv_device_identifier(PANEL)
+    assert identifier == f"{PANEL}_pv"
+    assert is_pv_device_identifier(PANEL, identifier)
+    assert pv_device_ref(identifier, PANEL) == PvDeviceRef(None)
+    assert extension_device_identifier(PANEL, ExtensionSubject(kind="pv")) == identifier
+    assert pv_inverter_device_identifier(PANEL, SOLAR_CIRCUIT).startswith(f"{identifier}_")
+    assert not is_pv_device_identifier(PANEL, pv_inverter_device_identifier(PANEL, SOLAR_CIRCUIT))
+    assert not is_pv_device_identifier(PANEL, f"other-panel_{SUB_DEVICE_PV}")
 
 
 def test_an_inverter_device_carries_its_key() -> None:

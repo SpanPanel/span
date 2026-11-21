@@ -90,7 +90,7 @@ from .conversion_repairs import (
 )
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
-from .current_monitor import CurrentMonitor
+from .current_monitor import CurrentMonitor, async_forget_monitoring
 from .device_id_rekey import async_migrate_device_ids, entry_holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
@@ -117,11 +117,13 @@ from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
     async_apply_panel_registration as async_apply_panel_registration,
+    async_drop_orphaned_favorites,
+    async_forget_favorites_of,
     async_load_panel_settings as async_load_panel_settings,
     async_register_frontend_assets as async_register_frontend_assets,
     async_update_panel_settings as async_update_panel_settings,
 )
-from .graph_horizon import GraphHorizonManager
+from .graph_horizon import GraphHorizonManager, async_forget_graph_horizons
 from .hardware_guard import (
     HARDWARE_UNREAD,
     HardwareRead,
@@ -198,6 +200,10 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
+    # Before the services and any entry, everything that reads favorites; the
+    # device registry is loaded by now. See `async_drop_orphaned_favorites`.
+    await async_drop_orphaned_favorites(hass)
+
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
@@ -1135,7 +1141,17 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     rather than registry ids, so a store left behind is one the next entry for
     the same panel would load and apply, re-asserting metadata the user is no
     longer here to have asked for. The copied package ratings go for that
-    reason too: they are keyed by wire circuit ids.
+    reason too: they are keyed by wire circuit ids. So do the monitoring
+    settings and the graph horizons, and every other store named for this
+    entry: no other entry reads a file named for this one, so left behind it
+    is a file nothing owns.
+
+    The panel's favorites go as well, for the announcements' reason. They are
+    kept in the domain's settings file under the panel's device id, and
+    re-adding the same panel brings that id back: Home Assistant restores the
+    device, its id included, from the tombstone the removal leaves. The entry's
+    devices are still registered here, since Home Assistant clears them only
+    once this returns.
 
     The pending reloads go first, before anything here can raise: Home Assistant
     catches what this function raises, and a reload still waiting for the
@@ -1147,7 +1163,16 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     await async_forget_curation(hass, entry)
     await async_forget_pv_binding(hass, entry)
     await async_forget_package_ratings(hass, entry)
+    await async_forget_monitoring(hass, entry)
+    await async_forget_graph_horizons(hass, entry)
     await async_forget(hass, entry)
+    await async_forget_favorites_of(
+        hass,
+        {
+            device.id
+            for device in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        },
+    )
 
 
 async def async_remove_config_entry_device(
