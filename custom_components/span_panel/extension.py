@@ -73,7 +73,10 @@ from .util import (
     SUB_DEVICE_EVSE,
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
+    bess_device_identifier,
     declares_a_number,
+    evse_device_identifier,
+    mid_device_identifier,
     pv_device_identifier,
     pv_inverter_device_identifier,
 )
@@ -330,15 +333,15 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
     if subject.kind in ("panel", "circuit", "lugs"):
         return panel_identifier
     if subject.kind == "battery":
-        return f"{panel_identifier}_{SUB_DEVICE_BESS}"
+        return bess_device_identifier(panel_identifier)
     if subject.kind == "mid":
-        return f"{panel_identifier}_{SUB_DEVICE_MID}"
+        return mid_device_identifier(panel_identifier)
     if subject.kind == "pv" and subject.instance_key is not None:
         return pv_inverter_device_identifier(panel_identifier, subject.instance_key)
     if subject.kind == "pv":
         return pv_device_identifier(panel_identifier)
     if subject.kind == "evse" and subject.instance_key is not None:
-        return f"{panel_identifier}_{SUB_DEVICE_EVSE}_{subject.instance_key}"
+        return evse_device_identifier(panel_identifier, subject.instance_key)
     return None
 
 

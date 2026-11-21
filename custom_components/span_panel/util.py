@@ -195,6 +195,39 @@ def snapshot_to_device_info(
     )
 
 
+def bess_device_identifier(panel_identifier: str) -> str:
+    """Return the registry identifier of the panel's battery card: `{panel serial}_bess`.
+
+    The one builder of it: the card's `DeviceInfo` (`bess_device_info`) and an
+    extension that joins the card (`extension.extension_device_identifier`)
+    ask here. `classify_sub_device_identifier` reads its kind back by the
+    `SUB_DEVICE_BESS` token it ends in.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_BESS}"
+
+
+def mid_device_identifier(panel_identifier: str) -> str:
+    """Return the registry identifier of the panel's microgrid interconnect card: `{panel serial}_mid`.
+
+    The one builder of it, for `mid_device_info` and for an extension that joins
+    the card (`extension.extension_device_identifier`).
+    `classify_sub_device_identifier` reads its kind back by the
+    `SUB_DEVICE_MID` token it ends in.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_MID}"
+
+
+def evse_device_identifier(panel_identifier: str, node_id: str) -> str:
+    """Return the registry identifier of a charger's card: `{panel serial}_evse_{node id}`.
+
+    The one builder of it, for `evse_device_info` and for an extension that
+    joins the card (`extension.extension_device_identifier`), whose subject's
+    instance key is the charger's node id. `classify_sub_device_identifier`
+    reads its kind back by the `_evse_` infix.
+    """
+    return f"{panel_identifier}_{SUB_DEVICE_EVSE}_{node_id}"
+
+
 def bess_device_info(
     panel_identifier: str,
     battery: SpanBatterySnapshot,
@@ -210,7 +243,7 @@ def bess_device_info(
     """
     name = f"{panel_name} Battery"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_BESS}")},
+        identifiers={(DOMAIN, bess_device_identifier(panel_identifier))},
         name=name,
         manufacturer=battery.vendor_name or "Unknown",
         # `model` is the human designation, which the BESS publishes as `info/model`.
@@ -242,7 +275,7 @@ def mid_device_info(
     would put the MID one level deeper than its siblings for no reader's benefit.
     """
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_MID}")},
+        identifiers={(DOMAIN, mid_device_identifier(panel_identifier))},
         name=f"{panel_name} Microgrid Interconnect",
         manufacturer=mid.vendor_name or "Unknown",
         model=mid.model or "Microgrid Interconnect Device",
@@ -302,7 +335,7 @@ def evse_device_info(
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_EVSE}_{evse.node_id}")},
+        identifiers={(DOMAIN, evse_device_identifier(panel_identifier, evse.node_id))},
         name=evse_display_name(evse, panel_name, display_suffix),
         manufacturer=evse.vendor_name or "SPAN",
         model=evse.model or "SPAN Drive",
