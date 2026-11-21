@@ -39,7 +39,11 @@ def is_list(value: object) -> TypeGuard[Sequence[object]]:
 
 
 def json_value(value: object) -> JsonValueType:
-    """Return `value` as JSON: a scalar as it is, a mapping or a list rebuilt, item by item.
+    """Return `value` as JSON: a scalar as it is, a mapping, a list or a tuple rebuilt, item by item.
+
+    A tuple is an array, as Home Assistant's own encoder writes it, so a shape
+    typed with one answers as it would through the encoder rather than being
+    refused here.
 
     Raises `TypeError` for anything else, and for a mapping key that is not a
     string, naming what it found: a value JSON cannot carry is a bug in the
@@ -49,9 +53,14 @@ def json_value(value: object) -> JsonValueType:
         return value
     if is_mapping(value):
         return json_object(_string_keyed(value))
-    if is_list(value):
+    if _is_array(value):
         return [json_value(item) for item in value]
     raise TypeError(f"{type(value).__name__} is not a JSON value")
+
+
+def _is_array(value: object) -> TypeGuard[Sequence[object]]:
+    """Whether `value` is what JSON writes as an array: a list or a tuple."""
+    return isinstance(value, (list, tuple))
 
 
 def json_object(value: Mapping[str, object]) -> JsonObjectType:

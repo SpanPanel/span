@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 from typing import TypedDict
 
+from homeassistant.helpers.json import JSONEncoder
 import pytest
 
 from custom_components.span_panel.json_values import (
@@ -49,13 +51,30 @@ def test_a_typed_shape_is_answered_as_the_json_it_holds() -> None:
 
 @pytest.mark.parametrize(
     "value",
-    [datetime(2026, 1, 1, tzinfo=UTC), {"a", "b"}, ("a", "b"), b"bytes"],
-    ids=["a-datetime", "a-set", "a-tuple", "bytes"],
+    [datetime(2026, 1, 1, tzinfo=UTC), {"a", "b"}, b"bytes"],
+    ids=["a-datetime", "a-set", "bytes"],
 )
 def test_a_value_json_cannot_carry_is_refused(value: object) -> None:
     """Named rather than passed on, at any depth: the shape that produced it is wrong."""
     with pytest.raises(TypeError, match=type(value).__name__):
         json_value({"outer": [{"inner": value}]})
+
+
+def test_a_tuple_is_answered_as_an_array_as_home_assistants_encoder_writes_it() -> None:
+    """A field typed with a tuple answers as an array, at any depth, as the service's encoder would.
+
+    Fails when a tuple is refused, which mypy would let through and the
+    service would only find at runtime.
+    """
+    shape: dict[str, tuple[int, ...] | tuple[tuple[str, int], ...]] = {
+        "ratings": (20, 30),
+        "pairs": (("a", 1), ("b", 2)),
+    }
+
+    answered = json_object(shape)
+
+    assert answered == {"ratings": [20, 30], "pairs": [["a", 1], ["b", 2]]}
+    assert answered == json.loads(JSONEncoder().encode(shape))
 
 
 def test_a_key_that_is_not_a_string_is_refused() -> None:
