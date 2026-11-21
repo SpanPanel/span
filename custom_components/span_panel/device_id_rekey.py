@@ -33,9 +33,13 @@ can:
 - in circuit-numbers mode, the identifier a hosted circuit with no tabs names
   its entities by, whether the panel names it or not.
 
-A hosted circuit's label in a message or the monitoring status
-(`helpers.construct_circuit_label`) follows the id the same way, as does that
-of a circuit that has left the snapshot; nothing stores either.
+A hosted circuit's label (`helpers.construct_circuit_label`) follows the id
+the same way, as does that of a circuit that has left the snapshot. Two
+things keep it: the package-ratings store saves it as each package's label,
+rewritten from the circuit at every reconcile, and as the label of each
+removal it lists; and the recorder keeps the `meter_shared_with` and
+`relay_shared_with` attributes it fills, in the history of the sensor or
+switch that carries them.
 
 **Run at every setup** (`async_setup_entry`), after the first refresh and the
 hardware verdict and before anything loads, reconciles or registers circuit

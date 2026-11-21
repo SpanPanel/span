@@ -242,9 +242,19 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
     outside the panel never has tabs, and is named by `outside_meter_label`
     wherever it is named: its device and entities (`circuit_device_name`), an
     inverter it feeds (`resolve_pv_display_suffix`), a message or attribute
-    naming it (`construct_circuit_label`). It has no breaker switch or priority
-    select, whose circuit-numbers identifiers alone come here directly. What
-    still reaches this without tabs is a hosted circuit whose spaces are
+    naming it (`construct_circuit_label`).
+
+    No captured remote CT has a breaker switch or a priority select: each
+    declares a meter, and on r202645 its connection point, and no `switch` or
+    `load-shed` node, so the controls' gates (`circuit_has_a_breaker_switch`,
+    `circuit_has_a_priority_select`) create neither. Nothing else holds that.
+    A meter outside the panel that declared a `switch` node the user may
+    operate would get a breaker switch, and with a settable `load-shed`
+    priority a priority select as well. Their circuit-numbers identifiers come
+    here directly, so in circuit-numbers mode their entity ids would be
+    composed from `Circuit {circuit_id}`.
+
+    What still reaches this without tabs is a hosted circuit whose spaces are
     declared and carry no value yet, and a message about a circuit that has
     left the snapshot, which nothing else names. The first is transient, the
     spaces arriving with the rest of the tree, and whatever name it takes here
@@ -560,6 +570,15 @@ def resolve_pv_display_suffixes(
     circuit-fed inverter falls back to its breaker positions, and whatever is
     still missing or shared then takes an ordinal, assigned in key order.
     Without this, two inverters' devices would carry the same name.
+
+    One narrow collision follows from a remote CT being named by its label in
+    either mode. In circuit-names mode, a hosted circuit the user named
+    exactly as a remote CT's label, such as `Remote CT 3`, shares its suffix
+    with the inverter the remote CT feeds. Both then fall back to the
+    circuit-numbers form: the hosted circuit's to its breaker positions, the
+    remote CT's to its label again, which is its circuit-numbers form too. So
+    the remote CT's inverter keeps `Remote CT 3`, and the hosted circuit's is
+    named by its positions rather than by the name the user gave it.
     """
     inverters = snapshot.pv_inverters
     suffixes = {
