@@ -38,8 +38,8 @@ from .const import (
 from .current_monitor import CurrentMonitor
 from .device_id_migration import current_circuit_id
 from .entity_resolver import resolve_circuit_id
-from .frontend import FavoriteKind, PanelFavorites, async_get_favorites, async_set_favorite
-from .graph_horizon import GraphHorizonManager
+from .frontend import async_get_favorites, async_set_favorite
+from .graph_horizon import GraphHorizonManager, GraphHorizonSettings
 from .hardware_guard import async_read_hardware_version, registers_by_passphrase_only
 from .id_builder import build_circuit_unique_id, match_circuit_id
 from .json_values import json_object
@@ -50,6 +50,7 @@ from .options import (
     WINDOW_DURATION_M,
 )
 from .package_ratings import panel_describes_breakers
+from .panel_settings import FavoriteKind, PanelFavorites
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .util import circuit_id_of_device
 
@@ -727,7 +728,9 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
                 mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
                     return json_object(mgr.get_all_settings())
-        return {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}}
+        return json_object(
+            GraphHorizonSettings(global_horizon=DEFAULT_GRAPH_HORIZON, circuits={}, sub_devices={})
+        )
 
     hass.services.async_register(
         DOMAIN,

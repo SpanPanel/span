@@ -17,7 +17,8 @@ from .json_values import is_list, is_mapping
 
 _LOGGER = logging.getLogger(__name__)
 
-FavoriteKind = Literal["circuits", "sub_devices"]
+type FavoriteKind = Literal["circuits", "sub_devices"]
+"""Which of a panel's favorites a target is: a circuit, or a sub-device."""
 
 FAVORITE_KINDS: Final[tuple[FavoriteKind, ...]] = ("circuits", "sub_devices")
 

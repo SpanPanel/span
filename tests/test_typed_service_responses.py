@@ -19,6 +19,7 @@ from custom_components.span_panel.current_monitor import (
     CircuitMonitoringStatus,
     PointMonitoringStatus,
 )
+from custom_components.span_panel.services import _async_register_graph_horizon_services
 
 from .captures_replay import capture
 from .replayed_panel import Panel, replayed_panels
@@ -93,3 +94,17 @@ async def test_the_graph_settings_answer_every_horizon(panels: Callable[..., Pan
         "circuits": {circuit_id: {"horizon": "1w", "has_override": True}},
         "sub_devices": {panel.runtime.panel_device_id: {"horizon": "1d", "has_override": True}},
     }
+
+
+async def test_the_graph_settings_with_no_panel_loaded_answer_the_same_shape(
+    hass: HomeAssistant,
+) -> None:
+    """With no panel loaded, the defaults: the global horizon, and no override of either kind.
+
+    Fails when the fallback answers a shape other than `GraphHorizonSettings`.
+    """
+    _async_register_graph_horizon_services(hass)
+
+    response = await _respond(hass, "get_graph_settings")
+
+    assert response == {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}, "sub_devices": {}}

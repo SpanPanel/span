@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
 
 from homeassistant import data_entry_flow
 from homeassistant.config_entries import ConfigEntry
@@ -118,7 +117,7 @@ GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
 def get_general_options_defaults(
     config_entry: ConfigEntry,
     panel_settings: PanelSettings | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Get default values for general options form.
 
     Args:
@@ -169,7 +168,7 @@ _PANEL_SETTING_KEYS = {PANEL_SHOW_SIDEBAR, PANEL_ADMIN_ONLY}
 def process_general_options_input(
     config_entry: ConfigEntry,
     user_input: Mapping[str, object],
-) -> tuple[dict[str, Any], dict[str, str], PanelSettings]:
+) -> tuple[dict[str, object], dict[str, str], PanelSettings]:
     """Process user input for general options.
 
     Args:
