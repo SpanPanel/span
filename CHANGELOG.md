@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 - **The SPAN Panel card and the sidebar dashboard now show a panel and each of its battery, charger and solar devices by the name you gave it in Home
   Assistant**, where a renamed device kept the name the integration gave it.
 
+- **A SPAN Panel card opened while Home Assistant is starting or restarting, or while the integration retries a panel it cannot reach, says it is waiting for
+  the panel to load and draws the panel once it has loaded**, where it showed "Unable to connect to SPAN Panel" until Retry was pressed or the dashboard was
+  opened again.
+
 ## [2.3.3] - 11/2026
 
 **Install 2.3.3 before your panel updates to firmware r202645**, which gives the panel's circuits new device IDs: 2.3.3 carries every circuit entity, device,
