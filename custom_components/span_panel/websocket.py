@@ -34,7 +34,7 @@ from .package_ratings import (
 )
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 from .solar_topology import SolarTopology, solar_topology
-from .util import circuit_device, classify_sub_device_identifier, pv_device_ref
+from .util import circuit_device, classify_sub_device_identifier, device_display_name, pv_device_ref
 from .websocket_adopted import handle_adopted_curate, handle_adopted_list
 from .websocket_panel import resolve_panel_device
 
@@ -287,7 +287,8 @@ async def handle_panel_topology(
         sub_device_type = _classify_sub_device(dev)
 
         record: dict[str, Any] = {
-            "name": dev.name,
+            # The name Home Assistant shows for the device, a rename included.
+            "name": device_display_name(dev),
             "type": sub_device_type,
             "manufacturer": dev.manufacturer,
             "model": dev.model,
@@ -326,7 +327,9 @@ async def handle_panel_topology(
             # the panel's identity from here rather than looking up the id it has.
             "panel_device_id": device_entry.id,
             "config_entry_id": config_entry_id,
-            "device_name": device_entry.name,
+            # The name Home Assistant shows for the panel's device: the user's
+            # where they renamed it, else the one the entry was set up with.
+            "device_name": device_display_name(device_entry),
             "panel_entities": panel_entities,
             # Whether `set_circuit_package_ratings` takes ratings on this panel at
             # all. False where the panel describes its multi-load breakers: current

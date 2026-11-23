@@ -132,7 +132,7 @@ from .const import DOMAIN
 from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix, suffix_wordings, without_core_number
 from .runtime import SpanPanelConfigEntry, SpanPanelRuntimeData, loaded_runtime_data
-from .util import circuit_id_of_device, effective_circuit_device_name
+from .util import circuit_id_of_device, device_display_name, effective_circuit_device_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ def compose_circuit_object_id(
         composed_device_name = device_name
         area_id = device_area_id
         if device_area_id is None and panel is not None:
-            panel_name = panel.name_by_user or panel.name
+            panel_name = device_display_name(panel)
             area_id = panel.area_id
 
     area_name: str | None = None

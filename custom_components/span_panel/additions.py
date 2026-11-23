@@ -37,7 +37,7 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN
 from .extension import is_extension_unique_id
 from .notices import async_raise, read_translations
-from .util import ADOPTED_IDENTIFIER_TOKEN
+from .util import ADOPTED_IDENTIFIER_TOKEN, device_display_name
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -368,7 +368,7 @@ def _adopted_device_name(
     token = f"_{ADOPTED_IDENTIFIER_TOKEN}_"
     if not any(token in identifier for _domain, identifier in device.identifiers):
         return None
-    return device.name_by_user or device.name or registry_entry.entity_id
+    return device_display_name(device) or registry_entry.entity_id
 
 
 def _extension_device_name(
@@ -392,7 +392,7 @@ def _extension_device_name(
     device = devices.async_get(registry_entry.device_id)
     if device is None:
         return None
-    return device.name_by_user or device.name or registry_entry.entity_id
+    return device_display_name(device) or registry_entry.entity_id
 
 
 def _label(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry) -> str:
@@ -443,7 +443,7 @@ def _own_device_name(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntr
         return None
     if isinstance(device, dr.DeviceEntry) and device.via_device_id is None:
         return None
-    return device.name_by_user or device.name
+    return device_display_name(device)
 
 
 async def async_forget_announcements(hass: HomeAssistant, entry: ConfigEntry) -> None:

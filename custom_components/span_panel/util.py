@@ -5,6 +5,7 @@ import logging
 from typing import Final
 
 from homeassistant.helpers.device_registry import (
+    AnyDeviceEntry,
     ChildDeviceEntry,
     ChildDeviceInfo,
     DeviceInfo,
@@ -549,6 +550,23 @@ def circuit_id_of_device(serial: str, device: ChildDeviceEntry) -> str | None:
         if circuit_id is not None:
             return circuit_id
     return None
+
+
+def device_display_name(device: AnyDeviceEntry) -> str | None:
+    """Return the name Home Assistant shows for a device: the user's, else the integration's.
+
+    A rename in Home Assistant is stored in `name_by_user`, and `name` stays the
+    name the integration registered the device under. Core shows the user's
+    wherever there is one, so anything that names a device to a person asks
+    here rather than reading `name` -- which is how the card's title kept a
+    panel's default name after the user renamed it.
+
+    Empty or None only for a device with neither, which each caller answers in
+    its own way. A circuit's entities are named by `effective_circuit_device_name`
+    instead, which falls back to the name the device is about to be given
+    rather than the one the registry holds.
+    """
+    return device.name_by_user or device.name
 
 
 def effective_circuit_device_name(

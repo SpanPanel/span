@@ -104,6 +104,7 @@ from .entity_resolver import entity_id_in_entry
 from .entry_issues import EntryIssue, EntryIssueFamily, async_create_entry_issue
 from .id_builder import build_switch_unique_id
 from .runtime import SpanPanelConfigEntry, loaded_runtime_data
+from .util import device_display_name
 
 _TRANSLATION_KEY: Final = "circuit_devices_converted"
 
@@ -243,7 +244,7 @@ def _panel_name(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> str:
     runtime_data = loaded_runtime_data(entry)
     if runtime_data is not None:
         device = dr.async_get(hass).async_get(runtime_data.panel_device_id)
-        if device is not None and (name := device.name_by_user or device.name):
+        if device is not None and (name := device_display_name(device)):
             return name
     return entry.title
 
