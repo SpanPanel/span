@@ -364,7 +364,7 @@ def adopted_device_info(
         identifiers={(DOMAIN, identifier)},
         name=adopted_device_label(device),
         manufacturer=device.vendor_name or "Unknown",
-        model=device.model or humanised(device.device_type.rsplit(".", 1)[-1]),
+        model=device.model or _type_name(device.device_type),
         serial_number=device.serial_number,
         sw_version=device.software_version,
         hw_version=device.hardware_version,
@@ -373,12 +373,30 @@ def adopted_device_info(
 
 
 def adopted_device_label(device: AdoptedDevice) -> str:
-    """Return the name this device is known by, on its card and in its errors.
+    """Return the name this device's card is registered under, taken from the wire.
 
-    One function because the two have to agree: an error naming a device the
-    user cannot find in their device list is an error they cannot act on.
+    It is what the device list shows until the user renames the device there.
+    Whatever names the device to a person names the card as Home Assistant
+    shows it instead (`util.device_display_name`): the errors its controls
+    raise, and the curation editor's heading, which falls back to this for a
+    device that has no card yet. An error naming a device the user cannot find
+    in their device list is an error they cannot act on.
+
+    Never empty: the device's own name where it publishes one, else the last
+    non-empty segment of its `$type`, else its wire id. The type comes from a
+    publisher this integration does not model and can be malformed. The
+    library skips a device declaring none, but one ending in a dot has nothing
+    after it, and an empty name is worse than none: Core names a new card
+    after the panel's entry, a device that is not the panel, and blanks it on
+    the next load, leaving the user nothing to find it by.
     """
-    return device.name or humanised(device.device_type.rsplit(".", 1)[-1])
+    return device.name or _type_name(device.device_type) or device.device_id
+
+
+def _type_name(device_type: str) -> str | None:
+    """Return the last non-empty segment of a dotted `$type`, humanised, or None where it has none."""
+    segment = next((part for part in reversed(device_type.split(".")) if part), None)
+    return None if segment is None else humanised(segment)
 
 
 def humanised(wire_token: str) -> str:
@@ -626,7 +644,6 @@ class AdoptedControl(AdoptedEntity):
         )
         self._node_id = declaration.node_id
         self._property_id = declaration.property_id
-        self._device_label = adopted_device_label(device)
 
     async def _publish(self, value: str) -> None:
         """Write one value and refresh, reporting both ways it can fail to happen.
@@ -641,8 +658,10 @@ class AdoptedControl(AdoptedEntity):
         The messages name the property and the device rather than the circuit or
         the charger the curated keys name, because that is the whole identity an
         adopted device has: this integration models nothing about it beyond its
-        declaration, and the wire vocabulary is what the user will find in the
-        panel's own tree.
+        declaration. The property is named in the wire vocabulary, which is what
+        the user will find in the panel's own tree. The device is named as their
+        device list names it, which after a rename is not the wire's name -- see
+        `SpanPanelEntity._displayed_device_name`.
 
         No `hasattr` guard, unlike the curated controls. Those ask because a
         transport may not implement an optional protocol at all; this entity only
@@ -658,7 +677,7 @@ class AdoptedControl(AdoptedEntity):
             not_delivered_key="adopted_control_not_delivered",
             placeholders={
                 "property": f"{self._node_id}/{self._property_id}",
-                "device": self._device_label,
+                "device": self._displayed_device_name(),
             },
         )
         await self.coordinator.async_request_refresh()

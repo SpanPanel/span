@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 import pytest
-from span_panel_api import PublishOutcome, PublishState
+from span_panel_api import PublishOutcome, PublishState, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.const import CircuitPriority
@@ -18,15 +18,15 @@ from custom_components.span_panel.select import (
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .helpers import PANEL_NAME, add_through_platform, coordinator_stand_in
 
 
-def _make_coordinator_with_circuit(
-    hass: HomeAssistant,
+def _snapshot_with_circuit(
     circuit_id: str = "id",
     circuit_name: str = "name",
     priority: str = "SOC_THRESHOLD",
-) -> MagicMock:
-    """Build a mock coordinator whose .data contains a single circuit."""
+) -> SpanPanelSnapshot:
+    """Build a snapshot holding a single controllable circuit."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id=circuit_id,
         name=circuit_name,
@@ -38,19 +38,38 @@ def _make_coordinator_with_circuit(
         priority=priority,
         is_user_controllable=True,
     )
+    return SpanPanelSnapshotFactory.create(circuits={circuit_id: circuit})
 
-    snapshot = SpanPanelSnapshotFactory.create(
-        circuits={circuit_id: circuit},
-    )
 
+def _make_coordinator_with_circuit(
+    hass: HomeAssistant,
+    circuit_id: str = "id",
+    circuit_name: str = "name",
+    priority: str = "SOC_THRESHOLD",
+) -> MagicMock:
+    """Build a mock coordinator whose .data contains a single circuit."""
     coordinator = MagicMock()
     coordinator.hass = hass
-    coordinator.data = snapshot
+    coordinator.data = _snapshot_with_circuit(circuit_id, circuit_name, priority)
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.title = "SPAN Panel"
     coordinator.config_entry.data = {}
     coordinator.config_entry.options = {}
     return coordinator
+
+
+async def _added_select(hass: HomeAssistant) -> tuple[MagicMock, SpanPanelCircuitsSelect]:
+    """Return the circuit's priority select, added through a real platform, and its coordinator.
+
+    Added because a priority error names the circuit by its device, which Core
+    links only as it adds the select.
+    """
+    snapshot = _snapshot_with_circuit()
+    coordinator, entry = coordinator_stand_in(hass, snapshot)
+    coordinator.async_request_refresh = AsyncMock()
+    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, snapshot, "id", PANEL_NAME)
+    await add_through_platform(hass, entry, "select", select)
+    return coordinator, select
 
 
 def test_select_init_missing_circuit() -> None:
@@ -117,19 +136,12 @@ async def test_async_select_option_refusal_is_raised_at_the_caller(hass: HomeAss
     passed through rather than diagnosed here, and the entity contributes the
     name the user knows the circuit by.
     """
-    coordinator = _make_coordinator_with_circuit(hass)
-    circuit = coordinator.data.circuits["id"]
-
-    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "Test Device")
-    select.coordinator = coordinator
-    select.hass = MagicMock()
-
+    coordinator, select = await _added_select(hass)
     coordinator.client = AsyncMock()
     coordinator.client.set_circuit_priority = AsyncMock(
         side_effect=SpanPanelServerError("Circuit 'id' declares its shed priority not settable")
     )
 
-    select._get_circuit = MagicMock(return_value=circuit)
     with pytest.raises(HomeAssistantError) as raised:
         await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
 
@@ -144,13 +156,7 @@ async def test_async_select_option_refusal_is_raised_at_the_caller(hass: HomeAss
 @pytest.mark.asyncio
 async def test_async_select_option_undelivered_is_raised_at_the_caller(hass: HomeAssistant) -> None:
     """A `FAILED` outcome is the promise this change will not arrive later."""
-    coordinator = _make_coordinator_with_circuit(hass)
-    circuit = coordinator.data.circuits["id"]
-
-    select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "Test Device")
-    select.coordinator = coordinator
-    select.hass = MagicMock()
-
+    coordinator, select = await _added_select(hass)
     coordinator.client = AsyncMock()
     coordinator.client.set_circuit_priority = AsyncMock(
         return_value=PublishOutcome(
@@ -158,7 +164,6 @@ async def test_async_select_option_undelivered_is_raised_at_the_caller(hass: Hom
         )
     )
 
-    select._get_circuit = MagicMock(return_value=circuit)
     with pytest.raises(HomeAssistantError) as raised:
         await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
 
@@ -172,22 +177,9 @@ async def test_async_select_option_undelivered_is_raised_at_the_caller(hass: Hom
 @pytest.mark.asyncio
 async def test_async_select_option_success_refreshes_coordinator(hass: HomeAssistant) -> None:
     """Successful priority changes should refresh coordinator data."""
-    coordinator = _make_coordinator_with_circuit(hass)
-    coordinator.async_request_refresh = AsyncMock()
-
-    with patch(
-        "custom_components.span_panel.select.er.async_get"
-    ) as mock_async_get:
-        registry = MagicMock()
-        registry.async_get_entity_id.return_value = None
-        mock_async_get.return_value = registry
-        select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, coordinator.data, "id", "SPAN Panel"
-        )
-
+    coordinator, select = await _added_select(hass)
     coordinator.client = MagicMock()
     coordinator.client.set_circuit_priority = AsyncMock()
-    select.hass = MagicMock()
 
     await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
 

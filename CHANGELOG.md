@@ -13,6 +13,9 @@ All notable changes to this project will be documented in this file.
   the panel to load and draws the panel once it has loaded**, where it showed "Unable to connect to SPAN Panel" until Retry was pressed or the dashboard was
   opened again.
 
+- **An error from a breaker, circuit priority, charger or adopted-device control now names the circuit or device by the name you gave it in Home Assistant**,
+  where it kept the name the panel or the integration gave it.
+
 ## [2.3.3] - 11/2026
 
 **Install 2.3.3 before your panel updates to firmware r202645**, which gives the panel's circuits new device IDs: 2.3.3 carries every circuit entity, device,

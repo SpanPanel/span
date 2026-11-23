@@ -179,9 +179,9 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
 
-        # The charger's own name, kept because both ways this control can fail
-        # are reported to a person. `_evse_id` is the node id the wire uses; it
-        # names nothing the user can see on their dashboard.
+        # The charger's own name, for the log line of each command. `_evse_id` is
+        # the node id the wire uses; it names nothing the user can see on their
+        # dashboard.
         self._charger_name = evse_display_name(evse, panel_name, display_suffix)
 
         self._attr_device_info = evse_device_info(
@@ -301,6 +301,8 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         `_async_control` every control in this integration shares. A refusal
         never resolved an address; a `FAILED` outcome resolved one and was never
         handed over, which the library promises means it will not arrive later.
+        Either names the charger as its card is shown, the user's name for it
+        included.
         """
         client = self.coordinator.client
         await self._async_control(
@@ -308,7 +310,7 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
             command=f"a charge-current limit for {self._charger_name}",
             failed_key="evse_charge_limit_failed",
             not_delivered_key="evse_charge_limit_not_delivered",
-            placeholders={"charger": self._charger_name},
+            placeholders={"charger": self._displayed_device_name()},
         )
 
         await self.coordinator.async_request_refresh()

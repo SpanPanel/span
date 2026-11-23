@@ -16,6 +16,7 @@ from custom_components.span_panel.switch import (
 )
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+from .helpers import added_circuit_switch
 
 
 @pytest.fixture(autouse=True)
@@ -84,9 +85,7 @@ async def test_switch_turn_on_operation(hass: HomeAssistant) -> None:
         name="Kitchen Outlets",
         relay_state="OPEN",
     )
-    coordinator = _make_coordinator(hass, {"1": circuit})
-
-    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
+    coordinator, switch = await added_circuit_switch(hass, circuit)
     switch.async_write_ha_state = MagicMock()
     await switch.async_turn_on()
 
@@ -102,9 +101,7 @@ async def test_switch_turn_off_operation(hass: HomeAssistant) -> None:
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator(hass, {"1": circuit})
-
-    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
+    coordinator, switch = await added_circuit_switch(hass, circuit)
     switch.async_write_ha_state = MagicMock()
     await switch.async_turn_off()
 
@@ -128,12 +125,10 @@ async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone(
         name="Kitchen Outlets",
         relay_state="CLOSED",
     )
-    coordinator = _make_coordinator(hass, {"1": circuit})
+    coordinator, switch = await added_circuit_switch(hass, circuit)
     coordinator.client.set_circuit_relay = AsyncMock(
         side_effect=SpanPanelServerError("Circuit '1' declares its relay non-commandable")
     )
-
-    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
 
     with pytest.raises(HomeAssistantError) as raised:
@@ -153,19 +148,17 @@ async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone(
 async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions(
     hass: HomeAssistant,
 ) -> None:
-    """The identifier the entity was named from, not the wire id."""
+    """Its device is named by its breaker positions, not by the wire id."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="abc123",
         name="",
         relay_state="OPEN",
         tabs=[30, 32],
     )
-    coordinator = _make_coordinator(hass, {"abc123": circuit})
+    coordinator, switch = await added_circuit_switch(hass, circuit)
     coordinator.client.set_circuit_relay = AsyncMock(
         side_effect=SpanPanelServerError("Circuit 'abc123' declares its relay non-commandable")
     )
-
-    switch = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "abc123", "SPAN Panel")
     switch.async_write_ha_state = MagicMock()
 
     with pytest.raises(HomeAssistantError) as raised:

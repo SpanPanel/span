@@ -69,7 +69,7 @@ from .adapter_fixtures import (
 )
 from .captures_replay import HOMIE_PREFIX, replay
 from .factories import pv_binding_for
-from .helpers import register_panel_device
+from .helpers import add_through_platform, register_panel_device
 
 EVSE = "evse"
 EVSE_2 = "evse-2"
@@ -284,6 +284,19 @@ def _for(created: Sequence[SpanEvseNumber], tree: dict[str, dict[str, str]], dev
     matches = [entity for entity in created if entity._evse_id == serial]
     assert len(matches) == 1, f"{len(matches)} numbers created for {device_id}, expected 1"
     return matches[0]
+
+
+async def _added_for(
+    hass: HomeAssistant, created: Sequence[SpanEvseNumber], tree: dict[str, dict[str, str]], device_id: str
+) -> SpanEvseNumber:
+    """Return the number belonging to one charger, added through a real platform so it can be operated.
+
+    A charge-limit error names the charger by its device, which Core links only
+    as it adds the number.
+    """
+    entity = _for(created, tree, device_id)
+    await add_through_platform(hass, entity.coordinator.config_entry, "number", entity)
+    return entity
 
 
 def _refreshed(entity: SpanEvseNumber, snapshot: SpanPanelSnapshot | None) -> SpanEvseNumber:
@@ -812,7 +825,7 @@ async def test_the_write_reaches_the_wire_as_one_publish(hass: HomeAssistant) ->
     tree = schema_one_tree()
     client, bridge = _live_client()
     created = await _created(hass, schema_one_snapshot(tree), client)
-    entity = _for(created, tree, EVSE)
+    entity = await _added_for(hass, created, tree, EVSE)
     asked = _published(tree, EVSE, CEILING_TOPIC) - 8
 
     await entity.async_set_native_value(float(asked))
@@ -828,9 +841,10 @@ async def test_the_write_goes_to_the_charger_the_entity_belongs_to(hass: HomeAss
     tree = schema_one_tree()
     client, bridge = _live_client()
     created = await _created(hass, schema_one_snapshot(tree), client)
+    entity = await _added_for(hass, created, tree, EVSE_2)
     asked = _published(tree, EVSE_2, CEILING_TOPIC) - 8
 
-    await _for(created, tree, EVSE_2).async_set_native_value(float(asked))
+    await entity.async_set_native_value(float(asked))
 
     bridge.publish.assert_called_once_with(
         f"ebus/5/{EVSE_2}/config/user-max-charge-current/set", str(asked)
@@ -847,9 +861,10 @@ async def test_a_fractional_request_truncates_downward(hass: HomeAssistant) -> N
     tree = schema_one_tree()
     client, bridge = _live_client()
     created = await _created(hass, schema_one_snapshot(tree), client)
+    entity = await _added_for(hass, created, tree, EVSE)
     whole = _published(tree, EVSE, CEILING_TOPIC) - 8
 
-    await _for(created, tree, EVSE).async_set_native_value(whole + 0.7)
+    await entity.async_set_native_value(whole + 0.7)
 
     bridge.publish.assert_called_once_with(
         f"ebus/5/{EVSE}/config/user-max-charge-current/set", str(whole)
@@ -869,10 +884,11 @@ async def test_a_value_above_the_ceiling_is_refused_before_it_reaches_the_wire(
     tree = schema_one_tree()
     client, bridge = _live_client()
     created = await _created(hass, schema_one_snapshot(tree), client)
+    entity = await _added_for(hass, created, tree, EVSE)
     over = _published(tree, EVSE, CEILING_TOPIC) + 1
 
     with pytest.raises(HomeAssistantError) as raised:
-        await _for(created, tree, EVSE).async_set_native_value(float(over))
+        await entity.async_set_native_value(float(over))
 
     assert raised.value.translation_key == "evse_charge_limit_failed"
     bridge.publish.assert_not_called()
@@ -893,7 +909,7 @@ async def test_a_command_the_transport_never_handed_over_is_reported(
     client, bridge = _live_client()
     bridge.publish.return_value = None
     created = await _created(hass, schema_one_snapshot(tree), client)
-    entity = _for(created, tree, EVSE)
+    entity = await _added_for(hass, created, tree, EVSE)
     asked = _published(tree, EVSE, CEILING_TOPIC) - 8
 
     with pytest.raises(HomeAssistantError) as raised:
@@ -917,7 +933,7 @@ async def test_a_failure_names_the_charger_the_user_sees(hass: HomeAssistant) ->
     client, bridge = _live_client()
     bridge.publish.return_value = None
     created = await _created(hass, schema_one_snapshot(tree), client)
-    entity = _for(created, tree, EVSE)
+    entity = await _added_for(hass, created, tree, EVSE)
     asked = _published(tree, EVSE, CEILING_TOPIC) - 8
 
     with pytest.raises(HomeAssistantError) as raised:
