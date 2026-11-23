@@ -23,6 +23,7 @@ from custom_components.span_panel.id_builder import build_evse_unique_id
 from custom_components.span_panel.lock import SpanEvseLock, async_setup_entry
 
 from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory
+from .helpers import add_through_platform
 from .test_evse_charge_limit import _coordinator
 
 SERIAL: Final = "sp3-lock-001"
@@ -113,7 +114,7 @@ async def test_a_command_goes_through_the_librarys_lock_control(
         )
     )
     (lock,) = await _created(hass, _snapshot(), client)
-    lock.hass = hass
+    await add_through_platform(hass, lock.coordinator.config_entry, "lock", lock)
 
     await getattr(lock, method)()
 

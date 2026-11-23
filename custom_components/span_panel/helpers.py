@@ -326,15 +326,14 @@ def circuit_device_name(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
 
 
 def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str) -> str:
-    """Name a circuit the way its owner knows it, for a message addressed to them.
+    """Name a circuit by the panel's name for it, for a message addressed to its owner.
 
-    The panel's own name where there is one, and the tab identifier otherwise --
-    which is what the entity itself was named from, so an error names the thing
-    the user is looking at rather than a wire UUID. A meter outside the panel
-    has no tabs, and takes `outside_meter_label`, as its own device does.
-    `None` is accepted because a circuit can drop out of a snapshot between a
-    command and its failure, and an error message is the worst possible place
-    to raise a second error.
+    The panel's own name where there is one, and the tab identifier otherwise,
+    so a message names a circuit the user knows rather than a wire UUID. A
+    meter outside the panel has no tabs, and takes `outside_meter_label`, as
+    its own device does. `None` is accepted for a circuit the snapshot does
+    not hold, which `construct_shared_with_attribute` passes for a peer the
+    snapshot lacks.
     """
     if circuit is not None and circuit.measures_outside_panel:
         return outside_meter_label(circuit_id)

@@ -31,7 +31,6 @@ from .helpers import (
     circuit_device_name,
     circuit_has_a_breaker_switch,
     construct_circuit_identifier_from_tabs,
-    construct_circuit_label,
     construct_shared_with_attributes,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -316,6 +315,9 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         address, and a `FAILED` outcome that resolved one and was never handed
         over -- are raised by `_async_control`, which every control in this
         integration shares.
+
+        The circuit is named as its own device is shown, the user's name for it
+        included.
         """
         client = self.coordinator.client
         await self._async_control(
@@ -323,12 +325,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             command=f"a relay command for {self.entity_id}",
             failed_key="circuit_relay_failed",
             not_delivered_key="circuit_relay_not_delivered",
-            placeholders={
-                "circuit": construct_circuit_label(
-                    self.coordinator.data.circuits.get(self._circuit_id),
-                    self._circuit_id,
-                )
-            },
+            placeholders={"circuit": self._displayed_device_name()},
         )
 
         self._attr_is_on = is_on

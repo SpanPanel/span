@@ -313,13 +313,16 @@ def evse_display_name(
     panel_name: str,
     display_suffix: str | None = None,
 ) -> str:
-    """Return what this charger is called wherever a person reads about it.
+    """Return the name a charger's device card is registered under.
 
-    Separate from the builder below because a charger is named in two places
-    that have to agree: its device card, and any message about it. The wire
-    calls a charger by its node id, which is what the panel needs and what
-    nobody reading a notification can act on -- so anything user-facing asks
-    here instead.
+    It is what the device list shows until the user renames the charger there.
+    The errors its controls raise name the card as Home Assistant shows it
+    (`SpanPanelEntity._displayed_device_name`) rather than by this. Separate
+    from the builder below because those controls keep it as `_charger_name`,
+    to name the charger in the log line of each command they send
+    (`command=`). The wire calls a charger by its node id, which is what the
+    panel needs and what nobody reading a message can act on, so nothing
+    user-facing names it by that.
     """
     base_name = evse.model or "EV Charger"
     name = f"{base_name} ({display_suffix})" if display_suffix else base_name

@@ -21,7 +21,6 @@ from .helpers import (
     circuit_device_name,
     circuit_has_a_priority_select,
     construct_circuit_identifier_from_tabs,
-    construct_circuit_label,
     construct_tabs_attribute,
     construct_voltage_attribute,
     remove_withdrawn_controls,
@@ -240,6 +239,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         resolved an address and was never handed to the broker, which the
         library promises means it will not arrive later either. Both live in
         `_async_control`, which every control in this integration shares.
+
+        The circuit is named as its own device is shown, the user's name for it
+        included.
         """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
@@ -250,7 +252,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             command=f"a priority change for {self.entity_id}",
             failed_key="circuit_priority_failed",
             not_delivered_key="circuit_priority_not_delivered",
-            placeholders={"circuit": construct_circuit_label(self._get_circuit(), self.id)},
+            placeholders={"circuit": self._displayed_device_name()},
         )
 
         await self.coordinator.async_request_refresh()

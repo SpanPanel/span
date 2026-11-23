@@ -32,7 +32,7 @@ from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
 from .id_builder import build_circuit_device_identifier
 from .naming import circuit_object_id_suffix
-from .util import circuit_device_info, snapshot_to_device_info
+from .util import circuit_device_info, device_display_name, snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,7 +157,9 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         user sees is `failed_key` / `not_delivered_key` with `placeholders`,
         which is why the reason is added here rather than at each call site: it
         is the one placeholder every one of these messages carries, and the one
-        a caller cannot know before the call.
+        a caller cannot know before the call. A placeholder that names the
+        circuit or device being commanded is `_displayed_device_name`'s answer,
+        so the message names it as the user's device list does.
 
         Returns the outcome for a caller that has something to say about a
         delivered command -- `no_op`, say, or the topic it went to.
@@ -182,6 +184,21 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             )
 
         return outcome
+
+    def _displayed_device_name(self) -> str:
+        """Return this entity's device as Home Assistant shows it, for a message that names it.
+
+        The user's name for the device, else the one it is registered under
+        (`util.device_display_name`), read from the entity's `device_entry` when
+        the message is built, so a rename made since setup is the name it
+        carries. An added control always has a named device: Core links the
+        device before it adds the entity, and every device a control sits on is
+        registered under a name.
+        """
+        device = self.device_entry
+        if device is None or not (name := device_display_name(device)):
+            raise RuntimeError(f"{self.entity_id} has no named device to report")
+        return name
 
     async def async_added_to_hass(self) -> None:
         """Tell the coordinator which snapshot fields this entity reads.

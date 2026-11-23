@@ -96,7 +96,7 @@ class SpanEvseLock(SpanPanelEntity, LockEntity):
         evse = snapshot.evse.get(evse_id, EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
-        # Named in the errors a person reads; `_evse_id` is the wire's node id.
+        # Named in the log line of each command; `_evse_id` is the wire's node id.
         self._charger_name = evse_display_name(evse, panel_name, display_suffix)
 
         self._attr_device_info = evse_device_info(
@@ -158,14 +158,15 @@ class SpanEvseLock(SpanPanelEntity, LockEntity):
         """Ask the panel to move the lock, through the control path every control shares.
 
         A refusal and an undelivered command both reach the caller; the state
-        stays what the charger reports until it republishes.
+        stays what the charger reports until it republishes. Either names the
+        charger as its card is shown, the user's name for it included.
         """
         await self._async_control(
             self._description.set_fn(self.coordinator.client, self._evse_id, locked),
             command=f"a lock command for {self._charger_name}",
             failed_key="evse_lock_failed",
             not_delivered_key="evse_lock_not_delivered",
-            placeholders={"charger": self._charger_name},
+            placeholders={"charger": self._displayed_device_name()},
         )
         await self.coordinator.async_request_refresh()
 

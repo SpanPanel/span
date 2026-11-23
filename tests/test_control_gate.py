@@ -1001,27 +1001,17 @@ async def test_a_refused_relay_leaves_the_switch_where_it_was(
     Nothing changed on the panel, so no coordinator update is coming to correct
     an optimistic write — it would simply stay wrong.
     """
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+    from .factories import SpanCircuitSnapshotFactory
+    from .helpers import added_circuit_switch
 
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
-    coordinator = MagicMock()
-    coordinator.hass = hass
-    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
-    coordinator.config_entry = MagicMock()
-    coordinator.config_entry.options = {}
-    coordinator.config_entry.title = "SPAN Panel"
-    coordinator.config_entry.data = {}
-    coordinator.client = MagicMock()
+    coordinator, entity = await added_circuit_switch(hass, circuit)
     coordinator.client.set_circuit_relay = AsyncMock(
         side_effect=ServiceValidationError("refused")
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
-    entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
 
@@ -1043,21 +1033,13 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
     later -- and it is worded as the different fact it is: this one resolved an
     address and was never handed to the broker.
     """
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+    from .factories import SpanCircuitSnapshotFactory
+    from .helpers import added_circuit_switch
 
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
-    coordinator = MagicMock()
-    coordinator.hass = hass
-    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
-    coordinator.config_entry = MagicMock()
-    coordinator.config_entry.options = {}
-    coordinator.config_entry.title = "SPAN Panel"
-    coordinator.config_entry.data = {}
-    coordinator.client = MagicMock()
+    coordinator, entity = await added_circuit_switch(hass, circuit)
     coordinator.client.set_circuit_relay = AsyncMock(
         return_value=PublishOutcome(
             state=PublishState.FAILED,
@@ -1067,8 +1049,6 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
-    entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
 
@@ -1096,21 +1076,13 @@ async def test_a_handed_over_relay_command_still_shows_the_requested_state(
     already have been acted on, so both keep the optimistic write that `FAILED`
     and a refusal are denied.
     """
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+    from .factories import SpanCircuitSnapshotFactory
+    from .helpers import added_circuit_switch
 
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1", name="Kitchen", relay_state="OPEN", is_user_controllable=True
     )
-    coordinator = MagicMock()
-    coordinator.hass = hass
-    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
-    coordinator.config_entry = MagicMock()
-    coordinator.config_entry.options = {}
-    coordinator.config_entry.title = "SPAN Panel"
-    coordinator.config_entry.data = {}
-    coordinator.client = MagicMock()
+    coordinator, entity = await added_circuit_switch(hass, circuit)
     coordinator.client.set_circuit_relay = AsyncMock(
         return_value=PublishOutcome(
             state=state,
@@ -1121,8 +1093,6 @@ async def test_a_handed_over_relay_command_still_shows_the_requested_state(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, coordinator.data, "1", "SPAN Panel")
-    entity.hass = hass
     entity.async_write_ha_state = MagicMock()
 
     await entity.async_turn_on()

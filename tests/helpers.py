@@ -11,6 +11,7 @@ from typing import Any, Final
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import data_entry_flow
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -28,6 +29,7 @@ from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.sensor_definitions import PANEL_ENERGY_SENSORS
 from custom_components.span_panel.sensor_panel import SpanPanelEnergySensor
+from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 from custom_components.span_panel.util import circuit_device_info
 
 from .factories import SpanPanelSnapshotFactory, pv_binding_for
@@ -304,6 +306,49 @@ def coordinator_stand_in(
         setup_snapshot=snapshot,
     )
     return coordinator, entry
+
+
+async def add_through_platform(
+    hass: HomeAssistant, entry: ConfigEntry, domain: str, entity: Entity
+) -> MockEntityPlatform:
+    """Add one entity through a real platform, as setup adds it, and return the platform.
+
+    Core links the entity to its device as it adds it, and that `device_entry`
+    is what a control names its device by in an error. An entity that was only
+    constructed has none, so a test that operates a control adds it here first.
+
+    `entry` must be added to `hass` with the panel's device registered, as
+    `coordinator_stand_in` leaves it: the registry refuses a device for an
+    unknown entry, and Core drops an entity whose device names a parent that
+    does not exist, logging an error rather than raising.
+    """
+    platform = MockEntityPlatform(
+        hass, domain=domain, platform_name=DOMAIN, logger=logging.getLogger(__name__)
+    )
+    platform.config_entry = entry
+    await platform.async_add_entities([entity])
+    await hass.async_block_till_done()
+    assert entity.device_entry is not None, f"the platform did not add {entity.unique_id}"
+    return platform
+
+
+async def added_circuit_switch(
+    hass: HomeAssistant, circuit: SpanCircuitSnapshot
+) -> tuple[MagicMock, SpanPanelCircuitsSwitch]:
+    """Return a circuit's breaker switch, added through a real platform, and its coordinator.
+
+    The coordinator is `coordinator_stand_in`'s on a panel holding `circuit`,
+    with an async client and refresh for the switch to write through. Added
+    because a breaker error names the circuit by its device, which Core links
+    only as it adds the switch.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(circuits={circuit.circuit_id: circuit})
+    coordinator, entry = coordinator_stand_in(hass, snapshot)
+    coordinator.client = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    switch = SpanPanelCircuitsSwitch(coordinator, snapshot, circuit.circuit_id, PANEL_NAME)
+    await add_through_platform(hass, entry, "switch", switch)
+    return coordinator, switch
 
 
 @dataclass(frozen=True, slots=True)

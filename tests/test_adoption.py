@@ -9,6 +9,7 @@ rather than listing their entities.
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -17,10 +18,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, InvalidStateError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from span_panel_api import AdoptedDevice, AdoptedProperty, PublishOutcome, PublishState
@@ -31,7 +33,9 @@ from custom_components.span_panel.adoption import (
     CONTROL_PLATFORMS,
     DEVICE_CLASS_BY_UNIT,
     MAX_STATE_LENGTH,
+    AdoptedControl,
     AdoptedNumber,
+    AdoptedSwitch,
     adopted_control_count,
     adopted_identifier,
     adopted_unique_id,
@@ -59,7 +63,7 @@ from custom_components.span_panel.util import (
 )
 
 from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory, pv_binding_for
-from .helpers import register_panel_device
+from .helpers import add_through_platform, register_panel_device
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -506,52 +510,28 @@ def test_a_number_takes_its_bounds_from_the_declaration(hass: HomeAssistant) -> 
     assert (entity.native_min_value, entity.native_max_value, entity.native_step) == (10.0, 80.0, 5.0)
 
 
-async def test_a_switch_publishes_the_vocabulary_homie_defines(hass: HomeAssistant) -> None:
+async def test_a_switch_publishes_the_vocabulary_homie_defines(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """`true` and `false`, not Home Assistant's `on` and `off`."""
-    declaration = _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True)
-    snapshot = _snapshot(_device(properties=(declaration,)))
-    coordinator = MagicMock(data=snapshot)
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel)
     coordinator.client.set_adopted_property = AsyncMock()
-    coordinator.async_request_refresh = AsyncMock()
 
-    (entity,) = create_adopted_switches(
-        coordinator,
-        snapshot,
-        dr.async_get(hass),
-        config_entry_id=ENTRY_ID,
-        panel_device_id="panel-device-id",
-        overlay=CurationOverlay.empty(),
-    )
     await entity.async_turn_on()
 
     coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "relay", "enabled", "true")
 
 
-def _adopted_switch(hass: HomeAssistant) -> tuple[MagicMock, object]:
-    """One adopted switch and the coordinator whose client it writes through."""
-    declaration = _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True)
-    snapshot = _snapshot(_device(properties=(declaration,)))
-    coordinator = MagicMock(data=snapshot)
-    coordinator.async_request_refresh = AsyncMock()
-    (entity,) = create_adopted_switches(
-        coordinator,
-        snapshot,
-        dr.async_get(hass),
-        config_entry_id=ENTRY_ID,
-        panel_device_id="panel-device-id",
-        overlay=CurationOverlay.empty(),
-    )
-    return coordinator, entity
-
-
-async def test_an_adopted_control_raises_when_the_command_was_not_delivered(hass: HomeAssistant) -> None:
+async def test_an_adopted_control_raises_when_the_command_was_not_delivered(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """A `FAILED` outcome is the promise that nothing will happen later.
 
     The library refuses such a write rather than letting paho queue it, so
     returning normally would tell the person who flipped the switch that their
     generator changed state when the command never left the process.
     """
-    coordinator, entity = _adopted_switch(hass)
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel)
     coordinator.client.set_adopted_property = AsyncMock(
         return_value=PublishOutcome(
             state=PublishState.FAILED,
@@ -570,9 +550,11 @@ async def test_an_adopted_control_raises_when_the_command_was_not_delivered(hass
     coordinator.async_request_refresh.assert_not_awaited()
 
 
-async def test_an_adopted_control_translates_the_librarys_refusal(hass: HomeAssistant) -> None:
+async def test_an_adopted_control_translates_the_librarys_refusal(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """A refusal reaches the caller in the user's language, like a curated one."""
-    coordinator, entity = _adopted_switch(hass)
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel)
     coordinator.client.set_adopted_property = AsyncMock(
         side_effect=SpanPanelServerError("No settable adopted property relay/enabled on device 'generator-1'")
     )
@@ -588,24 +570,198 @@ async def test_an_adopted_control_translates_the_librarys_refusal(hass: HomeAssi
     coordinator.async_request_refresh.assert_not_awaited()
 
 
-async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(hass: HomeAssistant) -> None:
-    """`5`, never `5.0`: a float literal is outside the declared datatype."""
-    declaration = _property(
-        node_id="generator", property_id="setpoint", datatype="integer", fmt="0:100:5", settable=True, unit=None
-    )
-    snapshot = _snapshot(_device(properties=(declaration,)))
-    coordinator = MagicMock(data=snapshot)
-    coordinator.client.set_adopted_property = AsyncMock()
-    coordinator.async_request_refresh = AsyncMock()
+# -- An adopted control's errors name its device as the device list does ----
 
+
+def _refused() -> AsyncMock:
+    """Return a write the library refuses, which never published anything."""
+    return AsyncMock(
+        side_effect=SpanPanelServerError("No settable adopted property relay/enabled on device 'generator-1'")
+    )
+
+
+def _not_delivered() -> AsyncMock:
+    """Return a write resolved to an address and never handed to the broker."""
+    return AsyncMock(
+        return_value=PublishOutcome(
+            state=PublishState.FAILED,
+            topic=None,
+            value="true",
+            detail="broker not connected; refused rather than queued",
+        )
+    )
+
+
+BOTH_WAYS_A_WRITE_FAILS = pytest.mark.parametrize(
+    ("failing_write", "translation_key"),
+    [(_refused, "adopted_control_failed"), (_not_delivered, "adopted_control_not_delivered")],
+    ids=["refused", "not-delivered"],
+)
+
+
+def _rename_generator(hass: HomeAssistant, entry_id: str, name: str) -> None:
+    """Rename the generator's card in Home Assistant, as the user does from its device page."""
+    registry = dr.async_get(hass)
+    identifier = resolve_identifier(registry, PANEL_SERIAL, _device(), config_entry_id=entry_id)
+    card = registry.async_get_device_by_identifier((DOMAIN, identifier), entry_id)
+    assert card is not None, "the generator has no card to rename"
+    registry.async_update_device(card.id, name_by_user=name)
+
+
+def _registered_generator(
+    hass: HomeAssistant,
+    registered_panel: tuple[str, str],
+    declaration: AdoptedProperty,
+    *,
+    renamed_to: str | None = None,
+) -> tuple[ConfigEntry, SpanPanelSnapshot, MagicMock]:
+    """Register the card of a generator declaring one property, as setup registers it.
+
+    Returns its entry, a snapshot carrying it, and a coordinator holding that
+    snapshot. `renamed_to` renames the generator after its card is registered
+    and before any control is set up, which is how a restart after a rename
+    finds it.
+    """
+    entry_id, panel_device_id = registered_panel
+    entry = hass.config_entries.async_get_entry(entry_id)
+    assert entry is not None
+    snapshot = _snapshot(_device(properties=(declaration,)))
+    async_register_adopted_devices(hass, entry_id, snapshot, panel_device_id=panel_device_id)
+    if renamed_to is not None:
+        _rename_generator(hass, entry_id, renamed_to)
+    coordinator = MagicMock(data=snapshot)
+    coordinator.async_request_refresh = AsyncMock()
+    return entry, snapshot, coordinator
+
+
+async def _enabled_and_added(hass: HomeAssistant, entry: ConfigEntry, domain: str, entity: AdoptedControl) -> None:
+    """Enable an adopted control's row, as its user does, and add it through a real platform.
+
+    Added because the name its errors carry is the one Core holds: a platform
+    gives the entity its `device_entry` as it adds it, and Core replaces it as
+    the device is renamed. Enabled first because every adopted entity registers
+    disabled, and a disabled entity is never added -- nor operated.
+    """
+    assert entity.unique_id is not None
+    er.async_get(hass).async_get_or_create(domain, DOMAIN, entity.unique_id, config_entry=entry, disabled_by=None)
+    await add_through_platform(hass, entry, domain, entity)
+
+
+async def _live_adopted_switch(
+    hass: HomeAssistant, registered_panel: tuple[str, str], *, renamed_to: str | None = None
+) -> tuple[MagicMock, AdoptedSwitch]:
+    """One adopted switch, added to Home Assistant the way setup adds it, and its coordinator."""
+    declaration = _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True)
+    entry, snapshot, coordinator = _registered_generator(hass, registered_panel, declaration, renamed_to=renamed_to)
+    (entity,) = create_adopted_switches(
+        coordinator,
+        snapshot,
+        dr.async_get(hass),
+        config_entry_id=entry.entry_id,
+        panel_device_id=registered_panel[1],
+        overlay=CurationOverlay.empty(),
+    )
+    await _enabled_and_added(hass, entry, "switch", entity)
+    return coordinator, entity
+
+
+async def _live_adopted_number(
+    hass: HomeAssistant, registered_panel: tuple[str, str], declaration: AdoptedProperty
+) -> tuple[MagicMock, AdoptedNumber]:
+    """One adopted number for `declaration`, added the way setup adds it, and its coordinator."""
+    entry, snapshot, coordinator = _registered_generator(hass, registered_panel, declaration)
     (entity,) = create_adopted_numbers(
         coordinator,
         snapshot,
         dr.async_get(hass),
-        config_entry_id=ENTRY_ID,
-        panel_device_id="panel-device-id",
+        config_entry_id=entry.entry_id,
+        panel_device_id=registered_panel[1],
         overlay=CurationOverlay.empty(),
     )
+    await _enabled_and_added(hass, entry, "number", entity)
+    return coordinator, entity
+
+
+async def _device_named_by_failed_write(
+    entity: AdoptedSwitch, coordinator: MagicMock, failing_write: Callable[[], AsyncMock], translation_key: str
+) -> str:
+    """Operate the switch through a write that fails, and return the device its error names."""
+    coordinator.client.set_adopted_property = failing_write()
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_turn_on()
+
+    assert raised.value.translation_key == translation_key
+    assert raised.value.translation_placeholders is not None
+    return raised.value.translation_placeholders["device"]
+
+
+@BOTH_WAYS_A_WRITE_FAILS
+async def test_an_adopted_controls_error_names_the_device_as_the_user_renamed_it(
+    hass: HomeAssistant,
+    registered_panel: tuple[str, str],
+    failing_write: Callable[[], AsyncMock],
+    translation_key: str,
+) -> None:
+    """The user's device list shows the name they gave the generator, not the panel's.
+
+    An error naming a device the user cannot find in that list is an error they
+    cannot act on, and after a rename the panel's own name is not in it.
+    """
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel, renamed_to="Shed Generator")
+
+    assert await _device_named_by_failed_write(entity, coordinator, failing_write, translation_key) == (
+        "Shed Generator"
+    )
+
+
+@BOTH_WAYS_A_WRITE_FAILS
+async def test_an_adopted_controls_error_names_a_device_nobody_renamed_by_its_label(
+    hass: HomeAssistant,
+    registered_panel: tuple[str, str],
+    failing_write: Callable[[], AsyncMock],
+    translation_key: str,
+) -> None:
+    """With no rename, the device list shows the label the card was registered under."""
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel)
+
+    assert await _device_named_by_failed_write(entity, coordinator, failing_write, translation_key) == (
+        "Backup Generator"
+    )
+
+
+@BOTH_WAYS_A_WRITE_FAILS
+async def test_a_rename_after_setup_reaches_the_next_error(
+    hass: HomeAssistant,
+    registered_panel: tuple[str, str],
+    failing_write: Callable[[], AsyncMock],
+    translation_key: str,
+) -> None:
+    """The name is read as the write is made, not captured as the entity is built.
+
+    Renaming a device does not set its entities up again, so a name captured at
+    setup is the old one for as long as Home Assistant keeps running.
+    """
+    coordinator, entity = await _live_adopted_switch(hass, registered_panel)
+    before = await _device_named_by_failed_write(entity, coordinator, failing_write, translation_key)
+
+    _rename_generator(hass, registered_panel[0], "Shed Generator")
+    await hass.async_block_till_done()
+    after = await _device_named_by_failed_write(entity, coordinator, failing_write, translation_key)
+
+    assert (before, after) == ("Backup Generator", "Shed Generator")
+
+
+async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """`5`, never `5.0`: a float literal is outside the declared datatype."""
+    declaration = _property(
+        node_id="generator", property_id="setpoint", datatype="integer", fmt="0:100:5", settable=True, unit=None
+    )
+    coordinator, entity = await _live_adopted_number(hass, registered_panel, declaration)
+    coordinator.client.set_adopted_property = AsyncMock()
+
     await entity.async_set_native_value(45.0)
 
     coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "generator", "setpoint", "45")
@@ -666,6 +822,41 @@ def test_a_device_whose_whole_declaration_is_info_still_gets_a_card(hass: HomeAs
     assert registered.model == "GEN-9000"
     assert registered.manufacturer == "Example Power"
     assert registered.sw_version == "3.2.1"
+
+
+def _registered_card_name(hass: HomeAssistant, registered_panel: tuple[str, str], device: AdoptedDevice) -> str | None:
+    """Register `device`'s card as setup does, and return the name it was registered under."""
+    entry_id, panel_device_id = registered_panel
+    async_register_adopted_devices(hass, entry_id, _snapshot(device), panel_device_id=panel_device_id)
+    card = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, adopted_identifier(PANEL_SERIAL, device.device_id)), entry_id
+    )
+    assert card is not None
+    return card.name
+
+
+def test_a_nameless_device_whose_type_ends_in_a_dot_is_named_by_its_last_segment(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A malformed `$type` from a publisher this integration does not model still names its card.
+
+    The library skips only a device declaring no type at all, so a trailing
+    dot reaches the label. Its last segment was the empty string after the dot,
+    so Core named the new card after the panel's entry and blanked the name on
+    the next load.
+    """
+    device = replace(_device(), name=None, device_type="energy.ebus.device.")
+
+    assert _registered_card_name(hass, registered_panel, device) == "Device"
+
+
+def test_a_nameless_device_whose_type_is_only_dots_is_named_by_its_id(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Where the type has no segment to name the card from, its wire id does, which is never empty."""
+    device = replace(_device(), name=None, device_type="...")
+
+    assert _registered_card_name(hass, registered_panel, device) == "generator-1"
 
 
 def test_registration_freezes_the_anchor_before_any_entity_resolves_it(hass: HomeAssistant, registered_panel: tuple[str, str]) -> None:
