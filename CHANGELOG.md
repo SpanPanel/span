@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.4] - 11/2026
+
+### Fixed
+
+- **The SPAN Panel card and the sidebar dashboard now show a panel and each of its battery, charger and solar devices by the name you gave it in Home
+  Assistant**, where a renamed device kept the name the integration gave it.
+
 ## [2.3.3] - 11/2026
 
 **Install 2.3.3 before your panel updates to firmware r202645**, which gives the panel's circuits new device IDs: 2.3.3 carries every circuit entity, device,

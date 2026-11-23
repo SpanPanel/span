@@ -37,6 +37,7 @@ from .factories import (
     pv_binding_for,
 )
 from .helpers import (
+    PANEL_NAME,
     count_panel_describes_breakers,
     register_circuit_device,
     register_panel_device,
@@ -139,8 +140,8 @@ async def _panel_holding(
     return panel_device_id
 
 
-async def _ask_topology(hass: HomeAssistant, device_id: str) -> dict[str, dict[str, object]]:
-    """Answer the topology for the panel whose device registry ID is `device_id`, and return its circuits."""
+async def _topology_result(hass: HomeAssistant, device_id: str) -> dict[str, object]:
+    """Answer the topology for the panel whose device registry ID is `device_id`, and return it."""
     connection = _make_mock_connection()
 
     await _handle_panel_topology_inner(
@@ -148,7 +149,15 @@ async def _ask_topology(hass: HomeAssistant, device_id: str) -> dict[str, dict[s
     )
 
     connection.send_error.assert_not_called()
-    circuits: dict[str, dict[str, object]] = connection.send_result.call_args.args[1]["circuits"]
+    result: object = connection.send_result.call_args.args[1]
+    assert isinstance(result, dict)
+    return result
+
+
+async def _ask_topology(hass: HomeAssistant, device_id: str) -> dict[str, dict[str, object]]:
+    """Answer the topology for the panel whose device registry ID is `device_id`, and return its circuits."""
+    circuits = (await _topology_result(hass, device_id))["circuits"]
+    assert isinstance(circuits, dict)
     return circuits
 
 
@@ -683,6 +692,58 @@ class TestHandlePanelTopology:
         # BESS entity should appear.
         bess_entities = result["sub_devices"][bess_device.id]["entities"]
         assert "sensor.span_panel_battery_level" in bess_entities
+
+    @pytest.mark.parametrize(
+        ("name_by_user", "expected"),
+        [(None, PANEL_NAME), ("Garage Panel", "Garage Panel")],
+        ids=["not_renamed", "renamed"],
+    )
+    async def test_topology_names_the_panel_as_home_assistant_does(
+        self, hass: HomeAssistant, name_by_user: str | None, expected: str
+    ) -> None:
+        """`device_name` is the name the user gave the panel's device, else the integration's.
+
+        A rename in Home Assistant is stored in `name_by_user` and leaves `name`
+        as the integration registered it. The card titles itself from
+        `device_name`, so reading `name` alone kept the default title after a
+        rename, and two panels the user had told apart showed the same one.
+        """
+        snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-242424-001")
+        panel_device_id = await _panel_holding(hass, snapshot, {})
+        dr.async_get(hass).async_update_device(panel_device_id, name_by_user=name_by_user)
+
+        result = await _topology_result(hass, panel_device_id)
+
+        assert result["device_name"] == expected
+
+    @pytest.mark.parametrize(
+        ("name_by_user", "expected"),
+        [(None, "SPAN Panel Battery"), ("Backup Battery", "Backup Battery")],
+        ids=["not_renamed", "renamed"],
+    )
+    async def test_topology_names_each_sub_device_as_home_assistant_does(
+        self, hass: HomeAssistant, name_by_user: str | None, expected: str
+    ) -> None:
+        """A sub-device's record carries the name the user gave its device, else the integration's.
+
+        The card names each sub-device's tile from its record, so a rename in
+        Home Assistant reaches the tile the way it reaches the device list.
+        """
+        serial = "sp3-242424-001"
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number=serial,
+            battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0),
+        )
+        panel_device_id = await _panel_holding(hass, snapshot, {})
+        battery = _register_sub_device(
+            hass, "span_entry", f"{serial}_bess", "SPAN Panel Battery", panel_device_id
+        )
+        dr.async_get(hass).async_update_device(battery.id, name_by_user=name_by_user)
+
+        sub_devices = (await _topology_result(hass, panel_device_id))["sub_devices"]
+
+        assert isinstance(sub_devices, dict)
+        assert sub_devices[battery.id]["name"] == expected
 
     @pytest.mark.asyncio
     async def test_evse_feed_circuit_entities_found(self, hass: HomeAssistant):

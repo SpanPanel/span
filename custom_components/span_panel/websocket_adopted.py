@@ -59,6 +59,7 @@ from .curation import (
 from .entry_reloads import async_request_reload
 from .extension import adoptable, extension_curation_key, resolve_platform
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
+from .util import device_display_name
 from .websocket_panel import resolve_panel_device
 
 if TYPE_CHECKING:
@@ -457,7 +458,7 @@ def _device_label(card: dr.DeviceEntry | None, fallback: str) -> str:
     """
     if card is None:
         return fallback
-    return card.name_by_user or card.name or fallback
+    return device_display_name(card) or fallback
 
 
 def _resolve_panel_entry(
