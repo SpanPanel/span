@@ -183,10 +183,8 @@ class MonitoredCircuit:
     its first member: that key is stable while the membership is, which is
     enough for alerts and overrides, neither of which is an entity.
 
-    `name` is the panel's name for the point, each member's label joined with " + ":
-    the alert event's `alert_name`, which automations read, so a rename in Home
-    Assistant never changes it. The alert's text names the point as Home
-    Assistant shows it instead (`CurrentMonitor._display_name`).
+    A point carries no name: an alert names it as Home Assistant shows it, read
+    from the device registry when the alert fires (`CurrentMonitor._alert_name`).
 
     `rating_a` is the rating judged against and `panel_rating_a` the breaker rating the
     panel published, each None where a circuit, or the capacity of a group, is unknown.
@@ -204,7 +202,6 @@ class MonitoredCircuit:
 
     point_id: str
     members: tuple[str, ...]
-    name: str
     current_a: float | None
     rating_a: float | None
     panel_rating_a: float | None
@@ -229,9 +226,6 @@ def monitored_circuits(
         point = MonitoredCircuit(
             point_id=key,
             members=members,
-            name=" + ".join(
-                construct_circuit_label(snapshot.circuits[member], member) for member in members
-            ),
             current_a=snapshot.circuits[key].current_a,
             rating_a=meter_capacity_a((spaces[m], r.judged_a) for m, r in resolved.items()),
             panel_rating_a=meter_capacity_a((spaces[m], r.panel_a) for m, r in resolved.items()),
@@ -248,9 +242,6 @@ def monitored_circuits(
             points[circuit_id] = MonitoredCircuit(
                 point_id=circuit_id,
                 members=(circuit_id,),
-                # Its label, as a shared meter's members are named above: the
-                # panel's name, or its breaker positions, never its wire id.
-                name=construct_circuit_label(circuit, circuit_id),
                 current_a=circuit.current_a,
                 rating_a=rating.judged_a,
                 panel_rating_a=rating.panel_a,
@@ -781,8 +772,7 @@ class CurrentMonitor:
                     self._hass,
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
-                    alert_name=point.name,
-                    display_name=self._display_name(point, snapshot),
+                    alert_name=self._alert_name(point, snapshot),
                     alert_id=circuit_id,
                     alert_source="circuit",
                     current_a=alert.current_a,
@@ -803,8 +793,7 @@ class CurrentMonitor:
                     self._hass,
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
-                    alert_name=point.name,
-                    display_name=self._display_name(point, snapshot),
+                    alert_name=self._alert_name(point, snapshot),
                     alert_id=circuit_id,
                     alert_source="circuit",
                     current_a=alert.current_a,
@@ -821,11 +810,11 @@ class CurrentMonitor:
                     entity_id=self._resolve_circuit_entity_id(circuit_id),
                 )
 
-    def _display_name(self, point: MonitoredCircuit, snapshot: SpanPanelSnapshot) -> str:
-        """Name a point as Home Assistant shows it, for the text of the alert it raises.
+    def _alert_name(self, point: MonitoredCircuit, snapshot: SpanPanelSnapshot) -> str:
+        """Name a point as Home Assistant shows it, for the alert it raises.
 
         Each member's device as Home Assistant shows it (`util.circuit_display_name`),
-        joined as `MonitoredCircuit.name` joins the panel's names. Asked when an
+        those of circuits that share a meter joined with " + ". Asked when an
         alert fires rather than held, so a device renamed since setup is named
         by its new name in the next alert.
         """
@@ -864,8 +853,8 @@ class CurrentMonitor:
                 self._mains_overrides.get(leg, {}), self.get_global_settings()
             )
 
-            # The mains has no device of its own, so its text and its event both
-            # name the leg by its own name.
+            # The mains has no device of its own, so its alert names the leg by
+            # its own name.
             leg_name = f"Mains {leg.replace('_', ' ').title()}"
 
             alert = check_spike(state, current, rating, spike_pct, cooldown_m)
@@ -875,7 +864,6 @@ class CurrentMonitor:
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=leg_name,
-                    display_name=leg_name,
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,
@@ -898,7 +886,6 @@ class CurrentMonitor:
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=leg_name,
-                    display_name=leg_name,
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,

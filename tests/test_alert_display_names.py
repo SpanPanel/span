@@ -1,22 +1,23 @@
-"""A current alert's text names the circuit as Home Assistant shows it; its event keeps the panel's name.
+"""A current alert names the circuit as Home Assistant shows it, in its text and in its event.
 
 A user who renames a circuit's device in Home Assistant finds it under that name
-everywhere Home Assistant shows it, so a notification naming the circuit by the
+everywhere Home Assistant shows it, so an alert naming the circuit by the
 panel's name names one they cannot find. The notification's title and message,
-through `{name}`, carry the device's name as Home Assistant shows it
-(`util.circuit_display_name`), read when the alert fires, so a rename made since
-setup reaches the next alert. Their `{entity_id}` is the entity ID of the
-point's Current sensor, as the documentation has always said.
+through `{name}`, and the `span_panel_current_alert` event's `alert_name` carry
+one name: the device's as Home Assistant shows it (`util.circuit_display_name`),
+read when the alert fires, so a rename made since setup reaches the next alert.
+The event carries no second name beside it.
 
-The `span_panel_current_alert` event is read by automations, so its
-`alert_name` stays the panel's name and its `alert_id` the circuit's id, and
-`alert_display_name` carries the name the text uses beside them.
+An automation that must not follow a rename reads the event's `alert_id`, the
+circuit's id, which a rename never changes. The text's `{entity_id}` is the
+entity ID of the point's Current sensor, as the documentation has always said.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+import logging
 from typing import Final
 
 from homeassistant.core import Event, HomeAssistant, ServiceCall
@@ -142,8 +143,8 @@ def _texts(calls: list[ServiceCall]) -> list[tuple[object, object]]:
     return [(call.data["title"], call.data["message"]) for call in calls]
 
 
-def _names(events: list[Event]) -> list[tuple[object, object]]:
-    return [(event.data["alert_name"], event.data["alert_display_name"]) for event in events]
+def _names(events: list[Event]) -> list[object]:
+    return [event.data["alert_name"] for event in events]
 
 
 @pytest.fixture
@@ -159,18 +160,28 @@ def alerts(hass: HomeAssistant) -> list[Event]:
 
 
 async def test_a_renamed_circuits_notification_carries_the_rename(
-    hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
+    hass: HomeAssistant,
+    notified: list[ServiceCall],
+    alerts: list[Event],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The title and message name the circuit by the user's name, and the event's `alert_name` stays the panel's."""
+    """The title, the message, the event's `alert_name` and the log line name the circuit by the user's name."""
     circuit = _circuit("circuit-7", "Panel Name Seven", 7)
     snapshot = _panel(circuit)
     panel = await _set_up(hass, snapshot)
     panel.rename(panel.register(circuit), "Synthetic Workshop")
 
-    await _judge(panel, snapshot)
+    with caplog.at_level(logging.WARNING, logger="custom_components.span_panel.alert_dispatcher"):
+        await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Synthetic Workshop spike", "Synthetic Workshop at 25.0A")]
-    assert _names(alerts) == [("Panel Name Seven", "Synthetic Workshop")]
+    assert _names(alerts) == ["Synthetic Workshop"]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.span_panel.alert_dispatcher"
+        and record.levelno == logging.WARNING
+    ] == ["Current alert: Synthetic Workshop \u2014 spike at 25.0A (125.0% of 20A rating)"]
 
 
 async def test_a_rename_after_setup_reaches_the_next_alert(
@@ -194,16 +205,33 @@ async def test_a_rename_after_setup_reaches_the_next_alert(
         ("SPAN: Panel Name Seven spike", "Panel Name Seven at 25.0A"),
         ("SPAN: Synthetic Workshop spike", "Synthetic Workshop at 25.0A"),
     ]
-    assert _names(alerts) == [
-        ("Panel Name Seven", "Panel Name Seven"),
-        ("Panel Name Seven", "Synthetic Workshop"),
+    assert _names(alerts) == ["Panel Name Seven", "Synthetic Workshop"]
+
+
+async def test_the_event_carries_no_second_name(
+    hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
+) -> None:
+    """A renamed circuit's event names it once, in `alert_name`, as the test event does."""
+    circuit = _circuit("circuit-7", "Panel Name Seven", 7)
+    snapshot = _panel(circuit)
+    panel = await _set_up(hass, snapshot)
+    panel.rename(panel.register(circuit), "Synthetic Workshop")
+
+    await _judge(panel, snapshot)
+    dispatch_test_alert(hass, {NOTIFY_TARGETS: "event_bus"})
+    await hass.async_block_till_done()
+
+    assert len(alerts) == 2
+    assert [key for event in alerts for key in event.data if key.endswith("_name")] == [
+        "alert_name",
+        "alert_name",
     ]
 
 
 async def test_an_unrenamed_circuit_is_named_as_before(
     hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
 ) -> None:
-    """A circuit nobody renamed is named by the panel's name, in its text and in both event fields."""
+    """A circuit nobody renamed is named by the panel's name, in its text and in its event."""
     circuit = _circuit("circuit-7", "Panel Name Seven", 7)
     snapshot = _panel(circuit)
     panel = await _set_up(hass, snapshot)
@@ -212,7 +240,7 @@ async def test_an_unrenamed_circuit_is_named_as_before(
     await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Panel Name Seven spike", "Panel Name Seven at 25.0A")]
-    assert _names(alerts) == [("Panel Name Seven", "Panel Name Seven")]
+    assert _names(alerts) == ["Panel Name Seven"]
 
 
 async def test_a_circuit_with_no_device_is_named_as_its_device_would_be(
@@ -232,13 +260,13 @@ async def test_a_circuit_with_no_device_is_named_as_its_device_would_be(
     await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Panel Name Seven spike", "Panel Name Seven at 25.0A")]
-    assert _names(alerts) == [("Panel Name Seven", "Panel Name Seven")]
+    assert _names(alerts) == ["Panel Name Seven"]
 
 
 async def test_a_shared_meter_is_named_by_each_members_name_as_home_assistant_shows_it(
     hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
 ) -> None:
-    """A shared meter's alert joins its members' names, each the user's where they renamed it.
+    """A shared meter's text and event join its members' names, each the user's where renamed.
 
     Two 20 A circuits at one space carry 40 A together, so both report 45 A.
     """
@@ -262,39 +290,38 @@ async def test_a_shared_meter_is_named_by_each_members_name_as_home_assistant_sh
     assert _texts(notified) == [
         ("SPAN: Synthetic Fan + Panel Name B spike", "Synthetic Fan + Panel Name B at 45.0A")
     ]
-    assert _names(alerts) == [("Panel Name A + Panel Name B", "Synthetic Fan + Panel Name B")]
+    assert _names(alerts) == ["Synthetic Fan + Panel Name B"]
 
 
 async def test_the_mains_is_named_by_its_own_name(
     hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
 ) -> None:
-    """The mains has no device of its own: its text and both event fields carry the leg's name."""
+    """The mains has no device of its own: its text and its event carry the leg's name."""
     snapshot = replace(_panel(), upstream_l1_current_a=250.0)
     panel = await _set_up(hass, snapshot)
 
     await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Mains Upstream L1 spike", "Mains Upstream L1 at 250.0A")]
-    assert _names(alerts) == [("Mains Upstream L1", "Mains Upstream L1")]
+    assert _names(alerts) == ["Mains Upstream L1"]
 
 
-async def test_the_test_event_carries_the_display_name_too(
-    hass: HomeAssistant, alerts: list[Event]
-) -> None:
-    """An automation written against the test event finds `alert_display_name` beside `alert_name`."""
+async def test_the_test_event_carries_one_name(hass: HomeAssistant, alerts: list[Event]) -> None:
+    """An automation written against the test event finds the sample's name in `alert_name`."""
     dispatch_test_alert(hass, {NOTIFY_TARGETS: "event_bus"})
     await hass.async_block_till_done()
 
-    assert _names(alerts) == [("Kitchen Oven", "Kitchen Oven")]
+    assert _names(alerts) == ["Kitchen Oven"]
 
 
 async def test_an_unnamed_solar_circuit_with_no_device_is_named_solar(
     hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
 ) -> None:
-    """Its device would be named "Solar", so its text is, while `alert_name` keeps its positions.
+    """Its device would be named "Solar", so its text and its event's `alert_name` are.
 
-    The name its device would be given, not the label a message used before:
-    once the device is registered, Home Assistant shows "Solar".
+    The name its device would be given, not the label a message used before,
+    its breaker positions: once the device is registered, Home Assistant shows
+    "Solar".
     """
     circuit = _circuit("circuit-7", "", 7, device_type="pv")
     snapshot = _panel(circuit)
@@ -303,13 +330,13 @@ async def test_an_unnamed_solar_circuit_with_no_device_is_named_solar(
     await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Solar spike", "Solar at 25.0A")]
-    assert _names(alerts) == [("Circuit 7", "Solar")]
+    assert _names(alerts) == ["Solar"]
 
 
 async def test_a_continuous_overload_names_the_circuit_as_home_assistant_shows_it(
     hass: HomeAssistant, notified: list[ServiceCall], alerts: list[Event]
 ) -> None:
-    """The sustained alert's text carries the rename, as the spike's does."""
+    """The sustained alert's text and event carry the rename, as the spike's do."""
     circuit = _circuit("circuit-7", "Panel Name Seven", 7, current_a=18.0)
     snapshot = _panel(circuit)
     panel = await _set_up(
@@ -329,7 +356,7 @@ async def test_a_continuous_overload_names_the_circuit_as_home_assistant_shows_i
     assert _texts(notified) == [
         ("SPAN: Synthetic Workshop continuous_overload", "Synthetic Workshop at 18.0A")
     ]
-    assert _names(alerts) == [("Panel Name Seven", "Synthetic Workshop")]
+    assert _names(alerts) == ["Synthetic Workshop"]
 
 
 async def test_a_circuit_renamed_on_the_panel_keeps_the_name_home_assistant_shows_until_its_reload(
@@ -337,10 +364,9 @@ async def test_a_circuit_renamed_on_the_panel_keeps_the_name_home_assistant_show
 ) -> None:
     """Between a rename on the panel and the reload that renames its device, Home Assistant shows the old name.
 
-    So the text carries the name the device is registered under, not the one it
-    is about to be given, which `effective_circuit_device_name` answers for an
-    entity id. The event's `alert_name` is the panel's, so it already carries the
-    new one.
+    So the text and the event's `alert_name` carry the name the device is
+    registered under, not the one it is about to be given, which
+    `effective_circuit_device_name` answers for an entity id.
     """
     registered = _circuit("circuit-7", "Old Panel Name", 7)
     snapshot = _panel(replace(registered, name="New Panel Name"))
@@ -350,7 +376,7 @@ async def test_a_circuit_renamed_on_the_panel_keeps_the_name_home_assistant_show
     await _judge(panel, snapshot)
 
     assert _texts(notified) == [("SPAN: Old Panel Name spike", "Old Panel Name at 25.0A")]
-    assert _names(alerts) == [("New Panel Name", "Old Panel Name")]
+    assert _names(alerts) == ["Old Panel Name"]
 
 
 @pytest.mark.usefixtures("notified")

@@ -1087,7 +1087,7 @@ class TestNotificationDispatch:
         """Spike notification message includes current and rating."""
         title, message = format_notification(
             alert_type="spike",
-            display_name="Kitchen",
+            alert_name="Kitchen",
             entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
@@ -1106,7 +1106,7 @@ class TestNotificationDispatch:
         """Continuous notification message includes window duration."""
         title, message = format_notification(
             alert_type="continuous_overload",
-            display_name="Kitchen",
+            alert_name="Kitchen",
             entity_id="sensor.kitchen_current",
             current_a=18.4,
             monitoring_rating_a=20.0,
@@ -1129,7 +1129,7 @@ class TestNotificationDispatch:
         """Custom templates produce expected output with entity_id placeholder."""
         title, message = format_notification(
             alert_type="spike",
-            display_name="Kitchen",
+            alert_name="Kitchen",
             entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
@@ -1146,7 +1146,7 @@ class TestNotificationDispatch:
         """Invalid template placeholders fall back to defaults."""
         title, message = format_notification(
             alert_type="spike",
-            display_name="Kitchen",
+            alert_name="Kitchen",
             entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
