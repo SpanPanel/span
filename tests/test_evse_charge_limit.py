@@ -299,7 +299,7 @@ async def _added_for(
     return entity
 
 
-def _refreshed(entity: SpanEvseNumber, snapshot: SpanPanelSnapshot | None) -> SpanEvseNumber:
+def _refreshed(entity: SpanEvseNumber, snapshot: SpanPanelSnapshot) -> SpanEvseNumber:
     """Push a new snapshot through the coordinator update the way HA does."""
     entity.coordinator.data = snapshot
     entity.async_write_ha_state = MagicMock()
@@ -513,23 +513,6 @@ async def test_an_unpublished_ceiling_makes_the_control_unavailable(hass: HomeAs
 
     assert _for(created, tree, EVSE).available is False
     assert _for(created, tree, EVSE_2).available is True
-
-
-async def test_a_coordinator_with_no_snapshot_yet_takes_the_control_down(hass: HomeAssistant) -> None:
-    """A failed first refresh leaves `coordinator.data` unset.
-
-    Every other read here goes through the snapshot, so the entity has to answer
-    without one rather than raising inside a property Home Assistant polls.
-    """
-    tree = schema_one_tree()
-    created = await _created(hass, schema_one_snapshot(tree))
-    entity = _for(created, tree, EVSE)
-
-    _refreshed(entity, None)
-
-    assert entity.available is False
-    assert entity.native_value is None
-    assert entity.extra_state_attributes is None
 
 
 async def test_the_control_is_unavailable_while_the_panel_is_offline(hass: HomeAssistant) -> None:

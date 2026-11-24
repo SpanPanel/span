@@ -145,10 +145,7 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         """
         if self.entity_description.key != "dsm_state":
             return None
-        snapshot = self.coordinator.data
-        if snapshot is None:
-            return None
-        return _shed_policy_attributes(snapshot) or None
+        return _shed_policy_attributes(self.coordinator.data) or None
 
 
 class SpanShedForecastSensor(
@@ -215,9 +212,6 @@ class SpanShedForecastSensor(
         readers sit beside each other.
         """
         snapshot = self.coordinator.data
-        if snapshot is None:
-            return None
-
         attributes: dict[str, Any] = {}
 
         full_charge = self._forecast.full_charge_fn(snapshot)
@@ -299,11 +293,11 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
         four constraint classes are `MAY`, so an absent family is conformant
         firmware rather than a reading that failed.
         """
-        snapshot = self.coordinator.data
-        if snapshot is None or snapshot.pcs is None:
+        pcs = self.coordinator.data.pcs
+        if pcs is None:
             return None
 
-        return self._pcs.attributes_fn(snapshot.pcs) or None
+        return self._pcs.attributes_fn(pcs) or None
 
 
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelSnapshot]):
@@ -360,9 +354,6 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
 
         `panel_size` is untouched and stays here.
         """
-        if not self.coordinator.data:
-            return None
-
         snapshot = self.coordinator.data
         attributes: dict[str, Any] = {}
 
@@ -510,9 +501,6 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes including amperage calculation."""
-        if not self.coordinator.data:
-            return None
-
         attributes: dict[str, Any] = {}
 
         # Add voltage attribute (standard panel voltage)

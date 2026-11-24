@@ -757,27 +757,6 @@ async def test_runtime_data_is_not_ours(
     assert reply["error"]["code"] == "not_loaded"
 
 
-async def test_no_data(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) -> None:
-    """A panel that has not answered yet has nothing to list."""
-    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id=ENTRY_ID, unique_id=PANEL_SERIAL)
-    entry.add_to_hass(hass)
-    entry.mock_state(hass, ConfigEntryState.LOADED)
-    panel = _register_cards(hass)
-    coordinator = MagicMock()
-    coordinator.data = None
-    entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator,
-        panel_device_id=panel.id,
-        curation=CurationOverlay.empty(),
-        pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
-        setup_snapshot=SpanPanelSnapshotFactory.create(),
-    )
-
-    reply = await _list(hass, hass_ws_client, panel.id)
-
-    assert reply["error"]["code"] == "no_data"
-
-
 async def test_a_panel_with_nothing_adopted_lists_nothing(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:

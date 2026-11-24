@@ -332,7 +332,7 @@ async def panel(hass: HomeAssistant, integration: None) -> _Panel:
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
-    monitor = CurrentMonitor(hass, entry, manager)
+    monitor = CurrentMonitor(hass, entry, manager, snapshot)
     monitor.process_snapshot(snapshot)
     coordinator = MagicMock()
     coordinator.data = snapshot

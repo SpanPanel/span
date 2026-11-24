@@ -270,9 +270,6 @@ class SpanCircuitPowerSensor(SpanCircuitSensorBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes."""
-        if not self.coordinator.data:
-            return None
-
         circuit = self.coordinator.data.circuits.get(self.circuit_id)
         if not circuit:
             return None
@@ -398,8 +395,7 @@ class SpanCircuitEnergySensor(
 
     def _reading_is_implausible(self, reading: float) -> bool:
         """Whether the reading is beyond anything this circuit's breaker could ever have passed."""
-        snapshot: SpanPanelSnapshot | None = self.coordinator.data
-        circuit = snapshot.circuits.get(self.circuit_id) if snapshot else None
+        circuit = self.coordinator.data.circuits.get(self.circuit_id)
         return circuit is not None and exceeds_lifetime_bound(circuit, reading)
 
     @property
@@ -409,17 +405,15 @@ class SpanCircuitEnergySensor(
         base_attributes = super().extra_state_attributes or {}
         attributes = dict(base_attributes)
 
-        # Add circuit-specific attributes if we have data
-        if self.coordinator.data:
-            circuit = self.coordinator.data.circuits.get(self.circuit_id)
+        # Add circuit-specific attributes
+        circuit = self.coordinator.data.circuits.get(self.circuit_id)
+        if circuit:
+            tabs = construct_tabs_attribute(circuit)
+            if tabs is not None:
+                attributes["tabs"] = tabs
 
-            if circuit:
-                tabs = construct_tabs_attribute(circuit)
-                if tabs is not None:
-                    attributes["tabs"] = tabs
-
-                voltage = construct_voltage_attribute(circuit)
-                if voltage is not None:
-                    attributes["voltage"] = voltage
+            voltage = construct_voltage_attribute(circuit)
+            if voltage is not None:
+                attributes["voltage"] = voltage
 
         return attributes or None

@@ -345,26 +345,25 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
             super()._handle_coordinator_update()
             return
 
-        # Check for panel offline status first to prevent accessing None data
-        if self.coordinator.panel_offline or self.coordinator.data is None:
+        if self.coordinator.panel_offline:
             if self.entity_description.key in _HARDWARE_STATUS_SENSORS:
                 self._attr_is_on = None
                 self._attr_available = True
                 _LOGGER.debug(
-                    "Hardware status sensor %s: panel offline or no data - showing as unknown",
+                    "Hardware status sensor %s: panel offline - showing as unknown",
                     self.entity_id,
                 )
             else:
                 self._attr_available = False
                 _LOGGER.debug(
-                    "Binary sensor %s: panel offline or no data - will be unavailable",
+                    "Binary sensor %s: panel offline - will be unavailable",
                     self.entity_id,
                 )
 
             super()._handle_coordinator_update()
             return
 
-        # Panel is online and data is available — snapshot provides status fields directly
+        # Panel is online — snapshot provides status fields directly
         snapshot = self.coordinator.data
         status_value = self._value_fn(snapshot)
 
@@ -434,10 +433,10 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
         an attribute present and empty reads as a reading that failed, which is
         a different claim from the panel never having made one.
         """
-        snapshot = self.coordinator.data
-        if snapshot is None or snapshot.wifi_ssid is None:
+        wifi_ssid = self.coordinator.data.wifi_ssid
+        if wifi_ssid is None:
             return None
-        return {"wifi_ssid": snapshot.wifi_ssid}
+        return {"wifi_ssid": wifi_ssid}
 
 
 _PANEL_BINARY_SENSOR_CLASSES: Mapping[
@@ -580,13 +579,12 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if self.coordinator.panel_offline or self.coordinator.data is None:
+        if self.coordinator.panel_offline:
             self._attr_is_on = None
             super()._handle_coordinator_update()
             return
 
-        snapshot = self.coordinator.data
-        evse = snapshot.evse.get(self._evse_id, EMPTY_EVSE)
+        evse = self.coordinator.data.evse.get(self._evse_id, EMPTY_EVSE)
         self._attr_is_on = self._value_fn(evse)
         super()._handle_coordinator_update()
 
@@ -668,7 +666,7 @@ class SpanPVInverterBinarySensor(SpanPanelEntity, BinarySensorEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if self.coordinator.panel_offline or self.coordinator.data is None:
+        if self.coordinator.panel_offline:
             self._attr_is_on = None
             super()._handle_coordinator_update()
             return

@@ -231,9 +231,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return panel position attributes for this circuit."""
-        if not self.coordinator.data:
-            return None
-
         circuit = self.coordinator.data.circuits.get(self._circuit_id)
         if not circuit:
             return None

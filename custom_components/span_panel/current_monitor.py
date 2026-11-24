@@ -258,9 +258,20 @@ class CurrentMonitor:
     """
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, ratings: PackageRatingManager
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        ratings: PackageRatingManager,
+        snapshot: SpanPanelSnapshot,
     ) -> None:
-        """Initialize the CurrentMonitor."""
+        """Initialize the CurrentMonitor, holding the coordinator's snapshot without judging it.
+
+        Only `process_snapshot` judges, so building a monitor raises no alert and
+        opens no over-threshold window: the first judgement is the next update's.
+        Holding the snapshot from the start means every reader has one: the status
+        lists the panel's circuits, and a threshold set on a shared meter's member
+        is held under the group's key, before that update arrives.
+        """
         self._hass = hass
         self._entry = entry
         self._ratings = ratings
@@ -269,7 +280,7 @@ class CurrentMonitor:
         self._circuit_overrides: dict[str, MonitoringSettings] = {}
         self._mains_overrides: dict[str, MonitoringSettings] = {}
         self._global_settings: MonitoringSettings = {}
-        self._last_snapshot: SpanPanelSnapshot | None = None
+        self._last_snapshot = snapshot
         self._store = _store_for(hass, entry)
 
     # --- Public API ---
@@ -332,19 +343,24 @@ class CurrentMonitor:
 
         The monitored point's id: the circuit's own, or for a member of a shared
         meter the group's first member, which is the key every reader uses. The
-        circuit's own id while no snapshot has said which group it is in.
+        circuit's own id for one the snapshot does not hold.
         """
-        snapshot = self._last_snapshot
-        point = self._points(snapshot).get(circuit_id) if snapshot else None
+        point = self._points(self._last_snapshot).get(circuit_id)
         return point.point_id if point is not None else circuit_id
 
     def _fold_member_overrides(self, snapshot: SpanPanelSnapshot) -> bool:
         """Move overrides held under a shared meter's other members onto the group's key.
 
-        Overrides written before a meter was known to be shared, or loaded from
-        storage, sit under a member's own id, where no reader looks. The group's
-        own key wins where it already holds one; otherwise the first member, in
-        group order, that holds one does. The rest are dropped. Returns whether
+        An override can sit under a member's own id, where no reader looks, in
+        two ways. The store can hold one there, written before the meter was
+        known to be shared or re-keyed by a device-id migration onto ids in
+        another order; `async_start` folds those as it loads. And one can be set
+        while the held snapshot does not yet group the member, because the panel
+        has not yet published its `meter/shared-with-device-ids` or a peer that
+        sorts first has not arrived. Nothing reloads the entry when either
+        arrives, so every judged snapshot is folded too. The group's own key
+        wins where it already holds one; otherwise the first member, in group
+        order, that holds one does. The rest are dropped. Returns whether
         anything moved, so the caller persists the result.
         """
         moved = False
@@ -450,10 +466,7 @@ class CurrentMonitor:
         Tries the current sensor first, then falls back to power, matching
         the frontend lookup order (circuit.entities.current ?? .power).
         """
-        snapshot = self._last_snapshot
-        if snapshot is None:
-            return circuit_id
-        serial = snapshot.serial_number
+        serial = self._last_snapshot.serial_number
         entity_reg = er.async_get(self._hass)
         # Try current sensor first (matches frontend preference)
         current_uid = build_circuit_unique_id(serial, circuit_id, "current")
@@ -478,10 +491,10 @@ class CurrentMonitor:
         snapshot's circuits that the entity's unique_id names; an id is opaque,
         so it is found among them rather than by its shape.
 
-        The caller passes the coordinator's live snapshot rather than this
-        monitor reading its own last one: the monitor sees a snapshot only on
-        the coordinator's next push after setup, and a threshold set before then
-        must still land on its circuit.
+        The caller passes the coordinator's live snapshot, the one every service
+        resolves its target against, rather than this monitor reading its own,
+        which is the last it judged or, before the first, the one it was built
+        holding.
 
         The ids this monitor holds overrides for are searched too, so a circuit
         that has left the panel can still have its override cleared through its
@@ -512,10 +525,7 @@ class CurrentMonitor:
 
     def _resolve_mains_entity_id(self, leg: str) -> str:
         """Resolve mains leg to its current sensor entity_id, or fall back to leg name."""
-        snapshot = self._last_snapshot
-        if snapshot is None:
-            return leg
-        serial = snapshot.serial_number
+        serial = self._last_snapshot.serial_number
         # The sensor key matches the leg name + "_current" (e.g., "upstream_l1_current")
         unique_id = build_panel_unique_id(serial, f"{leg}_current")
         entity_reg = er.async_get(self._hass)
@@ -525,25 +535,23 @@ class CurrentMonitor:
     def get_monitoring_status(self) -> MonitoringStatus:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
-        main_rating = service_rating_a(snapshot) if snapshot else None
+        main_rating = service_rating_a(snapshot)
 
         circuits: dict[str, CircuitMonitoringStatus] = {}
         # Include all circuits from the snapshot, not just those with active state.
         # Circuits with relays off may have no state yet but should still appear.
-        all_circuit_ids = set(self._circuit_states.keys())
-        if snapshot:
-            all_circuit_ids |= set(snapshot.circuits)
-            # A meter outside the panel has no breaker to monitor against.
-            all_circuit_ids -= {
-                cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
-            }
-        points = self._points(snapshot) if snapshot else {}
+        all_circuit_ids = set(self._circuit_states.keys()) | set(snapshot.circuits)
+        # A meter outside the panel has no breaker to monitor against.
+        all_circuit_ids -= {
+            cid for cid, circuit in snapshot.circuits.items() if circuit.measures_outside_panel
+        }
+        points = self._points(snapshot)
         # Asked once for every circuit's form: no circuit takes a copy on a panel
         # that describes its multi-load breakers.
-        describes_breakers = snapshot is not None and panel_describes_breakers(snapshot)
+        describes_breakers = panel_describes_breakers(snapshot)
 
         for cid in all_circuit_ids:
-            circuit = snapshot.circuits.get(cid) if snapshot else None
+            circuit = snapshot.circuits.get(cid)
             # A member of a shared meter shows its group's judgement: the
             # group's state, rating and thresholds, all under the group's key.
             point = points.get(cid)
@@ -662,8 +670,17 @@ class CurrentMonitor:
         return {"circuits": circuits, "mains": mains}
 
     async def async_start(self) -> None:
-        """Start the monitor — load persisted overrides."""
+        """Start the monitor: load persisted overrides, folded onto the snapshot it holds.
+
+        Folded here, before any reader runs, because every reader finds a shared
+        meter's override under the key the held snapshot gives its group. Left
+        under another member until the first judgement, a stored override reads
+        as absent, survives a clear, and loses its other settings to a threshold
+        set on that member.
+        """
         await self.async_load_overrides()
+        if self._fold_member_overrides(self._last_snapshot):
+            await self.async_save_overrides()
         _LOGGER.info("Current monitor started")
 
     def async_stop(self) -> None:
@@ -947,11 +964,12 @@ async def async_rekey_circuit_ids(
     Run by the device-id migration before any monitor loads the store. A shared
     meter's override is held under its first member, and its key moves to that
     member's new id; the new ids keep the members' order, and should a group's
-    first member differ, `_fold_member_overrides` moves the override onto it at
-    the first snapshot, as it does for any member's. A value already under the
-    new id wins (`device_id_migration.rekeyed`). Every other part of the store
-    is written back as the monitor reads it (`_read_stored`). Written only when
-    something moved. Returns how many overrides moved.
+    first member differ, `_fold_member_overrides` moves the override onto it as
+    the monitor loads the store (`async_start`), as it does for any member's. A
+    value already under the new id wins (`device_id_migration.rekeyed`). Every
+    other part of the store is written back as the monitor reads it
+    (`_read_stored`). Written only when something moved. Returns how many
+    overrides moved.
     """
     store = _store_for(hass, entry)
     data = _read_stored(await store.async_load(), entry)

@@ -118,10 +118,7 @@ class SpanEvseLock(SpanPanelEntity, LockEntity):
         self._apply(evse)
 
     def _evse(self) -> SpanEvseSnapshot:
-        snapshot: SpanPanelSnapshot | None = self.coordinator.data
-        if snapshot is None:
-            return EMPTY_EVSE
-        return snapshot.evse.get(self._evse_id, EMPTY_EVSE)
+        return self.coordinator.data.evse.get(self._evse_id, EMPTY_EVSE)
 
     def _apply(self, evse: SpanEvseSnapshot) -> None:
         """Take the lock state the charger reports: locked, unlocked, or not known.
