@@ -327,7 +327,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         A charger feed circuit's sensors ask too: in circuit-names mode the
         charger's device carries the name of the circuit that feeds it.
         """
-        if not (hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits")):
+        if not hasattr(self, "circuit_id"):
             return
 
         circuit = self.coordinator.data.circuits.get(getattr(self, "circuit_id", ""))

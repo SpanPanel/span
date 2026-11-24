@@ -32,6 +32,7 @@ from custom_components.span_panel.helpers import (
     construct_shared_with_attribute,
     construct_shared_with_attributes,
 )
+from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
@@ -443,10 +444,17 @@ def test_clearing_on_any_member_clears_the_shared_meter() -> None:
     assert monitor._circuit_overrides == {}
 
 
-def test_a_stored_member_override_folds_onto_the_group_key() -> None:
-    """Data stored under a member's own id, as loaded from storage, keeps working."""
+def test_a_member_override_moves_to_the_group_when_the_panel_says_the_meter_is_shared() -> None:
+    """Set while the pair was not yet known to share, it moves at the snapshot that says so.
+
+    A circuit's `meter/shared-with-device-ids` can arrive after the snapshot
+    the monitor started on, and nothing reloads the entry for it, which is why
+    every judged snapshot is folded and not only the one the store loads on.
+    """
     monitor = _make_monitor(_make_hass(), _make_options(spike_threshold_pct=100))
-    monitor._circuit_overrides = {"circuit-53": {"monitoring_enabled": False}}
+    monitor.process_snapshot(_panel(*(replace(c, meter_shared_with=None) for c in PAIR_A)))
+    monitor.set_circuit_override("circuit-53", {"monitoring_enabled": False})
+    assert monitor._circuit_overrides == {"circuit-53": {"monitoring_enabled": False}}
 
     monitor.process_snapshot(OVERLOADED)
 
@@ -477,3 +485,106 @@ def test_overrides_on_unshared_circuits_are_untouched() -> None:
     assert monitor._circuit_overrides == {
         "circuit-1": {"spike_threshold_pct": 120, "continuous_threshold_pct": 90}
     }
+
+
+# ---------------------------------------------------------------------------
+# A monitor started on the shared pair, before its first judgement
+# ---------------------------------------------------------------------------
+
+_MONITOR_STORE: Final = "span_panel_current_monitor"
+
+
+async def _started_on_the_pair(
+    hass: HomeAssistant, hass_storage: dict[str, object], circuit_overrides: dict[str, object]
+) -> tuple[CurrentMonitor, MockConfigEntry]:
+    """Start a monitor as setup does: holding `SNAPSHOT`, over a store holding these overrides.
+
+    Nothing is judged yet, as between setup and the first update. A store can
+    hold a group's override under a member other than the first: one written
+    before the meter was known to be shared, or one a device-id migration
+    re-keyed onto ids in another order.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-shared-meter")
+    entry.add_to_hass(hass)
+    hass_storage[f"{_MONITOR_STORE}.{entry.entry_id}"] = {
+        "version": 1,
+        "key": f"{_MONITOR_STORE}.{entry.entry_id}",
+        "data": {"enabled": True, "circuit_overrides": circuit_overrides, "mains_overrides": {}},
+    }
+    monitor = CurrentMonitor(hass, entry, PackageRatingManager(hass, entry), SNAPSHOT)
+    await monitor.async_start()
+    await hass.async_block_till_done()
+    return monitor, entry
+
+
+def _pair_rows(monitor: CurrentMonitor) -> dict[str, tuple[str, bool, bool, int, int]]:
+    """Each member's status row: its point, override, monitoring, spike threshold and window."""
+    rows = monitor.get_monitoring_status()["circuits"]
+    return {
+        cid: (
+            rows[cid]["point_id"],
+            rows[cid]["has_override"],
+            rows[cid]["monitoring_enabled"],
+            rows[cid]["spike_threshold_pct"],
+            rows[cid]["window_duration_m"],
+        )
+        for cid in ("circuit-52", "circuit-53")
+    }
+
+
+async def test_a_member_threshold_before_the_first_judgement_merges_into_the_groups(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """A threshold set on the group's second member joins the override the group holds."""
+    monitor, _entry = await _started_on_the_pair(
+        hass, hass_storage, {"circuit-52": {"window_duration_m": 7}}
+    )
+
+    monitor.set_circuit_override("circuit-53", {"spike_threshold_pct": 130})
+    monitor.process_snapshot(SNAPSHOT)
+
+    expected = ("circuit-52", True, True, 130, 7)
+    assert _pair_rows(monitor) == {"circuit-52": expected, "circuit-53": expected}
+
+
+async def test_clearing_a_stored_member_override_before_the_first_judgement_clears_the_group(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    monitor, _entry = await _started_on_the_pair(
+        hass, hass_storage, {"circuit-53": {"spike_threshold_pct": 150}}
+    )
+
+    monitor.clear_circuit_override("circuit-53")
+    monitor.process_snapshot(SNAPSHOT)
+
+    expected = ("circuit-52", False, True, 100, 15)
+    assert _pair_rows(monitor) == {"circuit-52": expected, "circuit-53": expected}
+
+
+async def test_a_member_threshold_keeps_the_members_other_stored_settings(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    monitor, _entry = await _started_on_the_pair(
+        hass, hass_storage, {"circuit-53": {"window_duration_m": 7}}
+    )
+
+    monitor.set_circuit_override("circuit-53", {"spike_threshold_pct": 130})
+    monitor.process_snapshot(SNAPSHOT)
+
+    expected = ("circuit-52", True, True, 130, 7)
+    assert _pair_rows(monitor) == {"circuit-52": expected, "circuit-53": expected}
+
+
+async def test_the_status_before_the_first_judgement_reads_a_stored_member_override(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """Monitoring stored as off under the second member reads as off; the store is folded."""
+    monitor, entry = await _started_on_the_pair(
+        hass, hass_storage, {"circuit-53": {"monitoring_enabled": False}}
+    )
+
+    expected = ("circuit-52", True, False, 100, 15)
+    assert _pair_rows(monitor) == {"circuit-52": expected, "circuit-53": expected}
+    stored = hass_storage[f"{_MONITOR_STORE}.{entry.entry_id}"]
+    assert isinstance(stored, dict)
+    assert stored["data"]["circuit_overrides"] == {"circuit-52": {"monitoring_enabled": False}}

@@ -82,19 +82,17 @@ def _rated_panel(*, publishes_shared_meters: bool | None) -> SpanPanelSnapshot:
     return replace(snapshot, publishes_shared_meters=publishes_shared_meters)
 
 
-async def _monitoring_status(
-    hass: HomeAssistant, snapshot: SpanPanelSnapshot, live: SpanPanelSnapshot | None
-) -> dict[str, object]:
-    """Answer `get_monitoring_status` for a panel set up on `snapshot` whose coordinator holds `live`."""
+async def _monitoring_status(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> dict[str, object]:
+    """Answer `get_monitoring_status` for a panel set up on, and still holding, `snapshot`."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id=snapshot.serial_number)
     entry.add_to_hass(hass)
     manager = PackageRatingManager(hass, entry)
     await manager.async_load()
     manager.begin(snapshot, _DECLARED)
     coordinator = MagicMock()
-    coordinator.data = live
+    coordinator.data = snapshot
     coordinator.package_rating_manager = manager
-    coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
+    coordinator.current_monitor = CurrentMonitor(hass, entry, manager, snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),
@@ -128,18 +126,7 @@ class TestMonitoringStatusSaysWhetherThePanelTakesCopies:
         """Offered on a panel that does not describe its multi-load breakers, and only there."""
         snapshot = _rated_panel(publishes_shared_meters=publishes_shared_meters)
 
-        status = await _monitoring_status(hass, snapshot, snapshot)
+        status = await _monitoring_status(hass, snapshot)
 
         assert status["enabled"] is True
         assert status["monitoring_rating_offered"] is offered
-
-    async def test_not_offered_while_the_coordinator_has_no_snapshot(
-        self, hass: HomeAssistant
-    ) -> None:
-        """With no snapshot there is nothing to say a copy is taken by, so none is offered."""
-        snapshot = _rated_panel(publishes_shared_meters=None)
-
-        status = await _monitoring_status(hass, snapshot, None)
-
-        assert status["enabled"] is True
-        assert status["monitoring_rating_offered"] is False

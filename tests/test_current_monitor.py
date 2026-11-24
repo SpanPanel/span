@@ -59,13 +59,18 @@ def _make_options(**overrides):
 
 
 def _make_monitor(hass, options=None, entry_id="test_entry"):
-    """Create a CurrentMonitor with mocked hass and entry."""
+    """Create a CurrentMonitor with mocked hass and entry, built holding a panel with no circuits.
+
+    So a test's circuits reach the monitor with its first `process_snapshot`.
+    """
     if options is None:
         options = _make_options()
     entry = MagicMock()
     entry.entry_id = entry_id
     entry.options = options
-    return CurrentMonitor(hass, entry, PackageRatingManager(hass, entry))
+    return CurrentMonitor(
+        hass, entry, PackageRatingManager(hass, entry), SpanPanelSnapshotFactory.create()
+    )
 
 
 def _run_coro(coro):
@@ -618,12 +623,13 @@ def _monitoring_handlers(hass: MagicMock) -> dict[str, Any]:
 def _panel_with_a_fresh_monitor(
     hass: MagicMock, entry_id: str, *circuit_ids: str
 ) -> tuple[MagicMock, CurrentMonitor, SpanPanelSnapshot]:
-    """Return a loaded panel's entry and monitor as setup leaves them: created, fed nothing yet.
+    """Return a loaded panel's entry and monitor as setup leaves them: holding, not judging.
 
-    The coordinator already holds the first refresh's snapshot, which is what a
-    threshold service resolves against; the monitor sees its first snapshot only
-    on the next push. Every circuit and the upstream L1 leg draw 90% of their
-    rating, under the global spike threshold of 100% and at an override of 90%.
+    The coordinator holds the first refresh's snapshot, which is what a
+    threshold service resolves against and what the monitor was built holding;
+    the monitor judges a snapshot first on the next push. Every circuit and the
+    upstream L1 leg draw 90% of their rating, under the global spike threshold
+    of 100% and at an override of 90%.
     """
     snapshot = SpanPanelSnapshotFactory.create(
         circuits={
@@ -642,7 +648,7 @@ def _panel_with_a_fresh_monitor(
     entry.entry_id = entry_id
     entry.options = _make_options(**{SPIKE_THRESHOLD_PCT: 100})
     ratings = PackageRatingManager(hass, entry)
-    monitor = CurrentMonitor(hass, entry, ratings)
+    monitor = CurrentMonitor(hass, entry, ratings, snapshot)
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.package_rating_manager = ratings
@@ -669,7 +675,7 @@ def _call(**data: Any) -> MagicMock:
 
 
 class TestThresholdServicesBeforeTheFirstPush:
-    """Right after setup the monitor has seen no snapshot, and a threshold still lands on its circuit."""
+    """Before the first judgement after setup, a threshold still lands on its circuit."""
 
     async def test_a_threshold_set_before_the_first_push_applies_to_its_circuit(self):
         hass = _make_hass()
@@ -727,6 +733,53 @@ class TestThresholdServicesBeforeTheFirstPush:
 
         assert raised.value.translation_key == "favorite_panel_not_loaded"
         assert raised.value.translation_placeholders == {"entity_id": "sensor.b_c_1_current"}
+
+
+def _drawing(current_a: float) -> SpanPanelSnapshot:
+    """A panel whose one 20 A circuit draws `current_a`."""
+    return SpanPanelSnapshotFactory.create(
+        circuits={
+            "c-1": SpanCircuitSnapshotFactory.create(
+                circuit_id="c-1", name="c-1", current_a=current_a, breaker_rating_a=20.0
+            )
+        }
+    )
+
+
+class TestSwitchingMonitoringOn:
+    """`set_global_monitoring` with `enabled` starts a monitor and judges the panel at once."""
+
+    async def test_it_judges_the_snapshot_the_coordinator_holds_once_the_store_has_loaded(self):
+        """A push that lands while the store loads is the snapshot judged, not the one before it."""
+        hass = _make_hass()
+        before, pushed = _drawing(5.0), _drawing(40.0)
+        entry = MagicMock()
+        entry.entry_id = "panel_a"
+        entry.options = _make_options()
+        coordinator = MagicMock()
+        coordinator.data = before
+        coordinator.package_rating_manager = PackageRatingManager(hass, entry)
+        coordinator.current_monitor = None
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator,
+            panel_device_id="panel_a-device",
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(before),
+            setup_snapshot=before,
+        )
+        _loaded(hass, entry)
+        handlers = _monitoring_handlers(hass)
+        start = CurrentMonitor.async_start
+
+        async def start_while_the_panel_pushes(monitor: CurrentMonitor) -> None:
+            await start(monitor)
+            coordinator.data = pushed
+
+        with patch.object(CurrentMonitor, "async_start", start_while_the_panel_pushes):
+            await handlers["set_global_monitoring"](_call(enabled=True))
+
+        state = coordinator.current_monitor.get_circuit_state("c-1")
+        assert state is not None and state.last_current_a == 40.0
 
 
 class TestThresholdServicesChooseTheEntitysOwnPanel:

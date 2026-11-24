@@ -26,6 +26,8 @@ from custom_components.span_panel.options import (
 )
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 
+from .factories import SpanPanelSnapshotFactory
+
 _KEY: Final = "span_panel_current_monitor"
 _MONITOR_LOGGER: Final = "custom_components.span_panel.current_monitor"
 
@@ -51,7 +53,9 @@ def _stored(hass_storage: dict[str, object], entry: MockConfigEntry) -> object:
 
 
 def _monitor(hass: HomeAssistant, entry: MockConfigEntry) -> CurrentMonitor:
-    return CurrentMonitor(hass, entry, PackageRatingManager(hass, entry))
+    return CurrentMonitor(
+        hass, entry, PackageRatingManager(hass, entry), SpanPanelSnapshotFactory.create()
+    )
 
 
 _MALFORMED: Final = {

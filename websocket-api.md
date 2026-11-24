@@ -330,11 +330,10 @@ so the circuit is judged against the panel's rating. A consumer reads what a cop
 Object), `monitoring_rating_user_set` is false and `package_ratings_a`, `package_ratings_form` and `package_ratings_state` null: only a panel that describes its
 breakers names shared meters, and no circuit on such a panel holds a copied package. The mains entry carries the six keys too: `breaker_rating_a` and
 `monitoring_rating_a` are both its rating, `monitoring_rating_user_set` is false and the other three null. While monitoring is enabled, the status root also
-carries `monitoring_rating_offered`, with the meaning it has at the top level here, so a consumer that reads only the status need not fetch the topology for it;
-it is false while the panel has sent no data yet. `utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off
-(`monitoring_enabled` false), its entry reports `utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement;
-`last_spike_alert` and `last_continuous_alert` stay, as history. Turning monitoring back on resumes the figures from the next reading, with no window carried
-over from before.
+carries `monitoring_rating_offered`, with the meaning it has at the top level here, so a consumer that reads only the status need not fetch the topology for it.
+`utilization_pct` is measured against `monitoring_rating_a`. While a point's monitoring is off (`monitoring_enabled` false), its entry reports
+`utilization_pct`, `last_current_a` and `over_threshold_since` as null, there being no judgement; `last_spike_alert` and `last_continuous_alert` stay, as
+history. Turning monitoring back on resumes the figures from the next reading, with no window carried over from before.
 
 A meter outside the panel occupies no breaker space and has no relay, so it has no slot in the breaker grid and no switch. A group key is the id of the group's
 first member, with the digits in ids compared as numbers (`circuit-9` before `circuit-10`), and every member of the group carries it; `shared_meter_group` keys
@@ -428,7 +427,6 @@ inverter repeats; `vendor` and `model` are read live, as the PV Vendor and PV Pr
 | not_span_panel   | The device is not a SPAN Panel device                              |
 | not_panel_device | The device_id is a sub-device or a circuit's device, not the panel |
 | not_loaded       | The integration or config entry is not loaded                      |
-| no_data          | The coordinator has no panel data yet                              |
 
 ### Usage from a Custom Card
 
@@ -564,7 +562,6 @@ does. Curation is keyed on the wire address rather than on a registry ID, so a r
 | not_span_panel   | The device is not a SPAN Panel device                              |
 | not_panel_device | The device_id is a sub-device or a circuit's device, not the panel |
 | not_loaded       | The integration or config entry is not loaded                      |
-| no_data          | The coordinator has no panel data yet                              |
 
 ## `span_panel/adopted/curate`
 
@@ -650,7 +647,6 @@ Warnings are never refusals. They name effects the stored record does not show o
 | not_span_panel             | The device is not a SPAN Panel device                                                 |
 | not_panel_device           | The device_id is a sub-device or a circuit's device, not the panel                    |
 | not_loaded                 | The integration or config entry is not loaded                                         |
-| no_data                    | The coordinator has no panel data yet                                                 |
 | unknown_key                | No curatable row on this panel carries that key                                       |
 | invalid_state_class        | A state class was asserted on a row that is not a numeric sensor                      |
 | invalid_device_class       | The value is not a device class for this row's platform                               |

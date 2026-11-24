@@ -152,8 +152,6 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 continue
 
             snapshot = runtime_data.coordinator.data
-            if snapshot is None:
-                continue
             serial = snapshot.serial_number
             circuits: list[JsonValueType] = []
 
@@ -415,8 +413,9 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
 
         The panel is `_threshold_panel_entry_id`'s choice. The runtime data comes
         with the monitor because a circuit is resolved against the coordinator's
-        live circuit ids, which the monitor itself does not hold until the
-        coordinator's next push.
+        live snapshot, as every service resolves its target, rather than the
+        monitor's own, which is the last it judged or, before the first, the one
+        it was built holding.
         """
         panel_entry_id = _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
         result = _get_runtime_data(panel_entry_id)
@@ -445,15 +444,18 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         runtime_data, entry = result
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
-        monitor = CurrentMonitor(hass, entry, runtime_data.coordinator.package_rating_manager)
+        monitor = CurrentMonitor(
+            hass,
+            entry,
+            runtime_data.coordinator.package_rating_manager,
+            runtime_data.coordinator.data,
+        )
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
-        # Seed the monitor with the coordinator's latest snapshot so that
-        # get_monitoring_status returns circuits immediately (before the
-        # next coordinator poll cycle).
-        snapshot = runtime_data.coordinator.data
-        if snapshot is not None:
-            monitor.process_snapshot(snapshot)
+        # Monitoring switched on here judges the panel at once, where setup leaves
+        # that to the next update: the coordinator's latest snapshot, read after
+        # the store has loaded, so a push that landed meanwhile is the one judged.
+        monitor.process_snapshot(runtime_data.coordinator.data)
         return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
@@ -503,10 +505,10 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         status["enabled"] = True
         # Whether the panel takes copied package ratings, as the topology root says,
         # so the Monitoring tab, which reads only this status, need not fetch the
-        # topology for it. Not offered while the coordinator has no snapshot to say.
-        snapshot = runtime_data.coordinator.data
-        offered = snapshot is not None and not panel_describes_breakers(snapshot)
-        status["monitoring_rating_offered"] = offered
+        # topology for it.
+        status["monitoring_rating_offered"] = not panel_describes_breakers(
+            runtime_data.coordinator.data
+        )
         # `MonitoringSettings` is `dict[str, int | bool | str]`, which `dict` is
         # invariant in, so it needs widening rather than casting to sit in a
         # JSON response. `get_global_settings` builds a fresh dict per call, so

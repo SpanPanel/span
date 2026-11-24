@@ -491,9 +491,4 @@ def _resolve_panel_entry(
         connection.send_error(msg["id"], "not_loaded", "SPAN Panel integration is not loaded")
         return None
 
-    snapshot = runtime_data.coordinator.data
-    if snapshot is None:
-        connection.send_error(msg["id"], "no_data", "SPAN Panel has not yet provided any data")
-        return None
-
-    return entry, runtime_data, snapshot
+    return entry, runtime_data, runtime_data.coordinator.data

@@ -107,7 +107,7 @@ async def _monitor(
 ) -> tuple[CurrentMonitor, PackageRatingManager]:
     entry = _entry(hass, **options)
     manager = await _begun(hass, entry, snapshot)
-    return CurrentMonitor(hass, entry, manager), manager
+    return CurrentMonitor(hass, entry, manager, snapshot), manager
 
 
 def _run_past_the_window(monitor: CurrentMonitor, snapshot: SpanPanelSnapshot, cid: str) -> None:
@@ -455,7 +455,7 @@ class TestACopySurvivesTheMonitorsOwnReset:
         coordinator = MagicMock()
         coordinator.data = snapshot
         coordinator.package_rating_manager = manager
-        coordinator.current_monitor = CurrentMonitor(hass, entry, manager)
+        coordinator.current_monitor = CurrentMonitor(hass, entry, manager, snapshot)
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
             panel_device_id=register_panel_device(hass, entry, snapshot.serial_number),

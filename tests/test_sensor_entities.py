@@ -389,22 +389,6 @@ def test_panel_battery_sensor_uses_battery_snapshot(hass: HomeAssistant) -> None
     assert sensor.get_data_source(snapshot) is battery
 
 
-def test_panel_status_attributes_return_none_without_coordinator_data(hass: HomeAssistant) -> None:
-    """Panel status attributes should disappear when coordinator data is missing."""
-    snapshot = SpanPanelSnapshotFactory.create()
-    coordinator = _make_coordinator(hass, snapshot)
-
-    sensor = SpanPanelStatus(
-        coordinator,
-        next(desc for desc in STATUS_SENSORS if desc.key == "software_version"),
-        snapshot,
-    )
-
-    coordinator.data = None
-
-    assert sensor.extra_state_attributes is None
-
-
 def test_bess_metadata_sensor_uses_device_override(hass: HomeAssistant) -> None:
     """BESS metadata sensors should preserve the provided sub-device info."""
     snapshot = SpanPanelSnapshotFactory.create(
