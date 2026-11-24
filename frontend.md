@@ -128,6 +128,8 @@ values.
 
 ![Monitoring Configuration](images/monitoring.png)
 
+![Monitored Points](images/monitoring2.png)
+
 ### Copying a Tandem's Ratings from the SPAN App
 
 On a MAIN 32, the Monitoring tab's **Rating** column and the **Monitoring** section of a circuit's side panel let you copy the second rating the SPAN app shows
