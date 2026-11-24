@@ -597,3 +597,38 @@ def effective_circuit_device_name(
     if device is not None and device.name_by_user:
         return device.name_by_user
     return circuit_device_name(circuit, circuit_id)
+
+
+def circuit_display_name(
+    device_registry: DeviceRegistry,
+    serial: str,
+    circuit: SpanCircuitSnapshot,
+    circuit_id: str,
+    *,
+    config_entry_id: str,
+) -> str:
+    """Return a circuit's name as Home Assistant shows it, for text that names the circuit to a person.
+
+    Its own device's name (`device_display_name`): the user's where they renamed
+    the device, else the name it is registered under. Read from the registry
+    each time it is asked, so a rename made since setup is the name the next
+    message carries. Unlike `effective_circuit_device_name`, a registered
+    device's `name` is read rather than the one it is about to be given:
+    between a rename on the panel and the reload that renames the device, Home
+    Assistant still shows the old one.
+
+    A circuit with no device takes the name `circuit_device_info` would give it
+    (`circuit_device_name`). A charger's feed circuit has none where it has
+    neither a breaker switch nor a priority select, and on the first setup after
+    an upgrade from a release before circuits had devices, the monitor judges
+    pushes before they are registered.
+
+    A circuit's device is always registered under a name, and Home Assistant
+    offers a user no way to clear it.
+    """
+    device = circuit_device(device_registry, serial, circuit_id, config_entry_id=config_entry_id)
+    if device is None:
+        return circuit_device_name(circuit, circuit_id)
+    if not (name := device_display_name(device)):
+        raise RuntimeError(f"The device of circuit {circuit_id} has no name to show")
+    return name

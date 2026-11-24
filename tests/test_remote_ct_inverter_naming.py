@@ -33,7 +33,8 @@ from custom_components.span_panel.helpers import (
 from custom_components.span_panel.util import pv_inverter_device_identifier
 
 from .captures_replay import RetainedTree, capture, panel_device_id, snapshot
-from .replayed_panel import MONITORED_OPTIONS, Panel, replayed_panels
+from .replayed_panel import Panel, replayed_panels
+from .test_expected_entities import FRESH_INSTALL_OPTIONS
 
 TREE: Final = "r202645-a"
 DONOR: Final = "main32_r202639-upstream-pv"
@@ -167,7 +168,7 @@ async def test_an_inverter_a_remote_ct_feeds_is_named_by_its_label(
     remote CT does not have.
     """
     tree, remote = derived_tree()
-    panel = panels(tree, options={**MONITORED_OPTIONS, USE_CIRCUIT_NUMBERS: numbers})
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, USE_CIRCUIT_NUMBERS: numbers})
     await panel.set_up(tree)
 
     card, rows = card_and_rows(panel, remote)
@@ -222,7 +223,7 @@ async def test_an_install_the_earlier_naming_built_keeps_its_entity_ids(
     the wire id.
     """
     tree, remote = derived_tree(name)
-    panel = panels(tree, options={**MONITORED_OPTIONS, USE_CIRCUIT_NUMBERS: numbers})
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, USE_CIRCUIT_NUMBERS: numbers})
     with patch("custom_components.span_panel.helpers.resolve_pv_display_suffix", _earlier_suffix):
         await panel.set_up(tree)
     card, rows = card_and_rows(panel, remote)

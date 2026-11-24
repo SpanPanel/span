@@ -28,8 +28,8 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     DOMAIN,
-    ENABLE_CURRENT_MONITORING,
 )
+from custom_components.span_panel.current_monitor import StoredMonitoring, _store_for
 from custom_components.span_panel.id_builder import (
     build_circuit_device_identifier,
     build_circuit_unique_id,
@@ -45,12 +45,6 @@ from .test_expected_entities import FRESH_INSTALL_OPTIONS
 
 PANEL_NAME: Final = "Span Panel"
 
-MONITORED_OPTIONS: Final[Mapping[str, object]] = {
-    **FRESH_INSTALL_OPTIONS,
-    ENABLE_CURRENT_MONITORING: True,
-}
-"""A fresh install's options, with current monitoring switched on."""
-
 
 # ---------------------------------------------------------------------------
 # One panel, over the trees a test sets it up on
@@ -64,7 +58,10 @@ class Panel:
     hass: HomeAssistant
     entry: MockConfigEntry
     tree: RetainedTree
+    monitored: bool = False
+    """Whether current monitoring was switched on before the first setup, as the store records it."""
     clients: list[ReplayClient] = field(default_factory=list)
+    _seeded: bool = False
 
     def client(self) -> ReplayClient:
         """Build the client a setup connects with, over the tree served now."""
@@ -92,10 +89,24 @@ class Panel:
     async def set_up(self, tree: RetainedTree) -> None:
         """Set the entry up over `tree`, then stream it once, as a live panel's first push."""
         self.tree = tree
+        if self.monitored and not self._seeded:
+            await self._switch_monitoring_on()
         assert await self.hass.config_entries.async_setup(self.entry.entry_id) is True
         await self.hass.async_block_till_done()
         assert self.entry.state is ConfigEntryState.LOADED
         await self.push(tree)
+
+    async def _switch_monitoring_on(self) -> None:
+        """Record monitoring as on in the store, keeping whatever else a test seeded there.
+
+        Once, before the first setup: a later setup reads whatever the test has
+        made of it since.
+        """
+        store = _store_for(self.hass, self.entry)
+        stored = await store.async_load() or StoredMonitoring()
+        stored["enabled"] = True
+        await store.async_save(stored)
+        self._seeded = True
 
     async def push(self, tree: RetainedTree) -> None:
         """Stream `tree` to the running session, as the panel publishing it does."""
@@ -158,7 +169,8 @@ def replayed_panels(hass: HomeAssistant) -> Iterator[Callable[..., Panel]]:
     def make(
         tree: RetainedTree,
         *,
-        options: Mapping[str, object] = MONITORED_OPTIONS,
+        options: Mapping[str, object] = FRESH_INSTALL_OPTIONS,
+        monitored: bool = True,
         entry_id: str = "entry-device-ids",
     ) -> Panel:
         serial = snapshot(tree).serial_number
@@ -181,7 +193,7 @@ def replayed_panels(hass: HomeAssistant) -> Iterator[Callable[..., Panel]]:
             minor_version=CURRENT_CONFIG_MINOR_VERSION,
         )
         entry.add_to_hass(hass)
-        made[serial] = Panel(hass, entry, tree)
+        made[serial] = Panel(hass, entry, tree, monitored=monitored)
         return made[serial]
 
     def client_for(_host: str, serial: str, *_args: object, **_kwargs: object) -> ReplayClient:

@@ -15,13 +15,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Final, Literal, TypedDict
 
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot, shared_meter_groups
 
-from .alert_dispatcher import dispatch_alert, format_notification
+from .alert_dispatcher import dispatch_alert
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
@@ -34,6 +34,7 @@ from .const import (
 )
 from .device_id_migration import rekeyed
 from .entity_resolver import resolve_circuit_id
+from .entry_reloads import async_update_entry_options_applied
 from .helpers import build_circuit_unique_id, build_panel_unique_id, construct_circuit_label
 from .meter_capacity import meter_capacity_a
 from .options import (
@@ -59,6 +60,7 @@ from .threshold_evaluator import (
     is_monitoring_disabled,
     resolve_thresholds,
 )
+from .util import circuit_display_name
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -84,6 +86,12 @@ _MAINS_CURRENT_ATTRS: dict[str, str] = {
 
 _STORAGE_VERSION = 1
 _STORAGE_KEY_PREFIX = "span_panel_current_monitor"
+
+_LEGACY_ENABLE_OPTION: Final = "enable_current_monitoring"
+"""The option a release before the monitoring store switched monitoring on by.
+
+Read only by `async_adopt_legacy_enable_option`, which moves it into the store.
+"""
 
 StoredMonitoring = TypedDict(
     "StoredMonitoring",
@@ -174,6 +182,11 @@ class MonitoredCircuit:
     is judged once, against its capacity (`meter_capacity_a`), under the id of
     its first member: that key is stable while the membership is, which is
     enough for alerts and overrides, neither of which is an entity.
+
+    `name` is the panel's name for the point, each member's label joined with " + ":
+    the alert event's `alert_name`, which automations read, so a rename in Home
+    Assistant never changes it. The alert's text names the point as Home
+    Assistant shows it instead (`CurrentMonitor._display_name`).
 
     `rating_a` is the rating judged against and `panel_rating_a` the breaker rating the
     panel published, each None where a circuit, or the capacity of a group, is unknown.
@@ -461,10 +474,13 @@ class CurrentMonitor:
         self._hass.async_create_task(self.async_save_overrides())
 
     def _resolve_circuit_entity_id(self, circuit_id: str) -> str:
-        """Resolve circuit_id to a sensor entity_id for monitoring status keys.
+        """Return the entity a circuit is shown under: its monitoring status key, and its alert's `{entity_id}`.
 
-        Tries the current sensor first, then falls back to power, matching
-        the frontend lookup order (circuit.entities.current ?? .power).
+        Its Current sensor, else its Power sensor, matching the frontend lookup
+        order (circuit.entities.current ?? .power): a circuit that never publishes
+        a current has no Current sensor, nor does one whose current first arrived
+        after setup until the next reload. The circuit's id where Home Assistant
+        holds neither, as for a circuit the panel added since the entry was set up.
         """
         serial = self._last_snapshot.serial_number
         entity_reg = er.async_get(self._hass)
@@ -524,7 +540,12 @@ class CurrentMonitor:
         return entity_id
 
     def _resolve_mains_entity_id(self, leg: str) -> str:
-        """Resolve mains leg to its current sensor entity_id, or fall back to leg name."""
+        """Return a mains leg's Current sensor, which its alert's `{entity_id}` carries.
+
+        Upstream L1's is also the key the monitoring status shows the mains
+        under. The leg's name where Home Assistant holds no such sensor, as for a
+        leg whose current first arrived after setup.
+        """
         serial = self._last_snapshot.serial_number
         # The sensor key matches the leg name + "_current" (e.g., "upstream_l1_current")
         unique_id = build_panel_unique_id(serial, f"{leg}_current")
@@ -761,6 +782,7 @@ class CurrentMonitor:
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=point.name,
+                    display_name=self._display_name(point, snapshot),
                     alert_id=circuit_id,
                     alert_source="circuit",
                     current_a=alert.current_a,
@@ -772,6 +794,7 @@ class CurrentMonitor:
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,
+                    entity_id=self._resolve_circuit_entity_id(circuit_id),
                 )
 
             alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
@@ -781,6 +804,7 @@ class CurrentMonitor:
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=point.name,
+                    display_name=self._display_name(point, snapshot),
                     alert_id=circuit_id,
                     alert_source="circuit",
                     current_a=alert.current_a,
@@ -794,7 +818,28 @@ class CurrentMonitor:
                     panel_serial=snapshot.serial_number,
                     window_duration_s=alert.window_duration_s,
                     over_threshold_since=alert.over_threshold_since,
+                    entity_id=self._resolve_circuit_entity_id(circuit_id),
                 )
+
+    def _display_name(self, point: MonitoredCircuit, snapshot: SpanPanelSnapshot) -> str:
+        """Name a point as Home Assistant shows it, for the text of the alert it raises.
+
+        Each member's device as Home Assistant shows it (`util.circuit_display_name`),
+        joined as `MonitoredCircuit.name` joins the panel's names. Asked when an
+        alert fires rather than held, so a device renamed since setup is named
+        by its new name in the next alert.
+        """
+        device_registry = dr.async_get(self._hass)
+        return " + ".join(
+            circuit_display_name(
+                device_registry,
+                snapshot.serial_number,
+                snapshot.circuits[member],
+                member,
+                config_entry_id=self._entry.entry_id,
+            )
+            for member in point.members
+        )
 
     # --- Mains evaluation ---
 
@@ -819,7 +864,9 @@ class CurrentMonitor:
                 self._mains_overrides.get(leg, {}), self.get_global_settings()
             )
 
-            leg_label = leg.replace("_", " ").title()
+            # The mains has no device of its own, so its text and its event both
+            # name the leg by its own name.
+            leg_name = f"Mains {leg.replace('_', ' ').title()}"
 
             alert = check_spike(state, current, rating, spike_pct, cooldown_m)
             if alert is not None:
@@ -827,7 +874,8 @@ class CurrentMonitor:
                     self._hass,
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
-                    alert_name=f"Mains {leg_label}",
+                    alert_name=leg_name,
+                    display_name=leg_name,
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,
@@ -840,6 +888,7 @@ class CurrentMonitor:
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
                     panel_serial=snapshot.serial_number,
+                    entity_id=self._resolve_mains_entity_id(leg),
                 )
 
             alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
@@ -848,7 +897,8 @@ class CurrentMonitor:
                     self._hass,
                     self.get_global_settings(),
                     alert_type=alert.alert_type,
-                    alert_name=f"Mains {leg_label}",
+                    alert_name=leg_name,
+                    display_name=leg_name,
                     alert_id=leg,
                     alert_source="mains",
                     current_a=alert.current_a,
@@ -863,15 +913,39 @@ class CurrentMonitor:
                     panel_serial=snapshot.serial_number,
                     window_duration_s=alert.window_duration_s,
                     over_threshold_since=alert.over_threshold_since,
+                    entity_id=self._resolve_mains_entity_id(leg),
                 )
-
-    # Backward-compatible static alias kept for existing callers/tests.
-    _format_notification = staticmethod(format_notification)
 
 
 def _store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredMonitoring]:
     """Return the store holding one panel's monitoring settings."""
     return Store(hass, _STORAGE_VERSION, f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}")
+
+
+async def async_adopt_legacy_enable_option(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Move an entry's legacy `enable_current_monitoring` option into the monitoring store, once.
+
+    Monitoring is switched on and off in the store alone, which turning it off
+    writes; an option left in the entry turned it on again at every setup, so an
+    entry holding it could not stay off across a restart. Setup calls this
+    before it reads the store. Where the store already holds a flag, that flag
+    is the user's last word and the option carries nothing; otherwise an option
+    that is on is recorded as on, and one that is off needs no record, since a
+    store holding no flag is off. Either way the option leaves the entry, through
+    a write that asks for no reload, because this setup has already applied it.
+    """
+    if _LEGACY_ENABLE_OPTION not in entry.options:
+        return
+    store = _store_for(hass, entry)
+    data = _read_stored(await store.async_load(), entry) or StoredMonitoring()
+    if "enabled" not in data and entry.options[_LEGACY_ENABLE_OPTION]:
+        data["enabled"] = True
+        await store.async_save(data)
+    async_update_entry_options_applied(
+        hass,
+        entry,
+        {key: value for key, value in entry.options.items() if key != _LEGACY_ENABLE_OPTION},
+    )
 
 
 async def async_forget_monitoring(hass: HomeAssistant, entry: ConfigEntry) -> None:

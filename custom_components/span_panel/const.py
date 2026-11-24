@@ -114,7 +114,6 @@ NEW_INSTALL_ENERGY_DIP_COMPENSATION = True
 """The config flow's starting choice for a new install, which it stores."""
 
 # Current monitoring configuration
-ENABLE_CURRENT_MONITORING = "enable_current_monitoring"
 DEFAULT_CONTINUOUS_THRESHOLD_PCT = 80
 DEFAULT_SPIKE_THRESHOLD_PCT = 100
 DEFAULT_WINDOW_DURATION_M = 15

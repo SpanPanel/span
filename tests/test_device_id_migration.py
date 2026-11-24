@@ -86,7 +86,8 @@ from .captures_replay import (
     without_topics,
 )
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
-from .replayed_panel import MONITORED_OPTIONS, PANEL_NAME, Panel, replayed_panels
+from .replayed_panel import PANEL_NAME, Panel, replayed_panels
+from .test_expected_entities import FRESH_INSTALL_OPTIONS
 
 BEFORE: Final = "r202639-e"
 AFTER: Final = "r202645-e"
@@ -415,7 +416,7 @@ async def install_and_update(
     panels: Callable[..., Panel],
     hass_storage: dict[str, object],
     *,
-    options: Mapping[str, object] = MONITORED_OPTIONS,
+    options: Mapping[str, object] = FRESH_INSTALL_OPTIONS,
     serial: str | None = None,
 ) -> tuple[Panel, Registered, str]:
     """Install on r202639-e with every setting the panel can hold, then restart on r202645-e."""
@@ -484,9 +485,11 @@ family's old and new ids exactly as its builder does.
 @pytest.mark.parametrize(
     ("options", "serial"),
     [
-        pytest.param(MONITORED_OPTIONS, None, id="circuit-names"),
-        pytest.param({**MONITORED_OPTIONS, USE_CIRCUIT_NUMBERS: True}, None, id="circuit-numbers"),
-        pytest.param(MONITORED_OPTIONS, MIXED_CASE_SERIAL, id="a-mixed-case-serial"),
+        pytest.param(FRESH_INSTALL_OPTIONS, None, id="circuit-names"),
+        pytest.param(
+            {**FRESH_INSTALL_OPTIONS, USE_CIRCUIT_NUMBERS: True}, None, id="circuit-numbers"
+        ),
+        pytest.param(FRESH_INSTALL_OPTIONS, MIXED_CASE_SERIAL, id="a-mixed-case-serial"),
     ],
 )
 async def test_an_install_keeps_everything_across_the_update(

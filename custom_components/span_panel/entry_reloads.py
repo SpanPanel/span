@@ -36,9 +36,9 @@ options, title or unique ID differ from what the running setup was built from.
 A preference or a discovery key written to the entry asks for nothing: Home
 Assistant reloads for the polling preference itself, and nothing here reads the
 others. A writer that applies its own change, as setup does when it pins a CA or
-renames an entry titled with its serial, writes through
-`async_update_entry_data_applied` or `async_update_entry_title_applied` and asks
-for nothing either.
+renames an entry titled with its serial, or removes the legacy monitoring option,
+writes through `async_update_entry_data_applied`, `async_update_entry_title_applied`
+or `async_update_entry_options_applied` and asks for nothing either.
 """
 
 from __future__ import annotations
@@ -194,6 +194,24 @@ def async_update_entry_title_applied(hass: HomeAssistant, entry: ConfigEntry, ti
         entry,
         lambda applied: replace(applied, title=title),
         lambda: hass.config_entries.async_update_entry(entry, title=title),
+    )
+
+
+@callback
+def async_update_entry_options_applied(
+    hass: HomeAssistant, entry: ConfigEntry, options: Mapping[str, object]
+) -> bool:
+    """Write the entry's options for a writer that applies them itself, asking for no reload.
+
+    For setup's removal of the legacy `enable_current_monitoring` option, which
+    it has already carried into the monitoring store. Only the options are
+    written and recorded; see `_async_write_applied`.
+    """
+    return _async_write_applied(
+        hass,
+        entry,
+        lambda applied: replace(applied, options=copy.deepcopy(dict(options))),
+        lambda: hass.config_entries.async_update_entry(entry, options=options),
     )
 
 

@@ -360,21 +360,21 @@ class TestPanelChoice:
         with pytest.raises(ServiceValidationError) as raised:
             await _set(hass, circuit_id=entity_id, package_ratings_a=[20, 30])
 
-        assert raised.value.translation_key == "favorite_panel_not_loaded"
+        assert raised.value.translation_key == "monitoring_panel_not_loaded"
         assert entry_a.state is ConfigEntryState.LOADED
 
     @pytest.mark.parametrize("service", ["set", "clear"])
     async def test_with_no_panel_loaded_the_call_says_so(
         self, hass: HomeAssistant, service: str
     ) -> None:
-        """With no panel loaded either call says so, with the one message that fits both."""
+        """With no panel loaded either call says so, as every monitoring service does."""
         with pytest.raises(ServiceValidationError) as raised:
             if service == "set":
                 await _set(hass, circuit_id="circuit-2", package_ratings_a=[20, 30])
             else:
                 await _clear(hass, circuit_id="circuit-2")
 
-        assert raised.value.translation_key == "package_ratings_panel_not_loaded"
+        assert raised.value.translation_key == "monitoring_panel_not_loaded"
 
 
 def _panel_of(*circuit_ids: str) -> SpanPanelSnapshot:

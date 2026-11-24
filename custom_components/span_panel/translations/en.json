@@ -530,7 +530,13 @@
       "message": "Entity {entity_id} belongs to a different SPAN Panel than config entry {config_entry_id}. Leave config_entry_id out, or name the entity's own panel."
     },
     "monitoring_not_enabled": {
-      "message": "No SPAN panel with current monitoring enabled."
+      "message": "Current monitoring is off on this SPAN Panel. Turn it on before changing its thresholds."
+    },
+    "monitoring_panel_not_loaded": {
+      "message": "The SPAN Panel is not loaded, so its current monitoring, and the ratings it judges against, cannot be read or changed."
+    },
+    "monitoring_panel_unknown": {
+      "message": "No SPAN Panel has config entry {config_entry_id}, so there is no monitoring to read or change."
     },
     "panel_auth_failed": {
       "message": "Authentication with the SPAN Panel failed. Please reauthenticate."
@@ -612,9 +618,6 @@
     },
     "package_ratings_circuit_unknown": {
       "message": "This panel has no circuit with that id."
-    },
-    "package_ratings_panel_not_loaded": {
-      "message": "No SPAN Panel is loaded, so no ratings can be copied or cleared."
     }
   },
   "options": {

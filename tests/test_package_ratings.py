@@ -548,5 +548,4 @@ def test_every_reason_the_rule_removes_an_entry_for_is_a_refusal_for_entered_rat
 def test_every_refusal_has_its_own_message_and_every_message_a_refusal() -> None:
     strings = json.loads((Path(__file__).parent.parent / "custom_components/span_panel/strings.json").read_text(encoding="utf-8"))
     keys = {key for key in strings["exceptions"] if key.startswith("package_ratings_")}
-    # Raised by the services, before any rule is asked: no panel to judge by.
-    assert keys - {"package_ratings_panel_not_loaded"} == {f"package_ratings_{reason}" for reason in get_args(Refusal.__value__)}
+    assert keys == {f"package_ratings_{reason}" for reason in get_args(Refusal.__value__)}

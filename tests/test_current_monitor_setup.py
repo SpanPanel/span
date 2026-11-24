@@ -33,13 +33,17 @@ from custom_components.span_panel.current_monitor import CurrentMonitor, Monitor
 from custom_components.span_panel.options import NOTIFY_TARGETS
 
 from .captures_replay import ReplayClient, RetainedTree, capture, snapshot
-from .replayed_panel import MONITORED_OPTIONS, Panel, replayed_panels
+from .replayed_panel import Panel, replayed_panels
+from .test_expected_entities import FRESH_INSTALL_OPTIONS
 
 _NOTIFY_SERVICE: Final = "synthetic_phone"
 """A notify service standing in for a user's phone."""
 
-_OPTIONS: Final = {**MONITORED_OPTIONS, NOTIFY_TARGETS: f"event_bus, notify.{_NOTIFY_SERVICE}"}
-"""Monitoring on, alerting through both channels: the event bus and a notify service."""
+_OPTIONS: Final = {**FRESH_INSTALL_OPTIONS, NOTIFY_TARGETS: f"event_bus, notify.{_NOTIFY_SERVICE}"}
+"""Alerting through both channels: the event bus and a notify service."""
+
+_LEGACY_OPTION: Final = "enable_current_monitoring"
+"""The option a release before the monitoring store switched monitoring on by, as entries still hold it."""
 
 _BETWEEN: Final = timedelta(seconds=30)
 """Time let pass after the monitor is built, and again before the first push."""
@@ -217,3 +221,92 @@ async def test_until_the_first_judgement_the_status_lists_the_circuits_unjudged(
     assert [(event.data["alert_id"], event.data["alert_type"]) for event in alerts] == [
         (circuit_id, "spike")
     ]
+
+
+# ---------------------------------------------------------------------------
+# The legacy `enable_current_monitoring` option
+# ---------------------------------------------------------------------------
+
+
+async def _stored_monitoring(hass: HomeAssistant, panel: Panel) -> bool:
+    return await CurrentMonitor.async_is_enabled(hass, panel.entry)
+
+
+async def test_an_entry_with_the_legacy_option_and_no_stored_flag_starts_monitoring_and_loses_the_option(
+    hass: HomeAssistant, panels: Callable[..., Panel]
+) -> None:
+    """The option is moved into the store once, at setup, and asks for no reload in leaving the options."""
+    tree, _circuit_id, _rating = _overloaded()
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, _LEGACY_OPTION: True}, monitored=False)
+
+    await panel.set_up(tree)
+    runtime = panel.runtime
+    await hass.async_block_till_done()
+
+    assert panel.runtime is runtime
+    assert runtime.coordinator.current_monitor is not None
+    assert _LEGACY_OPTION not in panel.entry.options
+    assert dict(panel.entry.options) == dict(FRESH_INSTALL_OPTIONS)
+    assert await _stored_monitoring(hass, panel) is True
+
+
+async def test_an_entry_with_the_legacy_option_off_stays_off_and_loses_the_option(
+    hass: HomeAssistant, panels: Callable[..., Panel]
+) -> None:
+    """An option that is off needs no record: a store holding no flag is off."""
+    tree, _circuit_id, _rating = _overloaded()
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, _LEGACY_OPTION: False}, monitored=False)
+
+    await panel.set_up(tree)
+
+    assert panel.runtime.coordinator.current_monitor is None
+    assert dict(panel.entry.options) == dict(FRESH_INSTALL_OPTIONS)
+    assert await _stored_monitoring(hass, panel) is False
+
+
+async def test_monitoring_turned_off_stays_off_across_a_restart_on_an_entry_that_held_the_option(
+    hass: HomeAssistant, panels: Callable[..., Panel]
+) -> None:
+    """Turning monitoring off writes only the store, so the option must not turn it on again."""
+    tree, _circuit_id, _rating = _overloaded()
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, _LEGACY_OPTION: True}, monitored=False)
+    await panel.set_up(tree)
+
+    await panel.call("set_global_monitoring", enabled=False)
+    await panel.restart_on(tree)
+
+    assert panel.runtime.coordinator.current_monitor is None
+    assert await _stored_monitoring(hass, panel) is False
+
+
+async def test_a_stored_off_wins_over_the_legacy_option(
+    hass: HomeAssistant, panels: Callable[..., Panel], hass_storage: dict[str, object]
+) -> None:
+    """Where the store already holds a flag, the option carries nothing over, and still leaves the options."""
+    tree, _circuit_id, _rating = _overloaded()
+    panel = panels(tree, options={**FRESH_INSTALL_OPTIONS, _LEGACY_OPTION: True}, monitored=False)
+    key = f"span_panel_current_monitor.{panel.entry.entry_id}"
+    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {"enabled": False}}
+
+    await panel.set_up(tree)
+    assert panel.runtime.coordinator.current_monitor is None
+    await panel.restart_on(tree)
+
+    assert panel.runtime.coordinator.current_monitor is None
+    assert _LEGACY_OPTION not in panel.entry.options
+    assert await _stored_monitoring(hass, panel) is False
+
+
+@pytest.mark.parametrize("monitored", [True, False], ids=["monitoring on", "monitoring off"])
+async def test_an_entry_without_the_legacy_option_is_unchanged(
+    hass: HomeAssistant, panels: Callable[..., Panel], monitored: bool
+) -> None:
+    """Its options are left as they are, and monitoring follows the store alone."""
+    tree, _circuit_id, _rating = _overloaded()
+    panel = panels(tree, options=FRESH_INSTALL_OPTIONS, monitored=monitored)
+
+    await panel.set_up(tree)
+
+    assert dict(panel.entry.options) == dict(FRESH_INSTALL_OPTIONS)
+    assert (panel.runtime.coordinator.current_monitor is not None) is monitored
+    assert await _stored_monitoring(hass, panel) is monitored
