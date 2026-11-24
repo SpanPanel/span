@@ -13,6 +13,27 @@ All notable changes to this project will be documented in this file.
   the panel to load and draws the panel once it has loaded**, where it showed "Unable to connect to SPAN Panel" until Retry was pressed or the dashboard was
   opened again.
 
+- **The sidebar dashboard, opened while Home Assistant is starting or restarting or while the integration retries a panel it cannot reach, says it is waiting
+  for the panel to load and draws the panel once it has loaded**, where it showed errors, monitoring as off or missing favorites meanwhile, and could miss the
+  panel's unreachable warning.
+
+- **A SPAN Panel card or the sidebar dashboard whose panel failed to set up, as when it must be authenticated again, cannot load until Home Assistant is
+  restarted, or is disabled, says so and how to set it right, and draws the panel once it has loaded**, where the card showed "Unable to connect to SPAN Panel"
+  and the sidebar "SPAN Panel integration is not loaded", monitoring as off or no favorites.
+
+- **A SPAN Panel card left on a dashboard after its panel was removed says it is unable to connect**, where it drew an empty card.
+
+- **The card and the sidebar dashboard show a panel's monitoring again once a reload of the panel, as after its options are changed, finishes**, where a view
+  drawn or a circuit's side panel opened during the reload could show monitoring as off until opened again.
+
+- **The sidebar dashboard says no SPAN Panel is found where there is none**, where it showed "Panel device not found. Check device_id in card config."
+
+- **The sidebar dashboard's panel list catches up once the connection to Home Assistant is back**, where a panel added, removed or renamed just as the
+  connection was lost stayed listed as it was until the next change.
+
+- **The Monitoring tab's Event Bus help lists every key of the `span_panel_current_alert` event**, the new `alert_display_name`, the circuit's name as Home
+  Assistant shows it, among them, where it left out the keys for the monitoring rating, the copied package ratings and when the overload began.
+
 - **An error from a breaker, circuit priority, charger or adopted-device control now names the circuit or device by the name you gave it in Home Assistant**,
   where it kept the name the panel or the integration gave it.
 
