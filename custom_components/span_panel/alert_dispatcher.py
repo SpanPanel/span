@@ -39,8 +39,8 @@ _LOGGER = logging.getLogger(__name__)
 def format_notification(
     *,
     alert_type: str,
-    alert_name: str,
-    alert_id: str,
+    display_name: str,
+    entity_id: str,
     current_a: float,
     monitoring_rating_a: float,
     threshold_pct: int,
@@ -52,13 +52,22 @@ def format_notification(
 ) -> tuple[str, str]:
     """Format notification title and message using templates.
 
-    `monitoring_rating_a` is the rating the point was judged against, which the
-    `{breaker_rating_a}` placeholder carries.
+    `display_name` is the point's name as Home Assistant shows it, which the
+    `{name}` placeholder carries, and `entity_id` the entity it is shown under,
+    which `{entity_id}` carries. `monitoring_rating_a` is the rating the point
+    was judged against, which the `{breaker_rating_a}` placeholder carries.
 
     Available placeholders:
-        {name}            - The circuit's name in the SPAN app, or the mains leg
+        {name}            - The circuit's name as Home Assistant shows it: the
+                            name the user gave its device, else the name the
+                            device is registered under, those of circuits that
+                            share a meter joined with " + "; or the mains leg
                             (e.g. "Mains Upstream L1")
-        {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
+        {entity_id}       - The entity ID of the circuit's Current sensor, or
+                            its Power sensor where it has none, that of the
+                            circuit `alert_id` names for circuits that share a
+                            meter; for the mains, the leg's Current sensor
+                            (e.g. sensor.kitchen_current)
         {alert_type}      - "spike" or "continuous_overload"
         {current_a}       - Current draw in amps (e.g. 18.3)
         {breaker_rating_a}- The rating in amps the circuit is judged against (e.g. 20):
@@ -73,8 +82,8 @@ def format_notification(
     """
     window_m = (window_duration_s or 0) // 60
     template_vars = {
-        "name": alert_name,
-        "entity_id": alert_id,
+        "name": display_name,
+        "entity_id": entity_id,
         "alert_type": alert_type,
         "current_a": f"{current_a:.1f}",
         "breaker_rating_a": f"{monitoring_rating_a:.0f}",
@@ -86,12 +95,12 @@ def format_notification(
     try:
         title = title_template.format_map(template_vars)
     except (KeyError, ValueError):
-        title = f"SPAN: {alert_name} {alert_type}"
+        title = f"SPAN: {display_name} {alert_type}"
     try:
         message = message_template.format_map(template_vars)
     except (KeyError, ValueError):
         message = (
-            f"{alert_name} at {current_a:.1f}A "
+            f"{display_name} at {current_a:.1f}A "
             f"({utilization_pct}% of {monitoring_rating_a:.0f}A rating) at {local_time or ''}"
         )
     return title, message
@@ -163,7 +172,9 @@ def dispatch_alert(
     *,
     alert_type: str,
     alert_name: str,
+    display_name: str,
     alert_id: str,
+    entity_id: str,
     alert_source: str,
     current_a: float,
     breaker_rating_a: float | None,
@@ -178,6 +189,15 @@ def dispatch_alert(
     over_threshold_since: str | None = None,
 ) -> None:
     """Dispatch alert through all enabled notification channels.
+
+    `alert_name` is the panel's name for the point and `display_name` the name
+    Home Assistant shows for it, the user's where they renamed the circuit's
+    device. The event carries both, as `alert_name` and `alert_display_name`:
+    automations read `alert_name`, so a rename in Home Assistant never changes
+    it. The title and message are read by a person, so their `{name}` is the
+    name that person finds the circuit under. `alert_id` is the point's id,
+    which the event carries, and `entity_id` the entity the point is shown
+    under, which only the text's `{entity_id}` carries.
 
     The event payload carries the ratings as `get_monitoring_status` does:
     `breaker_rating_a` is the panel's rating (a shared meter's capacity over its
@@ -199,6 +219,7 @@ def dispatch_alert(
         "alert_source": alert_source,
         "alert_id": alert_id,
         "alert_name": alert_name,
+        "alert_display_name": display_name,
         "alert_type": alert_type,
         "current_a": round(current_a, 1),
         "breaker_rating_a": breaker_rating_a,
@@ -227,8 +248,8 @@ def dispatch_alert(
 
     title, message = format_notification(
         alert_type=alert_type,
-        alert_name=alert_name,
-        alert_id=alert_id,
+        display_name=display_name,
+        entity_id=entity_id,
         current_a=current_a,
         monitoring_rating_a=monitoring_rating_a,
         threshold_pct=threshold_pct,
@@ -274,7 +295,13 @@ def dispatch_test_alert(
     """Dispatch a test notification using sample values through all enabled channels."""
     alert_type = "spike"
     alert_name = "Kitchen Oven"
+    # The sample circuit is one nobody renamed, so Home Assistant shows it by
+    # the panel's name.
+    display_name = alert_name
     alert_id = "sensor.kitchen_oven_current"
+    # The sample's id has always been its sensor's entity ID, so the text's
+    # `{entity_id}` carries the same one.
+    entity_id = alert_id
     alert_source = "circuit"
     current_a = 18.3
     breaker_rating_a = 20.0
@@ -296,6 +323,7 @@ def dispatch_test_alert(
         "alert_source": alert_source,
         "alert_id": alert_id,
         "alert_name": alert_name,
+        "alert_display_name": display_name,
         "alert_type": alert_type,
         "current_a": current_a,
         "breaker_rating_a": breaker_rating_a,
@@ -316,8 +344,8 @@ def dispatch_test_alert(
 
     title, message = format_notification(
         alert_type=alert_type,
-        alert_name=alert_name,
-        alert_id=alert_id,
+        display_name=display_name,
+        entity_id=entity_id,
         current_a=current_a,
         monitoring_rating_a=monitoring_rating_a,
         threshold_pct=threshold_pct,

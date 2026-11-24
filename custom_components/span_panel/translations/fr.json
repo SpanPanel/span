@@ -484,9 +484,6 @@
     "package_ratings_circuit_unknown": {
       "message": "Ce panneau n'a aucun circuit avec cet identifiant."
     },
-    "package_ratings_panel_not_loaded": {
-      "message": "Aucun SPAN Panel n'est chargé ; aucun calibre ne peut donc être copié ni effacé."
-    },
     "circuit_priority_failed": {
       "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
     },
@@ -560,7 +557,13 @@
       "message": "L'entité {entity_id} appartient à un autre SPAN Panel que l'entrée de configuration {config_entry_id}. Omettez config_entry_id ou indiquez le panneau de l'entité."
     },
     "monitoring_not_enabled": {
-      "message": "Aucun panneau SPAN n'a la surveillance de courant activée."
+      "message": "La surveillance du courant est désactivée sur ce SPAN Panel. Activez-la avant de modifier ses seuils."
+    },
+    "monitoring_panel_not_loaded": {
+      "message": "Le SPAN Panel n'est pas chargé, sa surveillance du courant, et les calibres auxquels elle se compare, ne peuvent donc être ni lus ni modifiés."
+    },
+    "monitoring_panel_unknown": {
+      "message": "Aucun SPAN Panel n'a l'entrée de configuration {config_entry_id} ; il n'y a donc aucune surveillance à lire ni à modifier."
     },
     "panel_auth_failed": {
       "message": "L'authentification avec le SPAN Panel a échoué. Veuillez vous réauthentifier."

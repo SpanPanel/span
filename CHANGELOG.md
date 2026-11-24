@@ -16,6 +16,24 @@ All notable changes to this project will be documented in this file.
 - **An error from a breaker, circuit priority, charger or adopted-device control now names the circuit or device by the name you gave it in Home Assistant**,
   where it kept the name the panel or the integration gave it.
 
+- **Current monitoring notifications now name a circuit by the name you gave it in Home Assistant, including through `{name}` in a custom title or message**,
+  where they used its name in the SPAN app; the `span_panel_current_alert` event carries that name in a new `alert_display_name` field and leaves `alert_name`
+  as it was.
+
+- **The Get monitoring status action now fails with an error when the panel it is asked about has not finished loading, such as while Home Assistant starts, or
+  when the config entry it names is not a SPAN Panel's**, where it answered that monitoring was off, so a script step that calls it then stops unless it is set
+  to continue on error, and Home Assistant logs the error.
+
+- **Changing a panel's current monitoring while the panel is not loaded, or naming a config entry that is not a SPAN Panel's, now fails with an error, turning
+  monitoring off included**, where turning it off reported success and left monitoring to start again once the panel loaded, and turning it on, changing its
+  settings or a threshold named by circuit id or leg, or sending a test notification said monitoring was not enabled.
+
+- **The `{entity_id}` placeholder in a current monitoring notification's title or message now carries the entity ID of the circuit's Current sensor, or its
+  Power sensor where it has none, or of the mains leg's Current sensor**, where it carried the circuit's internal id or the leg's name.
+
+- **Current monitoring turned off now stays off after Home Assistant restarts on a panel whose options still hold the monitoring switch an earlier release
+  stored there**, where it came back on at every restart.
+
 ## [2.3.3] - 11/2026
 
 **Install 2.3.3 before your panel updates to firmware r202645**, which gives the panel's circuits new device IDs: 2.3.3 carries every circuit entity, device,
@@ -72,8 +90,8 @@ setting and favorite across to them, and each entity keeps its entity ID and his
 - **A panel reloads once, not twice, after reauthentication, reconfiguration or re-pinning its certificate authority.** Reconfiguring no longer logs Home
   Assistant's warning that the integration "has an update listener and should use it for scheduling a reload".
 
-- **A reload no longer starts in the middle of the panel's own update**, and a change that nothing in the integration reads, such as the system option for
-  new entities, or a rediscovery that changes nothing, no longer reloads the panel.
+- **A reload no longer starts in the middle of the panel's own update**, and a change that nothing in the integration reads, such as the system option for new
+  entities, or a rediscovery that changes nothing, no longer reloads the panel.
 
 - **A change made while a panel is setting up is applied.** An options save that landed during setup was stored but not used until the next restart, and a
   reconfigure completed while the panel was retrying waited for Home Assistant's next retry, up to ten minutes later. Both now reload the panel straight away.
@@ -99,8 +117,8 @@ Home Assistant 2026.11.
 
 ### Fixed
 
-- **Discovering or adding a panel no longer logs a warning that its credentials are being sent over plaintext HTTP**, which the schema read that set it off never
-  carries.
+- **Discovering or adding a panel no longer logs a warning that its credentials are being sent over plaintext HTTP**, which the schema read that set it off
+  never carries.
 
 ## [2.3.1] - 11/2026
 

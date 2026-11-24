@@ -79,7 +79,6 @@ from .const import (
     DEFAULT_MQTTS_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
-    ENABLE_CURRENT_MONITORING,
     PANEL_CA_PENDING,
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
@@ -90,7 +89,11 @@ from .conversion_repairs import (
 )
 from .coordinator import SpanPanelCoordinator
 from .curation import async_forget_curation, async_load_curation
-from .current_monitor import CurrentMonitor, async_forget_monitoring
+from .current_monitor import (
+    CurrentMonitor,
+    async_adopt_legacy_enable_option,
+    async_forget_monitoring,
+)
 from .device_id_rekey import async_migrate_device_ids, entry_holds_old_ids
 from .entry_issues import async_clear_unlinked_issues, entry_removed
 from .entry_reloads import (
@@ -914,9 +917,8 @@ async def _async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 
             await coordinator.async_setup_streaming()
 
-            if entry.options.get(
-                ENABLE_CURRENT_MONITORING, False
-            ) or await CurrentMonitor.async_is_enabled(hass, entry):
+            await async_adopt_legacy_enable_option(hass, entry)
+            if await CurrentMonitor.async_is_enabled(hass, entry):
                 # Held, not judged: the first judgement, and any alert it raises,
                 # is the next update's.
                 monitor = CurrentMonitor(

@@ -16,12 +16,13 @@ from custom_components.span_panel.const import (
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
-    ENABLE_CURRENT_MONITORING,
     EVENT_CURRENT_ALERT,
 )
 from homeassistant.core import CoreState
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 
+from custom_components.span_panel.alert_dispatcher import format_notification
 from custom_components.span_panel.package_rating_manager import PackageRatingManager
 from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.curation import CurationOverlay
@@ -47,7 +48,6 @@ pytestmark = pytest.mark.usefixtures("hass_storage")
 def _make_options(**overrides):
     """Create options dict with monitoring enabled and defaults."""
     opts = {
-        ENABLE_CURRENT_MONITORING: True,
         CONTINUOUS_THRESHOLD_PCT: DEFAULT_CONTINUOUS_THRESHOLD_PCT,
         SPIKE_THRESHOLD_PCT: DEFAULT_SPIKE_THRESHOLD_PCT,
         WINDOW_DURATION_M: DEFAULT_WINDOW_DURATION_M,
@@ -106,6 +106,9 @@ def _make_hass():
     hass.states = MagicMock()
     hass.states.get = MagicMock(return_value=None)
     hass.async_create_task = MagicMock(side_effect=_run_coro)
+    # Its device registry holds no device, as before a panel's entities register
+    # theirs, so an alert names each circuit by the name its device will be given.
+    dr.async_get(hass).async_get_child_device_by_identifier.return_value = None
     return hass
 
 
@@ -664,8 +667,16 @@ def _panel_with_a_fresh_monitor(
 
 
 def _loaded(hass: MagicMock, *entries: MagicMock) -> None:
-    """Make these the loaded entries, in this order: the first is the old default panel."""
+    """Make these the loaded entries, in this order: the first is the old default panel.
+
+    They are the SPAN Panel entries Home Assistant holds too, so a call naming
+    one finds it, and a call naming any other id names no panel.
+    """
+    for entry in entries:
+        entry.domain = DOMAIN
+    by_id = {entry.entry_id: entry for entry in entries}
     hass.config_entries.async_loaded_entries = MagicMock(return_value=list(entries))
+    hass.config_entries.async_get_entry = MagicMock(side_effect=by_id.get)
 
 
 def _call(**data: Any) -> MagicMock:
@@ -719,7 +730,10 @@ class TestThresholdServicesBeforeTheFirstPush:
         assert "gone" not in monitor._circuit_overrides
 
     async def test_an_entity_whose_panel_is_not_loaded_says_so(self):
-        """Not that monitoring is off: nothing about monitoring was read."""
+        """Not that monitoring is off: nothing about monitoring was read.
+
+        Said as every monitoring service says it, which the card waits on.
+        """
         hass = _make_hass()
         entry, _monitor, _snapshot = _panel_with_a_fresh_monitor(hass, "panel_a", "c-1")
         _loaded(hass, entry)
@@ -731,8 +745,7 @@ class TestThresholdServicesBeforeTheFirstPush:
         ):
             await handlers["clear_circuit_threshold"](_call(circuit_id="sensor.b_c_1_current"))
 
-        assert raised.value.translation_key == "favorite_panel_not_loaded"
-        assert raised.value.translation_placeholders == {"entity_id": "sensor.b_c_1_current"}
+        assert raised.value.translation_key == "monitoring_panel_not_loaded"
 
 
 def _drawing(current_a: float) -> SpanPanelSnapshot:
@@ -1072,10 +1085,10 @@ class TestNotificationDispatch:
 
     def test_notification_message_format_spike(self):
         """Spike notification message includes current and rating."""
-        title, message = CurrentMonitor._format_notification(
+        title, message = format_notification(
             alert_type="spike",
-            alert_name="Kitchen",
-            alert_id="sensor.kitchen_current",
+            display_name="Kitchen",
+            entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
             threshold_pct=100,
@@ -1091,10 +1104,10 @@ class TestNotificationDispatch:
 
     def test_notification_message_format_continuous(self):
         """Continuous notification message includes window duration."""
-        title, message = CurrentMonitor._format_notification(
+        title, message = format_notification(
             alert_type="continuous_overload",
-            alert_name="Kitchen",
-            alert_id="sensor.kitchen_current",
+            display_name="Kitchen",
+            entity_id="sensor.kitchen_current",
             current_a=18.4,
             monitoring_rating_a=20.0,
             threshold_pct=80,
@@ -1114,10 +1127,10 @@ class TestNotificationDispatch:
 
     def test_notification_custom_template_with_entity_id(self):
         """Custom templates produce expected output with entity_id placeholder."""
-        title, message = CurrentMonitor._format_notification(
+        title, message = format_notification(
             alert_type="spike",
-            alert_name="Kitchen",
-            alert_id="sensor.kitchen_current",
+            display_name="Kitchen",
+            entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
             threshold_pct=100,
@@ -1131,10 +1144,10 @@ class TestNotificationDispatch:
 
     def test_notification_invalid_template_falls_back(self):
         """Invalid template placeholders fall back to defaults."""
-        title, message = CurrentMonitor._format_notification(
+        title, message = format_notification(
             alert_type="spike",
-            alert_name="Kitchen",
-            alert_id="sensor.kitchen_current",
+            display_name="Kitchen",
+            entity_id="sensor.kitchen_current",
             current_a=22.1,
             monitoring_rating_a=20.0,
             threshold_pct=100,

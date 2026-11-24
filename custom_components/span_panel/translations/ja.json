@@ -484,9 +484,6 @@
     "package_ratings_circuit_unknown": {
       "message": "このパネルには、その ID の回路がありません。"
     },
-    "package_ratings_panel_not_loaded": {
-      "message": "SPAN Panel が読み込まれていないため、定格をコピーすることもクリアすることもできません。"
-    },
     "circuit_priority_failed": {
       "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
     },
@@ -560,7 +557,13 @@
       "message": "エンティティ {entity_id} は、設定エントリ {config_entry_id} とは別の SPAN Panel に属しています。config_entry_id を省略するか、エンティティ自身のパネルを指定してください。"
     },
     "monitoring_not_enabled": {
-      "message": "電流監視が有効なSPANパネルがありません。"
+      "message": "この SPAN Panel では電流監視がオフになっています。しきい値を変更する前にオンにしてください。"
+    },
+    "monitoring_panel_not_loaded": {
+      "message": "SPAN Panel が読み込まれていないため、電流監視とその判定に使う定格を読み取ることも変更することもできません。"
+    },
+    "monitoring_panel_unknown": {
+      "message": "設定エントリ {config_entry_id} を持つ SPAN Panel がないため、読み取りや変更ができる監視はありません。"
     },
     "panel_auth_failed": {
       "message": "SPAN Panelとの認証に失敗しました。再認証してください。"

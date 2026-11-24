@@ -309,28 +309,51 @@ def _service_name(call: ServiceCall) -> str:
     return f"{call.domain}.{call.service}"
 
 
-def _raise_if_entitys_panel_not_loaded(
-    hass: HomeAssistant, target: str, panel_entry_id: str | None
-) -> None:
-    """Refuse a threshold call whose entity's own panel is chosen but not loaded.
+def _named_panel_entry_id(hass: HomeAssistant, call: ServiceCall) -> str | None:
+    """Return the config entry a monitoring call names, or None where it names none.
 
-    Said as that, rather than as monitoring being off, which nothing has read. A
-    loaded panel, no chosen panel, and a raw id, which belongs to no entity, are
-    all left to the caller's own refusal.
+    Refused where the id is no SPAN Panel's entry, whether no entry has it or
+    another integration's does: said as that, rather than as a panel that is
+    not loaded, which a caller waiting for it to load would wait on for good.
     """
-    if panel_entry_id is None:
-        return
-    config_entry = hass.config_entries.async_get_entry(panel_entry_id)
-    if config_entry is not None and loaded_runtime_data(config_entry) is not None:
-        return
-    entity_entry = er.async_get(hass).async_get(target)
-    if entity_entry is not None and entity_entry.platform == DOMAIN:
+    entry_id: str | None = call.data.get("config_entry_id")
+    if entry_id is None:
+        return None
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None or entry.domain != DOMAIN:
         raise ServiceValidationError(
-            f"The SPAN Panel that entity {target} belongs to is not loaded.",
+            f"No SPAN Panel has config entry {entry_id}.",
             translation_domain=DOMAIN,
-            translation_key="favorite_panel_not_loaded",
-            translation_placeholders={"entity_id": target},
+            translation_key="monitoring_panel_unknown",
+            translation_placeholders={"config_entry_id": entry_id},
         )
+    return entry_id
+
+
+def _loaded_monitoring_panel(
+    hass: HomeAssistant, config_entry_id: str | None
+) -> tuple[SpanPanelRuntimeData, ConfigEntry]:
+    """Return the loaded panel a monitoring service acts on: the one chosen, else the first loaded.
+
+    Every monitoring service, read or write, finds its panel here. One that is
+    not loaded is refused, in every state that keeps it so (setting up,
+    retrying, failed, disabled), and said as that, never as monitoring being
+    off, which nothing has read: a script asking while Home Assistant started
+    was told monitoring was off on a panel that had it on, and turning it off
+    was answered with success while the stored setting turned it on again once
+    the panel loaded. For a status read, the card waits for the entry to load on
+    this refusal, by its error code, translation domain and key; it waits on no
+    write's.
+    """
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        runtime_data = loaded_runtime_data(entry)
+        if runtime_data is not None and config_entry_id in (None, entry.entry_id):
+            return runtime_data, entry
+    raise ServiceValidationError(
+        "The SPAN Panel is not loaded, so its monitoring cannot be read or changed.",
+        translation_domain=DOMAIN,
+        translation_key="monitoring_panel_not_loaded",
+    )
 
 
 def _threshold_panel_entry_id(
@@ -387,24 +410,9 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services.
 
     Every service here but `get_monitoring_status` changes monitoring, so each
-    is registered through `_async_register_monitoring_write`.
+    is registered through `_async_register_monitoring_write`. Each finds its
+    panel through `_named_panel_entry_id` and `_loaded_monitoring_panel`.
     """
-
-    def _get_runtime_data(
-        config_entry_id: str | None = None,
-    ) -> tuple[SpanPanelRuntimeData, ConfigEntry] | None:
-        """Find SPAN panel runtime data and entry.
-
-        When config_entry_id is provided, returns that specific entry.
-        Otherwise falls back to the first loaded entry.
-        """
-        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = loaded_runtime_data(entry)
-            if runtime_data is None:
-                continue
-            if config_entry_id is None or entry.entry_id == config_entry_id:
-                return runtime_data, entry
-        return None
 
     def _get_monitored(
         call: ServiceCall, target: str
@@ -416,32 +424,24 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         live snapshot, as every service resolves its target, rather than the
         monitor's own, which is the last it judged or, before the first, the one
         it was built holding.
-        """
-        panel_entry_id = _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
-        result = _get_runtime_data(panel_entry_id)
-        if result is not None:
-            runtime_data, _entry = result
-            if runtime_data.coordinator.current_monitor is not None:
-                return runtime_data.coordinator.current_monitor, runtime_data
-        _raise_if_entitys_panel_not_loaded(hass, target, panel_entry_id)
-        raise ServiceValidationError(
-            "No SPAN panel with current monitoring enabled.",
-            translation_domain=DOMAIN,
-            translation_key="monitoring_not_enabled",
-        )
 
-    async def _get_or_create_monitor(
-        config_entry_id: str | None = None,
-    ) -> CurrentMonitor:
-        """Find or bootstrap a CurrentMonitor for the specified panel."""
-        result = _get_runtime_data(config_entry_id)
-        if result is None:
+        `monitoring_not_enabled` is this refusal alone: the panel is loaded, and
+        its monitoring is off.
+        """
+        panel_entry_id = _threshold_panel_entry_id(hass, target, _named_panel_entry_id(hass, call))
+        runtime_data, _entry = _loaded_monitoring_panel(hass, panel_entry_id)
+        monitor = runtime_data.coordinator.current_monitor
+        if monitor is None:
             raise ServiceValidationError(
-                "No SPAN panel integration loaded.",
+                "Current monitoring is off on this SPAN Panel.",
                 translation_domain=DOMAIN,
                 translation_key="monitoring_not_enabled",
             )
-        runtime_data, entry = result
+        return monitor, runtime_data
+
+    async def _get_or_create_monitor(config_entry_id: str | None) -> CurrentMonitor:
+        """Find or bootstrap a CurrentMonitor for the specified panel."""
+        runtime_data, entry = _loaded_monitoring_panel(hass, config_entry_id)
         if runtime_data.coordinator.current_monitor is not None:
             return runtime_data.coordinator.current_monitor
         monitor = CurrentMonitor(
@@ -493,11 +493,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_get_monitoring_status(
         call: ServiceCall,
     ) -> ServiceResponse:
-        entry_id = call.data.get("config_entry_id")
-        result = _get_runtime_data(entry_id)
-        if result is None:
-            return {"enabled": False}
-        runtime_data, _entry = result
+        runtime_data, _entry = _loaded_monitoring_panel(hass, _named_panel_entry_id(hass, call))
         monitor = runtime_data.coordinator.current_monitor
         if monitor is None:
             return {"enabled": False}
@@ -545,18 +541,19 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
         data = dict(call.data)
         enabled = data.pop("enabled", None)
-        entry_id = data.pop("config_entry_id", None)
+        data.pop("config_entry_id", None)
+        entry_id = _named_panel_entry_id(hass, call)
 
         if enabled is False:
-            # Disable monitoring: stop the monitor and mark storage as disabled
-            result = _get_runtime_data(entry_id)
-            if result is not None:
-                runtime_data, entry = result
-                monitor = runtime_data.coordinator.current_monitor
-                if monitor is not None:
-                    monitor.async_stop()
-                    await monitor.async_save_disabled()
-                    runtime_data.coordinator.current_monitor = None
+            # Disable monitoring: stop the monitor and mark storage as disabled.
+            # Only a loaded panel's: one that is not loaded is refused, where a
+            # success would have left its stored setting to turn it on again.
+            runtime_data, _entry = _loaded_monitoring_panel(hass, entry_id)
+            monitor = runtime_data.coordinator.current_monitor
+            if monitor is not None:
+                monitor.async_stop()
+                await monitor.async_save_disabled()
+                runtime_data.coordinator.current_monitor = None
             return
 
         monitor = await _get_or_create_monitor(entry_id)
@@ -580,8 +577,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_test_notification(call: ServiceCall) -> None:
         from .alert_dispatcher import dispatch_test_alert  # pylint: disable=import-outside-toplevel
 
-        entry_id = call.data.get("config_entry_id")
-        monitor = await _get_or_create_monitor(entry_id)
+        monitor = await _get_or_create_monitor(_named_panel_entry_id(hass, call))
         settings = monitor.get_global_settings()
         dispatch_test_alert(hass, settings)
 
@@ -609,21 +605,12 @@ def _async_register_package_rating_services(hass: HomeAssistant) -> None:
 
         The panel is `_threshold_panel_entry_id`'s choice, as for the threshold
         services: an entity belongs to one panel, and a raw circuit id goes to the
-        panel the call names, or else the first loaded.
+        panel the call names, or else the first loaded. Refused as every other
+        monitoring write is, by `_named_panel_entry_id` and `_loaded_monitoring_panel`.
         """
-        panel_entry_id = _threshold_panel_entry_id(hass, target, call.data.get("config_entry_id"))
-        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = loaded_runtime_data(entry)
-            if runtime_data is None:
-                continue
-            if panel_entry_id is None or entry.entry_id == panel_entry_id:
-                return runtime_data
-        _raise_if_entitys_panel_not_loaded(hass, target, panel_entry_id)
-        raise ServiceValidationError(
-            "No SPAN panel is loaded.",
-            translation_domain=DOMAIN,
-            translation_key="package_ratings_panel_not_loaded",
-        )
+        panel_entry_id = _threshold_panel_entry_id(hass, target, _named_panel_entry_id(hass, call))
+        runtime_data, _entry = _loaded_monitoring_panel(hass, panel_entry_id)
+        return runtime_data
 
     async def async_handle_set_circuit_package_ratings(call: ServiceCall) -> None:
         target = call.data["circuit_id"]
