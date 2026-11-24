@@ -607,12 +607,16 @@ def circuit_display_name(
     *,
     config_entry_id: str,
 ) -> str:
-    """Return a circuit's name as Home Assistant shows it, for text that names the circuit to a person.
+    """Return a circuit's name as Home Assistant shows it, wherever the integration names the circuit.
+
+    A current alert's name is this one, in its text, the `alert_name` of its
+    event and its log line, so a person and an automation find the circuit
+    under the name Home Assistant shows.
 
     Its own device's name (`device_display_name`): the user's where they renamed
     the device, else the name it is registered under. Read from the registry
     each time it is asked, so a rename made since setup is the name the next
-    message carries. Unlike `effective_circuit_device_name`, a registered
+    alert carries. Unlike `effective_circuit_device_name`, a registered
     device's `name` is read rather than the one it is about to be given:
     between a rename on the panel and the reload that renames the device, Home
     Assistant still shows the old one.

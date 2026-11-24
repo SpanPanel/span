@@ -4,56 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.4] - 11/2026
 
+This release is a dashboard focused release.
+
 ### Fixed
 
-- **The SPAN Panel card and the sidebar dashboard now show a panel and each of its battery, charger and solar devices by the name you gave it in Home
-  Assistant**, where a renamed device kept the name the integration gave it.
+- **A panel, circuit or device you rename in Home Assistant now shows its new name on the SPAN Panel card and in the sidebar dashboard.** Before, they kept
+  showing its original name.
 
-- **A SPAN Panel card opened while Home Assistant is starting or restarting, or while the integration retries a panel it cannot reach, says it is waiting for
-  the panel to load and draws the panel once it has loaded**, where it showed "Unable to connect to SPAN Panel" until Retry was pressed or the dashboard was
-  opened again.
+- **While Home Assistant is starting, or keeps retrying a panel it can't reach, the SPAN Panel card and the sidebar dashboard say they're waiting for the panel
+  and show it as soon as it's ready.** Before, the card said "Unable to connect to SPAN Panel" until you pressed Retry, and the sidebar showed errors,
+  monitoring as off, or no favorites.
 
-- **The sidebar dashboard, opened while Home Assistant is starting or restarting or while the integration retries a panel it cannot reach, says it is waiting
-  for the panel to load and draws the panel once it has loaded**, where it showed errors, monitoring as off or missing favorites meanwhile, and could miss the
-  panel's unreachable warning.
+- **When a panel can't start because it needs you to sign in again, needs Home Assistant restarted, or is disabled, the card and the sidebar dashboard now say
+  so and what to do, and show the panel once it starts.** Before, the card said "Unable to connect to SPAN Panel" and the sidebar "SPAN Panel integration is not
+  loaded".
 
-- **A SPAN Panel card or the sidebar dashboard whose panel failed to set up, as when it must be authenticated again, cannot load until Home Assistant is
-  restarted, or is disabled, says so and how to set it right, and draws the panel once it has loaded**, where the card showed "Unable to connect to SPAN Panel"
-  and the sidebar "SPAN Panel integration is not loaded", monitoring as off or no favorites.
+- **A SPAN Panel card left on a dashboard after you remove its panel now says it can't connect, and the sidebar dashboard says when you have no SPAN Panel.**
+  Before, the card was blank and the sidebar showed "Panel device not found. Check device_id in card config."
 
-- **A SPAN Panel card left on a dashboard after its panel was removed says it is unable to connect**, where it drew an empty card.
+- **After a panel reloads, for example when you change its options, the card and the sidebar dashboard show its monitoring again.** Before, anything opened
+  during the reload could show monitoring as off until you opened it again.
 
-- **The card and the sidebar dashboard show a panel's monitoring again once a reload of the panel, as after its options are changed, finishes**, where a view
-  drawn or a circuit's side panel opened during the reload could show monitoring as off until opened again.
+- **The sidebar dashboard's list of panels updates once the connection to Home Assistant comes back.** Before, a panel added, removed or renamed while the
+  connection was down stayed listed as it was.
 
-- **The sidebar dashboard says no SPAN Panel is found where there is none**, where it showed "Panel device not found. Check device_id in card config."
+- **The Monitoring tab's Event Bus help now says what the `span_panel_current_alert` event is for, and links to the full list of its fields.** Before, it showed
+  a bare list of field names.
 
-- **The sidebar dashboard's panel list catches up once the connection to Home Assistant is back**, where a panel added, removed or renamed just as the
-  connection was lost stayed listed as it was until the next change.
+- **Current monitoring notifications, including your own notification text through `{name}`, and the `alert_name` that automations read from the
+  `span_panel_current_alert` event now use the name you gave a circuit in Home Assistant instead of its SPAN app name.** If an automation compares `alert_name`
+  to a circuit's name, check it still matches.
 
-- **The Monitoring tab's Event Bus help lists every key of the `span_panel_current_alert` event**, the new `alert_display_name`, the circuit's name as Home
-  Assistant shows it, among them, where it left out the keys for the monitoring rating, the copied package ratings and when the overload began.
+- **`{entity_id}` in your own current monitoring notification text now gives the entity ID of the circuit's current sensor, or its power sensor where it has
+  none.** Before, it gave an internal circuit id.
 
-- **An error from a breaker, circuit priority, charger or adopted-device control now names the circuit or device by the name you gave it in Home Assistant**,
-  where it kept the name the panel or the integration gave it.
+- **Current monitoring actions, such as Get monitoring status or turning monitoring off, now fail with a clear error when the panel hasn't finished loading or
+  the panel named doesn't exist.** Before, Get monitoring status said monitoring was off and turning it off seemed to work but didn't, so check any script that
+  calls these while Home Assistant starts.
 
-- **Current monitoring notifications now name a circuit by the name you gave it in Home Assistant, including through `{name}` in a custom title or message**,
-  where they used its name in the SPAN app; the `span_panel_current_alert` event carries that name in a new `alert_display_name` field and leaves `alert_name`
-  as it was.
-
-- **The Get monitoring status action now fails with an error when the panel it is asked about has not finished loading, such as while Home Assistant starts, or
-  when the config entry it names is not a SPAN Panel's**, where it answered that monitoring was off, so a script step that calls it then stops unless it is set
-  to continue on error, and Home Assistant logs the error.
-
-- **Changing a panel's current monitoring while the panel is not loaded, or naming a config entry that is not a SPAN Panel's, now fails with an error, turning
-  monitoring off included**, where turning it off reported success and left monitoring to start again once the panel loaded, and turning it on, changing its
-  settings or a threshold named by circuit id or leg, or sending a test notification said monitoring was not enabled.
-
-- **The `{entity_id}` placeholder in a current monitoring notification's title or message now carries the entity ID of the circuit's Current sensor, or its
-  Power sensor where it has none, or of the mains leg's Current sensor**, where it carried the circuit's internal id or the leg's name.
-
-- **Current monitoring turned off now stays off after Home Assistant restarts on a panel whose options still hold the monitoring switch an earlier release
-  stored there**, where it came back on at every restart.
+- **Turning current monitoring off now stays off after Home Assistant restarts.** Before, on panels first set up with an older release, it came back on at every
+  restart.
 
 ## [2.3.3] - 11/2026
 

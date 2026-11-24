@@ -39,7 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 def format_notification(
     *,
     alert_type: str,
-    display_name: str,
+    alert_name: str,
     entity_id: str,
     current_a: float,
     monitoring_rating_a: float,
@@ -52,7 +52,7 @@ def format_notification(
 ) -> tuple[str, str]:
     """Format notification title and message using templates.
 
-    `display_name` is the point's name as Home Assistant shows it, which the
+    `alert_name` is the point's name as Home Assistant shows it, which the
     `{name}` placeholder carries, and `entity_id` the entity it is shown under,
     which `{entity_id}` carries. `monitoring_rating_a` is the rating the point
     was judged against, which the `{breaker_rating_a}` placeholder carries.
@@ -82,7 +82,7 @@ def format_notification(
     """
     window_m = (window_duration_s or 0) // 60
     template_vars = {
-        "name": display_name,
+        "name": alert_name,
         "entity_id": entity_id,
         "alert_type": alert_type,
         "current_a": f"{current_a:.1f}",
@@ -95,12 +95,12 @@ def format_notification(
     try:
         title = title_template.format_map(template_vars)
     except (KeyError, ValueError):
-        title = f"SPAN: {display_name} {alert_type}"
+        title = f"SPAN: {alert_name} {alert_type}"
     try:
         message = message_template.format_map(template_vars)
     except (KeyError, ValueError):
         message = (
-            f"{display_name} at {current_a:.1f}A "
+            f"{alert_name} at {current_a:.1f}A "
             f"({utilization_pct}% of {monitoring_rating_a:.0f}A rating) at {local_time or ''}"
         )
     return title, message
@@ -172,7 +172,6 @@ def dispatch_alert(
     *,
     alert_type: str,
     alert_name: str,
-    display_name: str,
     alert_id: str,
     entity_id: str,
     alert_source: str,
@@ -190,14 +189,12 @@ def dispatch_alert(
 ) -> None:
     """Dispatch alert through all enabled notification channels.
 
-    `alert_name` is the panel's name for the point and `display_name` the name
-    Home Assistant shows for it, the user's where they renamed the circuit's
-    device. The event carries both, as `alert_name` and `alert_display_name`:
-    automations read `alert_name`, so a rename in Home Assistant never changes
-    it. The title and message are read by a person, so their `{name}` is the
-    name that person finds the circuit under. `alert_id` is the point's id,
-    which the event carries, and `entity_id` the entity the point is shown
-    under, which only the text's `{entity_id}` carries.
+    `alert_name` is the point's name as Home Assistant shows it, the user's
+    where they renamed the circuit's device: the name a person finds the circuit
+    under, which the event's `alert_name`, the text's `{name}` and the log line
+    all carry. `alert_id` is the point's id, which the event carries and a
+    rename never changes, and `entity_id` the entity the point is shown under,
+    which only the text's `{entity_id}` carries.
 
     The event payload carries the ratings as `get_monitoring_status` does:
     `breaker_rating_a` is the panel's rating (a shared meter's capacity over its
@@ -219,7 +216,6 @@ def dispatch_alert(
         "alert_source": alert_source,
         "alert_id": alert_id,
         "alert_name": alert_name,
-        "alert_display_name": display_name,
         "alert_type": alert_type,
         "current_a": round(current_a, 1),
         "breaker_rating_a": breaker_rating_a,
@@ -248,7 +244,7 @@ def dispatch_alert(
 
     title, message = format_notification(
         alert_type=alert_type,
-        display_name=display_name,
+        alert_name=alert_name,
         entity_id=entity_id,
         current_a=current_a,
         monitoring_rating_a=monitoring_rating_a,
@@ -295,9 +291,6 @@ def dispatch_test_alert(
     """Dispatch a test notification using sample values through all enabled channels."""
     alert_type = "spike"
     alert_name = "Kitchen Oven"
-    # The sample circuit is one nobody renamed, so Home Assistant shows it by
-    # the panel's name.
-    display_name = alert_name
     alert_id = "sensor.kitchen_oven_current"
     # The sample's id has always been its sensor's entity ID, so the text's
     # `{entity_id}` carries the same one.
@@ -323,7 +316,6 @@ def dispatch_test_alert(
         "alert_source": alert_source,
         "alert_id": alert_id,
         "alert_name": alert_name,
-        "alert_display_name": display_name,
         "alert_type": alert_type,
         "current_a": current_a,
         "breaker_rating_a": breaker_rating_a,
@@ -344,7 +336,7 @@ def dispatch_test_alert(
 
     title, message = format_notification(
         alert_type=alert_type,
-        display_name=display_name,
+        alert_name=alert_name,
         entity_id=entity_id,
         current_a=current_a,
         monitoring_rating_a=monitoring_rating_a,
